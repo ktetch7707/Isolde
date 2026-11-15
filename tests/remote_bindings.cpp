@@ -8,6 +8,7 @@
 #include <QFile>
 #include <QSettings>
 #include <QJSValue>
+#include <QShortcut>
 #include "input/InputManager.h"
 #include "settings/RemoteSettings.h"
 
@@ -31,8 +32,88 @@ private slots:
     void malformedStorageAndAtomicFailure();
     void remoteUiCaptureReviewCancelRestore();
     void physicalKeyboardTextAndControls();
+    void ambientWakeConsumesPressRepeatAndRelease();
+    void bindingCaptureReportsInputActivity();
+    void bindingCapturePreemptsShortcuts();
     void textPreferenceCompatibilityAndRollback();
 };
+
+void RemoteBindingTests::bindingCapturePreemptsShortcuts()
+{
+    QTemporaryDir dir;
+    InputManager manager(dir.filePath("bindings.json"));
+    QQuickWindow window;
+    QShortcut shortcut(QKeySequence(Qt::Key_A), &window);
+    QShortcut chord(QKeySequence(QStringLiteral("Ctrl+A")), &window);
+    QSignalSpy activated(&shortcut, &QShortcut::activated);
+    QSignalSpy chordActivated(&chord, &QShortcut::activated);
+    window.show();
+    window.requestActivate();
+    QVERIFY(QTest::qWaitForWindowExposed(&window));
+    QVERIFY(manager.beginBinding(InputManager::NavigateUp));
+    QTest::keyClick(&window, Qt::Key_A);
+    QCOMPARE(activated.size(), 0);
+    QVERIFY(!manager.listening());
+    QVERIFY(manager.bindingActive());
+    QVERIFY(manager.saveBinding());
+    QCOMPARE(manager.commandForKey(Qt::Key_A), InputManager::NavigateUp);
+    QTest::keyClick(&window, Qt::Key_A);
+    QCOMPARE(activated.size(), 0);
+    QTest::keyClick(&window, Qt::Key_A, Qt::ControlModifier);
+    QCOMPARE(chordActivated.size(), 1);
+    QVERIFY(manager.clearBinding(InputManager::NavigateUp));
+    QTest::keyClick(&window, Qt::Key_A);
+    QCOMPARE(activated.size(), 1);
+}
+
+void RemoteBindingTests::bindingCaptureReportsInputActivity()
+{
+    InputManager manager;
+    QSignalSpy activity(&manager, &InputManager::inputActivity);
+    QVERIFY(manager.beginBinding(InputManager::NavigateUp));
+    press(Qt::Key_F6);
+    QCOMPARE(activity.size(), 1);
+    QVERIFY(!manager.listening());
+    press(Qt::Key_Down);
+    QCOMPARE(activity.size(), 2);
+}
+
+void RemoteBindingTests::ambientWakeConsumesPressRepeatAndRelease()
+{
+    class Recorder final : public QObject {
+    public:
+        int presses = 0;
+        int releases = 0;
+        bool event(QEvent *event) override {
+            if (event->type() == QEvent::KeyPress) ++presses;
+            if (event->type() == QEvent::KeyRelease) ++releases;
+            return QObject::event(event);
+        }
+    } receiver;
+    InputManager manager;
+    QSignalSpy wake(&manager, &InputManager::ambientWakeRequested);
+    connect(&manager, &InputManager::ambientWakeRequested, &manager,
+            [&manager] { manager.setAmbientInputActive(false); });
+    manager.setAmbientInputActive(true);
+    QKeyEvent overrideEvent(QEvent::ShortcutOverride, Qt::Key_A, Qt::NoModifier, "a");
+    overrideEvent.ignore();
+    QCoreApplication::sendEvent(&receiver, &overrideEvent);
+    QVERIFY(overrideEvent.isAccepted());
+    auto send = [&receiver](QEvent::Type type, bool repeat) {
+        QKeyEvent event(type, Qt::Key_A, Qt::NoModifier, "a", repeat);
+        QCoreApplication::sendEvent(&receiver, &event);
+    };
+    send(QEvent::KeyPress, false);
+    send(QEvent::KeyPress, true);
+    send(QEvent::KeyRelease, false);
+    QCOMPARE(wake.size(), 1);
+    QCOMPARE(receiver.presses, 0);
+    QCOMPARE(receiver.releases, 0);
+    send(QEvent::KeyPress, false);
+    send(QEvent::KeyRelease, false);
+    QCOMPARE(receiver.presses, 1);
+    QCOMPARE(receiver.releases, 1);
+}
 
 void RemoteBindingTests::captureSaveReloadAndProfileIsolation() {
     QTemporaryDir dir;
@@ -169,6 +250,19 @@ void RemoteBindingTests::remoteUiCaptureReviewCancelRestore() {
     QTest::keyClick(&window, Qt::Key_Menu); QVERIFY(page->property("editing").toBool());
     QTest::keyClick(&window, Qt::Key_Up); QTest::keyClick(&window, Qt::Key_Return);
     QCOMPARE(manager.commandForKey(Qt::Key_F6), InputManager::None);
+    QShortcut shortcut(QKeySequence(Qt::Key_A), &window);
+    QSignalSpy activated(&shortcut, &QShortcut::activated);
+    QTest::keyClick(&window, Qt::Key_Return); QTest::keyClick(&window, Qt::Key_A);
+    QVERIFY(!manager.listening()); QVERIFY(manager.bindingActive());
+    QTest::keyClick(&window, Qt::Key_Return);
+    QTest::keyClick(&window, Qt::Key_Down);
+    QCOMPARE(page->property("selectedIndex").toInt(), 1);
+    QTest::keyClick(&window, Qt::Key_A);
+    QCOMPARE(page->property("selectedIndex").toInt(), 0);
+    QCOMPARE(activated.size(), 0);
+    QTest::keyClick(&window, Qt::Key_Menu);
+    QTest::keyClick(&window, Qt::Key_Up); QTest::keyClick(&window, Qt::Key_Return);
+    QCOMPARE(manager.commandForKey(Qt::Key_A), InputManager::None);
     // Every action remains reachable by the D-pad, including the reset review.
     for (int i = 0; i < 14; ++i) QTest::keyClick(&window, Qt::Key_Down);
     QCOMPARE(page->property("selectedIndex").toInt(), 14);
@@ -189,6 +283,19 @@ void RemoteBindingTests::physicalKeyboardTextAndControls() {
     item->setParentItem(window.contentItem()); item->setSize({1160,660}); item->setPosition({60,30});
     window.show(); window.requestActivate(); item->forceActiveFocus(); QVERIFY(QTest::qWaitForWindowExposed(&window));
     auto *keyboard = object->findChild<QObject *>("physicalKeyboard"); QVERIFY(keyboard);
+    QShortcut shortcut(QKeySequence(Qt::Key_H), &window);
+    QShortcut chord(QKeySequence(QStringLiteral("Ctrl+H")), &window);
+    QSignalSpy activated(&shortcut, &QShortcut::activated);
+    QSignalSpy chordActivated(&chord, &QShortcut::activated);
+    QTest::keyClick(&window, Qt::Key_H);
+    QCOMPARE(activated.size(), 0);
+    QCOMPARE(keyboard->property("value").toString(), QString("h"));
+    QTest::keyClick(&window, Qt::Key_H, Qt::ControlModifier);
+    QCOMPARE(chordActivated.size(), 0);
+    QCOMPARE(keyboard->property("value").toString(), QString("h"));
+    shortcut.setEnabled(false);
+    chord.setEnabled(false);
+    keyboard->setProperty("value", QString());
     auto type = [&](int key, const QString &text, Qt::KeyboardModifiers modifiers = Qt::NoModifier) {
         QKeyEvent down(QEvent::KeyPress,key,modifiers,text); QCoreApplication::sendEvent(&window,&down);
         QKeyEvent up(QEvent::KeyRelease,key,modifiers,text); QCoreApplication::sendEvent(&window,&up);

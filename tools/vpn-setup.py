@@ -425,11 +425,25 @@ def capture_location(provider):
     try:
         verified = handoff_location(saved, source_uuid, country)
     except BaseException:
-        try:
-            if not any(c["uuid"]==saved for c in active_connections()):command("nmcli","connection","delete","uuid",saved)
-        except Exception: pass
+        discard_failed_capture(saved)
         raise
     return verified | {"savedUuid": saved, "sourceUuid":source_uuid, "country":country}
+
+
+def discard_failed_capture(uuid):
+    global ROOT_ABORTED
+    was_aborted = ROOT_ABORTED
+    ROOT_ABORTED = True
+    try:
+        if any(c["uuid"] == uuid for c in active_connections()):
+            raise RuntimeError("The saved VPN is still active.")
+        command("nmcli", "connection", "delete", "uuid", uuid)
+        if any(c["uuid"] == uuid for c in managed_connections()):
+            raise RuntimeError("The saved VPN still exists.")
+    except Exception as error:
+        raise RuntimeError("VPN capture failed; recovery or cleanup could not be confirmed. Refresh VPN settings before retrying.") from error
+    finally:
+        ROOT_ABORTED = was_aborted
 
 
 def transport_configuration(connection, device):
@@ -674,7 +688,19 @@ def observed_country(uuid, previous=None):
 
 def verify_location(uuid, country, previous=None):
     device = vpn_device(uuid,previous)
-    for family, destination in [("-4", "1.1.1.1"), ("-6", "2606:4700:4700::1111")]:
+    destinations = [("-4", "1.1.1.1"), ("-6", "2606:4700:4700::1111")]
+    if not previous:
+        _, separator, dns = command("resolvectl", "dns", device).partition("):")
+        _, domain_separator, domains = command("resolvectl", "domain", device).partition("):")
+        if not separator or not domain_separator or "~." not in domains.split() or not 1 <= len(dns.split()) <= 8:
+            raise RuntimeError("The selected VPN does not own the default DNS route. The app was not opened.")
+        for value in dns.split():
+            try:
+                address = ipaddress.ip_address(value)
+            except ValueError as error:
+                raise RuntimeError("The selected VPN returned an invalid DNS address.") from error
+            destinations.append((f"-{address.version}", str(address)))
+    for family, destination in destinations:
         # During capture the native client's policy still owns normal traffic.
         # Prove the new interface independently before handing over that policy.
         arguments = ("oif",device) if previous else ()
@@ -714,18 +740,43 @@ def disconnect_owned_location(uuid):
     return {"message":"Saved VPN location disconnected."}
 
 
+def rollback_location(uuid, previous):
+    global ROOT_ABORTED
+    was_aborted = ROOT_ABORTED
+    ROOT_ABORTED = True
+    try:
+        active = active_connections()
+        allowed = {uuid}
+        if previous:
+            allowed.add(previous)
+        if any(c["uuid"] not in allowed for c in active):
+            raise RuntimeError("Another VPN became active during recovery.")
+        if any(c["uuid"] == uuid for c in active):
+            command("nmcli", "--wait", "10", "connection", "down", "uuid", uuid)
+        active = active_connections()
+        if any(c["uuid"] != previous for c in active):
+            raise RuntimeError("The new VPN could not be disconnected.")
+        if previous and not any(c["uuid"] == previous for c in active):
+            command("nmcli", "--wait", "20", "connection", "up", "uuid", previous)
+        active = active_connections()
+        if len(active) != int(bool(previous)) or (previous and active[0]["uuid"] != previous):
+            raise RuntimeError("The previous VPN state could not be confirmed.")
+    except Exception as error:
+        raise RuntimeError("VPN switching failed and recovery could not be confirmed. Refresh VPN settings before retrying.") from error
+    finally:
+        ROOT_ABORTED = was_aborted
+
+
 def handoff_location(uuid, source_uuid, country):
     if not ROOT_COPY:raise SetupError("Use the installed location-saving support.")
     if uuid not in {c["uuid"] for c in managed_connections()} or active_connections()!=[{"uuid":source_uuid,"device":vpn_device(source_uuid)}]:
         raise SetupError("The selected provider connection changed. Refresh and retry.")
     # The native source has incomplete NM settings. Keep its kernel interface
     # alive until the new tunnel has independently passed routing/country checks.
-    source_stopped=False
     try:
         command("nmcli","--wait","20","connection","up","uuid",uuid)
         verified=verify_location(uuid,country,source_uuid)
         command("nmcli","--wait","20","connection","down","uuid",source_uuid)
-        source_stopped=True
         return verify_location(uuid,country)
     except BaseException as error:
         signal.signal(signal.SIGTERM,signal.SIG_IGN)
@@ -736,10 +787,7 @@ def handoff_location(uuid, source_uuid, country):
             recent=any(time.time()-stamp<120 for stamp in timestamps if stamp)
             error.diagnostic=getattr(error,"diagnostic","handoff")+"/"+TRANSPORT_DIAGNOSTIC+"/handshake-"+str(int(recent))
         except Exception:pass
-        if source_stopped:
-            raise RuntimeError("The saved VPN passed verification, but provider handoff changed afterward. Refresh VPN status before retrying.") from None
-        try:command("nmcli","--wait","10","connection","down","uuid",uuid)
-        except Exception:pass
+        rollback_location(uuid, source_uuid)
         raise
 
 
@@ -768,20 +816,7 @@ def switch_location(uuid, handoff_from=None):
         # Never disconnect a tunnel that was already active on entry.
         if changing:
             signal.signal(signal.SIGTERM, signal.SIG_IGN)
-            try:
-                current = active_connections()
-                target_active = any(c["uuid"] == uuid for c in current)
-                old_active = any(c["uuid"] == old for c in current)
-            except Exception:
-                target_active = True
-                old_active = False
-            try:
-                if target_active:command("nmcli", "--wait", "10", "connection", "down", "uuid", uuid)
-            except Exception: pass
-            if old and not old_active:
-                try: command("nmcli", "--wait", "20", "connection", "up", "uuid", old)
-                except Exception:
-                    raise RuntimeError("VPN switching failed and the previous VPN could not be restored. Refresh VPN settings before retrying.") from None
+            rollback_location(uuid, old)
         raise
 
 

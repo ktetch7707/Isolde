@@ -32,6 +32,7 @@ class InputManager final : public QObject {
     Q_PROPERTY(QString bindingStatus READ bindingStatus NOTIFY bindingsChanged)
     Q_PROPERTY(QString errorString READ errorString NOTIFY bindingsChanged)
     Q_PROPERTY(bool acceptTextKeys READ acceptTextKeys NOTIFY bindingsChanged)
+    Q_PROPERTY(bool ambientInputActive READ ambientInputActive WRITE setAmbientInputActive NOTIFY ambientInputActiveChanged)
 
 public:
     enum Command {
@@ -74,6 +75,8 @@ public:
     bool acceptTextKeys() const { return m_acceptTextKeys; }
     Q_INVOKABLE bool setAcceptTextKeys(bool enabled);
     Q_INVOKABLE void setTextInputTarget(QObject *target, bool active);
+    bool ambientInputActive() const { return m_ambientInputActive; }
+    void setAmbientInputActive(bool active);
 
     Command none() const { return None; }
     Command navigateUp() const { return NavigateUp; }
@@ -92,6 +95,9 @@ public:
     Command search() const { return Search; }
 signals:
     void bindingsChanged();
+    void ambientInputActiveChanged();
+    void ambientWakeRequested();
+    void inputActivity();
 protected:
     bool eventFilter(QObject *object, QEvent *event) override;
 private:
@@ -105,6 +111,8 @@ private:
     int m_releaseKey = 0;
     QTimer m_captureDeadline;
     bool m_acceptTextKeys = true;
+    bool m_ambientInputActive = false;
+    int m_ambientWakeKey = -1;
     QList<QPointer<QObject>> m_textInputTargets;
     QSet<int> m_textReleaseKeys;
 };

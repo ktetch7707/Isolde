@@ -8,6 +8,35 @@ Status: in progress. No acceptance credit awarded at campaign start.
 Branch: `agent-backlog-progress`. Preserve the six pre-existing modified Studio
 test files (destinations, grid, ordered, overlays, policies and store).
 
+### BUG-198 — Remapped Home did not return from a native client
+
+Installed release `9ba58c11096220d713ca901a` saved Home = F10 and retained
+it in a fresh session. In shell attempt `20261115-122724-442`, FreeTube
+remained open after F10; physical Home returned to its selected card. Attempt
+`20261115-123056-631` restored Home / H and confirmed normal service and
+layout restoration. The portal may retain an earlier assignment for the fixed
+shortcut ID, but the installed cause is not yet proven. The private-bus
+persistent-assignment regression fails in `t12-portal-remap-20261115-a`;
+the trigger-specific identity passes `t12-portal-remap-20261115-b`, and the
+full candidate c passes 63/63. Installed attempt `20261115-132909-113`
+granted F10, opened FreeTube and returned with F10 to the exact selected card.
+The temporary Home mapping was restored and confirmed in a fresh session
+`20261115-133226-206`. This closes the observed path, not the whole input matrix.
+
+### BUG-197 — VPN recovery could silently leave the wrong connection state
+
+Source review found that target-disconnect errors were ignored during switch
+and capture rollback, and a failed final handoff check after stopping the
+native source did not attempt to restore that source. Recovery now checks the
+exact active NetworkManager connection state, refuses to disturb unrelated
+VPNs, and explicitly reports incomplete recovery. It also runs if the
+requester disappears. Failed-capture cleanup verifies deletion or reports
+failure instead of suppressing it. A provider with an incomplete native
+connection profile may still need manual reconnection; active state is not a
+routing/leak proof. The 39 host VPN unit tests and
+`t12-vpn-recovery-20261115-c` focused VM suite pass. Installed-helper and
+isolated-topology acceptance remain open.
+
 ## Evidence
 
 - `round2-20261111-a`: transport blocked by sandbox before guest connection;

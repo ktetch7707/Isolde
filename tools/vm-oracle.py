@@ -553,6 +553,8 @@ def visual_result_passed(case, result):
                 and result.get("normalProfileUsed") is False)
     if case == "themecontrols":
         phases={tag+phase for tag in ("dark","pastel","custom") for phase in ("audio","ambient","return")} | {"custompolicy","customreset","customcancel"}
+        if result.get("powerConfirmationReview") is True:
+            phases |= {"custompower","custompowerconfirm","custompowercancel"}
         if "soundAcceptanceVersion" in result:
             if type(result["soundAcceptanceVersion"])!=int or result["soundAcceptanceVersion"]!=1:return False
             phases |= {tag+phase for tag in ("dark","pastel","custom") for phase in ("sounds","soundpreview","sounddisabled")}

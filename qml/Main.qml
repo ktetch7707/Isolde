@@ -21,6 +21,15 @@ Window {
         allApps.clearLaunchAttempt()
     })
     property bool ambientActive: false
+    Binding { target: inputManager; property: "ambientInputActive"; value: window.ambientActive }
+    Connections {
+        target: inputManager
+        function onAmbientWakeRequested() {
+            window.ambientActive = false
+            window.resetIdleTimer()
+        }
+        function onInputActivity() { window.resetIdleTimer() }
+    }
     Binding {
         target:interfaceSounds;property:"suppressed"
         value:!window.active || window.ambientActive || captureSession.open || desktopMode.active
@@ -37,7 +46,7 @@ Window {
     property bool launchErrorSteamGame: false
     property bool desktopHidden:false
     property int desktopRestoreVisibility:Window.FullScreen
-    DesktopReturnWindow {controller:desktopMode;appearance:homeLayout.homeAppearance}
+    DesktopReturnWindow {controller:desktopMode;appearance:homeLayout.homeAppearance;nativeSessionActive:sessionManager.active}
     Window {
         id:opticalSessionNotice
         readonly property var status:sessionManager.opticalSessionStatus
@@ -95,7 +104,7 @@ Window {
         function onChanged(){
             if(desktopMode.active && !desktopMode.nativeMode && !window.desktopHidden){window.desktopRestoreVisibility=window.visibility;window.desktopHidden=true;window.visibility=Window.Hidden}
             else if(!desktopMode.active && window.desktopHidden){window.desktopHidden=false;window.visibility=window.desktopRestoreVisibility;window.raise();window.requestActivate()}
-            if(desktopMode.active || desktopMode.busy)idleTimer.stop();else idleTimer.restart()
+            if(desktopMode.active || desktopMode.busy)idleTimer.stop();else window.resetIdleTimer()
             if(desktopMode.errorString){window.launchErrorSteamGame=false;window.launchErrorAppId="";window.launchErrorText=desktopMode.errorString}
         }
         function onReturned(origin){window.raise();window.requestActivate();if(!desktopMode.nativeMode)Qt.callLater(()=>{if(pageSurface.open)pageSurface.restoreOrigin(origin);else home.restoreFocus(origin)})}
@@ -187,6 +196,10 @@ Window {
             && !desktopMode.active && !desktopMode.busy && !appVpn.busy && !actionDispatcher.guideTransitionPending
     }
 
+    function resetIdleTimer() {
+        if (setupState.complete && ambientSettings.enabled && !ambientActive) idleTimer.restart()
+    }
+
     function handleCommand(command) {
         if (sessionManager.active && sessionManager.currentAppType === "settings" && settings.remoteEditing) {
             settings.handleCommand(command); return
@@ -198,7 +211,7 @@ Window {
         }
         if(desktopMode.busy || desktopMode.active && !desktopMode.nativeMode){if(command===inputManager.back || command===inputManager.home || desktopMode.active && command===inputManager.confirm)desktopMode.cancel();return}
         if(desktopMode.active && desktopMode.nativeMode && (command===inputManager.home || command===inputManager.back)){desktopMode.cancel();return}
-        idleTimer.restart()
+        resetIdleTimer()
         if(actionDispatcher.guideTransitionPending){
             if(command===inputManager.home){actionDispatcher.cancelGuidePlayback();window.showDesignatedHome()}
             else if(command===inputManager.back){actionDispatcher.cancelGuidePlayback();guideController.refresh()}
@@ -316,7 +329,7 @@ Window {
         running: setupState.complete && ambientSettings.enabled && !window.ambientActive
         repeat: true
         interval: ambientSettings.timeoutMinutes * 60000
-        onTriggered: if (window.ambientIdleAllowed()) window.ambientActive = true
+        onTriggered: if (setupState.complete && ambientSettings.enabled && window.ambientIdleAllowed()) window.ambientActive = true
     }
 
     Item {
@@ -343,6 +356,10 @@ Window {
             focus: true
             Keys.onPressed: event => {
                 const command = inputManager.commandForKey(event.key)
+                if (event.isAutoRepeat && command === inputManager.confirm && settings.powerConfirmation) {
+                    event.accepted = true
+                    return
+                }
                 if (window.ambientActive || command !== inputManager.none) {
                     window.handleCommand(command)
                     event.accepted = true

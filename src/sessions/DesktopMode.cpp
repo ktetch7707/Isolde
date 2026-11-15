@@ -7,6 +7,7 @@
 #include <QUuid>
 #include <QDebug>
 #include <QDBusServiceWatcher>
+#include <QCryptographicHash>
 
 namespace {
 const QString service="org.freedesktop.portal.Desktop";
@@ -72,6 +73,10 @@ void DesktopMode::begin(const QString &origin,bool native)
     if(!m_bus.isConnected() || m_presentation.value("returnShortcut").toString().isEmpty()){
         fail("Desktop return support is unavailable. Isolde stayed open.");return;
     }
+    m_requestedTrigger=m_presentation.value("returnShortcut").toString();
+    m_shortcutId=QStringLiteral("return-home");
+    if(m_requestedTrigger!=QStringLiteral("Home"))
+        m_shortcutId+=QStringLiteral("-")+QString::fromLatin1(QCryptographicHash::hash(m_requestedTrigger.toUtf8(),QCryptographicHash::Sha256).toHex().left(16));
     ++m_generation;m_busy=true;m_deadline.start();emit changed();
     if(m_registered){beginSession();return;}
     m_phase=Registering;
@@ -108,18 +113,18 @@ void DesktopMode::response(uint code,const QVariantMap &results)
         m_bus.connect(service,m_session,"org.freedesktop.portal.Session","Closed",this,SLOT(sessionClosed()));
         QString parentWindow;
         if(QGuiApplication::platformName()=="xcb")if(auto *window=QGuiApplication::focusWindow())parentWindow="x11:"+QString::number(window->winId(),16);
-        const QList<DesktopShortcut> entries{{"return-home",{{"description",m_presentation.value("returnLabel")},{"preferred_trigger",m_presentation.value("returnShortcut")}}}};
+        const QList<DesktopShortcut> entries{{m_shortcutId,{{"description",m_presentation.value("returnLabel")},{"preferred_trigger",m_requestedTrigger}}}};
         const auto handle=token();request("BindShortcuts",{QVariant::fromValue(QDBusObjectPath(m_session)),QVariant::fromValue(entries),parentWindow,QVariantMap{{"handle_token",handle}}},handle);
         return;
     }
     const auto entries=qdbus_cast<QList<DesktopShortcut>>(results.value("shortcuts"));
-    for(const auto &entry:entries)if(entry.id=="return-home")m_shortcut=entry.properties.value("trigger_description").toString().left(160);
+    for(const auto &entry:entries)if(entry.id==m_shortcutId)m_shortcut=entry.properties.value("trigger_description").toString().left(160);
     if(m_shortcut.isEmpty()){fail("No return shortcut was granted. Isolde stayed open.");return;}
     m_deadline.stop();m_phase=Idle;m_busy=false;m_active=true;emit changed();
 }
 void DesktopMode::activated(const QDBusObjectPath &session,const QString &id,qulonglong,const QVariantMap &)
 {
-    if(m_active && session.path()==m_session && id=="return-home")returnHome();
+    if(m_active && session.path()==m_session && id==m_shortcutId)returnHome();
 }
 void DesktopMode::sessionClosed()
 {

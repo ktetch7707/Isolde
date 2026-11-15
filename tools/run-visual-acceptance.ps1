@@ -195,7 +195,7 @@ $captureLine = {
             # Use Isolde's existing application Search shortcut; XF86Search is
             # intercepted by GNOME and opens the desktop overview instead.
             if ($guideInput) { $scancodes.F9=@('43','c3');$scancodes.Menu=@('e0','5d','e0','dd');$scancodes.Search=@('35','b5') }
-            if ($shellInput) { $scancodes.A=@('1e','9e') }
+            if ($shellInput) { $scancodes.A=@('1e','9e');$scancodes.F10=@('44','c4');$scancodes.Menu=@('e0','5d','e0','dd') }
             if ($Case -eq 'emulators') { $scancodes.X=@('2d','ad');$scancodes.Z=@('2c','ac');$scancodes.S=@('1f','9f') }
             if ((!$keys.Count -and !$nativePermission -and $phase -ne 'steaminstall') -or $keys.Count -gt 20) { throw 'Invalid bounded guest keystroke count.' }
             foreach ($key in $keys) {

@@ -136,7 +136,8 @@ class VpnSetupTests(unittest.TestCase):
     def test_switch_failure_restores_previous_owned_connection(self):
         owned = [{"uuid": UUID, "country": "CA"}, {"uuid": OTHER, "country": "US"}]
         with patch.object(vpn, "managed_connections", return_value=owned), \
-             patch.object(vpn, "active_connections", side_effect=[[{"uuid": OTHER, "device": "old"}],[{"uuid":UUID,"device":"new"}]]), \
+             patch.object(vpn, "active_connections", side_effect=[[{"uuid": OTHER, "device": "old"}],
+                 [{"uuid": UUID, "device": "new"}], [], [{"uuid": OTHER, "device": "old"}]]), \
              patch.object(vpn, "verify_location", side_effect=RuntimeError("wrong country")), \
              patch.object(vpn.signal, "signal"), patch.object(vpn, "command", return_value="old:wireguard") as execute:
             with self.assertRaisesRegex(RuntimeError, "wrong country"): vpn.switch_location(UUID)
@@ -176,6 +177,7 @@ class VpnSetupTests(unittest.TestCase):
     def test_country_check_is_bound_to_vpn_and_rejects_mismatch(self):
         def execute(*args, **kwargs):
             if args[0] == "ip": return json.dumps([{"dev": "ivpn123"}])
+            if args[0] == "resolvectl": return "Link 9 (ivpn123): " + ("10.64.0.1" if args[1] == "dns" else "~.")
             self.assertIn("--interface", args); self.assertIn("ivpn123", args); self.assertIn("--noproxy", args)
             return "US"
         with patch.object(vpn, "active_connections", return_value=[{"uuid": UUID, "device": "ivpn123"}]), patch.object(vpn, "command", side_effect=execute):
@@ -183,9 +185,18 @@ class VpnSetupTests(unittest.TestCase):
 
     def test_escaping_ipv6_route_blocks_launch_before_online_check(self):
         with patch.object(vpn, "active_connections", return_value=[{"uuid": UUID, "device": "ivpn123"}]), \
-             patch.object(vpn, "command", side_effect=[json.dumps([{"dev": "ivpn123"}]), json.dumps([{"dev": "ethernet"}])]) as execute:
+             patch.object(vpn, "command", side_effect=["Link 9 (ivpn123): 10.64.0.1", "Link 9 (ivpn123): ~.",
+                json.dumps([{"dev": "ivpn123"}]), json.dumps([{"dev": "ethernet"}])]) as execute:
             with self.assertRaisesRegex(RuntimeError, "routed"): vpn.verify_location(UUID, "CA")
             self.assertFalse(any(call.args[0] == "curl" for call in execute.call_args_list))
+
+    def test_dns_outside_tunnel_blocks_launch_before_online_check(self):
+        with patch.object(vpn, "vpn_device", return_value="ivpn123"), \
+             patch.object(vpn, "command", side_effect=["Link 9 (ivpn123): 10.64.0.1", "Link 9 (ivpn123): ~.",
+                '[{"dev":"ivpn123"}]', '[{"dev":"ivpn123"}]', '[{"dev":"ethernet"}]']) as execute:
+            with self.assertRaisesRegex(RuntimeError, "routed"):
+                vpn.verify_location(UUID, "CA")
+            self.assertEqual(execute.call_args.args, ("ip", "-j", "-4", "route", "get", "10.64.0.1"))
 
     def test_default_providers_are_both_installed(self):
         with patch.object(vpn, "installed", return_value=False), patch.object(vpn, "install") as install, patch.object(vpn, "install_copy_helper"), patch.object(vpn, "admin_command"), patch.object(vpn, "status", return_value={}):
@@ -223,6 +234,32 @@ class VpnSetupTests(unittest.TestCase):
              patch.object(vpn, "nm_async") as secrets:
             with self.assertRaisesRegex(RuntimeError, "another profile"): vpn.capture_location("surfshark")
             secrets.assert_not_called()
+
+    def test_failed_capture_cleanup_is_bounded_and_confirmed(self):
+        def guarded(*args, **kwargs):
+            vpn.check_copy_owner()
+            return ""
+        with patch.object(vpn, "ROOT_COPY", True), patch.object(vpn, "ROOT_ABORTED", False), \
+             patch.object(vpn, "OWNER_PROCESS", (-1, "missing", 0)), \
+             patch.object(vpn, "active_connections", return_value=[{"uuid": OTHER}]), \
+             patch.object(vpn, "managed_connections", return_value=[]) as owned, \
+             patch.object(vpn, "command", side_effect=guarded) as execute:
+            vpn.discard_failed_capture(UUID)
+            execute.assert_called_once_with("nmcli", "connection", "delete", "uuid", UUID)
+            owned.assert_called_once()
+            self.assertFalse(vpn.ROOT_ABORTED)
+        with patch.object(vpn, "active_connections", return_value=[{"uuid": UUID}]), patch.object(vpn, "command") as execute:
+            with self.assertRaisesRegex(RuntimeError, "recovery or cleanup could not be confirmed"):
+                vpn.discard_failed_capture(UUID)
+            execute.assert_not_called()
+        with patch.object(vpn, "active_connections", return_value=[]), \
+             patch.object(vpn, "command", side_effect=RuntimeError("delete failed")):
+            with self.assertRaisesRegex(RuntimeError, "recovery or cleanup could not be confirmed"):
+                vpn.discard_failed_capture(UUID)
+        with patch.object(vpn, "active_connections", return_value=[]), patch.object(vpn, "command"), \
+             patch.object(vpn, "managed_connections", return_value=[{"uuid": UUID}]):
+            with self.assertRaisesRegex(RuntimeError, "recovery or cleanup could not be confirmed"):
+                vpn.discard_failed_capture(UUID)
 
     def test_frontend_only_delegates_to_verified_installed_copy_tool(self):
         NM = MagicMock();source = NM.Client.new.return_value.get_connection_by_uuid.return_value
@@ -302,7 +339,7 @@ class VpnSetupTests(unittest.TestCase):
     def test_handoff_failure_keeps_native_source_connected(self):
         active=[{"uuid":OTHER,"device":"native"}]
         with patch.object(vpn,"ROOT_COPY",True),patch.object(vpn,"managed_connections",return_value=[{"uuid":UUID}]), \
-             patch.object(vpn,"active_connections",return_value=active),patch.object(vpn,"vpn_device",return_value="native"), \
+             patch.object(vpn,"active_connections",side_effect=[active, active + [{"uuid":UUID,"device":"new"}], active, active]),patch.object(vpn,"vpn_device",return_value="native"), \
              patch.object(vpn,"verify_location",side_effect=RuntimeError("wrong route")),patch.object(vpn.signal,"signal"),patch.object(vpn,"command") as run:
             with self.assertRaisesRegex(RuntimeError,"wrong route"):vpn.handoff_location(UUID,OTHER,"CA")
         self.assertFalse(any("down" in c.args and OTHER in c.args for c in run.call_args_list))
@@ -315,6 +352,62 @@ class VpnSetupTests(unittest.TestCase):
              patch.object(vpn,"verify_location",side_effect=[{"country":"CA"},{"country":"CA"}]) as verify:
             self.assertEqual(vpn.handoff_location(UUID,OTHER,"CA"),{"country":"CA"})
         self.assertEqual([c.args for c in verify.call_args_list],[(UUID,"CA",OTHER),(UUID,"CA")])
+
+    def test_handoff_final_verification_failure_restores_source(self):
+        state = {OTHER}
+        def active():
+            return [{"uuid": value, "device": "native" if value == OTHER else "new"} for value in sorted(state)]
+        def execute(*args, **kwargs):
+            if args[0] == "nmcli" and "connection" in args:
+                target = args[-1]
+                if "up" in args: state.add(target)
+                elif "down" in args: state.discard(target)
+            return ""
+        with patch.object(vpn, "ROOT_COPY", True), patch.object(vpn, "managed_connections", return_value=[{"uuid": UUID}]), \
+             patch.object(vpn, "active_connections", side_effect=active), patch.object(vpn, "vpn_device", return_value="native"), \
+             patch.object(vpn, "verify_location", side_effect=[{"country":"CA"}, RuntimeError("final route failed")]), \
+             patch.object(vpn.signal, "signal"), patch.object(vpn, "command", side_effect=execute):
+            with self.assertRaisesRegex(RuntimeError, "final route failed"):
+                vpn.handoff_location(UUID, OTHER, "CA")
+        self.assertEqual(state, {OTHER})
+
+    def test_rollback_reports_disconnect_or_restore_failure_and_refuses_other_vpns(self):
+        cases = [
+            ([{"uuid": UUID, "device": "new"}], RuntimeError("disconnect denied")),
+            ([], RuntimeError("restore denied")),
+            ([{"uuid": "unrelated", "device": "other"}], None),
+        ]
+        for active, failure in cases:
+            with self.subTest(active=active), patch.object(vpn, "active_connections", return_value=active), \
+                 patch.object(vpn, "command", side_effect=failure) as execute:
+                with self.assertRaisesRegex(RuntimeError, "recovery could not be confirmed"):
+                    vpn.rollback_location(UUID, OTHER)
+                if failure is None:
+                    execute.assert_not_called()
+
+    def test_rollback_requires_confirmed_result(self):
+        with patch.object(vpn, "active_connections", return_value=[]), patch.object(vpn, "command"):
+            with self.assertRaisesRegex(RuntimeError, "recovery could not be confirmed"):
+                vpn.rollback_location(UUID, OTHER)
+
+    def test_rollback_completes_after_requester_disappears(self):
+        state = {UUID}
+        def active():
+            vpn.check_copy_owner()
+            return [{"uuid": value, "device": "vpn"} for value in state]
+        def execute(*args, **kwargs):
+            vpn.check_copy_owner()
+            if "down" in args: state.discard(args[-1])
+            if "up" in args: state.add(args[-1])
+            return ""
+        with patch.object(vpn, "ROOT_COPY", True), patch.object(vpn, "ROOT_ABORTED", False), \
+             patch.object(vpn, "OWNER_PROCESS", (-1, "missing", 0)), \
+             patch.object(vpn, "active_connections", side_effect=active), patch.object(vpn, "command", side_effect=execute):
+            vpn.rollback_location(UUID, OTHER)
+            self.assertEqual(state, {OTHER})
+            self.assertFalse(vpn.ROOT_ABORTED)
+            with self.assertRaisesRegex(RuntimeError, "cancelled"):
+                vpn.check_copy_owner()
 
     def test_capture_preflight_route_is_bound_to_new_interface(self):
         with patch.object(vpn,"vpn_device",return_value="ivpn1234567890"), \

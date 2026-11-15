@@ -16,7 +16,7 @@ Item {
         else if(command===inputManager.navigateDown){pendingAction="";selectedIndex=Math.min(actions.length-1,selectedIndex+1)}
         else if(command===inputManager.confirm && backend && !backend.busy){
             const action=actions[selectedIndex]
-            if(action==="status")return
+            if(action==="status"){pendingAction="";return}
             if(action==="refresh"){pendingAction="";backend.refresh()}
             else if(pendingAction===action){pendingAction="";backend.request(action)}
             else pendingAction=action
@@ -45,6 +45,9 @@ Item {
                 required property string modelData
                 width:parent.width;height:Math.max(74*shell.textScale,powerRowLabel.implicitHeight+32);radius:shell.radius;color:root.selectedIndex===index?shell.selected:shell.surface
                 border.width:root.selectedIndex===index?2:0;border.color:shell.selectedFocus
+                Accessible.role: modelData==="status"?Accessible.StaticText:Accessible.Button
+                Accessible.name: powerRowLabel.text
+                Accessible.focused: root.visible && root.selectedIndex===index
                 Text { id:powerRowLabel;anchors.fill:parent;anchors.margins:16;verticalAlignment:Text.AlignVCenter;wrapMode:Text.WordWrap;textFormat:Text.PlainText;font.family:shell.fontFamily;font.pixelSize:21*shell.textScale;color:root.selectedIndex===index?shell.selectedText:shell.text
                     text:modelData==="status"?(root.backend?root.backend.status:qsTr("System power service unavailable.")):(root.pendingAction===modelData?qsTr("CONFIRM · "):"")+root.labels[index]+(index && root.backend?" · "+(root.backend.capabilities[modelData] || qsTr("checking")):"") }
                 MouseArea { anchors.fill:parent;onClicked:{root.selectedIndex=index;root.handleCommand(inputManager.confirm)} }

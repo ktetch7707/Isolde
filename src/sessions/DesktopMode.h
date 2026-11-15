@@ -56,7 +56,7 @@ private:
     QDBusConnection m_bus;
     QTimer m_deadline;
     QVariantMap m_presentation;
-    QString m_origin,m_error,m_shortcut,m_request,m_session,m_sessionToken,m_connectionName;
+    QString m_origin,m_error,m_shortcut,m_shortcutId,m_requestedTrigger,m_request,m_session,m_sessionToken,m_connectionName;
     enum Phase {Idle,Registering,Creating,Binding} m_phase=Idle;
     bool m_active=false,m_busy=false,m_registered=false,m_registering=false,m_nativeMode=false;
     quint64 m_generation=0,m_identityGeneration=0;

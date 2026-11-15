@@ -23,6 +23,8 @@ public:
     bool registered=false,rejectRegistration=false,objectPathResult=false;
     QString session;
     QString expectedTrigger="Home";
+    QString shortcutId;
+    QMap<QString, QString> savedTriggers;
     QStringList closed;
     QString introspect(const QString &) const override{return {};}
     bool handleMessage(const QDBusMessage &message,const QDBusConnection &bus) override{
@@ -44,8 +46,10 @@ public:
         if(create){session="/org/freedesktop/portal/desktop/session/"+sender+"/"+options.value("session_handle_token").toString();result["session_handle"]=objectPathResult?QVariant::fromValue(QDBusObjectPath(session)):QVariant(badSession?"/wrong/session":session);}
         else {
             const auto entries=qdbus_cast<QList<DesktopShortcut>>(message.arguments()[1]);
-            validBind=entries.size()==1 && entries.first().id=="return-home" && entries.first().properties.value("preferred_trigger")==expectedTrigger;
-            const QList<DesktopShortcut> granted=empty?QList<DesktopShortcut>{}:QList<DesktopShortcut>{{"return-home",{{"trigger_description",expectedTrigger}}}};
+            shortcutId=entries.isEmpty()?QString{}:entries.first().id;
+            validBind=entries.size()==1 && shortcutId.startsWith("return-home") && entries.first().properties.value("preferred_trigger")==expectedTrigger;
+            if(validBind && !savedTriggers.contains(shortcutId))savedTriggers[shortcutId]=expectedTrigger;
+            const QList<DesktopShortcut> granted=empty?QList<DesktopShortcut>{}:QList<DesktopShortcut>{{shortcutId,{{"trigger_description",savedTriggers.value(shortcutId)}}}};
             result["shortcuts"]=QVariant::fromValue(granted);
         }
         bus.send(message.createReply(QVariant::fromValue(QDBusObjectPath(handle))));
@@ -53,9 +57,9 @@ public:
         QTimer::singleShot(delay,this,[=]{auto response=QDBusMessage::createSignal(handle,"org.freedesktop.portal.Request","Response");response<<code<<result;bus.send(response);});
         return true;
     }
-    void activate(const QDBusConnection &bus,const QString &target={}){
+    void activate(const QDBusConnection &bus,const QString &target={},const QString &id={}){
         auto signal=QDBusMessage::createSignal("/org/freedesktop/portal/desktop","org.freedesktop.portal.GlobalShortcuts","Activated");
-        signal<<QVariant::fromValue(QDBusObjectPath(target.isEmpty()?session:target))<<QString("return-home")<<qulonglong(0)<<QVariantMap{};bus.send(signal);
+        signal<<QVariant::fromValue(QDBusObjectPath(target.isEmpty()?session:target))<<(id.isEmpty()?shortcutId:id)<<qulonglong(0)<<QVariantMap{};bus.send(signal);
     }
 };
 class DesktopTests final : public QObject {
@@ -105,6 +109,26 @@ private slots:
         mode.setPresentation(options);portal->expectedTrigger="Home";
         portal->deny=true;mode.prepareNative("cbc-gem");QTRY_VERIFY(!mode.busy());QVERIFY(!mode.active());QVERIFY(!mode.errorString().isEmpty());
     }
+    void remappingUsesDistinctPersistentPortalIdentity(){
+        DesktopMode mode(nullptr,*client);mode.setPresentation(options);
+        mode.prepareNative("first");QTRY_VERIFY(mode.active());QCOMPARE(mode.shortcutDescription(),QString("Home"));
+        const auto initialId=portal->shortcutId;mode.returnHome();
+        auto custom=options;custom["returnShortcut"]="F10";portal->expectedTrigger="F10";mode.setPresentation(custom);
+        mode.prepareNative("second");QTRY_VERIFY(mode.active());
+        QVERIFY(portal->shortcutId!=initialId);QCOMPARE(mode.shortcutDescription(),QString("F10"));
+        QSignalSpy returned(&mode,&DesktopMode::returned);
+        portal->activate(*server,{},initialId);QTest::qWait(30);QVERIFY(mode.active());
+        portal->activate(*server);QTRY_VERIFY(!mode.active());
+        QCOMPARE(returned.count(),1);QCOMPARE(returned.first().first().toString(),QString("second"));
+        portal->expectedTrigger="Home";mode.setPresentation(options);mode.prepareNative("third");QTRY_VERIFY(mode.active());
+        QCOMPARE(portal->shortcutId,initialId);QCOMPARE(mode.shortcutDescription(),QString("Home"));
+    }
+    void reportsActualPortalAssignment(){
+        auto custom=options;custom["returnShortcut"]="F10";portal->expectedTrigger="F10";
+        DesktopMode mode(nullptr,*client);mode.setPresentation(custom);mode.prepareNative("first");QTRY_VERIFY(mode.active());
+        const auto id=portal->shortcutId;mode.returnHome();portal->savedTriggers[id]="Other key";
+        mode.prepareNative("second");QTRY_VERIFY(mode.active());QCOMPARE(mode.shortcutDescription(),QString("Other key"));
+    }
     void identityRejectionNeverCreatesSession(){
         DesktopMode mode(nullptr,*client);mode.setPresentation(options);portal->rejectRegistration=true;mode.start("origin");QTRY_VERIFY(!mode.busy());QVERIFY(!mode.active());QCOMPARE(portal->creates,0);QVERIFY(!mode.errorString().isEmpty());
     }
@@ -132,6 +156,22 @@ private slots:
         auto *button=root->findChild<QQuickItem *>("desktopReturnButton");QVERIFY(button);QTRY_VERIFY(button->hasActiveFocus());
         QTest::keyClick(window,Qt::Key_Escape);QTRY_VERIFY(!mode.active());QTRY_VERIFY(!window->isVisible());
         mode.start("again");QTRY_VERIFY(mode.active());auto closed=QDBusMessage::createSignal(portal->session,"org.freedesktop.portal.Session","Closed");server->send(closed);QTRY_VERIFY(!mode.active());QVERIFY(!mode.errorString().isEmpty());
+    }
+    void nativeReturnNoticeShowsActualGrant(){
+        auto custom=options;custom["returnShortcut"]="F10";portal->expectedTrigger="F10";
+        DesktopMode mode(nullptr,*client);mode.setPresentation(custom);mode.prepareNative("first");QTRY_VERIFY(mode.active());
+        const auto id=portal->shortcutId;mode.returnHome();portal->savedTriggers[id]="Other key";
+        mode.prepareNative("second");QTRY_VERIFY(mode.active());
+        InputManager input;QQmlEngine engine;engine.rootContext()->setContextProperty("inputManager",&input);
+        QQmlComponent component(&engine,QUrl::fromLocalFile(QStringLiteral(DESKTOP_RETURN_QML)));QVERIFY2(component.isReady(),qPrintable(component.errorString()));
+        std::unique_ptr<QObject> root(component.createWithInitialProperties({{"controller",QVariant::fromValue(&mode)},{"appearance",QVariantMap{{"surfaceColor","#28262f"},{"selectedColor","#353039"},{"textColor","#f5f1f3"},{"mutedColor","#aaa5af"},{"focusColor","#c994a5"}}},{"nativeSessionActive",true}}));QVERIFY2(root,qPrintable(component.errorString()));
+        auto *window=qobject_cast<QQuickWindow *>(root.get());QVERIFY(window);QTRY_VERIFY(window->isVisible());
+        auto *description=root->findChild<QObject *>("desktopShortcutDescription");QVERIFY(description);QVERIFY(description->property("text").toString().contains("Other key"));
+        QVERIFY(window->flags().testFlag(Qt::WindowDoesNotAcceptFocus));QVERIFY(window->flags().testFlag(Qt::WindowTransparentForInput));
+        QTRY_VERIFY_WITH_TIMEOUT(!window->isVisible(),12000);
+        root->setProperty("nativeSessionActive",false);QTRY_VERIFY(!window->isVisible());
+        root->setProperty("nativeSessionActive",true);QTRY_VERIFY(window->isVisible());
+        mode.returnHome();QTRY_VERIFY(!window->isVisible());
     }
 };
 QTEST_MAIN(DesktopTests)

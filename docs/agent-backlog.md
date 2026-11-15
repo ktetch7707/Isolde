@@ -3,7 +3,7 @@ Location: `docs/agent-backlog.md`. Persistent entrypoint: `AGENTS.md`.
 
 ## Current acceptance reconciliation — 2026-11-12
 
-November14 review: acceptance is **90% (2253/25)**,208/239 milestones; T04 is complete at100%, with all seven Scope groups verified.
+November15 T12 input review: acceptance is **90% (2256/25)**, 212/243 milestones; T12 is 57% after narrow installed remapping, native return, Store keyboard and timed-wake evidence. T04 is complete at100%, with all seven Scope groups verified.
 Recent coder changes are under combined review/verification. BUG-180–185 cover
 the runner recovery-binary fixture, real signature return handling, private
 digest scratch files, an incorrect installer assertion, premature Steam warning
@@ -176,7 +176,7 @@ After Studio/shell and the current exception, follow the table: evidence reconci
 | T05 | 17 | Grid renderer evidence reconciliation | 100% | 100% | T17 geometry corroborated by final T21 suite and installed reference pairs |
 | T03 | 18 | Local Kodi search and installed acceptance | 100% | 100% | p62 full/x5 focused; installed56-episode paging/playback/exact Search and library return accepted |
 | T04 | 19 | Complete Kodi interface, preservation and import | 100% | 100% | all 7 groups verified across the installed media, import, Desktop, playlist shelf and reference workflows |
-| T12 | 20 | System/input/keyboard, VPN, apps and screensavers | 54% | 100% | coding claim predates campaign: BUG-078 missing Power software and installed input/contrast defects remain; interface audio output verified narrowly; broad acceptance open |
+| T12 | 20 | System/input/keyboard, VPN, apps and screensavers | 57% | 100% | Power and narrow installed input/native return/timed wake reviewed; broader input, VPN, apps and screensaver acceptance remain open |
 | T09 | 21 | Playback preference and viewing controls | 38% | 100% | all code complete: Always Play Locally preference (KodiService + DisplaySettings); T12 keyboard/screencode foundation; playback matrix and viewing controls complete |
 | T10 | 22 | Capture/HDMI/audio software and editors | 67% | 100% | capture and audio software/editor paths implemented; native and installed acceptance deferred; physical H04 separate |
 | T11 | 23 | Guide / PseudoTV | 100% | 100% | VM Guide acceptance complete; 18/18 milestones, 3/3 groups; return to Studio priority |

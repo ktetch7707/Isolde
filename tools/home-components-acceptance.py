@@ -507,6 +507,14 @@ def main():
                             original_bytes=json.dumps(next_document).encode();layout.write_bytes(original_bytes)
                             process,window,focused=start_shell()
                         if args.themes_controls_only:
+                            if tag=="custom":
+                                settings_route("system")
+                                key("Up",12);key("Down",3);key("Return")
+                                snap(tag,"power")
+                                key("Down",2);key("Return")
+                                snap(tag,"powerconfirm")
+                                key("Escape")
+                                snap(tag,"powercancel")
                             settings_route("interface-sounds");snap(tag,"sounds")
                             key("Down");key("Right");key("Return")  # Apply the first available preview choice.
                             fields=json.loads((Path(__file__).resolve().parents[1]/"config/interface-sounds.json").read_text())["fields"]
@@ -633,7 +641,7 @@ def main():
                     assert native_before==native_after and native_before,"Appearance changed native Kodi fixture settings"
                     assert not theme_provider.errors,theme_provider.errors
                     result={"passed":True,"journey":"themecontrols" if args.themes_controls_only else "themecustom" if args.themes_custom_only else "themes","executable":str(executable),"freshProfile":True,"normalProfileUsed":False,"palettes":["custom"] if args.themes_custom_only else ["dark","pastel","custom"],"phases":phases,"fixtureOnly":True,"nativeKodiBefore":native_before,"nativeKodiAfter":native_after,"layoutBytesUnchanged":True}
-                    if args.themes_controls_only:result.update(soundAcceptanceVersion=1,soundOutput=sound_observations)
+                    if args.themes_controls_only:result.update(soundAcceptanceVersion=1,soundOutput=sound_observations,powerConfirmationReview=True)
                     (evidence/"result.json").write_text(json.dumps(result,indent=2))
                     print("Evidence: "+str(evidence),flush=True)
                     return

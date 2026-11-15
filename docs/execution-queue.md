@@ -1,5 +1,161 @@
 # Executable backlog queue
 
+## Current checkpoint — T12 fix-first batch
+
+Installed remapped-return defect: shell attempts `20261115-122043-926` and
+`20261115-122357-099` saved and reopened Home = F10. In
+`20261115-122724-442`, FreeTube remained open after F10; physical Home returned
+to the exact selected card. Attempt `20261115-123056-631` restored Home / H;
+the service and layout restoration checks passed. The portal retaining a prior
+assignment under the same shortcut ID is a hypothesis, not a proven cause.
+The persistent-portal regression `t12-portal-remap-20261115-a` fails because
+both requested triggers use the same ID. Stable trigger-specific IDs preserve
+the default identity; `t12-portal-remap-20261115-b` passes the focused private-bus
+tests, including wrong-ID activation and reporting the portal's actual
+assignment. Native launch currently does not display that description to the
+user; installed grant and return behavior are still unverified. No remapped-return
+credit is claimed.
+
+A full suite is justified before deployment because portal identity and
+activation affect the shared native-app and desktop-return lifecycle, which
+the prior g suite exercised with a different registration contract.
+`t12-portal-remap-20261115-c` passes 63/63 and is installed as
+`0da8b56149169c4810cae49f`. In installed attempt `20261115-130600-575`,
+the compositor's new-shortcut dialog displayed F10. Return activated its
+shortcut editor rather than Add; no grant or client return was proven.
+Attempt `20261115-130904-185` investigated Tab focus and canceled the dialog
+without confirming a grant. Attempt `20261115-131237-575` restored the temporary
+Home mapping to Home / H. Attempt `20261115-132540-570` showed that two Tabs
+then Return cancel the portal dialog and Isolde visibly refuses to launch.
+In `20261115-132909-113`, three Tabs and Return granted F10; FreeTube opened,
+and physical F10 returned to its exact selected Home card. A fresh session
+`20261115-133226-206` confirmed the temporary mapping was again restored to
+Home / H. These attempts report normal service and unchanged layout hashes.
+This proves one native remapping path, not the complete return matrix.
+The working tree now shows the actual portal-assigned description in a
+non-focusable, input-transparent ten-second native-session notice. Focused
+`t12-portal-remap-20261115-f` verifies a differing assignment, timeout and
+reappearance; installed notice and the remaining remapping matrix still require verification.
+Candidate c predates this notice.
+
+VPN recovery follow-up: source review found that target disconnection failures
+were suppressed and recovery could be reported as the original error without
+confirming the old state. A capture handoff failure after stopping the native
+source did not attempt restoration. The switch and handoff now share bounded
+recovery that refuses unrelated active VPNs, verifies target removal and the
+previous NetworkManager connection state, and explicitly reports incomplete
+recovery. Recovery can continue after the requester disappears; a native
+provider may still require manual reconnection if its incomplete profile
+cannot be reactivated. Failed capture also confirms deletion of its inactive
+saved connection or reports incomplete cleanup. This is connection-state
+evidence, not proof of restored routes or a kill switch. Host Python passes
+39 VPN tests; `t12-vpn-recovery-20261115-c` passes both focused VM registrations with
+service active and zero restarts. The modified root helper has not been
+installed or exercised through installed UI. Isolated traffic/DNS topology,
+provider-boundary installed checks and all other open T12 gates remain open;
+no additional percentage credit is claimed.
+
+T12 starts at54% VM acceptance. Source review found existing guarded login1
+Power, so the old missing-implementation label is stale. This batch prevents
+held Confirm from authorizing a Power action, exposes Power focus and labels,
+consumes the entire ambient wake key before physical text handling, resets
+idle on accepted physical text, and checks VPN DNS route ownership before
+allowing an assigned app launch. Published the default-app support matrix.
+
+`t12-user-repair-20261114-a` built and passed 63/63 CTest registrations, including
+Power's private-bus contract, remote bindings and VPN tests; installed release
+`9feee15a509210c6dfd79fba` remained healthy. The installed themecontrols run
+reviewed the Power page, confirmation and Back cancellation. Its legacy
+custom policy/reset/cancel frames show other screens and do not prove those
+claims. Lounge and Pastel completed their scripted runs and the host screenshots
+were reviewed; owned-window screenshots remain unreviewed. The attended shell
+case timed out at its first review prompt:
+no guest keys were sent, and Status confirmed service/layout restoration. VPN
+and clients in that grouped invocation did not run.
+
+Follow-up: remote-binding capture consumed key presses before the shell's idle
+reset. InputManager now reports input activity before capture, with wake presses
+still consumed separately; `t12-user-repair-20261114-b` passes both focused
+registrations, including the new capture regression. The follow-up
+`t12-user-repair-20261114-c` passes 63/63 CTest registrations and is installed
+as `f5fbb716778acf44743f3657`, with service active and zero restarts. Continue
+T12 with installed idle, remapping, VPN topology and app-session journeys. Do
+not treat the attended timeout or the older installed candidate as acceptance of
+the newer input change. Paid-provider scenarios use the documented VM boundary
+substitute.
+
+Installed shell attempt `20261115-110913-088` completed transport and restored
+the service/layout. Reviewed frames show Home, All Apps, Store and exact
+gallery-origin return; the frame labelled ambient is VPN Settings, while the
+frame labelled wake shows the ambient preview before a Return key was sent.
+The helper takes no post-key frame, so neither timed idle nor wake/focus return
+is established by this attempt. Remaining reference owned-window review and
+the VPN/clients journeys have not run against c.
+
+Shell attempt `20261115-111425-045` reviewed the Preview Now selection before
+two physical Return presses and the same selection afterward. The intermediate
+preview was not captured in that attempt; together with the prior preview
+capture this is narrow evidence, not proof of timed idle or full T12.5.
+
+Shell attempt `20261115-111828-529` changed the Studio Demo idle timeout
+from five to one minute, waited 65 seconds, and captured the actual ambient
+slideshow. One Return dismissed it to the same selected timeout row, still
+showing one minute, without activating the row. Four Right presses restored
+the previous value; a fresh installed attempt `20261115-112258-154` captured
+the five-minute value. Both runs restored the service and normal layout
+hashes. This verifies that specific timed wake path, not screensaver content,
+rotation, profile isolation, or the complete T12.5 milestone.
+
+Installed clients attempt `20261115-112617-496` opened FreeTube and the live
+CBC Gem landing page, then used physical Home to return to the respective
+selected Home cards. All eight captured frames were reviewed; the runner
+reported active service, zero restarts and unchanged normal layout hashes.
+This does not establish playback, offline recovery, remapped return, account
+isolation, or the remaining provider matrix. All 24 owned-window frames from
+the earlier a Lounge/Pastel runs have now been reviewed, including the four
+default/custom frames. The frames labelled resetmenu show the Studio panel and
+those labelled resetconfirm show the Reset page choice, not a confirmed reset;
+the labels alone do not prove reset completion. This review is of a's renderer,
+not the later input or VPN changes.
+
+Installed remote attempt `20261115-112912-688` exposed a shortcut conflict:
+choosing Up and pressing A opened the ambient preview instead of reviewing
+the binding. Wake returned to Remote Setup with no binding saved. Regression
+`t12-user-repair-20261115-d` reproduced the shortcut activation in a real
+QQuickWindow. ShortcutOverride now gives binding capture, saved unmodified
+custom bindings and visible physical text input precedence; modified shortcuts
+remain available outside text entry. Focused `t12-user-repair-20261115-f`
+passes both registrations, including real-window shortcut/capture, remapped
+navigation, text entry and chord cases. The fix still needs installed review.
+Another full run is justified because ShortcutOverride arbitration changes a
+global input boundary for every screen, including ordinary shortcuts and text
+entry; the earlier c suite tested different dispatch behavior.
+
+`t12-user-repair-20261115-g` passed 63/63 CTest registrations and installed
+release `9ba58c11096220d713ca901a`. In installed shell attempt
+`20261115-114840-467`, A reached the Up binding review, saved successfully,
+and moved selection from Down back to Up without opening ambient. Menu
+opened the single-action restore confirmation; a subsequent fresh attempt
+`20261115-115139-905` showed Up restored to its default arrow. The reviewed
+frames prove that path only, not remapped native-window return or the full
+remote/keyboard matrix. Both runs restored the service and layout hashes.
+The host shell runner now allows the Menu key for this bounded workflow.
+Shell attempt `20261115-115340-406` used the Store Search keyboard: physical A
+entered `a` instead of opening ambient, Back canceled, and reopening showed an
+empty field. All six frames were reviewed; service/layout restoration passed.
+This is not the complete installed field, IME or remote-keyboard matrix.
+Shell attempt `20261115-115932-353` repeats one-minute idle and single-Confirm
+wake against g: the selected timeout row remains at one minute after wake,
+and the final reviewed frame confirms restoration to five minutes. Six frames
+were reviewed; service/layout restoration passed. The narrowly proven input
+and wake paths split their pre-existing unfinished milestone weights, retaining
+the rest; broad acceptance remains open.
+
+The additional full run was justified before installing the follow-up: the new
+activity signal is emitted by the application-wide key-event filter, crossing
+every QML input surface and changing idle behavior beyond remote setup. The
+focused run does not cover that global dispatch and runtime integration.
+
 ## Current checkpoint — November 14 review and media continuation
 
 T04 complete; acceptance90% (2253/25),208/239 milestones, T04=100% (7/7 groups).

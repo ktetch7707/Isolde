@@ -132,6 +132,7 @@ Item {
         else { route = ""; inPage = false }
     }
     readonly property bool remoteEditing: inPage && route === "remotes" && remotePage.editing
+    readonly property bool powerConfirmation: visible && inPage && route === "system" && systemPage.activePage === 3
 
     function handleCommand(command) {
         if (remoteEditing) { remotePage.handleCommand(command); return }

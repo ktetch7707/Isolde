@@ -35,10 +35,14 @@ filter and timer with the runtime.
 Supported: key/media-key events actually delivered to Isolde by compatible
 keyboard/HID USB, Bluetooth or receiver devices. This is not new Bluetooth
 pairing, device-specific identity/scan-code discovery, raw IR/CEC reception,
-gamepad-axis support or physical device qualification. Custom mappings apply to
-Isolde screens; native/external apps and Kodi keep their existing return/input
-controls. Full T12.3 installed/external-window/offline/hang/retry acceptance stays
-open. No installed release is changed by these edits or focused checks.
+gamepad-axis support or physical device qualification. Custom mappings apply to Isolde screens. For native/external clients Isolde
+requests supported Home, letter, digit and function-key bindings through the
+desktop portal; the compositor controls the actual grant. Unsupported custom
+Home keys use the configured desktop default. A transient, non-interactive
+notice displays the granted shortcut when the native session starts; it does
+not assert the compositor honored the requested key. Kodi keeps its existing
+input controls. Full T12.3 installed/external-window/offline/hang/retry
+acceptance stays open; the notice has not yet been verified in an installed VM.
 
 ## Verification
 
@@ -118,6 +122,13 @@ default to true without being rewritten; malformed booleans are refused. A
 failed preference save preserves both stored and active mode and surfaces retry.
 Keyboard target registration is removed on hide/destruction, with guarded
 references preventing profile teardown from retaining a client.
+
+Shortcut arbitration also gives an active capture, a saved unmodified custom
+binding, and visible physical text input precedence over conflicting Qt
+shortcuts. Other modified shortcuts remain available outside text entry.
+Installed `t12-user-repair-20261115-g` reviewed A capture/save/navigation/
+restore and Store Search text/cancel; its full suite passed 63/63. The broader
+installed and external-window matrices remain open; see `execution-queue.md`.
 
 Verification: `remote-keyboard-20261112-a` stops at oracle self-test: four checks
 load an acceptance helper whose parser assumes the old keyboard actions list.
