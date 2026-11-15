@@ -119,6 +119,11 @@ public:
         file.close();
         return home.load(QStringLiteral(STUDIO_DEFAULTS), saved);
     }
+    Q_INVOKABLE bool resetPastel() {
+        if (!temp.isValid()) return false;
+        saved = temp.filePath(QString("scenario-%1.json").arg(++sequence));
+        return home.load(QStringLiteral(STUDIO_DEFAULTS), saved) && home.applySkin("builtin-pastel");
+    }
     Q_INVOKABLE QVariantMap surfacePalette(const QVariantMap &appearance) const { return ComponentSchema::surfacePalette(appearance); }
     Q_INVOKABLE QString disk() const {
         QFile file(saved);

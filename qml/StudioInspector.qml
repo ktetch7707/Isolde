@@ -156,7 +156,7 @@ Item {
         if(f.type==="color")return local(current || {},f)===undefined?"Theme":"Custom"
         if(f.control==="slider" || f.control==="stepper")return Number((Number(value)*(f.displayScale || 1)).toFixed(2))+String(f.displayUnit || "")+(local(current || {},f)===undefined?" · Theme":"")
         const members=pageMode?[{}]:targets,overridden=members.filter(i=>local(i,f)!==undefined).length
-        return String(value===undefined?"":value)+(overridden===0?" · Inherited":overridden===members.length?" · Override":" · Mixed overrides")
+        return String(value===undefined?"":value)+(overridden===0?" · Default":overridden===members.length?" · Custom":" · Mixed")
     }
     function run(op,args){
         const success=previewActive?session.previewCommand(op,args,pageId):session.execute(op,args,pageId)
@@ -294,8 +294,8 @@ Item {
             view="sourcePolicy";return
         }
         if(f.type==="replaceComponent"){openChoices((options.replacementChoices || []).map(entry=>({name:entry.name,value:entry.type,kind:"replacement"})));return}
-        if(f.type==="number" && (f.control==="slider" || f.control==="stepper")){beginScalar();return}
-        if(f.type==="number" || f.type==="text"){beginKeyboard(f.type,effective(current,f));return}
+        if(f.type==="number"){beginScalar();return}
+        if(f.type==="text"){beginKeyboard(f.type,effective(current,f));return}
         if(f.type==="toggle"){adjust(f,1);return}
         if(f.type==="choice"){openChoices(f.choices.filter(value=>f.scope!=="surfaceTheme" || f.key!=="mode" || shellSurface!=="settings" || value.value!=="origin").map(value=>value && typeof value==="object"?value:({name:value,value:value})));return}
         if(f.type==="color"){beginColor();return}
