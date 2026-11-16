@@ -413,11 +413,7 @@ void HomeLayout::appendAppChoices(QVariantList& choices, const QString& type) co
     }
 }
 bool HomeLayout::rebindSource(const QString& itemId, const QString& sourceId) {
-    bool compatible = false;
-    for (const auto& choice : sourceChoices(itemId))
-        if (choice.toMap().value("id") == sourceId)
-            compatible = true;
-    if (!compatible) {
+    if (!sourceIsCompatible(itemId, sourceId)) {
         setError(tr("Choose a compatible installed source."));
         return false;
     }
@@ -425,35 +421,49 @@ bool HomeLayout::rebindSource(const QString& itemId, const QString& sourceId) {
         auto item = m_items[i].toObject();
         if (item.value("id") != itemId)
             continue;
-        const auto previous = item;
-        auto actionList = normalizedActionForItem(item);
-        if (actionList.isEmpty())
-            continue;
-        auto first = actionList.first().toMap();
-        const auto type = first.value("type").toString();
-        if (type == "launch-app") {
-            first["appId"] = sourceId;
-            if (item.value("kind") == "app")
-                item["appId"] = sourceId;
-        } else if (type == "open-collection" || type == "play-movie" || type == "open-show")
-            first["collectionId"] = sourceId;
-        else if (type == "switch-input")
-            first["input"] = sourceId.toInt();
-        else
-            first["openWith"] = sourceId;
-        actionList[0] = QJsonObject::fromVariantMap(first);
-        item["actions"] = QJsonArray::fromVariantList(actionList);
-        item.remove("action");
-        item = QJsonObject::fromVariantMap(ComponentSchema::component(item.toVariantMap(), true));
-        m_items[i] = item;
-        if (!save()) {
-            m_items[i] = previous;
-            return false;
-        }
-        emit layoutChanged();
-        return true;
+        return rebindItemAt(i, item, sourceId);
     }
     return false;
+}
+
+bool HomeLayout::sourceIsCompatible(const QString& itemId, const QString& sourceId) const {
+    for (const auto& choice : sourceChoices(itemId))
+        if (choice.toMap().value("id") == sourceId)
+            return true;
+    return false;
+}
+
+bool HomeLayout::rebindItemAt(qsizetype i, const QJsonObject& item, const QString& sourceId) {
+    auto actionList = normalizedActionForItem(item);
+    if (actionList.isEmpty())
+        return false;
+    auto first = actionList.first().toMap();
+    const auto type = first.value("type").toString();
+    if (type == "launch-app") {
+        first["appId"] = sourceId;
+        if (item.value("kind") == "app")
+            first["appId"] = sourceId;
+    } else if (type == "open-collection" || type == "play-movie" || type == "open-show")
+        first["collectionId"] = sourceId;
+    else if (type == "switch-input")
+        first["input"] = sourceId.toInt();
+    else
+        first["openWith"] = sourceId;
+    actionList[0] = QJsonObject::fromVariantMap(first);
+    item["actions"] = QJsonArray::fromVariantList(actionList);
+    item.remove("action");
+    item = QJsonObject::fromVariantMap(ComponentSchema::component(item.toVariantMap(), true));
+    m_items[i] = item;
+    if (!save()) {
+        m_items[i] = previousItem(i);
+        return false;
+    }
+    emit layoutChanged();
+    return true;
+}
+
+QJsonObject HomeLayout::previousItem(qsizetype i) const {
+    return m_items[i].toObject();
 }
 QVariantList HomeLayout::categories() const {
     return m_categories.toVariantList();
