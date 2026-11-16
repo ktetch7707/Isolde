@@ -28,7 +28,11 @@ private slots:
     void settingsNavigationIsBoundedAndProfileLocal();
 };
 
-QTEST_GUILESS_MAIN(SettingsPowerTests)
+int main(int argc, char *argv[]) {
+    SettingsPowerTests test;
+    return QTest::qExec(&test, argc, argv);
+}
+
 #include "tst_settings_power.moc"
 
 void SettingsPowerTests::powerCapabilitiesGuardAndActions() {

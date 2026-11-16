@@ -23,7 +23,11 @@ private slots:
     void gamesLaunchRejectsMissingAndRedirectedTargets();
 };
 
-QTEST_GUILESS_MAIN(GameLibraryTests)
+int main(int argc, char *argv[]) {
+    GameLibraryTests test;
+    return QTest::qExec(&test, argc, argv);
+}
+
 #include "tst_game_library.moc"
 
 void GameLibraryTests::steamGamesUseProviderIdentityAndReviewedImport() {

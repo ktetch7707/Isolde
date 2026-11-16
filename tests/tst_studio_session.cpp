@@ -36,7 +36,11 @@ private slots:
     void studioStartingStylesAreValidatedDraftData();
 };
 
-QTEST_GUILESS_MAIN(StudioSessionTests)
+int main(int argc, char *argv[]) {
+    StudioSessionTests test;
+    return QTest::qExec(&test, argc, argv);
+}
+
 #include "tst_studio_session.moc"
 
 void StudioSessionTests::studioSessionDraftUndoBoundsAndNoWrite() {

@@ -26,7 +26,11 @@ private slots:
     void rejectsConflictingVersionedLayout();
 };
 
-QTEST_GUILESS_MAIN(LayoutPersistenceTests)
+int main(int argc, char *argv[]) {
+    LayoutPersistenceTests test;
+    return QTest::qExec(&test, argc, argv);
+}
+
 #include "tst_layout_persistence.moc"
 
 void LayoutPersistenceTests::pagesPersistAndRouteAndTravelWithSkins() {

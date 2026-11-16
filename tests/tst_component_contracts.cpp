@@ -18,7 +18,11 @@ private slots:
     void densePlacementValidationPreservesBoundsAndTouchingEdges();
 };
 
-QTEST_GUILESS_MAIN(ComponentContractTests)
+int main(int argc, char *argv[]) {
+    ComponentContractTests test;
+    return QTest::qExec(&test, argc, argv);
+}
+
 #include "tst_component_contracts.moc"
 
 void ComponentContractTests::validatesContracts() {
