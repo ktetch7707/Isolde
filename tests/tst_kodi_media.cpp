@@ -57,6 +57,7 @@ private slots:
     void cancelsScanMonitoring();
     void observedScanCompletes();
     void rejectedScanIsNotSuccess();
+    void playlistCollisionAndRulePreview();
 };
 void KodiMediaTests::localPlaybackPreferenceIsPersistedAndProfileScoped()
 {
@@ -206,7 +207,7 @@ static void serve(QLocalServer &server, int version)
                 QJsonValue result;
                 if (request.value("method") == "JSONRPC.Version")
                     result = QJsonObject{{"version", QJsonObject{{"major", version}}}};
-                else if (request.value("method").toString().startsWith("Isolde.Play")) {
+                else if (request.value("method").toString().startsWith("Isolde.Play") || request.value("method") == "Isolde.PlaybackControl") {
                     server.setProperty("lastPlayMethod", request.value("method").toString());
                     server.setProperty("lastPlayParams", request.value("params").toObject().toVariantMap());
                     server.setProperty("playRequests", server.property("playRequests").toInt() + 1);
@@ -232,6 +233,14 @@ static void serve(QLocalServer &server, int version)
                 else if (request.value("method") == "Isolde.CreatePlaylist") {
                     const auto params=request.value("params").toObject();server.setProperty("savedPlaylist",params.toVariantMap());
                     result=QJsonObject{{"saved",!server.property("rejectPlaylist").toBool()},{"name",params["name"]},{"kind",params["kind"]},{"playlistName","Isolde-12345678.xsp"}};
+                }
+                else if (request.value("method") == "Isolde.RenamePlaylist") {
+                    const auto params=request.value("params").toObject();server.setProperty("savedPlaylist",params.toVariantMap());
+                    result=QJsonObject{{"renamed",!server.property("rejectPlaylist").toBool()},{"newName",params["newName"]},{"playlistName","Isolde-12345678.xsp"}};
+                }
+                else if (request.value("method") == "Isolde.DeletePlaylist") {
+                    const auto params=request.value("params").toObject();server.setProperty("savedPlaylist",params.toVariantMap());
+                    result=QJsonObject{{"deleted",!server.property("rejectPlaylist").toBool()},{"name",params["name"]}};
                 }
                 else if (request.value("method") == "Isolde.GetPlaylistItems") {
                     server.setProperty("playlistParams",request.value("params").toObject().toVariantMap());
@@ -346,6 +355,46 @@ void KodiMediaTests::savedKodiPlaylistCatalogAndShelf()
     QCOMPARE(server.property("playlistMutation").toMap()["revision"].toString(),QString(64,'b'));
     server.setProperty("rejectPlaylistMutation",true);editor.sortPlaylist("Family films.xsp","title","ascending");QTRY_VERIFY(!editor.busy());
     QVERIFY(editor.connected());QCOMPARE(editor.items(),retained);QVERIFY(editor.playlistStatus().contains("failed"));
+}
+void KodiMediaTests::playlistCollisionAndRulePreview()
+{
+    QTemporaryDir dir;QLocalServer server;QVERIFY(server.listen(dir.filePath("rpc.sock")));serve(server,13);
+    KodiMedia catalog("playlist-collision",nullptr,dir.path());catalog.openPlaylists();QTRY_VERIFY(catalog.connected());
+    QCOMPARE(catalog.items().size(),1);QCOMPARE(catalog.items()[0].toMap()["playlistName"].toString(),QString("Family films.xsp"));
+
+    // Same-name rename is rejected locally without a Kodi request.
+    catalog.renamePlaylist("Family films.xsp","Family films.xsp");QVERIFY(!catalog.busy());
+    QVERIFY(catalog.playlistStatus().contains("Cannot rename"));
+
+    // Delete the existing playlist.
+    catalog.deletePlaylist("Family films.xsp");QTRY_VERIFY(!catalog.busy());
+    QVERIFY(catalog.playlistStatus().contains("deleted"));
+
+    // Rule preview: preview first, then edit requires the preview revision.
+    catalog.previewPlaylist("New Playlist.xsp","search","Fixture");QTRY_VERIFY(!catalog.busy());
+    QVERIFY(catalog.playlistPreviewReady());QCOMPARE(catalog.playlistPreview().size(),1);
+    QCOMPARE(catalog.playlistPreview()[0].toMap()["title"].toString(),QString("Fixture"));
+    QCOMPARE(server.property("ruleParams").toMap()["name"].toString(),QString("New Playlist.xsp"));
+    QCOMPARE(server.property("ruleParams").toMap()["view"].toString(),QString("search"));
+    QCOMPARE(server.property("ruleParams").toMap()["value"].toString(),QString("Fixture"));
+
+    // Edit requires the same rule params as preview.
+    catalog.editPlaylist("New Playlist.xsp","search","Fixture");QTRY_VERIFY(!catalog.busy());
+    QVERIFY(catalog.playlistStatus().contains("saved"));
+
+    // Rename collision: reject simulates Kodi refusing the name.
+    server.setProperty("rejectPlaylist",true);
+    catalog.renamePlaylist("New Playlist.xsp","Collision.xsp");QTRY_VERIFY(!catalog.busy());
+    QVERIFY(catalog.playlistStatus().contains("did not confirm"));
+    QCOMPARE(server.property("savedPlaylist").toMap()["newName"].toString(),QString("Collision.xsp"));
+
+    // Rename succeeds when Kodi accepts.
+    server.setProperty("rejectPlaylist",false);
+    catalog.renamePlaylist("New Playlist.xsp","Renamed.xsp");QTRY_VERIFY(!catalog.busy());
+    QVERIFY(catalog.playlistStatus().contains("renamed"));
+    QCOMPARE(server.property("savedPlaylist").toMap()["newName"].toString(),QString("Renamed.xsp"));
+
+    catalog.invalidate("Test complete");
 }
 void KodiMediaTests::recentlyViewedMergesKodiHistoryAndStaysBounded()
 {
