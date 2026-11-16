@@ -29,7 +29,7 @@ Item {
         { name: "System Hint", value: ambientSettings.showSystemHint ? "Shown" : "Hidden", help: "Shows mode/rate and wake hint." },
         { name: "Preview Now", value: "Open", help: "Immediately preview the screensaver." },
         { name: "Reset Ambient", value: "Defaults", help: "Restore default screensaver settings." },
-        { name: "Screensaver Pages", value: (ambientSettings.pageIds || []).length + " selected", help: "Create pages with Page Studio, then choose their rotation here. Select Pages as Visual Mode." }
+        { name: "Screensaver Pages", value: (ambientSettings.pageIds || []).length + " selected", help: "Create pages with Skin Studio, then choose their rotation here. Select Pages as Visual Mode." }
     ]
     signal previewRequested()
 

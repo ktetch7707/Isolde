@@ -4,7 +4,7 @@
 
 # Configurable shell surfaces — sources, All Apps, themes and Search
 
-Status: additive design specification, 2026-10-19. User observations require four corrections, implemented later as T25-T28. This revision changes plans only. It extends [Page Studio](page-studio-redesign.md), including its draft/apply, declarative layout, focus, compatibility and evidence rules. Priority revision (user): these capabilities follow the complete core Studio T15-T24 package; they must not delay its templates, Preview/Apply or core cutover.
+Status: additive design specification, 2026-10-19. User observations require four corrections, implemented later as T25-T28. This revision changes plans only. It extends [Skin Studio](page-studio-redesign.md), including its draft/apply, declarative layout, focus, compatibility and evidence rules. Priority revision (user): these capabilities follow the complete core Studio T15-T24 package; they must not delay its templates, Preview/Apply or core cutover.
 
 ## 1. Source findings and intended behavior
 

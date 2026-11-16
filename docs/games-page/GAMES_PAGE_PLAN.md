@@ -11,7 +11,7 @@ Games should behave like Movies: a cover-driven personal library, operated from 
 
 Requirements: [unified master plan, section 6](../unified-master-plan.txt), [execution order](../implementation-order.md), [backlog](../agent-backlog.md), and repository AGENTS.md. The master plan explicitly requires a local games catalog, manual metadata, collections, offline artwork and multiple editions. Kodi's prohibition on a parallel movie/TV database must not erase that distinct games requirement. Kodi remains authoritative for its media; storefronts/emulators remain authoritative for entitlements, installations, execution and saves.
 
-This review authorizes documentation only. It does not reorder Page Studio, start a build, install emulators or authorize new providers/dependencies. When implementation is selected, map slices to an explicitly scheduled backlog task and synchronize dependencies/counts before granting credit. Do not invent a task ID or take over another coder's active work.
+This review authorizes documentation only. It does not reorder Skin Studio, start a build, install emulators or authorize new providers/dependencies. When implementation is selected, map slices to an explicitly scheduled backlog task and synchronize dependencies/counts before granting credit. Do not invent a task ID or take over another coder's active work.
 
 ### 1.1 Decisive acceptance test — TV remote to Xbox controller, no mouse
 

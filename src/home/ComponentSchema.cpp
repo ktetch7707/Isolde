@@ -331,8 +331,8 @@ bool ComponentSchema::validSettingsNavigation(const QVariantMap &value)
         || !QJsonValue::fromVariant(value.value("schemaVersion")).isDouble()
         || value.value("schemaVersion").toDouble() != 1
         || value.value("categories").metaType().id() != QMetaType::QVariantList) return false;
-    const QSet<QString> categoryIds{"network", "picture", "home", "apps", "inputs", "remotes", "profiles", "media", "system"};
-    const QSet<QString> routes{"network", "vpn", "display", "audio", "interface-sounds", "studio", "ambient", "store", "store-preferences", "capture", "sources", "remotes", "profiles", "media", "system"};
+    const QSet<QString> categoryIds{"network", "picture", "home", "apps", "inputs", "remotes", "profiles", "media", "system", "display-skins"};
+    const QSet<QString> routes{"network", "vpn", "display", "audio", "interface-sounds", "studio", "ambient", "store", "store-preferences", "capture", "sources", "remotes", "profiles", "media", "system", "skins"};
     const auto categories = value.value("categories").toList();
     if (categories.size() != categoryIds.size()) return false;
     QSet<QString> seen, seenRoutes;
@@ -373,7 +373,7 @@ bool ComponentSchema::validComposition(const QVariantMap &value)
     for (auto it = value.cbegin(); it != value.cend(); ++it) if (!keys.contains(it.key())) return false;
     if (value.contains("settingsCategoryOrder")) {
         if (value.value("settingsCategoryOrder").metaType().id() != QMetaType::QVariantList) return false;
-        const QSet<QString> ids{"network", "picture", "home", "apps", "inputs", "remotes", "profiles", "media", "system"};
+        const QSet<QString> ids{"network", "picture", "home", "apps", "inputs", "remotes", "profiles", "media", "system", "display-skins"};
         const auto order = value.value("settingsCategoryOrder").toList();
         if (order.size() != ids.size()) return false;
         QSet<QString> seen;
@@ -518,8 +518,8 @@ bool ComponentSchema::validComposition(const QVariantMap &value)
         const auto tab = entry.toMap(); const auto id = tab.value("id").toString();
         if (!safeId(id) || ids.contains(id) || tab.value("name").toString().trimmed().isEmpty() || tab.value("name").toString().size() > MaxNameLength) return false;
         ids.insert(id);
-        for (auto it = tab.cbegin(); it != tab.cend(); ++it) if (!QStringList{"id", "name", "action", "sections"}.contains(it.key())) return false;
-        if (tab.contains("action") && action(tab["action"].toMap()).isEmpty()) return false;
+        for (auto it = tab.cbegin(); it != tab.cend(); ++it) if (!QStringList{"id", "name", "actions", "sections"}.contains(it.key())) return false;
+        if (tab.contains("actions")) {const auto list = tab["actions"].toList(); if (actions(list).isEmpty()) return false;}
         if (tab.contains("sections")) {
             if (tab["sections"].metaType().id() != QMetaType::QVariantList) return false;
             for (const auto &category : tab["sections"].toList()) if (!safeId(category.toString())) return false;
@@ -680,6 +680,11 @@ QVariantMap ComponentSchema::action(const QVariantMap &input, QString *error)
         result["input"] = static_cast<int>(inputNumber);
     } else if (type == "desktop-mode") {
         result["label"] = input.value("label", "Desktop Mode").toString().left(MaxNameLength);
+    } else if (type == "wait") {
+        const double duration = input.value("duration", 500).toDouble();
+        if (!std::isfinite(duration) || duration < 50 || duration > 30000 || std::floor(duration) != duration)
+            return reject(error, "Wait duration must be 50-30000 ms.");
+        result["duration"] = static_cast<int>(duration);
     } else if (QStringList{"open-folder", "open-file", "open-disc", "open-url"}.contains(type)) {
         const auto target = input.value("target").toString().trimmed();
         const auto handler = input.value("openWith").toString();
@@ -693,6 +698,22 @@ QVariantMap ComponentSchema::action(const QVariantMap &input, QString *error)
         result["target"] = target;
         result["openWith"] = handler.isEmpty() ? "system" : handler;
     } else return reject(error, "This action type is not supported.");
+    return result;
+}
+
+QVariantList ComponentSchema::actions(const QVariantList &input, QString *error)
+{
+    if (error) error->clear();
+    QVariantList result;
+    for (const auto &entry : input) {
+        if (entry.metaType().id() != QMetaType::QVariantMap) {
+            if (error) *error = "Each action in a sequence must be an action map.";
+            return {};
+        }
+        const auto normalized = action(entry.toMap(), error);
+        if (normalized.isEmpty()) return {};
+        result.append(normalized);
+    }
     return result;
 }
 
@@ -949,7 +970,10 @@ QVariantMap ComponentSchema::component(const QVariantMap &input, bool legacy, QS
             if(music)source["kind"]="music";
             if(guide)source["kind"]="guide";
         } else {
-            if(input.contains("action")) {const auto link=action(input["action"].toMap(),error);if(link.isEmpty())return {};result["action"]=link;}
+            const auto list = input["actions"].toList();
+            const auto normalized = actions(list, error);
+            if (normalized.isEmpty()) return {};
+            result["actions"] = normalized;
             source={{"schemaVersion",1},{"provider","shell"},{"kind",type}};
         }
     } else if (type == "clock" || type == "text" || type=="shape" || type=="container") {
@@ -959,26 +983,28 @@ QVariantMap ComponentSchema::component(const QVariantMap &input, bool legacy, QS
         if(QStringList{"detected-sources","source-notice"}.contains(input.value("family").toString())) source={{"schemaVersion",1},{"provider","sources"},{"kind",input.value("family")}};
         result.remove("action");
     } else {
-        auto requested = input.value("action").toMap();
-        if (requested.isEmpty() && legacy && kind == "app") requested = {{"type", "launch-app"}, {"appId", input.value("appId")}};
-        const auto normalized = action(requested, error);
-        if (normalized.isEmpty()) return {};
-        const auto actionType = normalized.value("type").toString();
+        QVariantList normalizedList;
+        QString actionType;
+        const auto list = input.value("actions").toList();
+        normalizedList = actions(list, error);
+        if (normalizedList.isEmpty()) return {};
+        actionType = normalizedList.first().toMap().value("type").toString();
         if (kind != "app" && kind != "action") return reject(error, "Invalid launcher kind.");
-        if (kind == "app" && (actionType != "launch-app" || input.value("appId") != normalized.value("appId")))
+        if (kind == "app" && (actionType != "launch-app" || input.value("appId") != normalizedList.first().toMap().value("appId")))
             return reject(error, "App binding does not match its action.");
         if (kind == "action" && input.value("name").toString().trimmed().isEmpty()) return reject(error, "A launcher needs a name.");
         source = {{"schemaVersion", 1}};
-        if (actionType == "launch-app") source.insert({{"provider", "apps"}, {"kind", "app"}, {"id", normalized.value("appId")}});
+        const auto first = normalizedList.first().toMap();
+        if (actionType == "launch-app") source.insert({{"provider", "apps"}, {"kind", "app"}, {"id", first.value("appId")}});
         else if (actionType == "open-collection" || actionType == "play-movie" || actionType == "open-show")
-            source.insert({{"provider", "kodi"}, {"kind", "collection"}, {"id", normalized.value("collectionId")}});
-        else if (actionType == "open-page") source.insert({{"provider","shell"},{"kind","page"},{"id",normalized.value("pageId")}});
+            source.insert({{"provider", "kodi"}, {"kind", "collection"}, {"id", first.value("collectionId")}});
+        else if (actionType == "open-page") source.insert({{"provider","shell"},{"kind","page"},{"id",first.value("pageId")}});
         else if (actionType == "open-guide") source.insert({{"provider","isolde"},{"kind","guide"}});
-        else if (actionType == "switch-input") source.insert({{"provider", "isolde"}, {"kind", "capture-input"}, {"id", QString::number(normalized.value("input").toInt())}});
-        else if (actionType.startsWith("open-")) source.insert({{"provider", "handler"}, {"kind", actionType}, {"id", normalized.value("openWith")}});
+        else if (actionType == "switch-input") source.insert({{"provider", "isolde"}, {"kind", "capture-input"}, {"id", QString::number(first.value("input").toInt())}});
+        else if (actionType.startsWith("open-")) source.insert({{"provider", "handler"}, {"kind", actionType}, {"id", first.value("openWith")}});
         else source.insert({{"provider", "shell"}, {"kind", actionType}});
         if (type == "media-shelf" && actionType != "open-collection") return reject(error, "A media shelf requires a collection source.");
-        result["action"] = normalized;
+        result["actions"] = normalizedList;
     }
     // A source is a capability binding, never a second conflicting launch route.
     if (!legacy && input.value("source").toMap() != source) return reject(error, "Source binding does not match its action.");

@@ -45,7 +45,7 @@ static const QByteArray apps = R"([
 ])";
 static const QByteArray legacy = R"({"schemaVersion":1,"theme":{"backgroundStart":"#123456","backgroundEnd":"#010203","tileRoundness":0.73},
  "categories":[{"id":"personal","name":"Personal"}],"items":[
- {"id":"my-folder","kind":"action","name":"My films","categoryId":"personal","size":"wide","opacity":0.42,"showTitle":false,"customLogo":"artwork/my-folder.png","action":{"type":"open-folder","target":"/media/films","openWith":"gone"}},
+ {"id":"my-folder","kind":"action","name":"My films","categoryId":"personal","size":"wide","opacity":0.42,"showTitle":false,"customLogo":"artwork/my-folder.png","actions":[{"type":"open-folder","target":"/media/films","openWith":"gone"}]},
  {"id":"my-app","kind":"app","appId":"absent","size":"compact"},
  {"id":"clock","kind":"widget","widgetType":"clock"}]})";
 static void writeFile(const QString &path, const QByteArray &data) { QFile file(path); if (file.open(QIODevice::WriteOnly)) file.write(data); }
@@ -260,9 +260,9 @@ void ComponentTests::steamRecoveryWritesRemainBoundToManagerProfileAfterSwitch()
 }
 void ComponentTests::guideActionsValidateIdentityAndAppearance() {
     QTemporaryDir dir;AppRegistry registry;HomeLayout home(&registry);const auto user=dir.filePath("home.json");
-    const QByteArray fixture=R"({"schemaVersion":1,"categories":[{"id":"apps","name":"Apps"}],"items":[{"kind":"action","id":"guide-entry","name":"TV Guide","symbol":"TV","size":"standard","categoryId":"apps","action":{"schemaVersion":1,"type":"open-guide"}}]})";
+    const QByteArray fixture=R"({"schemaVersion":1,"categories":[{"id":"apps","name":"Apps"}],"items":[{"kind":"action","id":"guide-entry","name":"TV Guide","symbol":"TV","size":"standard","categoryId":"apps","actions":[{"schemaVersion":1,"type":"open-guide"}]}]})";
     writeFile(user,fixture);QVERIFY(home.load(QFINDTESTDATA("../config/default-home-layout.json"),user));
-    QVERIFY2(home.errorString().isEmpty(),qPrintable(home.errorString()));QCOMPARE(home.items().size(),1);QCOMPARE(home.items().first().toMap().value("action").toMap().value("type").toString(),QString("open-guide"));QCOMPARE(readFile(user),fixture);
+    QVERIFY2(home.errorString().isEmpty(),qPrintable(home.errorString()));QCOMPARE(home.items().size(),1);QCOMPARE(home.items().first().toMap().value("actions").toArray().first().toMap().value("type").toString(),QString("open-guide"));QCOMPARE(readFile(user),fixture);
     QVERIFY(!ComponentSchema::action({{"type","open-guide"}}).isEmpty());
     QVERIFY(!ComponentSchema::action({{"type","tune-channel"},{"channelId","local-station"}}).isEmpty());
     QVERIFY(ComponentSchema::action({{"type","tune-channel"},{"channelId","../other"}}).isEmpty());
@@ -599,7 +599,7 @@ void ComponentTests::pagesPersistAndRouteAndTravelWithSkins()
     QVERIFY(!page->setAppearance({{"highContrast","yes"}}));
     QVERIFY(page->addWidget("text"));QVERIFY(page->addWidget("clock"));
     QVERIFY2(page->addButton(),qPrintable(page->errorString()));const auto button=page->items().last().toMap()["id"].toString();
-    QVERIFY(page->setItemName(button,"Visit television"));QVERIFY2(page->setItemAction(button,{{"type","open-page"},{"pageId",shows}}),qPrintable(page->errorString()));
+    QVERIFY(page->setItemName(button,"Visit television"));QVERIFY2(page->setItemAction(button,QVariantList{QVariantMap{{"type","open-page"},{"pageId",shows}}}),qPrintable(page->errorString()));
     const auto beforeInvalid=page->document();
     QVERIFY(!page->setItemPresentation(button,{{"labelSize",-1}}));
     QCOMPARE(page->document(),beforeInvalid);
@@ -661,7 +661,7 @@ void ComponentTests::pagesPersistAndRouteAndTravelWithSkins()
     for(const auto &value:presetPages)QVERIFY(layout.pageModel(value.toObject()["id"].toString()));
     const auto linkedState=layout.committedDocument();
     QVERIFY(!layout.removePage(shows));QCOMPARE(layout.committedDocument(),linkedState);
-    QVERIFY(page->setItemAction(button,{{"type","open-page"},{"pageId",movies}})); // Explicitly repair the incoming link.
+    QVERIFY(page->setItemAction(button,QVariantList{QVariantMap{{"type","open-page"},{"pageId",movies}}})); // Explicitly repair the incoming link.
     QVERIFY(layout.removePage(shows));QVERIFY(!layout.pageModel(shows));
     QVERIFY(layout.applySkin(snapshot));QCOMPARE(layout.pages().size(),2);
     QCOMPARE(layout.pageModel(movies),page); // Existing bindings survive a skin switch.
@@ -731,7 +731,7 @@ void ComponentTests::skinSnapshotsSurviveResetAndArtworkChanges()
     for(const auto &value:presetPages)QVERIFY(layout.pageModel(value.toObject()["id"].toString()));
     auto *moviePage=qobject_cast<PageModel *>(layout.pageModel("library-movies"));QVERIFY(moviePage);
     QCOMPARE(moviePage->items().first().toMap()["componentType"].toString(),QString("library"));
-    const auto moviesLink=layout.components()[6].toMap()["action"].toMap();
+    const auto moviesLink=layout.components()[6].toMap()["actions"].toArray().first().toMap();
     QCOMPARE(moviesLink["type"].toString(),QString("open-page"));
     QCOMPARE(moviesLink["pageId"].toString(),QString("library-movies"));
     QVERIFY(moviePage->setAppearance({{"focusColor","#123456"}}));
@@ -844,7 +844,7 @@ void ComponentTests::starterPageUpdatesPreserveDesignAndRollback()
     for (int i = 0; i < components.size(); ++i) {
         auto c = components[i].toObject(); const auto id = c["id"].toString();
         if (id == "music" || id == "games" || id == "guide") {
-            c["action"] = id == "guide" ? QJsonObject{{"type","settings"},{"section",4}} : QJsonObject{{"type","app-drawer"}};
+            c["actions"] = QJsonArray{QJsonObject(id == "guide" ? QVariantMap{{"type","settings"},{"section",4}} : QVariantMap{{"type","app-drawer"}})};
             if(c["componentType"]!="button")c["source"] = QJsonObject{{"schemaVersion",1},{"kind",id == "guide" ? "settings" : "app-drawer"},{"provider","shell"}};
             components[i] = c;
         }
@@ -870,7 +870,7 @@ void ComponentTests::starterPageUpdatesPreserveDesignAndRollback()
     int updatedButtons=0;for(const auto &value:after["components"].toArray()){
         const auto item=value.toObject();if(item["id"]=="music" || item["id"]=="games" || item["id"]=="guide"){
             ++updatedButtons;
-            QCOMPARE(item["componentType"].toString(),QString("button"));QCOMPARE(item["source"].toObject()["kind"].toString(),QString("button"));QCOMPARE(item["action"].toObject()["type"].toString(),QString("open-page"));
+            QCOMPARE(item["componentType"].toString(),QString("button"));QCOMPARE(item["source"].toObject()["kind"].toString(),QString("button"));QCOMPARE(item["actions"].toArray().first().toObject()["type"].toString(),QString("open-page"));
         }
     }
     QCOMPARE(updatedButtons,3);
@@ -1042,12 +1042,12 @@ void ComponentTests::validatesContracts()
     const auto show = ComponentSchema::action({{"type", "open-show"}, {"collectionId", "shows"}, {"tvShowId", 12}});
     QCOMPARE(show["tvShowId"].toInt(), 12);
     const auto showTile = ComponentSchema::component({{"id", "show-card"}, {"kind", "action"}, {"name", "Fixture show"},
-        {"action", show}}, true);
+        {"actions", QVariantList{show}}}, true);
     QCOMPARE(showTile["source"].toMap()["kind"].toString(), QString("collection"));
     const auto inputAction = ComponentSchema::action({{"type", "switch-input"}, {"input", 4}});
     QCOMPARE(inputAction["input"].toInt(), 4);
     const auto inputTile = ComponentSchema::component({{"id", "hdmi-four"}, {"kind", "action"}, {"name", "Console"},
-        {"action", inputAction}}, true);
+        {"actions", QVariantList{inputAction}}}, true);
     QCOMPARE(inputTile["source"].toMap()["provider"].toString(), QString("isolde"));
     QCOMPARE(inputTile["source"].toMap()["id"].toString(), QString("4"));
     QTemporaryDir dir;
@@ -1109,7 +1109,7 @@ void ComponentTests::compositionPersistenceAndValidation()
     invalid = config; auto invalidGallery = config.value("appGallery").toMap();
     invalidGallery["favoriteIds"] = QVariantList{"gallery-test","gallery-test"}; invalid["appGallery"] = invalidGallery;
     QVERIFY(!layout.setComposition(invalid));
-    invalid = config; invalid["navigation"] = QVariantList{QVariantMap{{"id","bad"},{"name","Bad"},{"action",QVariantMap{{"type","shell"}}}}};
+    invalid = config; invalid["navigation"] = QVariantList{QVariantMap{{"id","bad"},{"name","Bad"},{"actions",QVariantList{QVariantMap{{"type","shell"}}}}}};
     QVERIFY(!layout.setComposition(invalid));
     QVERIFY(!layout.setSectionPresentation("personal",{{"height",-1}}));
     QVERIFY(!layout.setItemPresentation("my-folder",{{"progress",1.1}}));
@@ -1288,7 +1288,7 @@ void ComponentTests::migratesAndRepairsWithoutLosingPresentation()
     QCOMPARE(tile["showTitle"].toBool(), false);
     QCOMPARE(tile["customLogo"].toString(), QString("artwork/my-folder.png"));
     QCOMPARE(tile["categoryId"].toString(), QString("personal"));
-    QCOMPARE(tile["action"].toMap()["target"].toString(), QString("/media/films"));
+    QCOMPARE(tile["actions"].toArray().first().toMap()["target"].toString(), QString("/media/films"));
     QCOMPARE(restored.backgroundStart(), QString("#123456"));
     QCOMPARE(restored.tileRoundness(), 0.73);
     QVERIFY(registry.removeApp("other"));
@@ -1303,7 +1303,7 @@ void ComponentTests::preservesMissingCollectionAndEmptyHome()
 {
     QTemporaryDir dir;
     auto component = ComponentSchema::component({{"id", "curated"}, {"kind", "action"}, {"name", "Curated"},
-        {"action", QVariantMap{{"type", "open-collection"}, {"collectionId", "missing"}}}}, true);
+        {"actions", QVariantList{QVariantMap{{"type", "open-collection"}, {"collectionId", "missing"}}}}}, true);
     const QJsonValue theme = QJsonDocument::fromJson(legacy).object().value("theme");
     writeFile(dir.filePath("defaults.json"), QJsonDocument(QJsonObject{{"schemaVersion", 2}, {"theme", theme},
         {"components", QJsonArray{QJsonObject::fromVariantMap(component)}}}).toJson());
@@ -1842,7 +1842,7 @@ void ComponentTests::studioPageLifecycleRepairsLinksAndPreservesRoot()
     QVERIFY2(session->execute("removePage",{{"id",""},{"replacementPageId",id}}),qPrintable(session->errorString()));
     const auto removed=session->draft();QVERIFY(!draft->rootPageVisible());QCOMPARE(draft->studioPages().size(),1);
     document=QJsonDocument::fromJson(removed).object();QVERIFY(document["components"].toArray().isEmpty());
-    const auto action=document["pages"].toArray().first().toObject()["layout"].toObject()["components"].toArray().last().toObject()["action"].toObject();
+    const auto action=document["pages"].toArray().first().toObject()["layout"].toObject()["components"].toArray().last().toObject()["actions"].toArray().first().toObject();
     QCOMPARE(action["type"].toString(),QString("open-page"));QCOMPARE(action["pageId"].toString(),id);
     QVERIFY(!session->execute("setHomePage",{{"id",""}}));QCOMPARE(session->draft(),removed);
     QVERIFY(session->undo());QCOMPARE(session->draft(),before);QVERIFY(session->redo());QCOMPARE(session->draft(),removed);
@@ -2152,9 +2152,10 @@ void ComponentTests::studioCatalogLinksInspectorAndStagedArtwork()
     appNode["appCollection"]=QVariantMap{{"mode","all"},{"ids",QVariantList{"unsafe/identity"}}};
     QVERIFY(ComponentSchema::component(appNode,true).isEmpty());
     const QVariantMap box{{"x",0},{"y",0},{"width",2},{"height",1}};QVERIFY(session->execute("addResolved",{{"type","button"},{"placement",box}}));
-    QVERIFY(session->execute("patch",{{"id","button"},{"value",QVariantMap{{"action",QVariantMap{{"type","root-page"}}}}}}));
-    const auto linked=session->draft();QVERIFY(!session->execute("patch",{{"id","button"},{"value",QVariantMap{{"action",QVariantMap{{"type","open-page"},{"pageId","absent"}}}}}}));QCOMPARE(session->draft(),linked);
-    QVERIFY(session->execute("patch",{{"id","button"},{"value",QVariantMap{{"action",QVariantMap{}}}}}));QVERIFY(!QJsonDocument::fromJson(session->draft()).object()["components"].toArray().first().toObject().contains("action"));
+    QVERIFY(session->execute("patch",{{"id","button"},{"value",QVariantMap{{"actions",QVariantList{QVariantMap{{"type","root-page"}}}}}}}));
+}
+    const auto linked=session->draft();QVERIFY(!session->execute("patch",{{"id","button"},{"value",QVariantMap{{"actions",QVariantList{QVariantMap{{"type","open-page"},{"pageId","absent"}}}}}}}));QCOMPARE(session->draft(),linked);
+    QVERIFY(session->execute("patch",{{"id","button"},{"value",QVariantMap{{"actions",QVariantList{}}}}));QVERIFY(!QJsonDocument::fromJson(session->draft()).object()["components"].toArray().first().toObject().contains("actions"));
     QVERIFY(session->execute("patch",{{"id","button"},{"value",QVariantMap{{"presentation",QVariantMap{{"surfaceColor","#123456"}}}}}}));
     QVERIFY(session->execute("patch",{{"id","button"},{"value",QVariantMap{{"presentation",QVariantMap{{"surfaceColor",QVariant()}}}}}}));QVERIFY(!QJsonDocument::fromJson(session->draft()).object()["components"].toArray().first().toObject()["presentation"].toObject().contains("surfaceColor"));
     QImage image(32,24,QImage::Format_RGB32);image.fill(QColor("#56789a"));const auto source=dir.filePath("chosen.png");QVERIFY(image.save(source));
@@ -2168,6 +2169,7 @@ void ComponentTests::studioCatalogLinksInspectorAndStagedArtwork()
     const auto pipe=dir.filePath("input-pipe.gif");QVERIFY(::mkfifo(pipe.toLocal8Bit().constData(),0600)==0);
     QVERIFY(session->stageArtwork(pipe).isEmpty()); // Refuse before opening a blocking FIFO.
 #endif
+}
     QVERIFY(QDir().mkpath(dir.filePath("many")));for(int i=0;i<513;++i){QFile f(dir.filePath("many/"+QString::number(i)));QVERIFY(f.open(QIODevice::WriteOnly));}
     QVERIFY(session->browseArtwork(dir.filePath("many")).isEmpty());QVERIFY(session->errorString().contains("512"));
     for(const auto &field:QStringList{"bodySize","bodyPadding","bodyLines","bodyLineHeight"}){
@@ -2185,7 +2187,7 @@ void ComponentTests::studioCatalogLinksInspectorAndStagedArtwork()
     QVERIFY(session->apply("button"));QVERIFY(QFile::exists(dir.filePath("profile/"+relative)));QCOMPARE(readFile(dir.filePath("profile/"+relative)),readFile(source));QVERIFY(!QJsonDocument::fromJson(readFile(user)).object()["theme"].toObject().contains("focusColor"));
     QVERIFY(session->stageArtwork("https://example.com/image.png").isEmpty());QVERIFY(session->stageArtwork(user).isEmpty());
     session->invalidate();QVERIFY(!QFile::exists(staged));QVERIFY(QFile::exists(dir.filePath("profile/"+relative)));
-    auto invalid=options["componentPresets"].toMap()["image"].toMap();invalid["action"]=QVariantMap{{"type","exec"},{"target","bad"}};QVERIFY(ComponentSchema::component(invalid,true).isEmpty());
+    auto invalid=options["componentPresets"].toMap()["image"].toMap();invalid["actions"]=QVariantList{QVariantMap{{"type","exec"},{"target","bad"}}};QVERIFY(ComponentSchema::component(invalid,true).isEmpty());
     invalid=options["componentPresets"].toMap()["library"].toMap();auto style=invalid["presentation"].toMap();style["libraryLimit"]=51;invalid["presentation"]=style;QVERIFY(ComponentSchema::component(invalid,true).isEmpty());
 }
 void ComponentTests::studioOrderedInsertionPreservesSlotsAndIsAtomic()
@@ -2324,7 +2326,7 @@ void ComponentTests::studioShapesLabelsAndReplacementAreAtomic()
     QVariantMap shape{{"id","decoration"},{"kind","widget"},{"widgetType","shape"},{"componentType","shape"},{"name","Decorative background"},{"source",QVariantMap{{"schemaVersion",1},{"provider","shell"},{"kind","shape"}}},
         {"presentation",QVariantMap{{"shape","ellipse"},{"visibleLabel","Caption"},{"fillMode","gradient"},{"fillEndColor","#123456"},{"fillDirection","horizontal"}}}};
     QVERIFY(!ComponentSchema::component(shape,false).isEmpty());
-    auto invalid=shape;invalid["action"]=QVariantMap{{"type","settings"},{"section",1}};QVERIFY(ComponentSchema::component(invalid,false).isEmpty());
+    auto invalid=shape;invalid["actions"]=QVariantList{QVariantMap{{"type","settings"},{"section",1}}};QVERIFY(ComponentSchema::component(invalid,false).isEmpty());
     invalid=shape;invalid["customLogo"]="artwork/picture.png";QVERIFY(ComponentSchema::component(invalid,false).isEmpty());
     QVERIFY(!ComponentSchema::validPresentation({{"bodyText",QString(4097,'x')}}));
     QVERIFY(!ComponentSchema::validPresentation({{"visibleLabel",QString(161,'x')}}));
@@ -2337,16 +2339,18 @@ void ComponentTests::studioShapesLabelsAndReplacementAreAtomic()
     document["composition"]=QJsonObject{{"schemaVersion",1},{"enabled",true},{"grid",QJsonObject{{"columns",8},{"rows",5},{"mode","screen"}}}};
     QVERIFY(session->pushEdit(QJsonDocument(document).toJson()));
     QVERIFY(session->execute("addPlaced",{{"type","button"},{"placement",QVariantMap{{"x",2},{"y",1},{"width",3},{"height",2}}},
-        {"configuration",QVariantMap{{"name","Library shortcut"},{"action",QVariantMap{{"type","settings"},{"section",1}}},{"presentation",QVariantMap{{"visibleLabel","My library"}}}}}}));
+        {"configuration",QVariantMap{{"name","Library shortcut"},{"actions",QVariantList{QVariantMap{{"type","settings"},{"section",1}}}}},{"presentation",QVariantMap{{"visibleLabel","My library"}}}}}}));
     const auto before=session->draft();const auto count=session->changeCount();const auto original=session->document()["components"].toList().first().toMap();const auto id=original["id"].toString();
     const auto image=session->replacementProposal(id,"image");QVERIFY2(image["valid"].toBool(),qPrintable(image["reason"].toString()));QCOMPARE(session->draft(),before);
     QVERIFY(session->previewCommand("replaceComponent",{{"id",id},{"type","image"}}));QCOMPARE(session->draft(),before);QCOMPARE(session->changeCount(),count);
     session->cancelPreview();QCOMPARE(session->draft(),before);
     QVERIFY(session->execute("replaceComponent",{{"id",id},{"type","image"}}));
-    const auto replaced=session->document()["components"].toList().first().toMap();QCOMPARE(replaced["id"],original["id"]);QCOMPARE(replaced["placement"],original["placement"]);QCOMPARE(replaced["action"],original["action"]);
+    const auto replaced=session->document()["components"].toList().first().toMap();QCOMPARE(replaced["id"],original["id"]);QCOMPARE(replaced["placement"],original["placement"]);QCOMPARE(replaced["actions"],original["actions"]);
+}
     QCOMPARE(replaced["presentation"].toMap()["visibleLabel"].toString(),QString("My library"));QCOMPARE(session->changeCount(),count+1);
     QVERIFY(session->undo());QCOMPARE(session->draft(),before);
     const auto text=session->replacementProposal(id,"text");QVERIFY(text["valid"].toBool());QVERIFY(text["losses"].toStringList().contains("Action link"));
+    QVERIFY(!session->replacementProposal(id,"executable")["valid"].toBool());QCOMPARE(session->draft(),before);QVERIFY(!QFile::exists(path));;;
     QVERIFY(!session->replacementProposal(id,"executable")["valid"].toBool());QCOMPARE(session->draft(),before);QVERIFY(!QFile::exists(path));
 }
 void ComponentTests::studioButtonCollectionsAreBoundedAndAtomic()
@@ -2354,7 +2358,7 @@ void ComponentTests::studioButtonCollectionsAreBoundedAndAtomic()
     QTemporaryDir dir;AppRegistry registry;QVERIFY(registry.loadFromData(apps));HomeLayout home(&registry);
     const auto path=dir.filePath("home.json");QVERIFY(home.load(QFINDTESTDATA("../config/default-home-layout.json"),path));
     auto *session=qobject_cast<StudioSession *>(home.beginStudio());QVERIFY(session);
-    QVariantList buttons;for(int i=0;i<128;++i)buttons.append(QVariantMap{{"name",QString("Input %1").arg(i+1)},{"action",QVariantMap{{"type","switch-input"},{"input",i%8+1}}}});
+    QVariantList buttons;for(int i=0;i<128;++i)buttons.append(QVariantMap{{"name",QString("Input %1").arg(i+1)},{"actions",QVariantList{QVariantMap{{"type","switch-input"},{"input",i%8+1}}}}});
     const auto before=session->draft();const auto prototype=session->componentPrototype("carousel",{{"buttons",buttons}});
     QVERIFY2(!prototype.isEmpty(),qPrintable(session->errorString()));QCOMPARE(prototype["components"].toList().size(),129);QCOMPARE(session->draft(),before);
     const auto root=prototype["root"].toMap();QCOMPARE(root["presentation"].toMap()["layout"].toMap()["columns"].toInt(),128);
@@ -2465,7 +2469,10 @@ void ComponentTests::studioGifArtworkIsBoundedStagedAndProfileScoped()
     QVERIFY(editing->pushEdit(QJsonDocument(blank).toJson()));
     QVERIFY(editing->execute("addResolved",{{"type","image"},{"placement",QVariantMap{{"x",0},{"y",0},{"width",3},{"height",2}}}}));
     const auto imported=editing->stageArtwork(source);QVERIFY(imported.endsWith(".gif"));
-    QVERIFY(editing->execute("patch",{{"id","image"},{"value",QVariantMap{{"customLogo",imported},{"action",QVariantMap{{"type","root-page"}}},{"presentation",QVariantMap{{"animateArtwork",true},{"visibleLabel","Animation caption"},{"labelPosition","below"}}}}}}));
+    QVariantMap rootPageAction{{"type","root-page"}};
+    QVariantList rootPageActions{rootPageAction};
+    QVariantMap valueMap{{"customLogo",imported},{"actions",rootPageActions},{"presentation",QVariantMap{{"animateArtwork",true},{"visibleLabel","Animation caption"},{"labelPosition","below"}}}};
+    QVERIFY(editing->execute("patch",{{"id","image"},{"value",valueMap}}));
     const auto beforeApply=editing->draft();QVERIFY(QDir().mkpath(dir.filePath("saved")));
     QFile blocked(dir.filePath("saved/artwork"));QVERIFY(blocked.open(QIODevice::WriteOnly));blocked.write("blocked");blocked.close();
     QVERIFY(!editing->apply("image"));QCOMPARE(editing->draft(),beforeApply);QVERIFY(!QFile::exists(saved));QVERIFY(blocked.remove());
@@ -2492,7 +2499,7 @@ void ComponentTests::studioPastelPresetUsesEditableButtons()
         if(item["componentType"]=="button") {
             ++buttons;QCOMPARE(item["kind"].toString(),QString("widget"));QCOMPARE(item["widgetType"].toString(),QString("button"));
             const auto normalized=ComponentSchema::component(item.toVariantMap(),false);QVERIFY(!normalized.isEmpty());
-            QCOMPARE(normalized["source"].toMap()["kind"].toString(),QString("button"));QVERIFY(!normalized["action"].toMap().isEmpty());
+            QCOMPARE(normalized["source"].toMap()["kind"].toString(),QString("button"));QVERIFY(!normalized["actions"].toList().first().toMap().isEmpty());
         }
         if(item.contains("appCollection"))++appCollections;
         if(item["family"]=="recently-viewed"){++histories;QCOMPARE(item["source"].toObject()["libraryKind"].toString(),QString("history"));}

@@ -7,7 +7,7 @@ Location: `docs/agent-backlog.md` (this file). Entrypoint: `AGENTS.md` at repo r
 Sequencing authority: `docs/implementation-order.md`. Requirements: `docs/unified-master-plan.txt`, `docs/studio-builder.md`, `docs/master-roadmap.md`.
 
 ## How percent completion works (agent must follow)
-- Active tasks are T01,T03-T05,T09-T29 (25 tasks). T02 is out of scope; T06-T08 are superseded by the Page Studio tasks and excluded from math. Each active task uses equally weighted checkboxes.
+- Active tasks are T01,T03-T05,T09-T29 (25 tasks). T02 is out of scope; T06-T08 are superseded by the Skin Studio tasks and excluded from math. Each active task uses equally weighted checkboxes.
 - Task % = round(checked / total * 100). Update `| % |` cell when you check a box.
 - Overall % = round(average of the 25 ACTIVE task %s). Recompute on every edit.
 - `100% x 25 = active backlog implemented` ONLY if every active box is `[x]` AND `Evidence` has log/screenshot paths. No evidence = max 90%.
@@ -15,11 +15,11 @@ Sequencing authority: `docs/implementation-order.md`. Requirements: `docs/unifie
 - Standing gates for every task: `tests/visual/home-reference/` + `tests/visual/home-pastel-reference/` recreation+reset pass; profile isolation; atomic save+rollback; Kodi owns media/progress/playback (no parallel DB/player); offline Generator Test; Settings/Edit Home always reachable.
 - Scope revision (user, 2026-10-25): [complete Kodi interface](kodi-complete-interface-2026-10-25.md) supersedes the October 19 restriction on Isolde curation UI. Isolde must expose Kodi-owned playlist authoring, library/source settings and refresh, poster editing, playback and backend lifecycle without requiring Kodi menus. Keep Kodi authoritative; no parallel media DB or direct Kodi DB writes. Extend T04/T21/T09/T12; T02 stays archived as an older superseded scope.
 
-Audit/deployment evidence is in [planning-audit.md](planning-audit.md) and [vm-update-2026-10-19.md](vm-update-2026-10-19.md). The user-selected Page Studio redesign now has priority; the existing editor code is committed in `25f56bf`, not an accepted replacement design. Read [vm-oracle.md](vm-oracle.md) before VM testing.
+Audit/deployment evidence is in [planning-audit.md](planning-audit.md) and [vm-update-2026-10-19.md](vm-update-2026-10-19.md). The user-selected Skin Studio redesign now has priority; the existing editor code is committed in `25f56bf`, not an accepted replacement design. Read [vm-oracle.md](vm-oracle.md) before VM testing.
 
 User feedback slice (2026-10-24): [Home background, app logos, editable page menus and Surfshark dependency](home-feedback-2026-10-24.md) records the explicitly requested related shell/T21 work. Combined J and final `surfshark-20261024-full-l` pass 28/28 and are deployed; the first graphical capture is rejected for showing GNOME overview, so visual gates remain open. [Bounded cancellation is repaired and verified](vm-cancellation-2026-10-24.md). [Surfshark 3.14.0 is installed and running in the guest](surfshark-install-2026-10-24.md); private login/keyring resolution and tunnel verification remain open. Automatic VPN switching and universal third-party Store onboarding remain open. No broad checkbox credit: T20 80%, T21 36%, Overall round(866/24) = 36%.
 
-## Execution priority — Page Studio first (user, 2026-10-19)
+## Execution priority — Skin Studio first (user, 2026-10-19)
 
 Current user-authorized T29 slice (2026-10-25): continue the intervening coder's Store plan and implementation, using **F-Droid/account-free verified repositories** for Android and **web apps/streaming sites with Add by URL** for Chromium. Add a real remote-control bridge for existing external Chrome apps and the embedded view. This explicit sequencing exception preserves unfinished Studio/media/VPN/release gates. See `docs/actual-stores-integration-plan.md` for the accepted decision and `docs/store-lifecycle-2026-10-25.md` for the separate installed lifecycle evidence. The provider scaffolding is not live-store acceptance. No new checkbox credit; 25 active tasks sum 847, Overall round(847/25)=34%.
 
@@ -35,7 +35,7 @@ User acceptance repair scope (2026-10-25): [twelve reported issues and acceptanc
 
 User-requested VPN implementation (2026-10-24): [setup, automatic app-location scope and verification ledger](vpn-setup-2026-10-24.md) records the explicitly authorized T12/network slice. Both providers and the root-owned helper are installed through the repeatable provisioner. Capture, selected-interface key copy and profile-only automatic switching are explicitly approved; AF verifies two consecutive provisioning runs with the narrow grants installed. Local Python tests pass 33/33; full AO passes 30/30, deploys and provisions. Its five reviewed live frames and bounded diagnostics confirm the copied tunnel handshakes with actual kernel MTU/mark preserved, but TCP traffic still fails while native Surfshark is active. The candidate is removed safely and the native connection remains active. Native-provider coexistence/settings inspection is next; saved Canada/US and automatic CBC Canada acceptance remain open. AD retains the reviewed Studio/lounge/Pastel functional checkpoint, with prior Pastel/design gaps open. No completion credit: T12 0%, T20 80%, T21 36%, Overall round(866/24) = 36%.
 
-Page Studio is the highest-priority feature package. Complete **T15 → T16 → T17 → T18 → T19 → T20 → T21 → T22 → T23 → T24** first: design, safe drafts/history, grid/canvas, workspace, remote editing, desktop/nested editing, inspector, templates, Preview/Apply, and installed usability/cutover. **Finish reopened T19.6, then T20.5, then T21.6-T21.14 before T22. These gates implement the user's revised movement/color/context UX and real component semantics. T15 user review remains deferred to T24 under the user-authorized provisional-design exception.** Existing current-source build/regression gates remain mandatory during each implementation slice; this ordering does not waive safety tests or hardware limits.
+Skin Studio is the highest-priority feature package. Complete **T15 → T16 → T17 → T18 → T19 → T20 → T21 → T22 → T23 → T24** first: design, safe drafts/history, grid/canvas, workspace, remote editing, desktop/nested editing, inspector, templates, Preview/Apply, and installed usability/cutover. **Finish reopened T19.6, then T20.5, then T21.6-T21.14 before T22. These gates implement the user's revised movement/color/context UX and real component semantics. T15 user review remains deferred to T24 under the user-authorized provisional-design exception.** Existing current-source build/regression gates remain mandatory during each implementation slice; this ordering does not waive safety tests or hardware limits.
 
 Next complete the related shell improvements: **T27 → T25 → T26 → T28** (shared theme, contained source notices, All Apps gallery, genuine Web switch). These extend the accepted Studio and no longer block its templates, Preview/Apply or core cutover. Then follow the remaining ranked rows for evidence repair, media preservation, input/system polish, playback, hardware/guide, appliance distribution and optional online work.
 
@@ -46,10 +46,10 @@ The first Studio expansion changed 13 active tasks to 20 (21% to 14%). This addi
 ## Overall (update every edit)
 | Task | Priority | Title | % | Status |
 |------|----------|-------|---|--------|
-| T15 | 1 | Page Studio interaction design and usability validation | 75% | provisional design only; T15.4 user acceptance OPEN, deferred to T24 |
+| T15 | 1 | Skin Studio interaction design and usability validation | 75% | provisional design only; T15.4 user acceptance OPEN, deferred to T24 |
 | T16 | 2 | Shared draft transactions, history and profile safety | 100% | task verification complete; T17 next |
 | T17 | 3 | Shared canvas geometry, grids and legacy compatibility | 100% | geometry checkpoint verified; T18 next |
-| T18 | 4 | Unified Page Studio workspace and selection | 100% | workspace/lifecycle/selection verified; T19 next |
+| T18 | 4 | Unified Skin Studio workspace and selection | 100% | workspace/lifecycle/selection verified; T19 next |
 | T19 | 5 | Remote pick-up/drop, resize and collision workflows | 100% | verified movement/reflow checkpoint; T20 next |
 | T20 | 6 | Desktop parity, layers and nested/group editing | 80% | open: T21.9 prerequisite authorized; standing Pastel gate remains open |
 | T21 | 7 | Contextual inspector, catalog and capability binding | 36% | reopened: component semantics, visual editing, shared selection, editable header and tool organization; depends on T20 |
@@ -87,7 +87,7 @@ Games integrated-emulator scope correction (user, 2026-10-25): [Games plan §3.2
 
 Code quality planning (2026-10-25): [free tooling and coder delivery strategy](code-quality-strategy-2026-10-25.md) proposes staged analysis/formatting, documentation, SOLID/DRY review, meaningful unit coverage and existing bounded VM acceptance. Planning only; no tooling installation, application implementation, sequencing change or checkbox credit. The 25-task table remains authoritative: sum 847, Overall round(847/25) = 34%; historical 24-task figures elsewhere are not new credit.
 
-## Highest priority: core Page Studio
+## Highest priority: core Skin Studio
 
 Kodi authoring checkpoint (2026-10-25): [playlist creation evidence](kodi-complete-interface-2026-10-25.md) records `media-controls-20261025-i` 31/31, an actual Isolde name/cancel/save/catalog journey in a fresh Kodi profile, all seven playlist and all 28 standing captures reviewed, and deployed release `cc26b6a6530d1a508e0b3c15`. Normal profiles are unchanged; all 20 native captures match reviewed K. Generated-filename presentation and actual video presentation remain open, alongside full playlist management, Studio shelf-picker acceptance and Kodi-free setup. No weighted checkbox credit: T04 round(1/7×100)=14%, 24 active tasks sum 847, Overall round(847/24)=35%.
 

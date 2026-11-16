@@ -1,4 +1,4 @@
-# Page Studio implementation and VM evidence — 2026-10-19
+# Skin Studio implementation and VM evidence — 2026-10-19
 
 This is a working provisional Studio slice, not completion of T17–T24 or user usability acceptance. The legacy editor remains available until cutover gates pass.
 
@@ -12,7 +12,7 @@ This is a working provisional Studio slice, not completion of T17–T24 or user 
 - Host snapshot: `build/studio-implementation-12/` contains HEAD, full dirty patch, per-file hashes and archive hash. Base HEAD was `9de7bf7`; the dirty source bytes, not HEAD alone, identify this build. Application/test files were checked against the manifest after building. Subsequent documentation amendments do not change the installed binary.
 - Deployment used `python3 tools/install-appliance.py install --build-dir ../build`, then `systemctl --user restart isolde.service`. The installer repeated all tests before selecting the release.
 
-Open **Settings → Home → Page Studio (preview)**. Remote Left/Right selects existing editor actions; Studio is the final action. Studio's toolbar exposes Add, Pages, Layers, Undo, Redo, Grid, Fit, Preview and Apply. Menu opens selected-component tools. Back cancels gestures/tools, then offers dirty-exit choices.
+Open **Settings → Home → Skin Studio (preview)**. Remote Left/Right selects existing editor actions; Studio is the final action. Studio's toolbar exposes Add, Pages, Layers, Undo, Redo, Grid, Fit, Preview and Apply. Menu opens selected-component tools. Back cancels gestures/tools, then offers dirty-exit choices.
 
 ## Implemented slice
 

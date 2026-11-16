@@ -95,6 +95,7 @@ Item {
         else if (target === "display") systemPage.activePage = 0
         else if (target === "audio") systemPage.activePage = 1
         else if (target === "ambient") systemPage.activePage = 2
+        else if (target === "skins") { skinPicker.begin() }
         else if (target === "system") systemPage.activePage = -1
     }
 
@@ -148,6 +149,7 @@ Item {
             return
         }
         if (route === "studio") { homePage.handleCommand(command); return }
+        if (route === "skins") { skinPicker.handleCommand(command); return }
         if (route === "media") {
             if (command === inputManager.back) { if (!mediaPage.back()) backToParent() }
             else mediaPage.handleCommand(command)
@@ -196,6 +198,17 @@ Item {
         z: 5
         onPageRequested: id => root.pageRequested(id)
         onClosed: root.backToParent()
+    }
+
+    SkinPicker {
+        id: skinPicker
+        anchors.fill: parent
+        visible: root.inPage && root.route === "skins"
+        layoutModel: root.layoutModel
+        z: 6
+        onClosed: { if (root.route === "skins") root.route = "" }
+        onEditSkin: id => { root.route = "studio"; Qt.callLater(() => homePage.studio.openDesign(id)) }
+        onAddSkin: { root.route = "studio"; Qt.callLater(() => homePage.studio.show()) }
     }
 
     Row {

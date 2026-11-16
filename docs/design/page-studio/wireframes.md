@@ -1,4 +1,4 @@
-# Page Studio wireframes — TV and desktop (T15.2)
+# Skin Studio wireframes — TV and desktop (T15.2)
 
 **Superseded workspace proposal:** use [Page-first Studio](page-first-design.md) for the current full-page layout, left page menu and contextual windows. The top ribbon, permanently fitted canvas and parallel desktop panels below must not be implemented as the default. Remaining state coverage is a historical checklist, subject to the revised contract.
 
@@ -13,7 +13,7 @@ complete with the remote, and both produce byte-identical canonical layout data)
 Shared chrome (both form factors):
 
 ```text
-Top bar:    Page Studio | Home v | Edit: Home / Sources widget | Draft: 3 changes
+Top bar:    Skin Studio | Home v | Edit: Home / Sources widget | Draft: 3 changes
 Toolbar:    Add | Pages | Layers | Undo | Redo | Grid | Fit | Preview | Apply
 Footer:     current operation + applicable buttons, or selected item position readout
 ```
@@ -29,7 +29,7 @@ TV:
 
 ```text
 +---------------------------------------------------------------------+
-| Page Studio | My page | Edit: My page                  Draft: 0    |
+| Skin Studio | My page | Edit: My page                  Draft: 0    |
 | Add | Pages | Layers | Undo | Redo | Grid | Fit | Preview | Apply   |
 +---------------------------------------------------------------------+
 |                                                                     |

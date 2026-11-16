@@ -4,7 +4,7 @@
 
 The user found the provisional screenshots ugly and asked for full view of the interface, a left page menu with Add page, contextual page actions, protected designated Home, six component families, page colors/background and Settings colors inherited from Home. [Page-first Studio](page-first-design.md) responds with a revised proposal and acceptance journeys. This is real design feedback, not evidence of an uncoached installed walkthrough. Earlier designer review does not approve the new proposal; T15.4/T24 acceptance remains open.
 
-# Page Studio review and acceptance journeys (T15.4)
+# Skin Studio review and acceptance journeys (T15.4)
 
 Status: provisional designer review, 2026-10-19 — T15.4 user review is OPEN (no genuine user
 usability acceptance has occurred; deferred to T24 per the sequencing exception below).

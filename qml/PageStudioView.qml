@@ -1217,7 +1217,7 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
             color:studio.palette.surfaceColor;radius:studio.spacing/2
             Column {
                 anchors.fill:parent;anchors.margins:studio.spacing;spacing:studio.spacing/2
-                Text {id:menuTitle;text:"Page Studio";color:studio.palette.textColor;font.pixelSize:26*studio.textScale}
+                Text {id:menuTitle;text:"Skin Studio";color:studio.palette.textColor;font.pixelSize:26*studio.textScale}
                 Text {textFormat:Text.PlainText;id:menuStatus;width:parent.width;text:session && session.errorString?"Edit refused: "+session.errorString:preview.layoutError?"Layout needs attention: "+preview.layoutError:session && session.dirty?"Draft · "+session.changeCount+" changes":"Your interface";wrapMode:Text.Wrap;color:studio.palette.textColor;font.pixelSize:16*studio.textScale}
                 Row {
                     id:historyControls

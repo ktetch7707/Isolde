@@ -20,16 +20,18 @@
 
 namespace {
 
-QVariantMap normalizedActionForItem(const QJsonObject &object)
+QVariantList normalizedActionForItem(const QJsonObject &object)
 {
-    const auto kind = object.value("kind").toString();
-    if (kind == QStringLiteral("app")) {
-        return QJsonObject{{"type", "launch-app"}, {"appId", object.value("appId")}}.toVariantMap();
+    auto actionList = object.value(QStringLiteral("actions")).toArray();
+    if (actionList.isEmpty() && object.value("kind") == "app")
+        actionList = QJsonArray{QJsonObject{{"type", "launch-app"}, {"appId", object.value("appId")}}};
+    QVariantList result;
+    for (const auto &entry : actionList) {
+        auto normalized = ComponentSchema::action(entry.toObject().toVariantMap());
+        if (!normalized.isEmpty())
+            result.append(normalized);
     }
-    if ((kind == QStringLiteral("action") || object["componentType"]=="button" || object["componentType"]=="image") && object.contains("action")) {
-        return object.value("action").toObject().toVariantMap();
-    }
-    return QVariantMap{};
+    return result;
 }
 
 } // namespace
@@ -130,10 +132,10 @@ QVariantList PageModel::resolveItems(const QJsonArray &components) const
         const auto object = value.toObject();
         auto item = object.toVariantMap();
         if(m_owner)item["presentation"]=m_owner->componentPresentation(item.value("presentation").toMap());
-        const auto action = normalizedActionForItem(object);
-        if (!action.isEmpty()) {
-            item.insert("actionType", action.value(QStringLiteral("type")).toString());
-            item.insert("action", action);
+        const auto actionList = normalizedActionForItem(object);
+        if (!actionList.isEmpty()) {
+            item.insert("actionType", actionList.first().toMap().value(QStringLiteral("type")).toString());
+            item.insert("actions", actionList);
         }
         if (item.value("kind") == QStringLiteral("app")) {
             const auto appId = item.value("appId").toString();
@@ -158,8 +160,8 @@ QVariantList PageModel::resolveItems(const QJsonArray &components) const
         }
         const auto logoFile = item.value("customLogo").toString();
         item.insert("logoSource", m_owner?m_owner->resolveArtwork(logoFile):QString());
-        auto unavailable = ComponentSchema::unavailable(action, registry, m_owner?m_owner->m_collections:QVariantList{});
-        if (unavailable.isEmpty() && action.value("type").toString() == QStringLiteral("switch-input") && (!m_owner || !m_owner->m_captureInputsReady)) {
+        auto unavailable = ComponentSchema::unavailable(actionList.isEmpty()?QVariantMap():actionList.first().toMap(), registry, m_owner?m_owner->m_collections:QVariantList{});
+        if (unavailable.isEmpty() && !actionList.isEmpty() && actionList.first().toMap().value("type").toString() == QStringLiteral("switch-input") && (!m_owner || !m_owner->m_captureInputsReady)) {
             unavailable = QCoreApplication::translate("PageModel", "Configure Settings → System → HDMI Inputs");
         }
         if(object.value("requiredCapability")=="capture-inputs" && (!m_owner || !m_owner->m_captureInputsReady))unavailable=QCoreApplication::translate("PageModel","HDMI capture unavailable · configure inputs in Settings");
@@ -472,7 +474,7 @@ bool PageModel::addButton()
     if (!m_owner) return false;
     QString id = QStringLiteral("button-") + QUuid::createUuid().toString(QUuid::WithoutBraces);
     QJsonObject item{{"kind", "widget"}, {"widgetType","button"}, {"componentType","button"}, {"id", id}, {"name", QCoreApplication::translate("PageModel", "Button")},
-                     {"action", QJsonObject{{"type", "open-apps"}}}};
+                     {"actions", QJsonArray{QJsonObject{{"type", "open-apps"}}}}};
     QString error;
     const auto normalized=ComponentSchema::component(item.toVariantMap(),true,&error);
     if(normalized.isEmpty()){m_owner->setError(error);return false;}
@@ -497,17 +499,30 @@ bool PageModel::setItemName(const QString &id, const QString &name)
     return setItemField(id, [name](QJsonObject &item) { item.insert("name", name.trimmed()); });
 }
 
-bool PageModel::setItemAction(const QString &id, const QVariantMap &action)
+bool PageModel::setItemAction(const QString &id, const QVariantList &actions)
 {
-    const auto normalized = ComponentSchema::action(action);
-    if (normalized.isEmpty()) {
-        m_owner->setError(tr("Choose a valid action and destination."));
+    if (actions.isEmpty()) {
+        m_owner->setError(tr("Choose at least one action for the button."));
         return false;
+    }
+    QVariantList normalized;
+    for (const auto &entry : actions) {
+        if (entry.metaType().id() != QMetaType::QVariantMap) {
+            m_owner->setError(tr("Each action must be an action map."));
+            return false;
+        }
+        const auto n = ComponentSchema::action(entry.toMap());
+        if (n.isEmpty()) {
+            m_owner->setError(tr("Choose a valid action and destination."));
+            return false;
+        }
+        normalized.append(n);
     }
     return setItemField(id, [normalized](QJsonObject &item) {
         if (item.value("componentType") != "button" && item.value("componentType") != "image")
             item.insert("kind", QStringLiteral("action"));
-        item.insert("action", QJsonObject::fromVariantMap(normalized));
+        item.insert("actions", QJsonArray::fromVariantList(normalized));
+        item.remove("action");
         item.remove("appId");
         if (item.value("name").toString().isEmpty()) item.insert("name", QStringLiteral("Link"));
     });

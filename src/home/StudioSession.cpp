@@ -165,7 +165,7 @@ bool StudioSession::validNewAction(const QVariantMap &value)
 }
 QVariantMap StudioSession::componentPrototype(const QString &type,const QVariantMap &configuration)
 {
-    if(!currentProfile()){setError(tr("Reopen Page Studio before adding components."));return {};}
+    if(!currentProfile()){setError(tr("Reopen Skin Studio before adding components."));return {};}
     const auto options=m_live->studioOptions();QJsonArray nodes;
     if(options.value("componentPresets").toMap().contains(type))nodes.append(QJsonObject::fromVariantMap(options.value("componentPresets").toMap().value(type).toMap()));
     else if(type=="container")nodes.append(QJsonObject::fromVariantMap(options.value("groupPreset").toMap()));
@@ -384,7 +384,7 @@ bool StudioSession::apply(const QString &focusId)
 {
     if (!editingPermitted()) return false;
     if (!m_active || !m_live || m_live->m_userPath != m_profilePath) {
-        setError(QStringLiteral("The profile changed. Reopen Page Studio."));
+        setError(QStringLiteral("The profile changed. Reopen Skin Studio."));
         return false;
     }
     if (isStaleAgainst(m_live->committedDocument())) {
@@ -431,7 +431,7 @@ bool StudioSession::apply(const QString &focusId)
 bool StudioSession::execute(const QString &operation, const QVariantMap &a, const QString &pageId)
 {
     if (!editingPermitted()) return false;
-    if (!currentProfile()) { setError(QStringLiteral("Reopen Page Studio before editing.")); return false; }
+    if (!currentProfile()) { setError(QStringLiteral("Reopen Skin Studio before editing.")); return false; }
     if(operation=="replaceComponent") {
         if(a.size()!=2 || !a.contains("id") || !a.contains("type") || a["id"].metaType().id()!=QMetaType::QString || a["type"].metaType().id()!=QMetaType::QString){setError(tr("Choose a component and its replacement type."));return false;}
         const auto proposal=replacementProposal(a["id"].toString(),a["type"].toString(),pageId);
@@ -948,7 +948,7 @@ bool StudioSession::execute(const QString &operation, const QVariantMap &a, cons
     else if (operation == "appearance") ok = worker.setAppearance(a.value("value").toMap());
     else if (operation == "composition") ok = worker.setComposition(a.value("value").toMap());
     else if (operation == "grid") ok = worker.setGrid(a.value("value").toMap());
-    else if (operation == "action") ok = worker.setItemAction(id, a.value("value").toMap());
+    else if (operation == "action") ok = worker.setItemAction(id, QVariantList{a.value("value").toMap()});
     else if (operation == "addWidget" || operation == "addPlaced") {
         ok = worker.addWidget(a.value("type").toString());
         if (ok && operation == "addPlaced") {

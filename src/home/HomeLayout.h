@@ -64,7 +64,7 @@ public:
     static constexpr int RequiredComponentPresets = 5;        // studio component presets (button, image, library, carousel, app-bar)
     static constexpr int RequiredCatalogEntries = 6;          // studio catalog entries
     static constexpr int MaxInspectorFields = 160;            // studio inspector field cap
-    // Appearance value ranges (displayed to the user in Settings / Page Studio).
+    // Appearance value ranges (displayed to the user in Settings / Skin Studio).
     static constexpr double MinTypographyScale = 0.8;
     static constexpr double MaxTypographyScale = 1.3;
     static constexpr int MinHomeColumns = 2;
@@ -121,7 +121,7 @@ public:
     Q_INVOKABLE QObject *pageModel(const QString &id);
     Q_INVOKABLE bool linkPage(const QString &id, bool asTab);
     Q_INVOKABLE QString addLibraryWidget(const QString &name, const QString &kind = "movies");
-    Q_INVOKABLE bool setItemAction(const QString &id, const QVariantMap &action);
+    Q_INVOKABLE bool setItemAction(const QString &id, const QVariantList &actions);
     Q_INVOKABLE bool setItemName(const QString &id, const QString &name);
     Q_INVOKABLE bool addButton();
 

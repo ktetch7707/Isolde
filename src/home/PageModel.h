@@ -65,7 +65,7 @@ public:
     Q_INVOKABLE bool addWidget(const QString &widgetType);
     Q_INVOKABLE bool addButton();
     Q_INVOKABLE bool setItemName(const QString &id, const QString &name);
-    Q_INVOKABLE bool setItemAction(const QString &id, const QVariantMap &action);
+    Q_INVOKABLE bool setItemAction(const QString &id, const QVariantList &actions);
     Q_INVOKABLE bool setItemPresentation(const QString &id, const QVariantMap &value);
     Q_INVOKABLE QString addLibraryWidget(const QString &name, const QString &kind = "movies");
     Q_INVOKABLE bool setItemPlacement(const QString &id, const QVariantMap &placement);

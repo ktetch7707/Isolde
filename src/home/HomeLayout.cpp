@@ -102,7 +102,7 @@ bool isSupportedActionType(const QString &type)
     static const QSet<QString> actionTypes{QStringLiteral("launch-app"), QStringLiteral("open-folder"),
                                            QStringLiteral("open-file"), QStringLiteral("open-url"),
                                            QStringLiteral("open-disc"), QStringLiteral("desktop-mode"),
-                                           QStringLiteral("switch-input")};
+                                           QStringLiteral("switch-input"), QStringLiteral("wait")};
     return actionTypes.contains(type);
 }
 
@@ -113,12 +113,18 @@ QString defaultActionTypeForKind(const QJsonObject &item)
     return {};
 }
 
-QJsonObject normalizedActionForItem(const QJsonObject &item)
+QVariantList normalizedActionForItem(const QJsonObject &item)
 {
-    auto action = item.value(QStringLiteral("action")).toObject();
-    if (action.isEmpty() && item.value("kind") == "app")
-        action = {{"type", "launch-app"}, {"appId", item.value("appId")}};
-    return QJsonObject::fromVariantMap(ComponentSchema::action(action.toVariantMap()));
+    auto actionList = item.value(QStringLiteral("actions")).toArray();
+    if (actionList.isEmpty() && item.value("kind") == "app")
+        actionList = QJsonArray{QJsonObject{{"type", "launch-app"}, {"appId", item.value("appId")}}};
+    QVariantList result;
+    for (const auto &entry : actionList) {
+        auto normalized = ComponentSchema::action(entry.toObject().toVariantMap());
+        if (!normalized.isEmpty())
+            result.append(normalized);
+    }
+    return result;
 }
 
 } // namespace
@@ -150,10 +156,10 @@ QVariantList HomeLayout::items() const
         if(hidden.contains(object["id"].toString()))return;
         auto item = object.toVariantMap();
         item["presentation"]=componentPresentation(item.value("presentation").toMap());
-        const auto action = normalizedActionForItem(object);
-        if (!action.isEmpty()) {
-            item.insert("actionType", action.value(QStringLiteral("type")).toString());
-            item.insert("action", action.toVariantMap());
+        const auto actionList = normalizedActionForItem(object);
+        if (!actionList.isEmpty()) {
+            item.insert("actionType", actionList.first().toMap().value(QStringLiteral("type")).toString());
+            item.insert("actions", actionList);
         }
         if (item.value("kind") == QStringLiteral("app")) {
             const auto appId = item.value("appId").toString();
@@ -178,16 +184,17 @@ QVariantList HomeLayout::items() const
         }
         const auto logoFile = item.value("customLogo").toString();
         auto logo=resolveArtwork(logoFile);
-        if(logoFile.isEmpty() && action.value("type")=="launch-app"){
-            if(const auto *app=m_registry->find(action.value("appId").toString())){
+        if(logoFile.isEmpty() && !actionList.isEmpty() && actionList.first().toMap().value("type")=="launch-app"){
+            const auto actionMap = actionList.first().toMap();
+            if(const auto *app=m_registry->find(actionMap.value("appId").toString())){
                 const auto mode=item.value("presentation").toMap().value("logoMode").toString();
                 logo=mode=="monochrome" && !app->inkIconSource.isEmpty()?app->inkIconSource:mode=="cutout" && !app->cutoutIconSource.isEmpty()?app->cutoutIconSource:app->iconSource;
                 item["cutoutLogoSource"]=app->cutoutIconSource;item["inkLogoSource"]=app->inkIconSource;item["inkAvailable"]=!app->inkIconSource.isEmpty();item["iconOpticalScale"]=app->iconOpticalScale;item["iconContrastBackdrop"]=app->iconContrastBackdrop;
             }
         }
         item.insert("logoSource", logo);
-        auto unavailable = ComponentSchema::unavailable(action.toVariantMap(), m_registry, m_collections);
-        if (unavailable.isEmpty() && action.value("type").toString() == "switch-input" && !m_captureInputsReady)
+        auto unavailable = ComponentSchema::unavailable(actionList.isEmpty()?QVariantMap():actionList.first().toMap(), m_registry, m_collections);
+        if (unavailable.isEmpty() && !actionList.isEmpty() && actionList.first().toMap().value("type").toString() == "switch-input" && !m_captureInputsReady)
             unavailable = "Configure Settings → System → HDMI Inputs";
         if(object.value("requiredCapability")=="capture-inputs" && !m_captureInputsReady)unavailable=tr("HDMI capture unavailable · configure inputs in Settings");
         item.insert("unavailableReason", unavailable);
@@ -230,8 +237,8 @@ QVariantList HomeLayout::sourceChoices(const QString &itemId) const
     for (const auto &value : m_items) {
         const auto item = value.toObject();
         if (item.value("id") != itemId) continue;
-        const auto action = normalizedActionForItem(item);
-        const auto type = action.value("type").toString();
+        const auto actionList = normalizedActionForItem(item);
+        const auto type = actionList.isEmpty() ? QString() : actionList.first().toMap().value("type").toString();
         if (type == "switch-input") {
             // HDMI inputs are numbered 1..ComponentSchema::MaxHdmiInput.
             for (int input = ComponentSchema::MinHdmiInput; input <= ComponentSchema::MaxHdmiInput; ++input)
@@ -256,13 +263,17 @@ bool HomeLayout::rebindSource(const QString &itemId, const QString &sourceId)
         auto item = m_items[i].toObject();
         if (item.value("id") != itemId) continue;
         const auto previous = item;
-        auto action = normalizedActionForItem(item);
-        const auto type = action.value("type").toString();
-        if (type == "launch-app") { action["appId"] = sourceId; if (item.value("kind") == "app") item["appId"] = sourceId; }
-        else if (type == "open-collection" || type == "play-movie" || type == "open-show") action["collectionId"] = sourceId;
-        else if (type == "switch-input") action["input"] = sourceId.toInt();
-        else action["openWith"] = sourceId;
-        item["action"] = action;
+        auto actionList = normalizedActionForItem(item);
+        if (actionList.isEmpty()) continue;
+        auto first = actionList.first().toMap();
+        const auto type = first.value("type").toString();
+        if (type == "launch-app") { first["appId"] = sourceId; if (item.value("kind") == "app") item["appId"] = sourceId; }
+        else if (type == "open-collection" || type == "play-movie" || type == "open-show") first["collectionId"] = sourceId;
+        else if (type == "switch-input") first["input"] = sourceId.toInt();
+        else first["openWith"] = sourceId;
+        actionList[0] = QJsonObject::fromVariantMap(first);
+        item["actions"] = QJsonArray::fromVariantList(actionList);
+        item.remove("action");
         item = QJsonObject::fromVariantMap(ComponentSchema::component(item.toVariantMap(), true));
         m_items[i] = item;
         if (!save()) { m_items[i] = previous; return false; }
@@ -508,7 +519,9 @@ QVariantMap HomeLayout::studioOptions() const
     }
     for(const auto &entry:object["actions"].toArray()) {
         const auto choice=entry.toObject();
-        if(!choice["name"].isString() || choice["name"].toString().trimmed().isEmpty() || choice["name"].toString().size()>160 || ComponentSchema::action(choice["action"].toObject().toVariantMap()).isEmpty())return {};
+        if(!choice["name"].isString() || choice["name"].toString().trimmed().isEmpty() || choice["name"].toString().size()>160)return {};
+        const auto actionList = choice["actions"].toArray();
+        if (actionList.isEmpty() || ComponentSchema::action(actionList.first().toObject().toVariantMap()).isEmpty())return {};
         if(choice.contains("aliases")) {
             if(!choice["aliases"].isArray() || choice["aliases"].toArray().size()>8)return {};
             for(const auto &alias:choice["aliases"].toArray())if(!alias.isString() || alias.toString().size()>80 || alias.toString().contains(QChar::Null))return {};
@@ -981,7 +994,11 @@ bool HomeLayout::loadDocument(const QByteArray &data, bool userDocument)
         const auto item = QJsonObject::fromVariantMap(normalized);
         const auto kind = item.value("kind").toString();
         const auto id = item.value("id").toString();
-        const auto actionType = item.value("action").toObject().value("type").toString(defaultActionTypeForKind(item)).trimmed();
+        const auto actionType = [&item]() {
+            if (item.contains("actions") && item["actions"].isArray() && !item["actions"].toArray().isEmpty())
+                return item["actions"].toArray().first().toObject().value("type").toString();
+            return QString();
+        }();
         if (normalized.isEmpty() || item.value("componentType") == "media-shelf" || ids.contains(id) || (kind != "app" && kind != "widget" && kind != "action")
             || (kind == "app" && actionType == QStringLiteral("launch-app") && item.value("appId").toString().isEmpty())
             || (kind == "action" && item.value("name").toString().trimmed().isEmpty())
@@ -1037,7 +1054,7 @@ bool HomeLayout::addAppTile(const QString &appId)
     };
     while (idExists(id)) id = appId + '-' + QString::number(suffix++);
     QJsonObject tile{{"kind", "app"}, {"id", id}, {"appId", appId},
-                     {"action", QJsonObject{{"type", "launch-app"}, {"appId", appId}}},
+                     {"actions", QJsonArray{QJsonObject{{"type", "launch-app"}, {"appId", appId}}}},
                      {"size", "standard"}};
     const auto section = m_registry->find(appId)->section;
     for (const auto &value : m_categories) {
@@ -1092,7 +1109,7 @@ bool HomeLayout::addActionTile(const QString &name, const QString &actionType, c
 
     const QJsonObject action = QJsonObject::fromVariantMap(normalizedAction);
     QJsonObject tile{{"kind", "action"}, {"id", id}, {"name", cleanName}, {"size", "standard"},
-                     {"action", action}};
+                     {"actions", QJsonArray{action}}};
     if (!categoryId.isEmpty()) tile.insert(QStringLiteral("categoryId"), categoryId);
     m_items.append(tile);
     if (!save()) { m_items.removeLast(); return false; }

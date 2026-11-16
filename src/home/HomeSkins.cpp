@@ -211,7 +211,11 @@ QVariantList HomeLayout::skinPageUpdates(const QString &id) const {
         if (!actionError.isEmpty() || fromAction.isEmpty()) return {};
         for (const auto &entry : home["components"].toArray()) {
             const auto component = entry.toObject();
-            if (component["id"] != componentId || component["action"].toObject().toVariantMap() != fromAction) continue;
+            if (component["id"] != componentId) continue;
+            const auto compAction = component.contains("actions") && component["actions"].isArray() && !component["actions"].toArray().isEmpty()
+                ? component["actions"].toArray().first().toObject().toVariantMap()
+                : component["action"].toObject().toVariantMap();
+            if (compAction != fromAction) continue;
             result.append(QVariantMap{{"componentId", componentId}, {"name", component["name"].toString()},
                 {"pageId", pageId}, {"page", target.toVariantMap()}});
         }

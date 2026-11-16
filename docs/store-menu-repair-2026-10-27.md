@@ -4,7 +4,7 @@ User authorized fixing the Store blocker and continuing T11. Store feature progr
 
 The expanded Menu always exposed Android/F-Droid tools. On the Web tab, Menu → Confirm therefore toggled F-Droid instead of opening Add website. The first tool now matches the selected platform and uses the same `storeTool()` action as the visible button. That action restores the tools origin, so Back from the form changes nothing and Confirm can reopen it. Android's F-Droid toggle, update and setup actions remain available.
 
-Independent `store_remote_ui` coverage exercises the real AppStoreView without a Page Studio fixture: Web Menu/form/cancel/reopen/name/address/save-once, no accidental F-Droid change, unchanged Android toggle, and Menu cancellation restoring its original area/header selection. Existing StudioSelection coverage is retained.
+Independent `store_remote_ui` coverage exercises the real AppStoreView without a Skin Studio fixture: Web Menu/form/cancel/reopen/name/address/save-once, no accidental F-Droid change, unchanged Android toggle, and Menu cancellation restoring its original area/header selection. Existing StudioSelection coverage is retained.
 
 Delegated `store-menu-20261027-a` passes **1/1 suite**, with three behavior cases. Source digest `dc19a28328c1cb9e2da94b3bcb842de6388e2858f60bf761176289c207600682`; host evidence `build/vm-oracle/store-menu-20261027-a/report/`.
 

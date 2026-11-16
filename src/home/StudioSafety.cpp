@@ -124,13 +124,15 @@ QVariantList StudioSession::healthFindings() const
         for (const auto &value : page["components"].toArray()) {
             const auto item = value.toObject();
             const auto id = item["id"].toString();
-            const auto action = item["action"].toObject();
+            const auto actionVal = item.contains("actions") && item["actions"].isArray() && !item["actions"].toArray().isEmpty()
+                ? item["actions"].toArray().first().toObject()
+                : item["action"].toObject();
             const auto presentation = item["presentation"].toObject();
             const auto type = item["componentType"].toString();
-            if (visible(item) && (!action.isEmpty() || item["kind"] == "app" || type == "library" || type == "carousel")) ++reachable;
-            if (action["type"] == "open-page" && !pages.contains(action["pageId"].toString()))
+            if (visible(item) && (!actionVal.isEmpty() || item["kind"] == "app" || type == "library" || type == "carousel")) ++reachable;
+            if (actionVal["type"] == "open-page" && !pages.contains(actionVal["pageId"].toString()))
                 add(id, "action", tr("The destination page is missing. Choose another destination."));
-            if (action["type"] == "root-page" && !m_model->rootPageVisible())
+            if (actionVal["type"] == "root-page" && !m_model->rootPageVisible())
                 add(id, "action", tr("The root page is hidden. Choose an available destination."));
             const auto appId = item["appId"].toString();
             if (!appId.isEmpty() && !m_live->registry()->find(appId))
@@ -140,7 +142,7 @@ QVariantList StudioSession::healthFindings() const
                 add(id, "customLogo", tr("Managed artwork is missing. Choose another image or keep the placeholder."));
             if (item["name"].toString().size() > 80)
                 add(id, "name", tr("This long label may be clipped. Review it at the current viewport."));
-            if ((type == "button" || type == "image") && action.isEmpty())
+            if ((type == "button" || type == "image") && actionVal.isEmpty())
                 add(id, "action", tr("This component has no action. Intentional decoration can be kept."));
             if (type == "text" && presentation["bodyText"].toString().isEmpty())
                 add(id, "bodyText", tr("This text is empty. Add text or keep it intentionally empty."));
@@ -177,7 +179,7 @@ bool StudioSession::diskRevisionUnchanged() const
 bool StudioSession::editingPermitted()
 {
     if (m_active && !currentProfile()) {
-        setError(tr("The profile changed. Reopen Page Studio.")); return false;
+        setError(tr("The profile changed. Reopen Skin Studio.")); return false;
     }
     if (m_editorLocked || !ProfileManager::allows("edit")) {
         setError(tr("Editing is restricted. Unlock the editor or enable editing in Settings > Profiles.")); return false;

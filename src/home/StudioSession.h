@@ -14,7 +14,7 @@ class HomeLayout;
 class QTemporaryDir;
 
 /**
- * @brief T16 — shared draft/undo transaction foundation for Page Studio.
+ * @brief T16 — shared draft/undo transaction foundation for Skin Studio.
  *
  * StudioSession holds an opaque canonical document snapshot (Home layout or
  * single-page document) plus the last committed bytes. Edits push the prior

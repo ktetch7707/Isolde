@@ -137,73 +137,215 @@ void HomeLayout::syncPages() {
         if(QJsonObject::fromVariantMap(model->document())!=entry["layout"].toObject()){
             model->loadDocument(QJsonDocument(entry["layout"].toObject()).toJson(),false);}}
 }
-bool HomeLayout::linkPage(const QString &id,bool asTab) {
-    if(!pageModel(id)){setError(tr("Page not found."));return false;}QString name=id;
-    for(const auto &entry:(m_owner?m_owner->pages():pages()))if(entry.toMap()["id"]==id)name=entry.toMap()["name"].toString();
-    const auto linkId="link-"+QUuid::createUuid().toString(QUuid::WithoutBraces);
-    if(asTab){auto config=m_composition;config["schemaVersion"]=1;config["enabled"]=true;config["headerMode"]="navigation";auto tabs=config.value("navigation").toList();
-        if(tabs.isEmpty()){tabs.append(QVariantMap{{"id","home"},{"name","Home"}});config["initialTab"]="home";}
-        tabs.append(QVariantMap{{"id",linkId},{"name",name},{"action",QVariantMap{{"type","open-page"},{"pageId",id}}}});config["navigation"]=tabs;return setComposition(config);}
-    const auto previous=m_items;m_items.append(QJsonObject{{"id",linkId},{"kind","action"},{"name",name},{"action",QJsonObject{{"type","open-page"},{"pageId",id}}}});
-    if(!save()){m_items=previous;return false;}emit layoutChanged();return true;
-}
-QString HomeLayout::addLibraryWidget(const QString &name,const QString &kind) {
-    if(name.trimmed().isEmpty() || !QStringList{"movies","shows"}.contains(kind))return {};
-    const auto previousComposition=m_composition;const auto previousCategories=m_categories;
-    if(!m_composition.value("enabled").toBool()){
-        m_composition["schemaVersion"]=1;m_composition["enabled"]=true;m_composition["fit"]=false;
+
+bool HomeLayout::linkPage(const QString &id, bool asTab) {
+    if (!pageModel(id)) {
+        setError(tr("Page not found."));
+        return false;
     }
-    const auto id="library-"+QUuid::createUuid().toString(QUuid::WithoutBraces);
-    m_categories.append(QJsonObject{{"id",id},{"name",name.trimmed().left(60)},{"presentation",QJsonObject{
-        {"variant","library"},{"height",500},{"libraryKind",kind},{"libraryView","all"},{"libraryLayout","grid"},{"libraryColumns",4}}}});
-    if(!save()){m_composition=previousComposition;m_categories=previousCategories;return {};}emit layoutChanged();return id;
+    QString name = id;
+    for (const auto &entry : (m_owner ? m_owner->pages() : pages())) {
+        if (entry.toMap()["id"] == id)
+            name = entry.toMap()["name"].toString();
+    }
+    const auto linkId = "link-" + QUuid::createUuid().toString(QUuid::WithoutBraces);
+    if (asTab) {
+        auto config = m_composition;
+        config["schemaVersion"] = 1;
+        config["enabled"] = true;
+        config["headerMode"] = "navigation";
+        auto tabs = config.value("navigation").toList();
+        if (tabs.isEmpty()) {
+            tabs.append(QVariantMap{{"id", "home"}, {"name", "Home"}});
+            config["initialTab"] = "home";
+        }
+        tabs.append(QVariantMap{{"id", linkId}, {"name", name},
+                                {"actions", QVariantList{QVariantMap{{"type", "open-page"}, {"pageId", id}}}}});
+        config["navigation"] = tabs;
+        return setComposition(config);
+    }
+    const auto previous = m_items;
+    m_items.append(QJsonObject{{"id", linkId}, {"kind", "action"}, {"name", name},
+                               {"actions", QJsonArray{QJsonObject{{"type", "open-page"}, {"pageId", id}}}}});
+    if (!save()) {
+        m_items = previous;
+        return false;
+    }
+    emit layoutChanged();
+    return true;
 }
-bool HomeLayout::setItemAction(const QString &id,const QVariantMap &action) {
-    const auto normalized=ComponentSchema::action(action);if(normalized.isEmpty()){setError(tr("Choose a valid action and destination."));return false;}
-    for(qsizetype i=0;i<m_items.size();++i){auto item=m_items[i].toObject();if(item["id"]!=id)continue;
-        const bool visualLink=item["componentType"]=="button" || item["componentType"]=="image";
-        if(item["kind"]=="widget" && !visualLink)continue;
-        const auto previous=m_items;if(!visualLink)item["kind"]="action";item["action"]=QJsonObject::fromVariantMap(normalized);item.remove("appId");
-        if(item["name"].toString().isEmpty())item["name"]="Link";
-        QString error;const auto canonical=ComponentSchema::component(item.toVariantMap(),true,&error);
-        if(canonical.isEmpty()){setError(error);return false;}m_items[i]=QJsonObject::fromVariantMap(canonical);
-        if(!save()){m_items=previous;return false;}emit layoutChanged();return true;}
-    setError(tr("Choose a launcher card."));return false;
+
+QString HomeLayout::addLibraryWidget(const QString &name, const QString &kind) {
+    if (name.trimmed().isEmpty() || !QStringList{"movies", "shows"}.contains(kind))
+        return {};
+    const auto previousComposition = m_composition;
+    const auto previousCategories = m_categories;
+    if (!m_composition.value("enabled").toBool()) {
+        m_composition["schemaVersion"] = 1;
+        m_composition["enabled"] = true;
+        m_composition["fit"] = false;
+    }
+    const auto id = "library-" + QUuid::createUuid().toString(QUuid::WithoutBraces);
+    m_categories.append(QJsonObject{{"id", id},
+                                    {"name", name.trimmed().left(60)},
+                                    {"presentation", QJsonObject{
+                                        {"variant", "library"},
+                                        {"height", 500},
+                                        {"libraryKind", kind},
+                                        {"libraryView", "all"},
+                                        {"libraryLayout", "grid"},
+                                        {"libraryColumns", 4}}}});
+    if (!save()) {
+        m_composition = previousComposition;
+        m_categories = previousCategories;
+        return {};
+    }
+    emit layoutChanged();
+    return id;
 }
-bool HomeLayout::setItemName(const QString &id,const QString &name) {
-    if(name.trimmed().isEmpty()||name.trimmed().size()>80){setError(tr("Use a card name of 1-80 characters."));return false;}
-    for(qsizetype i=0;i<m_items.size();++i){auto item=m_items[i].toObject();if(item["id"]!=id)continue;const auto previous=m_items;
-        item["name"]=name.trimmed();if(item["kind"]=="app"){item["kind"]="action";item.remove("appId");}m_items[i]=item;
-        if(!save()){m_items=previous;return false;}emit layoutChanged();return true;}
+
+bool HomeLayout::setItemAction(const QString &id, const QVariantList &actions) {
+    if (actions.isEmpty()) {
+        setError(tr("Choose at least one action for the button."));
+        return false;
+    }
+    QVariantList normalized;
+    for (const auto &entry : actions) {
+        if (entry.metaType().id() != QMetaType::QVariantMap) {
+            setError(tr("Each action must be an action map."));
+            return false;
+        }
+        const auto n = ComponentSchema::action(entry.toMap());
+        if (n.isEmpty()) {
+            setError(tr("Choose a valid action and destination."));
+            return false;
+        }
+        normalized.append(n);
+    }
+    for (qsizetype i = 0; i < m_items.size(); ++i) {
+        auto item = m_items[i].toObject();
+        if (item["id"] != id)
+            continue;
+        const bool visualLink = item["componentType"] == "button" || item["componentType"] == "image";
+        if (item["kind"] == "widget" && !visualLink)
+            continue;
+        const auto previous = m_items;
+        if (!visualLink)
+            item["kind"] = "action";
+        item["actions"] = QJsonArray::fromVariantList(normalized);
+        item.remove("action");
+        item.remove("appId");
+        if (item["name"].toString().isEmpty())
+            item["name"] = "Link";
+        QString error;
+        const auto canonical = ComponentSchema::component(item.toVariantMap(), true, &error);
+        if (canonical.isEmpty()) {
+            setError(error);
+            return false;
+        }
+        m_items[i] = QJsonObject::fromVariantMap(canonical);
+        if (!save()) {
+            m_items = previous;
+            return false;
+        }
+        emit layoutChanged();
+        return true;
+    }
+    setError(tr("Choose a launcher card."));
     return false;
 }
-bool HomeLayout::addButton(){
+
+bool HomeLayout::setItemName(const QString &id, const QString &name) {
+    if (name.trimmed().isEmpty() || name.trimmed().size() > 80) {
+        setError(tr("Use a card name of 1-80 characters."));
+        return false;
+    }
+    for (qsizetype i = 0; i < m_items.size(); ++i) {
+        auto item = m_items[i].toObject();
+        if (item["id"] != id)
+            continue;
+        const auto previous = m_items;
+        item["name"] = name.trimmed();
+        if (item["kind"] == "app") {
+            item["kind"] = "action";
+            item.remove("appId");
+        }
+        m_items[i] = item;
+        if (!save()) {
+            m_items = previous;
+            return false;
+        }
+        emit layoutChanged();
+        return true;
+    }
+    return false;
+}
+
+bool HomeLayout::addButton() {
     QString error;
-    const auto item=ComponentSchema::component({{"id","button-"+QUuid::createUuid().toString(QUuid::WithoutBraces)},{"kind","widget"},{"widgetType","button"},{"componentType","button"},{"name","Button"},{"action",QVariantMap{{"type","open-apps"}}}},true,&error);
-    if(item.isEmpty()){setError(error);return false;}
+    const auto item = ComponentSchema::component(
+        {{"id", "button-" + QUuid::createUuid().toString(QUuid::WithoutBraces)},
+         {"kind", "widget"},
+         {"widgetType", "button"},
+         {"componentType", "button"},
+         {"name", "Button"},
+         {"actions", QVariantList{QVariantMap{{"type", "open-apps"}}}}},
+        true, &error);
+    if (item.isEmpty()) {
+        setError(error);
+        return false;
+    }
     m_items.append(QJsonObject::fromVariantMap(item));
-    if(!save()){m_items.removeLast();return false;}emit layoutChanged();return true;
+    if (!save()) {
+        m_items.removeLast();
+        return false;
+    }
+    emit layoutChanged();
+    return true;
 }
 
-
-bool HomeLayout::storePage(const QString &id,const QJsonObject &document) {
-    HomeLayout validator(m_registry);validator.m_owner=this;
-    if(!validator.loadDocument(QJsonDocument(document).toJson(),false)){setError(validator.errorString());return false;}
-    for(qsizetype i=0;i<m_pages.size();++i){auto entry=m_pages[i].toObject();if(entry["id"]!=id)continue;
-        const auto previous=m_pages;entry["layout"]=document;m_pages[i]=entry;
+bool HomeLayout::storePage(const QString &id, const QJsonObject &document) {
+    HomeLayout validator(m_registry);
+    validator.m_owner = this;
+    if (!validator.loadDocument(QJsonDocument(document).toJson(), false)) {
+        setError(validator.errorString());
+        return false;
+    }
+    for (qsizetype i = 0; i < m_pages.size(); ++i) {
+        auto entry = m_pages[i].toObject();
+        if (entry["id"] != id)
+            continue;
+        const auto previous = m_pages;
+        entry["layout"] = document;
+        m_pages[i] = entry;
         QString validationError;
-        if(!validateStudioDocument(documentData(),&validationError,m_defaultTheme) || !save()){
-            m_pages=previous;if(!validationError.isEmpty())setError(validationError);return false;
-        }emit layoutChanged();return true;}
-    setError(tr("This page was removed. Choose another page."));return false;
+        if (!validateStudioDocument(documentData(), &validationError, m_defaultTheme) || !save()) {
+            m_pages = previous;
+            if (!validationError.isEmpty())
+                setError(validationError);
+            return false;
+        }
+        emit layoutChanged();
+        return true;
+    }
+    setError(tr("This page was removed. Choose another page."));
+    return false;
 }
+
 QObject *HomeLayout::pageModel(const QString &id) {
-    if(m_owner)return m_owner->pageModel(id);
-    for(const auto &value:m_pages){const auto entry=value.toObject();if(entry["id"]!=id)continue;
-        if(m_pageModels.contains(id))return m_pageModels[id];
-        auto *model=new PageModel(this,id,this);
+    if (m_owner)
+        return m_owner->pageModel(id);
+    for (const auto &value : m_pages) {
+        const auto entry = value.toObject();
+        if (entry["id"] != id)
+            continue;
+        if (m_pageModels.contains(id))
+            return m_pageModels[id];
+        auto *model = new PageModel(this, id, this);
         model->setParent(this);
-        model->loadDocument(QJsonDocument(entry["layout"].toObject()).toJson(),false);
-        m_pageModels[id]=model;return model;}
+        model->loadDocument(QJsonDocument(entry["layout"].toObject()).toJson(), false);
+        m_pageModels[id] = model;
+        return model;
+    }
     return nullptr;
 }

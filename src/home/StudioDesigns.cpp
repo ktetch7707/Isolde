@@ -129,8 +129,10 @@ bool portableLayout(const QJsonObject &document, QString &error, bool nestedPage
             error = QObject::tr("Unknown portable component field '%1'.").arg(it.key()); return false;
         }
         // Machine grants, local media identities and provider collections are not portable capabilities.
-        const auto action = node["action"].toObject();
-        const auto type = action["type"].toString();
+        const auto actionVal = node.contains("actions") && node["actions"].isArray() && !node["actions"].toArray().isEmpty()
+            ? node["actions"].toArray().first().toObject()
+            : node["action"].toObject();
+        const auto type = actionVal["type"].toString();
         const auto provider = node["source"].toObject()["provider"].toString();
         if (QStringList{"open-file", "open-folder", "open-disc", "play-movie", "play-episode", "open-show", "open-collection", "play-music", "play-game"}.contains(type)
             || node["source"].toObject().contains("collectionId") || provider == "games") {

@@ -357,7 +357,7 @@ Item {
                 return
             }
             if (host.unavailableReason(item)) host.settingsRequested(1)
-            else if (item.action) host.actionActivated(item.action, item.id)
+            else if (item.actions && item.actions.length>0) host.actionActivated({actions:item.actions}, item.id)
             return
         }
         let candidates = [], next

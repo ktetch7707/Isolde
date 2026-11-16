@@ -1,4 +1,4 @@
-# Page Studio feature map — current editor to Studio (T15.1)
+# Skin Studio feature map — current editor to Studio (T15.1)
 
 Status: provisional design inventory, 2026-10-19. Code-inspection evidence only; no installed
 acceptance run is claimed and no user review has occurred (deferred to T24). Sources: `qml/CustomizeHomeView.qml`, `qml/PageManager.qml`,
@@ -43,7 +43,7 @@ not the data contract.
 | 28-29 | Add text widget / Add button | `addWidget("text")` / `addButton()` | Add catalog → Text & artwork / Navigation | Buttons need the same validated action form as Add tile |
 | 30 | Duplicate | `duplicateItem(id)` | Context menu Duplicate | No undo; Studio places the copy adjacently with collision resolution |
 
-| 31 | Page Studio (preview) | HomeLayout::beginStudio() → StudioSession typed commands | Native canvas draft workspace | Provisional implementation entry; legacy editor retained until cutover acceptance |
+| 31 | Skin Studio (preview) | HomeLayout::beginStudio() → StudioSession typed commands | Native canvas draft workspace | Provisional implementation entry; legacy editor retained until cutover acceptance |
 
 Modal overlays in the current editor (full-screen; immediate-save except where noted): source
 repair, theme preview+apply, built-in art, add tile (+ on-screen keyboard), tile roundness, item

@@ -252,7 +252,8 @@ Item {
             return "Network needed"
         return ""
     }
-    function focusable(item){return editMode || item && item.componentType!=="shape" && item.componentType!=="text" && !(item.componentType==="image" && !item.action)}
+    function hasAction(item){return !!(item.actions && item.actions.length>0)}
+    function focusable(item){return editMode || item && item.componentType!=="shape" && item.componentType!=="text" && !(item.componentType==="image" && !hasAction(item))}
     function repairFocus(){if(editMode)return;if(composition.enabled && (sections || []).some(s=>(s.presentation || {}).variant==="library"))return;if(items[focusedIndex] && focusable(items[focusedIndex]))return;const first=items.findIndex(i=>focusable(i));if(first<0){if(!recoveryFocused)focusRecoveryHeader();return}focusedIndex=first;focusedItemId=items[first].id;recoveryFocused=false}
 
     function visualEntries() {
@@ -360,7 +361,7 @@ Item {
         else if (command === inputManager.confirm) {
             const item = items[focusedIndex]
             if (item.unavailableReason) settingsRequested(1)
-            else if (item.action && unavailableReason(item) === "") actionActivated(item.action, item.id)
+            else if (hasAction(item) && unavailableReason(item) === "") actionActivated(item.actions && item.actions.length>0 ? {actions:item.actions} : item.action, item.id)
         }
         focusedIndex = next
     }

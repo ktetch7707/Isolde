@@ -148,7 +148,7 @@ Item {
         if(f.type==="historyApps")return value && value.length?"Local media + "+value.length+" selected app openings":"Local media only"
         if(f.type==="visibility")return current && current.hidden?"Hidden":"Visible"
         if(f.type==="lock")return current && current.locked?"Locked":"Unlocked"
-        if(f.type==="action"){if(!value || !value.type)return "None";const named=actions.find(a=>Object.keys(a.action).every(k=>a.action[k]===value[k]));return named?named.name:"Unavailable link · choose a replacement"}
+        if(f.type==="action"){const av=Array.isArray(value)?(value.length>0?value[0]:{}):value;if(!av || !av.type)return "None";const named=actions.find(a=>Object.keys(a.action).every(k=>a.action[k]===av[k]));return named?named.name:"Unavailable link · choose a replacement"}
         if(f.type==="artwork")return value?"Managed image":"None"
         if(["geometry","layout","children","apps","order","crop","grid","header","typography"].indexOf(f.type)>=0)return "Open…"
         if(f.type==="toggle" || f.type==="scrolling")return value?"On":"Off"

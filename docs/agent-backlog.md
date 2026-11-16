@@ -155,36 +155,36 @@ After Studio/shell and the current exception, follow the table: evidence reconci
 
 ## Overall (update every edit)
 
-| Task | Priority | Title | % | Coding% | Status |
-|------|----------|-------|---|--------|
-| T15 | 1 | Page Studio design and user validation | 100% | 100% | accepted final installed Studio batch; source-bound34-task audit and reviewed VM evidence |
-| T16 | 2 | Draft transactions, history and profile safety | 100% | 100% | verified foundation; final integrated regression T31 |
-| T17 | 3 | Shared canvas geometry and legacy compatibility | 100% | 100% | verified foundation; evidence reusable by T05 |
-| T18 | 4 | Unified Studio workspace and selection | 100% | 100% | verified foundation; broad cutover remains T24 |
-| T19 | 5 | Remote movement, resize and collision | 100% | 100% | verified reflow foundation; later UX gates retained |
-| T20 | 6 | Desktop parity, layers and nested editing | 100% | 100% | installed movement parity accepted; 4/4 final milestones |
-| T21 | 7 | Inspector, real components, header and controls | 100% | 100% | 14/14 weighted milestones accepted; installed candidate and agent-run task walkthrough complete |
-| T22 | 8 | Templates, tokens, reuse and portability | 100% | 100% | accepted final installed Studio batch; source-bound34-task audit and reviewed VM evidence |
-| T23 | 9 | Apply, versions, restore and navigation safety | 100% | 100% | accepted final installed Studio batch; source-bound34-task audit and reviewed VM evidence |
-| T24 | 10 | Installed Studio usability and cutover | 100% | 100% | accepted final installed Studio batch; source-bound34-task audit and reviewed VM evidence |
-| T27 | 11 | Shared theme across shell surfaces | 100% | 100% | accepted installed theme/state/contrast matrix; source-bound full/focused and both reference pairs reviewed |
-| T25 | 12 | Contained configurable detected sources | 100% | 100% | installed18-checkpoint source policy/components/actions accepted; four focused tests with strict original61/61 reuse |
-| T26 | 13 | Configurable All Apps destination | 100% | 100% | native Studio edit/Preview/Cancel/Apply plus exact installed saved presentation, artwork/density and eight real native returns accepted |
-| T28 | 14 | Genuine Web search header toggle | 100% | 100% | installed16-checkpoint cold/profile/save-failure/retry/OFF matrix, full61 and clean reference pairs accepted |
-| T29 | 15 | Verified Store, Android and Chromium remote | 100% | 100% | Installed signed updates/rollback/fullscreen/remote lifecycle accepted; explicit live-content handoff |
-| T01 | 16 | Current-source build and visual ledger | 100% | 100% | frozen T21 Linux build/source/reference ledger reconciled |
-| T05 | 17 | Grid renderer evidence reconciliation | 100% | 100% | T17 geometry corroborated by final T21 suite and installed reference pairs |
-| T03 | 18 | Local Kodi search and installed acceptance | 100% | 100% | p62 full/x5 focused; installed56-episode paging/playback/exact Search and library return accepted |
-| T04 | 19 | Complete Kodi interface, preservation and import | 100% | 100% | all 7 groups verified across the installed media, import, Desktop, playlist shelf and reference workflows |
-| T12 | 20 | System/input/keyboard, VPN, apps and screensavers | 57% | 100% | Power and narrow installed input/native return/timed wake reviewed; broader input, VPN, apps and screensaver acceptance remain open |
-| T09 | 21 | Playback preference and viewing controls | 38% | 100% | all code complete: Always Play Locally preference (KodiService + DisplaySettings); T12 keyboard/screencode foundation; playback matrix and viewing controls complete |
-| T10 | 22 | Capture/HDMI/audio software and editors | 67% | 100% | capture and audio software/editor paths implemented; native and installed acceptance deferred; physical H04 separate |
-| T11 | 23 | Guide / PseudoTV | 100% | 100% | VM Guide acceptance complete; 18/18 milestones, 3/3 groups; return to Studio priority |
-| T14 | 24 | Online discovery and Linguist subtitles | 50% | 100% | VM production-boundary HTTP/SRT/service/QML proofs accepted; combined installed/model workflows open |
-| T30 | 25 | Unified Games, local copies/discs and emulators | 44% | 100% | Six expanded route implementations added for BUG-058; round-two native suite passes; installed provisioning/gameplay open; pre-campaign Coding claim is not verified; expanded generation/VM acceptance remains open; 0/9 software acceptance gates |
-| T13 | — | Appliance software, distribution and user setup guide | 0% | 35% | **Excluded** from project requirements and averages; historical progress retained |
-| T31 | — | Frozen first-product software acceptance | 5% | 10% | **Excluded** from project requirements and averages; historical progress retained |
-| **Overall** | — | **average of 25 ACTIVE software tasks** | **90%** | **100%** | **2253 / 25 acceptance and 2500 / 25 coding rounded; S1 incomplete** |
+| Task | Priority | Title | % | Status |
+|------|----------|-------|---|---|
+| T15 | 1 | Skin Studio design and user validation | 100% | accepted final installed Studio batch; source-bound34-task audit and reviewed VM evidence |
+| T16 | 2 | Draft transactions, history and profile safety | 100% | verified foundation; final integrated regression T31 |
+| T17 | 3 | Shared canvas geometry and legacy compatibility | 100% | verified foundation; evidence reusable by T05 |
+| T18 | 4 | Unified Studio workspace and selection | 100% | verified foundation; broad cutover remains T24 |
+| T19 | 5 | Remote movement, resize and collision | 100% | verified reflow foundation; later UX gates retained |
+| T20 | 6 | Desktop parity, layers and nested editing | 100% | installed movement parity accepted; 4/4 final milestones |
+| T21 | 7 | Inspector, real components, header and controls | 100% | 14/14 weighted milestones accepted; installed candidate and agent-run task walkthrough complete |
+| T22 | 8 | Templates, tokens, reuse and portability | 100% | accepted final installed Studio batch; source-bound34-task audit and reviewed VM evidence |
+| T23 | 9 | Apply, versions, restore and navigation safety | 100% | accepted final installed Studio batch; source-bound34-task audit and reviewed VM evidence |
+| T24 | 10 | Installed Studio usability and cutover | 100% | accepted final installed Studio batch; source-bound34-task audit and reviewed VM evidence |
+| T27 | 11 | Shared theme across shell surfaces | 100% | accepted installed theme/state/contrast matrix; source-bound full/focused and both reference pairs reviewed |
+| T25 | 12 | Contained configurable detected sources | 100% | installed18-checkpoint source policy/components/actions accepted; four focused tests with strict original61/61 reuse |
+| T26 | 13 | Configurable All Apps destination | 100% | native Studio edit/Preview/Cancel/Apply plus exact installed saved presentation, artwork/density and eight real native returns accepted |
+| T28 | 14 | Genuine Web search header toggle | 100% | installed16-checkpoint cold/profile/save-failure/retry/OFF matrix, full61 and clean reference pairs accepted |
+| T29 | 15 | Verified Store, Android and Chromium remote | 100% | Installed signed updates/rollback/fullscreen/remote lifecycle accepted; explicit live-content handoff |
+| T01 | 16 | Current-source build and visual ledger | 100% | frozen T21 Linux build/source/reference ledger reconciled |
+| T05 | 17 | Grid renderer evidence reconciliation | 100% | T17 geometry corroborated by final T21 suite and installed reference pairs |
+| T03 | 18 | Local Kodi search and installed acceptance | 100% | p62 full/x5 focused; installed56-episode paging/playback/exact Search and library return accepted |
+| T04 | 19 | Complete Kodi interface, preservation and import | 100% | all 7 groups verified across the installed media, import, Desktop, playlist shelf and reference workflows |
+| T12 | 20 | System/input/keyboard, VPN, apps and screensavers | 57% | Power and narrow installed input/native return/timed wake reviewed; broader input, VPN, apps and screensaver acceptance remain open |
+| T09 | 21 | Playback preference and viewing controls | 38% | all code complete: Always Play Locally preference (KodiService + DisplaySettings); T12 keyboard/screencode foundation; playback matrix and viewing controls complete |
+| T10 | 22 | Capture/HDMI/audio software and editors | 67% | capture and audio software/editor paths implemented; native and installed acceptance deferred; physical H04 separate |
+| T11 | 23 | Guide / PseudoTV | 100% | VM Guide acceptance complete; 18/18 milestones, 3/3 groups; return to Studio priority |
+| T14 | 24 | Online discovery and Linguist subtitles | 50% | VM production-boundary HTTP/SRT/service/QML proofs accepted; combined installed/model workflows open |
+| T30 | 25 | Unified Games, local copies/discs and emulators | 44% | Six expanded route implementations added for BUG-058; round-two native suite passes; installed provisioning/gameplay open; pre-campaign Coding claim is not verified; expanded generation/VM acceptance remains open; 0/9 software acceptance gates |
+| T13 | — | Appliance software, distribution and user setup guide | 0% | **Excluded** from project requirements and averages; historical progress retained |
+| T31 | — | Frozen first-product software acceptance | 5% | **Excluded** from project requirements and averages; historical progress retained |
+| **Overall** | — | **average of 25 ACTIVE software tasks** | **90%** | **2253 / 25 acceptance rounded; S1 incomplete** |
 
 ## Current checkpoint summary
 
@@ -245,8 +245,8 @@ Reconciliation (2026-11-02): [four-task evidence review](backlog-evidence-reconc
 
 ## Active task scopes — in execution order
 
-## T15 — Page Studio interaction design and usability validation (M, depends: none; selected priority)
-Entry docs: `docs/page-studio-redesign.md` sections 1-4, 10-11; `docs/shell-surfaces-design.md` sections 1-6; `docs/interface-design.md` Page Studio amendment.
+## T15 — Skin Studio interaction design and usability validation (M, depends: none; selected priority)
+Entry docs: `docs/page-studio-redesign.md` sections 1-4, 10-11; `docs/shell-surfaces-design.md` sections 1-6; `docs/interface-design.md` Skin Studio amendment.
 Entry files: `qml/CustomizeHomeView.qml`, `qml/PageManager.qml` (read-only workflow inventory); new design artifacts under `docs/design/page-studio/`.
 Scope:
 - [x] T15.1 Inventory every currently supported editor operation plus source notices, All Apps, themed shell surfaces and the Search header switch; map each to Studio and identify capability gaps without treating UI labels as backend proof.
@@ -280,7 +280,7 @@ Scope:
 Done when: canvas-to-runtime geometry agrees at cell boundaries and scaling extremes; legacy fixtures remain generic; T05's remaining placement gate has concrete evidence and is updated separately.
 Verify: extend `universalGridValidatesAndPersists` and `home_component_navigation` with actual placed widgets, holes/header offsets/scroll containers; full CTest and both VM visual fixtures. Evidence: [studio-geometry-2026-10-20.md](studio-geometry-2026-10-20.md), source snapshot 18 (archive aae05fd1d9dcc9877878543074309a32e4b1717558fe3068265c8dcdc17b6d69), full 14/14 CTest, installed release d30eff6291f378d0fd37b276, both recreation/reset pairs and Studio Apply/reopen; durable logs/config/captures under build/studio-installed-18/. Full nested editing, precision appearance controls and accepted editor chrome remain T18-T24.
 
-## T18 — Unified Page Studio workspace and selection (M, depends: T17)
+## T18 — Unified Skin Studio workspace and selection (M, depends: T17)
 User-requested entry correction (2026-10-20): the old 32-action Customize Home grid was still the normal entry, and named pages used PageEditor. This supersedes the earlier “developer entry remains until T24” statement below. Normal Home/page editing now routes directly to the same Studio; compatibility-only legacy operation tests are explicitly separate. Current-source verification and installed entry capture: [studio-entry-correction-2026-10-20.md](studio-entry-correction-2026-10-20.md). This narrow correction does not complete T24's feature parity/usability/performance/offline matrix. T18 checkboxes remain 4/4; no new feature credit.
 Entry docs: `docs/page-studio-redesign.md` sections 2-4, 6; T15 approved wireframes and feature map.
 Entry files: `qml/CustomizeHomeView.qml`, `qml/PageManager.qml`, `qml/PageSurface.qml`, `qml/Main.qml`, `src/home/HomePages.cpp`, `tests/tst_home_navigation.cpp`; new native Studio view files only as needed.

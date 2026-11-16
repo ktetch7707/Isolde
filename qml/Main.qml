@@ -766,8 +766,9 @@ Window {
             const items = lists[m] || []
             for (let i = 0; i < items.length; ++i) {
                 const item = items[i]
-                if (!item.action || item.action.type !== "switch-input"
-                        || item.action.input !== input || !item.customLogo) continue
+                const firstAction = item.actions && item.actions.length>0 ? item.actions[0] : undefined
+                if (!firstAction || firstAction.type !== "switch-input"
+                        || firstAction.input !== input || !item.customLogo) continue
                 const resolved = homeLayout.resolveArtwork(item.customLogo)
                 if (!resolved) continue
                 if (item.id === originId) return resolved

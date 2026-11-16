@@ -71,6 +71,10 @@ bool safeId(const QString &id);
 // Normalizes and validates an action map; returns an empty map and sets
 // error on rejection. Owns the full list of supported action types.
 QVariantMap action(const QVariantMap &input, QString *error = nullptr);
+// Normalizes and validates an ordered list of actions (an action sequence);
+// returns an empty list and sets error on rejection. Each entry is validated
+// through action(); execution order is preserved.
+QVariantList actions(const QVariantList &input, QString *error = nullptr);
 // Short-lived editor commands are validated separately from persistent Home
 // actions, so they cannot be saved as component destinations.
 QVariantMap editorAction(const QVariantMap &input, QString *error = nullptr);

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""T15 static verification: Page Studio design pack coverage (no Qt build needed).
+"""T15 static verification: Skin Studio design pack coverage (no Qt build needed).
 
 Checks (design state-transition/feature-coverage review for backlog T15):
   T15.1 feature map covers every CustomizeHomeView action label and PageManager

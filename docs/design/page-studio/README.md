@@ -1,4 +1,4 @@
-# Page Studio design pack (T15)
+# Skin Studio design pack (T15)
 
 **Current direction:** [Page-first Studio](page-first-design.md), revised after the user's direct rejection of the provisional screenshots. Read it first. It supersedes conflicting workspace schematics and interaction transitions in this pack. The earlier artifact walkthrough and static coverage log do not validate this revised design; user acceptance remains open.
 
