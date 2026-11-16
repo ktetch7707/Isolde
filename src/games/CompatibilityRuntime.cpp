@@ -22,15 +22,26 @@ QVariantMap CompatibilityRuntime::discover() {
     const QFileInfo candidate("/usr/bin/wine");
     if (!candidate.exists() && !candidate.isSymLink())
         return classify(false, false);
-    const auto resolved = candidate.canonicalFilePath();
-    if (!resolved.startsWith("/usr/") || !QFileInfo(resolved).isFile() || !QFileInfo(resolved).isExecutable())
+    if (!isWineBinaryValid(candidate))
         return classify(true, false);
-    for (auto path = QFileInfo(resolved);; path = QFileInfo(path.absolutePath())) {
-        if (path.isSymLink() || path.ownerId() != 0 || (path.permissions() & (QFile::WriteGroup | QFile::WriteOther)))
-            return classify(true, false);
-        if (path.absoluteFilePath() == "/")
-            break;
-    }
+    if (!isPathSecure(candidate))
+        return classify(true, false);
     return classify(true, true);
 #endif
 }
+
+namespace {
+bool isWineBinaryValid(const QFileInfo& candidate) {
+    const auto resolved = candidate.canonicalFilePath();
+    return resolved.startsWith("/usr/") && QFileInfo(resolved).isFile() && QFileInfo(resolved).isExecutable();
+}
+bool isPathSecure(const QFileInfo& path) {
+    for (auto p = path;; p = QFileInfo(p.absolutePath())) {
+        if (p.isSymLink() || p.ownerId() != 0 || (p.permissions() & (QFile::WriteGroup | QFile::WriteOther)))
+            return false;
+        if (p.absoluteFilePath() == "/")
+            break;
+    }
+    return true;
+}
+} // namespace

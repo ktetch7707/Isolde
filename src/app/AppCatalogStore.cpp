@@ -29,9 +29,9 @@ bool AppCatalog::checkForUpdates() {
     }
     QStringList packages;
     for (const auto& entry : m_entries)
-        if (isInstalled(entry.app.id) && entry.custom && entry.app.type == "android" &&
-            !m_updatesDisabled.contains(entry.app.id))
-            packages.append(QJsonDocument::fromJson(entry.manifestData).object().value("packageName").toString());
+        if (isInstalled(entry.core.app.id) && entry.setup.custom && entry.core.app.type == "android" &&
+            !m_updatesDisabled.contains(entry.core.app.id))
+            packages.append(QJsonDocument::fromJson(entry.setup.manifestData).object().value("packageName").toString());
     if (packages.isEmpty()) {
         setError(tr("No apps are subscribed to update notifications."));
         return false;
@@ -46,7 +46,7 @@ bool AppCatalog::checkForUpdates() {
 
 bool AppCatalog::setUpdatesEnabled(const QString& id, bool enabled) {
     const auto* entry = findEntry(id);
-    if (busy() || !entry || !isInstalled(id) || !entry->custom || entry->app.type != "android")
+    if (busy() || !entry || !isInstalled(id) || !entry->setup.custom || entry->core.app.type != "android")
         return false;
     if (!enabled && !m_updatesDisabled.contains(id) && m_updatesDisabled.size() >= 256) {
         setError(tr("This profile has reached its 256 saved update preferences."));
@@ -80,21 +80,21 @@ bool AppCatalog::updateApp(const QString& id) {
 
 bool AppCatalog::commitUpdate(const Entry& entry) {
     for (auto& current : m_entries)
-        if (current.app.id == entry.app.id) {
+        if (current.core.app.id == entry.core.app.id) {
             const Entry previous = current;
-            if (!m_registry->replaceApp(entry.app)) {
+            if (!m_registry->replaceApp(entry.core.app)) {
                 setError(tr("Unable to register the updated app."));
                 return false;
             }
             current = entry;
-            m_customPackages.insert(entry.app.id, entry.version);
+            m_customPackages.insert(entry.core.app.id, entry.core.version);
             if (!saveState()) {
                 current = previous;
-                m_customPackages.insert(previous.app.id, previous.version);
-                m_registry->replaceApp(previous.app);
+                m_customPackages.insert(previous.core.app.id, previous.core.version);
+                m_registry->replaceApp(previous.core.app);
                 return false;
             }
-            m_availableUpdates.remove(entry.app.id);
+            m_availableUpdates.remove(entry.core.app.id);
             emit entriesChanged();
             return true;
         }

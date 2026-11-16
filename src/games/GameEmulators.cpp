@@ -53,6 +53,22 @@ bool psxFirmware(const QByteArray& bytes) {
     return bytes.size() == 512 * 1024 &&
            hashes.contains(QCryptographicHash::hash(bytes, QCryptographicHash::Sha1).toHex());
 }
+bool shouldRetirePsxFirmware(const QFileInfo& info, const QString& keep) {
+    if (info.fileName() == keep)
+        return false;
+    if (!QRegularExpression("^[a-f0-9]{64}\\.bin$").match(info.fileName()).hasMatch())
+        return false;
+    if (info.isSymLink() || !info.isFile() || info.size() != 512 * 1024)
+        return false;
+    QFile file(info.absoluteFilePath());
+    if (!file.open(QIODevice::ReadOnly))
+        return false;
+    const auto bytes = file.read(512 * 1024 + 1);
+    if (!psxFirmware(bytes) ||
+        QString::fromLatin1(QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex()) + ".bin" != info.fileName())
+        return false;
+    return true;
+}
 bool prunePsxFirmware(const QString& root, const QString& keep, QString* error) {
     const auto directory = root + "/firmware";
     if (!protectedPath(directory)) {
@@ -68,24 +84,32 @@ bool prunePsxFirmware(const QString& root, const QString& keep, QString* error) 
         return false;
     }
     for (const auto& name : names) {
-        if (name == keep || !QRegularExpression("^[a-f0-9]{64}\\.bin$").match(name).hasMatch())
-            continue;
         const auto path = dir.filePath(name);
         const QFileInfo info(path);
-        if (info.isSymLink() || !info.isFile() || info.size() != 512 * 1024)
-            continue;
-        QFile file(path);
-        if (!file.open(QIODevice::ReadOnly))
-            continue;
-        const auto bytes = file.read(512 * 1024 + 1);
-        if (!psxFirmware(bytes) ||
-            QString::fromLatin1(QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex()) + ".bin" != name)
+        if (!shouldRetirePsxFirmware(info, keep))
             continue;
         if (!QFile::remove(path)) {
             *error = "A previous private firmware copy could not be retired.";
             return false;
         }
     }
+    return true;
+}
+bool shouldRetireFirmware(const QFileInfo& info, const QString& keep) {
+    if (info.fileName() == keep)
+        return false;
+    if (!QRegularExpression("^[a-f0-9]{64}\\.bin$").match(info.fileName()).hasMatch())
+        return false;
+    if (info.isSymLink() || !info.isFile() ||
+        (info.size() != 4 * 1024 * 1024 && info.size() != 8 * 1024 * 1024))
+        return false;
+    QFile file(info.absoluteFilePath());
+    if (!file.open(QIODevice::ReadOnly))
+        return false;
+    const auto bytes = file.read(8 * 1024 * 1024 + 1);
+    if (bytes.size() != info.size() || !bytes.contains("ROMDIR") || !bytes.contains("ROMVER") ||
+        QString::fromLatin1(QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex()) + ".bin" != info.fileName())
+        return false;
     return true;
 }
 bool pruneFirmware(const QString& root, const QString& keep, QString* error) {
@@ -103,18 +127,9 @@ bool pruneFirmware(const QString& root, const QString& keep, QString* error) {
         return false;
     }
     for (const auto& name : names) {
-        if (name == keep || !QRegularExpression("^[a-f0-9]{64}\\.bin$").match(name).hasMatch())
-            continue;
         const auto path = dir.filePath(name);
         const QFileInfo info(path);
-        if (info.isSymLink() || !info.isFile() || (info.size() != 4 * 1024 * 1024 && info.size() != 8 * 1024 * 1024))
-            continue;
-        QFile file(path);
-        if (!file.open(QIODevice::ReadOnly))
-            continue;
-        const auto bytes = file.read(8 * 1024 * 1024 + 1);
-        if (bytes.size() != info.size() || !bytes.contains("ROMDIR") || !bytes.contains("ROMVER") ||
-            QString::fromLatin1(QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex()) + ".bin" != name)
+        if (!shouldRetireFirmware(info, keep))
             continue;
         if (!QFile::remove(path)) {
             *error = "A previous private firmware copy could not be retired.";
@@ -123,20 +138,48 @@ bool pruneFirmware(const QString& root, const QString& keep, QString* error) {
     }
     return true;
 }
-bool valid(const QVariantMap& value) {
+namespace {
+bool hasValidSettingsKeys(const QVariantMap& value) {
     const QSet<QString> keys{"schemaVersion", "video", "controller", "firmware"};
-    const auto actual = value.keys();
-    const auto versionType = value.value("schemaVersion").metaType().id();
-    return QSet<QString>(actual.begin(), actual.end()) == keys &&
-           (versionType == QMetaType::Int || versionType == QMetaType::LongLong || versionType == QMetaType::Double) &&
-           value.value("video").metaType().id() == QMetaType::QString &&
-           value.value("controller").metaType().id() == QMetaType::QString &&
-           value.value("firmware").metaType().id() == QMetaType::QString &&
-           value.value("schemaVersion").toDouble() == 1 &&
-           QStringList{"automatic", "software"}.contains(value.value("video").toString()) &&
-           QStringList{"xbox", "xbox-wii-classic"}.contains(value.value("controller").toString()) &&
-           (value.value("firmware").toString().isEmpty() ||
-            QRegularExpression("^[a-f0-9]{64}\\.bin$").match(value.value("firmware").toString()).hasMatch());
+    return QSet<QString>(value.keys().begin(), value.keys().end()) == keys;
+}
+bool hasValidSchemaVersion(const QVariantMap& value) {
+    const auto type = value.value("schemaVersion").metaType().id();
+    return type == QMetaType::Int || type == QMetaType::LongLong || type == QMetaType::Double;
+}
+bool hasValidStringField(const QVariantMap& value, const QString& key) {
+    return value.value(key).metaType().id() == QMetaType::QString;
+}
+bool isValidVideoMode(const QString& video) {
+    return QStringList{"automatic", "software"}.contains(video);
+}
+bool isValidController(const QString& controller) {
+    return QStringList{"xbox", "xbox-wii-classic"}.contains(controller);
+}
+bool isValidFirmwareName(const QString& firmware) {
+    return firmware.isEmpty() ||
+           QRegularExpression("^[a-f0-9]{64}\\.bin$").match(firmware).hasMatch();
+}
+bool valid(const QVariantMap& value) {
+    if (!hasValidSettingsKeys(value))
+        return false;
+    if (!hasValidSchemaVersion(value))
+        return false;
+    if (!hasValidStringField(value, "video"))
+        return false;
+    if (!hasValidStringField(value, "controller"))
+        return false;
+    if (!hasValidStringField(value, "firmware"))
+        return false;
+    if (value.value("schemaVersion").toDouble() != 1)
+        return false;
+    if (!isValidVideoMode(value.value("video").toString()))
+        return false;
+    if (!isValidController(value.value("controller").toString()))
+        return false;
+    if (!isValidFirmwareName(value.value("firmware").toString()))
+        return false;
+    return true;
 }
 bool setupAssetHeader(const QByteArray& header, const QString& kind) {
     return kind == "xbox-bootset"

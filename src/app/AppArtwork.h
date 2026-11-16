@@ -5,6 +5,7 @@
 #include <QVector>
 #include <algorithm>
 #include <cmath>
+#include <functional>
 
 namespace AppArtwork {
 struct Cleanup {
@@ -216,20 +217,9 @@ inline QImage inkMask(const QImage& source, const QColor& ink, const QList<QColo
 }
 // Remove only a uniform, opaque, edge-connected backdrop. Enclosed white
 // lettering survives; existing transparency and ambiguous artwork are retained.
-inline QImage cutout(const QImage& source) {
-    if (source.isNull() || source.width() > 512 || source.height() > 512)
-        return source;
-    auto image = source.convertToFormat(QImage::Format_ARGB32);
+namespace {
+QVector<int> floodFillConnected(const QImage& image, std::function<bool(QRgb)> matches) {
     const int w = image.width(), h = image.height();
-    const auto background = image.pixel(0, 0);
-    auto matches = [&](QRgb pixel) {
-        return qAlpha(pixel) > 248 && std::max({std::abs(qRed(pixel) - qRed(background)),
-                                                std::abs(qGreen(pixel) - qGreen(background)),
-                                                std::abs(qBlue(pixel) - qBlue(background))}) <= 18;
-    };
-    if (!matches(background) || !matches(image.pixel(w - 1, 0)) || !matches(image.pixel(0, h - 1)) ||
-        !matches(image.pixel(w - 1, h - 1)))
-        return source;
     QVector<int> pending;
     QVector<bool> visited(w * h, false);
     auto enqueue = [&](int x, int y) {
@@ -259,6 +249,25 @@ inline QImage cutout(const QImage& source) {
         if (y + 1 < h)
             enqueue(x, y + 1);
     }
+    return pending;
+}
+} // namespace
+
+inline QImage cutout(const QImage& source) {
+    if (source.isNull() || source.width() > 512 || source.height() > 512)
+        return source;
+    auto image = source.convertToFormat(QImage::Format_ARGB32);
+    const int w = image.width(), h = image.height();
+    const auto background = image.pixel(0, 0);
+    auto matches = [&](QRgb pixel) {
+        return qAlpha(pixel) > 248 && std::max({std::abs(qRed(pixel) - qRed(background)),
+                                                std::abs(qGreen(pixel) - qGreen(background)),
+                                                std::abs(qBlue(pixel) - qBlue(background))}) <= 18;
+    };
+    if (!matches(background) || !matches(image.pixel(w - 1, 0)) || !matches(image.pixel(0, h - 1)) ||
+        !matches(image.pixel(w - 1, h - 1)))
+        return source;
+    const auto pending = floodFillConnected(image, matches);
     if (pending.size() > w * h * .95)
         return source;
     for (const int i : pending)

@@ -125,20 +125,29 @@ class AppCatalog final : public QObject {
 
   private:
     friend class IsoldeTests;
-    struct Entry {
+    struct EntryCore {
         AppDefinition app;
         QString packageId;
         QString category;
         QString version;
         QString minIsoldeVersion;
+    };
+    struct EntryMetadata {
         QString description;
         QString publisher;
         QString provenance;
+        QStringList capabilities;
+    };
+    struct EntrySetup {
         bool setupRequired = false;
         QString setupPrompt;
-        QStringList capabilities;
         QByteArray manifestData;
         bool custom = false;
+    };
+    struct Entry {
+        EntryCore core;
+        EntryMetadata meta;
+        EntrySetup setup;
     };
     const Entry* findEntry(const QString& id) const;
     bool saveState();

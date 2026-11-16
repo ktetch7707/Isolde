@@ -29,14 +29,13 @@
     }
   },
   "baseline": {
-    "lizard_warnings_total": 343,
+    "lizard_warnings_total": 340,
     "lizard_warnings_by_category": {
       "cyclomatic_complexity_over_10": "see baseline_lizard.csv",
       "function_length_over_60": "see baseline_lizard.csv",
       "parameter_count_over_5": "see baseline_lizard.csv"
     },
     "class_size_violations": [
-      "src/app/AppCatalog.h: class 'Entry' has 13 data members (max 10)",
       "src/app/LocalCatalogProvider.h: class 'LocalCatalogProvider' has 9 public methods (max 5)",
       "src/app/StoreProvider.h: class 'StoreProvider' has 21 methods (max 20)",
       "src/app/StoreProvider.h: class 'StoreProvider' has 21 public methods (max 5)",
@@ -46,13 +45,18 @@
       "src/media/VideoCaptureAdapter.h: class 'VideoCaptureAdapter' has 10 public methods (max 5)",
       "src/sessions/AppSession.h: class 'AppSession' has 11 public methods (max 5)"
     ],
-    "class_size_violation_count": 9,
+    "class_size_violation_count": 8,
+    "class_size_fixed": [
+      "src/app/AppCatalog.h: class 'Entry' split into EntryCore/EntryMetadata/EntrySetup nested structs (13 -> 5/4/4 members)"
+    ],
     "clang_tidy": "not run locally - CMake/Qt6 not available on this host; baseline will be established on first CI run"
   },
   "notes": [
     "This baseline documents pre-existing violations.",
     "CI must fail on any violation NOT in this baseline.",
     "Files modified by a pull request are checked fully - baseline does not hide violations in changed files.",
-    "Limits are NOT weakened to make existing code pass."
+    "Limits are NOT weakened to make existing code pass.",
+    "Remaining class-size violations are interface/API contracts (abstract base classes, overridden virtuals, static utility classes) that cannot be reduced without breaking the API.",
+    "Lizard fixes applied: CompatibilityRuntime::discover, GameEmulators::valid, GameEmulators::prunePsxFirmware, GameEmulators::pruneFirmware, AppArtwork::cutout"
   ]
 }
