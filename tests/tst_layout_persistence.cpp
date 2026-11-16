@@ -163,6 +163,7 @@ void LayoutPersistenceTests::skinSnapshotsSurviveResetAndArtworkChanges() {
     QVERIFY(layout.load(defaults,dir.filePath("home.json")));
     QCOMPARE(layout.skins().size(),7);
     // Skin application depends on packaged skin definitions which may vary by build
+    QVERIFY(layout.categories().size() >= 4);
     QCOMPARE(layout.categories().size(),4);
     QVERIFY(layout.setAppearance({{"fontFamily","Serif"},{"focusColor","#123456"}}));
     const auto id = layout.saveSkin("  Evening  "); QVERIFY(!id.isEmpty());
