@@ -116,250 +116,24 @@ struct ProfileRuntime {
         : audioSettings(audio), captureController(capture),
           appVpn(QFileInfo(profiles.layoutPath()).absoluteDir().filePath("app-vpn.json"), profiles.activeId()),
           input(QFileInfo(profiles.layoutPath()).absoluteDir().filePath("remote-bindings.json")) {
-        actions.setAudioSettings(&audioSettings);
-        kodiArtwork.setManagedArtworkResolver([this, &profiles](const QString& id) {
-            return profiles.editingAllowed() ? homeLayout.resolveArtwork(id) : QString{};
-        });
-        kodi.setSourceEditGuard([this, &profiles] {
-            return profiles.editingAllowed() &&
-                   (!sessions.hasActiveSession() || sessions.currentAppType() == "settings") && !desktopMode.active() &&
-                   !kodiService.switching() && !kodiImporter.importInProgress();
-        });
-        powerSettings.setGuard([this, &profiles] {
-            return profiles.editingAllowed() &&
-                   (!sessions.hasActiveSession() || sessions.currentAppType() == "settings") && !desktopMode.active() &&
-                   !kodi.playbackActive() && !kodiService.switching() && !kodiImporter.importInProgress();
-        });
-        const auto kodiAddons = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) +
-                                "/native-profiles/" + profiles.activeId() + "/kodi/home/.kodi/addons";
-        interfaceSounds = std::make_unique<InterfaceSounds>(
-            QFileInfo(profiles.layoutPath()).absoluteDir().filePath("interface-sounds.json"),
-            QStringList{kodiAddons, "/usr/share/kodi/addons", "/usr/local/share/kodi/addons"});
-        interfaceSounds->setMuted(audioSettings.muted());
-        QObject::connect(&audioSettings, &AudioSettings::changed, interfaceSounds.get(), [this] {
-            interfaceSounds->setMuted(audioSettings.muted());
-        });
-        QObject::connect(&actions, &ActionDispatcher::rejected, interfaceSounds.get(), [this](const QString&) {
-            interfaceSounds->playEvent("error");
-        });
-        QObject::connect(&sessions, &SessionManager::sessionRejected, interfaceSounds.get(), [this](const QString&) {
-            interfaceSounds->playEvent("error");
-        });
-        catalog.setStoreProvider(&storeProvider);
-        kodiImporter.setBackendGuard(
-            [this] {
-                if (kodi.playbackActive() || sessions.currentAppId() == "kodi" || desktopMode.active())
-                    return false;
-                kodiService.beginFolderEditing();
-                return kodiService.canEditFolders();
-            },
-            [this] {
-                kodiService.endFolderEditing();
-            },
-            [this] {
-                return kodiService.switching();
-            });
-        QObject::connect(
-            &kodiService,
-            &KodiService::changed,
-            &kodiImporter,
-            [this] {
-                kodiImporter.continueWhenBackendReady();
-            },
-            Qt::QueuedConnection);
-        if (kodiImporter.recoveryPending())
-            QTimer::singleShot(0, &kodiImporter, &KodiImporter::scanExistingKodi);
-        if (initialLaunch && QCoreApplication::arguments().contains("--setup"))
-            setup.restart();
-        engine.rootContext()->setContextProperty(QStringLiteral("setupState"), &setup);
-        engine.rootContext()->setContextProperty(QStringLiteral("componentHealth"), &componentHealth);
-        engine.rootContext()->setContextProperty(QStringLiteral("searchPreferences"), &searchSettings);
-        engine.rootContext()->setContextProperty(QStringLiteral("discoveryProvider"), &onlineDiscovery);
-        engine.rootContext()->setContextProperty(QStringLiteral("onlineSubtitleRepository"), &onlineSubtitleRepository);
-        engine.rootContext()->setContextProperty(QStringLiteral("subtitleService"), &subtitleService);
-        engine.rootContext()->setContextProperty(QStringLiteral("desktopMode"), &desktopMode);
-        engine.rootContext()->setContextProperty(QStringLiteral("captureController"), &captureController);
-        engine.rootContext()->setContextProperty(QStringLiteral("kodiMedia"), &kodi);
-        engine.rootContext()->setContextProperty(QStringLiteral("kodiImporter"), &kodiImporter);
-        engine.rootContext()->setContextProperty(QStringLiteral("searchMovies"), &searchMovies);
-        engine.rootContext()->setContextProperty(QStringLiteral("searchShows"), &searchShows);
-        engine.rootContext()->setContextProperty(QStringLiteral("searchEpisodes"), &searchEpisodes);
-        engine.rootContext()->setContextProperty(QStringLiteral("kodiService"), &kodiService);
-        engine.rootContext()->setContextProperty(QStringLiteral("kodiShelves"), &kodiShelves);
-        engine.rootContext()->setContextProperty(QStringLiteral("kodiArtwork"), &kodiArtwork);
-        QObject::connect(&kodiService, &KodiService::unavailable, &kodiArtwork, [this](const QString&) {
-            kodiArtwork.clear();
-        });
-        engine.rootContext()->setContextProperty(QStringLiteral("actionDispatcher"), &actions);
-        engine.rootContext()->setContextProperty(QStringLiteral("pageData"), &pageData);
-        actions.setLayout(&homeLayout);
-        pageData.setApplications(&registry, &sessions, &actions);
-        games = std::make_unique<GameLibrary>(QFileInfo(profiles.layoutPath()).absoluteDir().filePath("games.sqlite"),
-                                              &registry);
-        actions.setGames(games.get());
-        games->setCatalog(&catalog);
-        games->setSessionActiveGuard([this] {
-            return sessions.hasActiveSession() || pendingLaunch || pendingNativeLaunch;
-        });
-        engine.rootContext()->setContextProperty(QStringLiteral("gameLibrary"), games.get());
-        QObject::connect(&kodiService, &KodiService::unavailable, &pageData, &PageData::unavailable);
-        homeLayout.setCollections(kodi.collections());
-        QObject::connect(&kodi, &KodiMedia::collectionsChanged, &homeLayout, [this] {
-            homeLayout.setCollections(kodi.collections());
-        });
-        homeLayout.setCaptureInputsReady(captureController.canSwitchInput(1));
-        QObject::connect(&captureController, &CaptureController::changed, &homeLayout, [this] {
-            homeLayout.setCaptureInputsReady(captureController.canSwitchInput(1));
-        });
-        QObject::connect(&kodiService, &KodiService::ready, &kodiShelves, [this] {
-            kodiShelves.setAvailable(true);
-        });
-        QObject::connect(&kodiService, &KodiService::unavailable, &kodiShelves, [this](const QString&) {
-            kodiShelves.setAvailable(false);
-        });
-        QObject::connect(&kodi, &KodiMedia::playbackReturned, &kodiShelves, [this](bool) {
-            QTimer::singleShot(1500, &kodiShelves, [this] {
-                kodiShelves.refresh();
-            });
-        });
-        sessions.setLaunchGuard([this](const QString& id) -> QString {
-            const auto* app = registry.find(id);
-            if (vpnSettings.busy() && app && app->type != "settings" && app->type != "store" &&
-                app->type != "customize")
-                return "Finish the current VPN setup operation before opening another app.";
-            if (id == "kodi" && !kodiService.canOpenApplication())
-                return "Switch to Kodi application mode in Settings → Media & Playback first. This lets Kodi save your "
-                       "setup before opening its interface.";
-            return {};
-        });
-        QObject::connect(&kodiService, &KodiService::probeRequested, &kodi, &KodiMedia::refresh);
-        QObject::connect(&kodiService, &KodiService::unavailable, &kodi, &KodiMedia::invalidate);
-        QObject::connect(&kodi, &KodiMedia::changed, &kodiService, [this] {
-            if (kodi.connected())
-                kodiService.markReady();
-        });
-        QObject::connect(&sessions, &SessionManager::launching, &kodiService, [this](const QString& id) {
-            qApp->setProperty("isoldeRemoteAppearance", input.webRemoteOptions(homeLayout.homeAppearance()));
-            if (id == "kodi")
-                kodiService.suspend(true);
-        });
-        QObject::connect(&sessions, &SessionManager::returnedHome, &kodiService, [this](const QString& id) {
-            if (id == "kodi")
-                kodiService.suspend(false);
-        });
-        if (!registry.load())
-            qFatal("%s", qPrintable(registry.errorString()));
-        if (!catalog.load())
-            qWarning("%s", qPrintable(catalog.errorString()));
-        if (!homeLayout.load({}, profiles.layoutPath()))
-            qFatal("%s", qPrintable(homeLayout.errorString()));
-        sourceManager.setLayout(&homeLayout);
-        const auto updateNativeReturn = [this] {
-            auto presentation = homeLayout.studioOptions().value("desktop").toMap();
-            const auto shortcut = input.nativeReturnShortcut();
-            if (!shortcut.isEmpty())
-                presentation["returnShortcut"] = shortcut;
-            desktopMode.setPresentation(presentation);
-        };
-        updateNativeReturn();
-        QObject::connect(&input, &InputManager::bindingsChanged, &desktopMode, updateNativeReturn);
-        guide = std::make_unique<GuideController>(
-            QFileInfo(profiles.layoutPath()).absoluteDir().filePath("guide.sqlite"), profiles.activeId());
-        actions.setGuide(guide.get());
-        engine.rootContext()->setContextProperty(QStringLiteral("guideController"), guide.get());
-        sessions.setLaunchPreparation([this](const AppDefinition& definition) {
-            if (definition.type != "settings" && definition.type != "store" && definition.type != "customize") {
-                if (pendingLaunch && pendingNativeDefinition.id != definition.id)
-                    return false;
-                if (!pendingLaunch) {
-                    pendingNativeDefinition = definition;
-                    pendingLaunch = true;
-                    pendingVpnReady = false;
-                }
-                if (!pendingVpnReady) {
-                    if (!appVpn.prepare(definition.id))
-                        return false;
-                    pendingVpnReady = true;
-                }
-            }
-            if ((definition.type != "desktop" && definition.type != "android") ||
-                (desktopMode.active() && desktopMode.nativeMode())) {
-                pendingLaunch = false;
-                pendingVpnReady = false;
-                return true;
-            }
-            pendingNativeDefinition = definition;
-            pendingNativeLaunch = true;
-            desktopMode.prepareNative(definition.id);
-            return false;
-        });
-        QObject::connect(&appVpn, &AppVpn::ready, &sessions, [this](const QString& id) {
-            if (pendingLaunch && pendingNativeDefinition.id == id)
-                sessions.resumePreparedLaunch(pendingNativeDefinition);
-        });
-        QObject::connect(&appVpn, &AppVpn::failed, &sessions, [this](const QString& id, const QString& message) {
-            pendingLaunch = false;
-            pendingNativeLaunch = false;
-            pendingVpnReady = false;
-            Q_UNUSED(id);
-            Q_UNUSED(message);
-            sessions.goHome();
-        });
-        QObject::connect(&vpnSettings, &VpnSettings::refreshed, &appVpn, [this] {
-            appVpn.refresh();
-        });
-        QObject::connect(&vpnSettings, &VpnSettings::externalOpening, &desktopMode, [this] {
-            desktopMode.start("settings-vpn");
-            if (desktopMode.active() && !desktopMode.nativeMode())
-                vpnSettings.resumeExternal();
-        });
-        QObject::connect(&desktopMode, &DesktopMode::changed, &sessions, [this] {
-            if (vpnSettings.waitingExternal()) {
-                if (desktopMode.active() && !desktopMode.nativeMode())
-                    vpnSettings.resumeExternal();
-                else if (!desktopMode.busy() && !desktopMode.active() && !desktopMode.errorString().isEmpty())
-                    vpnSettings.cancelExternal();
-            }
-            if (!pendingNativeLaunch || !desktopMode.active() || !desktopMode.nativeMode())
-                return;
-            const auto definition = pendingNativeDefinition;
-            pendingNativeLaunch = false;
-            pendingVpnReady = false;
-            sessions.resumePreparedLaunch(definition);
-        });
-        QObject::connect(&desktopMode, &DesktopMode::returned, &sessions, [this](const QString&) {
-            vpnSettings.cancelExternal();
-            pendingNativeLaunch = false;
-            pendingLaunch = false;
-            pendingVpnReady = false;
-            if (desktopMode.nativeMode())
-                sessions.goHome();
-        });
-        QObject::connect(&sessions, &SessionManager::currentAppChanged, &desktopMode, [this] {
-            if (!sessions.hasActiveSession() && desktopMode.active() && desktopMode.nativeMode())
-                desktopMode.cancel();
-        });
-        QObject::connect(&actions, &ActionDispatcher::desktopRequested, &desktopMode, &DesktopMode::start);
-        QObject::connect(&catalog, &AppCatalog::packageInstalled, &homeLayout, &HomeLayout::addAppTile);
-        // Keep user launchers repairable when a package disappears. Registry changes
-        // update availability; reinstalling reconnects the same stable binding.
-        if (!artPacks.load())
-            qWarning("%s", qPrintable(artPacks.errorString()));
-        engine.rootContext()->setContextProperty(QStringLiteral("profileManager"), &profiles);
-        // Immutable for this engine's lifetime: never retarget a live browser profile.
-        engine.rootContext()->setContextProperty(QStringLiteral("browserStorageName"), "isolde-" + profiles.activeId());
-        engine.rootContext()->setContextProperty(QStringLiteral("appRegistry"), &registry);
-        engine.rootContext()->setContextProperty(QStringLiteral("sessionManager"), &sessions);
-        engine.rootContext()->setContextProperty(QStringLiteral("appCatalog"), &catalog);
-        engine.rootContext()->setContextProperty(QStringLiteral("homeLayout"), &homeLayout);
-        engine.rootContext()->setContextProperty(QStringLiteral("displaySettings"), &displaySettings);
-        engine.rootContext()->setContextProperty(QStringLiteral("powerSettings"), &powerSettings);
-        engine.rootContext()->setContextProperty(QStringLiteral("audioSettings"), &audioSettings);
-        engine.rootContext()->setContextProperty(QStringLiteral("interfaceSounds"), interfaceSounds.get());
-        engine.rootContext()->setContextProperty(QStringLiteral("remoteSettings"), &remoteSettings);
-        engine.rootContext()->setContextProperty(QStringLiteral("ambientSettings"), &ambientSettings);
-        engine.rootContext()->setContextProperty(QStringLiteral("networkSettings"), &networkSettings);
-        engine.rootContext()->setContextProperty(QStringLiteral("vpnSettings"), &vpnSettings);
+        setupAudioAndSound();
+        setupInterfaceSounds();
+        setupKodiImporterGuard();
+        setupLaunchFlags(initialLaunch);
+        setupQmlContextProperties();
+        setupGameLibrary();
+        setupKodiShelvesConnections();
+        setupCaptureInputs();
+        setupKodiServiceConnections();
+        setupSessionsLaunchGuard();
+        setupKodiServiceMediaConnections();
+        setupLaunchPreparation();
+        setupAppVpnConnections();
+        setupDesktopModeConnections();
+        setupQmlEngineAndPresentKodi();
+        setupKodiServiceReady();
+        handleLaunchArguments();
+    }        engine.rootContext()->setContextProperty(QStringLiteral("vpnSettings"), &vpnSettings);
         engine.rootContext()->setContextProperty(QStringLiteral("appVpn"), &appVpn);
         engine.rootContext()->setContextProperty(QStringLiteral("sourceManager"), &sourceManager);
         engine.rootContext()->setContextProperty(QStringLiteral("artPacks"), &artPacks);
@@ -467,7 +241,389 @@ struct ProfileRuntime {
             }
         }
     }
-    ~ProfileRuntime() {
+
+    void setupAudioAndSound() {
+        actions.setAudioSettings(&audioSettings);
+        kodiArtwork.setManagedArtworkResolver([this, &profiles](const QString& id) {
+            return profiles.editingAllowed() ? homeLayout.resolveArtwork(id) : QString{};
+        });
+        kodi.setSourceEditGuard([this, &profiles] {
+            return profiles.editingAllowed() &&
+                   (!sessions.hasActiveSession() || sessions.currentAppType() == "settings") && !desktopMode.active() &&
+                   !kodiService.switching() && !kodiImporter.importInProgress();
+        });
+        powerSettings.setGuard([this, &profiles] {
+            return profiles.editingAllowed() &&
+                   (!sessions.hasActiveSession() || sessions.currentAppType() == "settings") && !desktopMode.active() &&
+                   !kodi.playbackActive() && !kodiService.switching() && !kodiImporter.importInProgress();
+        });
+    }
+
+    void setupInterfaceSounds() {
+        const auto kodiAddons = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) +
+                                "/native-profiles/" + profiles.activeId() + "/kodi/home/.kodi/addons";
+        interfaceSounds = std::make_unique<InterfaceSounds>(
+            QFileInfo(profiles.layoutPath()).absoluteDir().filePath("interface-sounds.json"),
+            QStringList{kodiAddons, "/usr/share/kodi/addons", "/usr/local/share/kodi/addons"});
+        interfaceSounds->setMuted(audioSettings.muted());
+        QObject::connect(&audioSettings, &AudioSettings::changed, interfaceSounds.get(), [this] {
+            interfaceSounds->setMuted(audioSettings.muted());
+        });
+        QObject::connect(&actions, &ActionDispatcher::rejected, interfaceSounds.get(), [this](const QString&) {
+            interfaceSounds->playEvent("error");
+        });
+        QObject::connect(&sessions, &SessionManager::sessionRejected, interfaceSounds.get(), [this](const QString&) {
+            interfaceSounds->playEvent("error");
+        });
+    }
+
+    void setupKodiImporterGuard() {
+        catalog.setStoreProvider(&storeProvider);
+        kodiImporter.setBackendGuard(
+            [this] {
+                if (kodi.playbackActive() || sessions.currentAppId() == "kodi" || desktopMode.active())
+                    return false;
+                kodiService.beginFolderEditing();
+                return kodiService.canEditFolders();
+            },
+            [this] {
+                kodiService.endFolderEditing();
+            },
+            [this] {
+                return kodiService.switching();
+            });
+        QObject::connect(
+            &kodiService,
+            &KodiService::changed,
+            &kodiImporter,
+            [this] {
+                kodiImporter.continueWhenBackendReady();
+            },
+            Qt::QueuedConnection);
+        if (kodiImporter.recoveryPending())
+            QTimer::singleShot(0, &kodiImporter, &KodiImporter::scanExistingKodi);
+    }
+
+    void setupLaunchFlags(bool initialLaunch) {
+        if (initialLaunch && QCoreApplication::arguments().contains("--setup"))
+            setup.restart();
+    }
+
+    void setupQmlContextProperties() {
+        engine.rootContext()->setContextProperty(QStringLiteral("setupState"), &setup);
+        engine.rootContext()->setContextProperty(QStringLiteral("componentHealth"), &componentHealth);
+        engine.rootContext()->setContextProperty(QStringLiteral("searchPreferences"), &searchSettings);
+        engine.rootContext()->setContextProperty(QStringLiteral("discoveryProvider"), &onlineDiscovery);
+        engine.rootContext()->setContextProperty(QStringLiteral("onlineSubtitleRepository"), &onlineSubtitleRepository);
+        engine.rootContext()->setContextProperty(QStringLiteral("subtitleService"), &subtitleService);
+        engine.rootContext()->setContextProperty(QStringLiteral("desktopMode"), &desktopMode);
+        engine.rootContext()->setContextProperty(QStringLiteral("captureController"), &captureController);
+        engine.rootContext()->setContextProperty(QStringLiteral("kodiMedia"), &kodi);
+        engine.rootContext()->setContextProperty(QStringLiteral("kodiImporter"), &kodiImporter);
+        engine.rootContext()->setContextProperty(QStringLiteral("searchMovies"), &searchMovies);
+        engine.rootContext()->setContextProperty(QStringLiteral("searchShows"), &searchShows);
+        engine.rootContext()->setContextProperty(QStringLiteral("searchEpisodes"), &searchEpisodes);
+        engine.rootContext()->setContextProperty(QStringLiteral("kodiService"), &kodiService);
+        engine.rootContext()->setContextProperty(QStringLiteral("kodiShelves"), &kodiShelves);
+        engine.rootContext()->setContextProperty(QStringLiteral("kodiArtwork"), &kodiArtwork);
+        QObject::connect(&kodiService, &KodiService::unavailable, &kodiArtwork, [this](const QString&) {
+            kodiArtwork.clear();
+        });
+        engine.rootContext()->setContextProperty(QStringLiteral("actionDispatcher"), &actions);
+        engine.rootContext()->setContextProperty(QStringLiteral("pageData"), &pageData);
+        actions.setLayout(&homeLayout);
+        pageData.setApplications(&registry, &sessions, &actions);
+        engine.rootContext()->setContextProperty(QStringLiteral("guideController"), guide.get());
+        engine.rootContext()->setContextProperty(QStringLiteral("profileManager"), &profiles);
+        engine.rootContext()->setContextProperty(QStringLiteral("browserStorageName"), "isolde-" + profiles.activeId());
+        engine.rootContext()->setContextProperty(QStringLiteral("appRegistry"), &registry);
+        engine.rootContext()->setContextProperty(QStringLiteral("sessionManager"), &sessions);
+        engine.rootContext()->setContextProperty(QStringLiteral("appCatalog"), &catalog);
+        engine.rootContext()->setContextProperty(QStringLiteral("homeLayout"), &homeLayout);
+        engine.rootContext()->setContextProperty(QStringLiteral("displaySettings"), &displaySettings);
+        engine.rootContext()->setContextProperty(QStringLiteral("powerSettings"), &powerSettings);
+        engine.rootContext()->setContextProperty(QStringLiteral("audioSettings"), &audioSettings);
+        engine.rootContext()->setContextProperty(QStringLiteral("interfaceSounds"), interfaceSounds.get());
+        engine.rootContext()->setContextProperty(QStringLiteral("remoteSettings"), &remoteSettings);
+        engine.rootContext()->setContextProperty(QStringLiteral("ambientSettings"), &ambientSettings);
+        engine.rootContext()->setContextProperty(QStringLiteral("networkSettings"), &networkSettings);
+        engine.rootContext()->setContextProperty(QStringLiteral("vpnSettings"), &vpnSettings);
+        engine.rootContext()->setContextProperty(QStringLiteral("appVpn"), &appVpn);
+        engine.rootContext()->setContextProperty(QStringLiteral("sourceManager"), &sourceManager);
+        engine.rootContext()->setContextProperty(QStringLiteral("artPacks"), &artPacks);
+        engine.rootContext()->setContextProperty(QStringLiteral("inputManager"), &input);
+        engine.rootContext()->setContextProperty(QStringLiteral("isoldeVersion"),
+                                                 QCoreApplication::applicationVersion());
+    }
+
+    void setupGameLibrary() {
+        games = std::make_unique<GameLibrary>(QFileInfo(profiles.layoutPath()).absoluteDir().filePath("games.sqlite"),
+                                              &registry);
+        actions.setGames(games.get());
+        games->setCatalog(&catalog);
+        games->setSessionActiveGuard([this] {
+            return sessions.hasActiveSession() || pendingLaunch || pendingNativeLaunch;
+        });
+        engine.rootContext()->setContextProperty(QStringLiteral("gameLibrary"), games.get());
+    }
+
+    void setupKodiShelvesConnections() {
+        QObject::connect(&kodiService, &KodiService::unavailable, &pageData, &PageData::unavailable);
+        homeLayout.setCollections(kodi.collections());
+        QObject::connect(&kodi, &KodiMedia::collectionsChanged, &homeLayout, [this] {
+            homeLayout.setCollections(kodi.collections());
+        });
+        QObject::connect(&kodiService, &KodiService::ready, &kodiShelves, [this] {
+            kodiShelves.setAvailable(true);
+        });
+        QObject::connect(&kodiService, &KodiService::unavailable, &kodiShelves, [this](const QString&) {
+            kodiShelves.setAvailable(false);
+        });
+        QObject::connect(&kodi, &KodiMedia::playbackReturned, &kodiShelves, [this](bool) {
+            QTimer::singleShot(1500, &kodiShelves, [this] {
+                kodiShelves.refresh();
+            });
+        });
+    }
+
+    void setupCaptureInputs() {
+        homeLayout.setCaptureInputsReady(captureController.canSwitchInput(1));
+        QObject::connect(&captureController, &CaptureController::changed, &homeLayout, [this] {
+            homeLayout.setCaptureInputsReady(captureController.canSwitchInput(1));
+        });
+    }
+
+    void setupKodiServiceConnections() {
+        QObject::connect(&kodiService, &KodiService::unavailable, &kodi, &KodiMedia::invalidate);
+        QObject::connect(&kodi, &KodiMedia::changed, &kodiService, [this] {
+            if (kodi.connected())
+                kodiService.markReady();
+        });
+        QObject::connect(&catalog, &AppCatalog::packageInstalled, &homeLayout, &HomeLayout::addAppTile);
+        // Keep user launchers repairable when a package disappears. Registry changes
+        // update availability; reinstalling reconnects the same stable binding.
+        if (!artPacks.load())
+            qWarning("%s", qPrintable(artPacks.errorString()));
+    }
+
+    void setupSessionsLaunchGuard() {
+        sessions.setLaunchGuard([this](const QString& id) -> QString {
+            const auto* app = registry.find(id);
+            if (vpnSettings.busy() && app && app->type != "settings" && app->type != "store" &&
+                app->type != "customize")
+                return "Finish the current VPN setup operation before opening another app.";
+            if (id == "kodi" && !kodiService.canOpenApplication())
+                return "Switch to Kodi application mode in Settings → Media & Playback first. This lets Kodi save your "
+                       "setup before opening its interface.";
+            return {};
+        });
+    }
+
+    void setupKodiServiceMediaConnections() {
+        QObject::connect(&kodiService, &KodiService::probeRequested, &kodi, &KodiMedia::refresh);
+        QObject::connect(&kodi, &KodiMedia::changed, &kodiService, [this] {
+            if (kodi.connected())
+                kodiService.markReady();
+        });
+    }
+
+    void setupLaunchPreparation() {
+        sessions.setLaunchPreparation([this](const AppDefinition& definition) {
+            if (definition.type != "settings" && definition.type != "store" && definition.type != "customize") {
+                if (pendingLaunch && pendingNativeDefinition.id != definition.id)
+                    return false;
+                if (!pendingLaunch) {
+                    pendingNativeDefinition = definition;
+                    pendingLaunch = true;
+                    pendingVpnReady = false;
+                }
+                if (!pendingVpnReady) {
+                    if (!appVpn.prepare(definition.id))
+                        return false;
+                    pendingVpnReady = true;
+                }
+            }
+            if ((definition.type != "desktop" && definition.type != "android") ||
+                (desktopMode.active() && desktopMode.nativeMode())) {
+                pendingLaunch = false;
+                pendingVpnReady = false;
+                return true;
+            }
+            pendingNativeDefinition = definition;
+            pendingNativeLaunch = true;
+            desktopMode.prepareNative(definition.id);
+            return false;
+        });
+    }
+
+    void setupAppVpnConnections() {
+        QObject::connect(&appVpn, &AppVpn::ready, &sessions, [this](const QString& id) {
+            if (pendingLaunch && pendingNativeDefinition.id == id)
+                sessions.resumePreparedLaunch(pendingNativeDefinition);
+        });
+        QObject::connect(&appVpn, &AppVpn::failed, &sessions, [this](const QString& id, const QString& message) {
+            pendingLaunch = false;
+            pendingNativeLaunch = false;
+            pendingVpnReady = false;
+            Q_UNUSED(id);
+            Q_UNUSED(message);
+            sessions.goHome();
+        });
+        QObject::connect(&vpnSettings, &VpnSettings::refreshed, &appVpn, [this] {
+            appVpn.refresh();
+        });
+    }
+
+    void setupDesktopModeConnections() {
+        QObject::connect(&vpnSettings, &VpnSettings::externalOpening, &desktopMode, [this] {
+            desktopMode.start("settings-vpn");
+            if (desktopMode.active() && !desktopMode.nativeMode())
+                vpnSettings.resumeExternal();
+        });
+        QObject::connect(&desktopMode, &DesktopMode::changed, &sessions, [this] {
+            if (vpnSettings.waitingExternal()) {
+                if (desktopMode.active() && !desktopMode.nativeMode())
+                    vpnSettings.resumeExternal();
+                else if (!desktopMode.busy() && !desktopMode.active() && !desktopMode.errorString().isEmpty())
+                    vpnSettings.cancelExternal();
+            }
+            if (!pendingNativeLaunch || !desktopMode.active() || !desktopMode.nativeMode())
+                return;
+            const auto definition = pendingNativeDefinition;
+            pendingNativeLaunch = false;
+            pendingVpnReady = false;
+            sessions.resumePreparedLaunch(definition);
+        });
+        QObject::connect(&desktopMode, &DesktopMode::returned, &sessions, [this](const QString&) {
+            vpnSettings.cancelExternal();
+            pendingNativeLaunch = false;
+            pendingLaunch = false;
+            pendingVpnReady = false;
+            if (desktopMode.nativeMode())
+                sessions.goHome();
+        });
+        QObject::connect(&sessions, &SessionManager::currentAppChanged, &desktopMode, [this] {
+            if (!sessions.hasActiveSession() && desktopMode.active() && desktopMode.nativeMode())
+                desktopMode.cancel();
+        });
+        QObject::connect(&actions, &ActionDispatcher::desktopRequested, &desktopMode, &DesktopMode::start);
+    }
+
+    void setupQmlEngineAndPresentKodi() {
+        if (!registry.load())
+            qFatal("%s", qPrintable(registry.errorString()));
+        if (!catalog.load())
+            qWarning("%s", qPrintable(catalog.errorString()));
+        if (!homeLayout.load({}, profiles.layoutPath()))
+            qFatal("%s", qPrintable(homeLayout.errorString()));
+        sourceManager.setLayout(&homeLayout);
+        const auto updateNativeReturn = [this] {
+            auto presentation = homeLayout.studioOptions().value("desktop").toMap();
+            const auto shortcut = input.nativeReturnShortcut();
+            if (!shortcut.isEmpty())
+                presentation["returnShortcut"] = shortcut;
+            desktopMode.setPresentation(presentation);
+        };
+        updateNativeReturn();
+        QObject::connect(&input, &InputManager::bindingsChanged, &desktopMode, updateNativeReturn);
+        guide = std::make_unique<GuideController>(
+            QFileInfo(profiles.layoutPath()).absoluteDir().filePath("guide.sqlite"), profiles.activeId());
+        actions.setGuide(guide.get());
+        engine.loadFromModule(QStringLiteral("Isolde"), QStringLiteral("Main"));
+        if (auto* window = qobject_cast<QQuickWindow*>(engine.rootObjects().value(0)))
+            QObject::connect(window,
+                             &QQuickWindow::frameSwapped,
+                             guide.get(),
+                             &GuideController::recordGuidePaint,
+                             Qt::QueuedConnection);
+        if (engine.rootObjects().isEmpty())
+            qFatal("Could not load the Isolde interface");
+        QObject::connect(&kodi, &KodiMedia::playbackStarted, &engine, [this] {
+            presentKodiWindow(true);
+        });
+        QObject::connect(&kodi, &KodiMedia::playbackPresentationRequested, &engine, [this] {
+            presentKodiWindow(true);
+        });
+        QObject::connect(&kodi, &KodiMedia::playbackReturned, &engine, [this](bool) {
+            if (kodi.playbackStatus() != "replaced")
+                presentKodiWindow(false);
+            if (auto* window = qobject_cast<QQuickWindow*>(engine.rootObjects().value(0))) {
+                window->raise();
+                window->requestActivate();
+            }
+        });
+    }
+
+    void presentKodiWindow(bool show) {
+        // Supported X11/XWayland host only. Require exactly one Kodi window;
+        // never activate an arbitrary match or execute a shell command.
+        auto* query = new QProcess(&engine);
+        auto environment = QProcessEnvironment::systemEnvironment();
+        const QDir runtime(environment.value("XDG_RUNTIME_DIR"));
+        const auto auth = runtime.entryList({".mutter-Xwaylandauth.*"}, QDir::Files | QDir::Hidden, QDir::Time);
+        if (!auth.isEmpty())
+            environment.insert("XAUTHORITY", runtime.filePath(auth.first()));
+        query->setProcessEnvironment(environment);
+        QObject::connect(query,
+                         qOverload<int, QProcess::ExitStatus>(&QProcess::finished),
+                         &engine,
+                         [this, query, show](int code, QProcess::ExitStatus) {
+                             query->deleteLater();
+                             if (show && code != 0 && kodi.playbackActive())
+                                 kodi.presentationFailed();
+                             if (!show && !kodi.playbackActive()) {
+                                 if (auto* window = qobject_cast<QQuickWindow*>(engine.rootObjects().value(0))) {
+                                     window->raise();
+                                     window->requestActivate();
+                                 }
+                             }
+                         });
+        QObject::connect(
+            query, &QProcess::errorOccurred, &engine, [this, query, show](QProcess::ProcessError error) {
+                if (error == QProcess::FailedToStart) {
+                    query->deleteLater();
+                    if (show)
+                        kodi.presentationFailed();
+                }
+            });
+        auto helper = QCoreApplication::applicationDirPath() + "/../share/isolde/kodi-window.py";
+        if (!QFileInfo::exists(helper))
+            helper = QCoreApplication::applicationDirPath() + "/share/isolde/kodi-window.py";
+        query->start("python3", {helper, show ? "show" : "hide"});
+        QTimer::singleShot(6000, query, [query] {
+            if (query->state() != QProcess::NotRunning)
+                query->kill();
+        });
+    }
+
+    void setupKodiServiceReady() {
+        QObject::connect(&setup, &SetupState::changed, &kodiService, [this] {
+            if (setup.complete() && !kodiImporter.importInProgress() && !kodiImporter.recoveryPending())
+                kodiService.start();
+        });
+        if (setup.complete())
+            QTimer::singleShot(1500, &kodiService, [this] {
+                if (!kodiImporter.importInProgress() && !kodiImporter.recoveryPending())
+                    kodiService.start();
+            });
+    }
+
+    void handleLaunchArguments() {
+        const QStringList arguments = QCoreApplication::arguments();
+        for (const auto& argument : arguments) {
+            if (initialLaunch && setup.complete() && argument.startsWith(QStringLiteral("--launch-app="))) {
+                const auto appId = argument.mid(QStringLiteral("--launch-app=").size()).trimmed();
+                if (!appId.isEmpty())
+                    QTimer::singleShot(500, &sessions, [this, appId] {
+                        if (appId == "movies" || appId == "shows")
+                            actions.dispatch({{"type", "launch-app"}, {"appId", appId}});
+                        else
+                            sessions.launch(appId);
+                    });
+                break;
+            }
+        }
+    }
         kodiImporter.shutdown();
         interfaceSounds->setSuppressed(true);
         pageData.invalidate("This profile is no longer active.");
