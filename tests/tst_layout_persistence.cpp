@@ -174,7 +174,7 @@ void LayoutPersistenceTests::skinSnapshotsSurviveResetAndArtworkChanges() {
     for(const auto &value:presetPages)QVERIFY(layout.pageModel(value.toObject()["id"].toString()));
     auto *moviePage=qobject_cast<PageModel *>(layout.pageModel("library-movies"));QVERIFY(moviePage);
     QCOMPARE(moviePage->items().first().toMap()["componentType"].toString(),QString("library"));
-    const auto moviesLink=layout.components()[6].toMap()["actions"].toArray().first().toMap();
+    const auto moviesLink=layout.components()[6].toMap()["actions"].toList().first().toMap();
     QCOMPARE(moviesLink["type"].toString(),QString("open-page"));
     QCOMPARE(moviesLink["pageId"].toString(),QString("library-movies"));
     QVERIFY(moviePage->setAppearance({{"focusColor","#123456"}}));
@@ -311,7 +311,7 @@ void LayoutPersistenceTests::starterPageUpdatesPreserveDesignAndRollback() {
     int updatedButtons=0;for(const auto &value:after["components"].toArray()){
         const auto item=value.toObject();if(item["id"]=="music" || item["id"]=="games" || item["id"]=="guide"){
             ++updatedButtons;
-            QCOMPARE(item["componentType"].toString(),QString("button"));QCOMPARE(item["source"].toObject()["kind"].toString(),QString("button"));QCOMPARE(item["actions"].toArray().first().toObject()["type"].toString(),QString("open-page"));
+            QCOMPARE(item["componentType"].toString(),QString("button"));QCOMPARE(item["source"].toObject()["kind"].toString(),QString("button"));            QCOMPARE(item["actions"].toList().first().toObject()["type"].toString(),QString("open-page"));
         }
     }
     QCOMPARE(updatedButtons,3);
@@ -490,7 +490,7 @@ void LayoutPersistenceTests::migratesAndRepairsWithoutLosingPresentation() {
     QCOMPARE(tile["showTitle"].toBool(), false);
     QCOMPARE(tile["customLogo"].toString(), QString("artwork/my-folder.png"));
     QCOMPARE(tile["categoryId"].toString(), QString("personal"));
-    QCOMPARE(tile["actions"].toArray().first().toMap()["target"].toString(), QString("/media/films"));
+    QCOMPARE(tile["actions"].toList().first().toMap()["target"].toString(), QString("/media/films"));
     QCOMPARE(restored.backgroundStart(), QString("#123456"));
     QCOMPARE(restored.tileRoundness(), 0.73);
     QVERIFY(registry.removeApp("other"));
