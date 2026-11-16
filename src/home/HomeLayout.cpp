@@ -1163,28 +1163,36 @@ bool HomeLayout::validateComponents(const QJsonValue& entries, int version, cons
         const auto normalized =
             ComponentSchema::component(value.toObject().toVariantMap(), version == 1, &componentError);
         const auto item = QJsonObject::fromVariantMap(normalized);
-        const auto kind = item.value("kind").toString();
-        const auto id = item.value("id").toString();
-        const auto actionType = [&item]() {
-            if (item.contains("actions") && item["actions"].isArray() && !item["actions"].toArray().isEmpty())
-                return item["actions"].toArray().first().toObject().value("type").toString();
-            return QString();
-        }();
-        if (normalized.isEmpty() || item.value("componentType") == "media-shelf" || ids.contains(id) ||
-            (kind != "app" && kind != "widget" && kind != "action") ||
-            (kind == "app" && actionType == QStringLiteral("launch-app") && item.value("appId").toString().isEmpty()) ||
-            (kind == "action" && item.value("name").toString().trimmed().isEmpty()) ||
-            (kind == "widget" && item.value("widgetType").toString().isEmpty()) ||
-            (!item.value("categoryId").toString().isEmpty() &&
-             !categoryIds.contains(item.value("categoryId").toString())) ||
-            (!actionType.isEmpty() && normalizedActionForItem(item).isEmpty()) ||
-            (item.contains("opacity") && (!item.value("opacity").isDouble() || item.value("opacity").toDouble() < 0.0 ||
-                                          item.value("opacity").toDouble() > 1.0))) {
+        if (!isValidComponentItem(item, ids, categoryIds, normalized)) {
             setError(tr("Home layout contains an invalid or duplicate item."));
             return false;
         }
-        ids.insert(id);
+        ids.insert(item.value("id").toString());
         components.append(item);
+    }
+    return true;
+}
+
+bool HomeLayout::isValidComponentItem(const QJsonObject& item, const QSet<QString>& ids,
+                                       const QSet<QString>& categoryIds, const QJsonObject& normalized) {
+    const auto kind = item.value("kind").toString();
+    const auto id = item.value("id").toString();
+    const auto actionType = [&item]() {
+        if (item.contains("actions") && item["actions"].isArray() && !item["actions"].toArray().isEmpty())
+            return item["actions"].toArray().first().toObject().value("type").toString();
+        return QString();
+    }();
+    if (normalized.isEmpty() || item.value("componentType") == "media-shelf" || ids.contains(id) ||
+        (kind != "app" && kind != "widget" && kind != "action") ||
+        (kind == "app" && actionType == QStringLiteral("launch-app") && item.value("appId").toString().isEmpty()) ||
+        (kind == "action" && item.value("name").toString().trimmed().isEmpty()) ||
+        (kind == "widget" && item.value("widgetType").toString().isEmpty()) ||
+        (!item.value("categoryId").toString().isEmpty() &&
+         !categoryIds.contains(item.value("categoryId").toString())) ||
+        (!actionType.isEmpty() && normalizedActionForItem(item).isEmpty()) ||
+        (item.contains("opacity") && (!item.value("opacity").isDouble() || item.value("opacity").toDouble() < 0.0 ||
+                                      item.value("opacity").toDouble() > 1.0))) {
+        return false;
     }
     return true;
 }

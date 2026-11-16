@@ -255,6 +255,8 @@ class HomeLayout final : public QObject {
     bool isValidArtworkFile(const QFileInfo& file) const;
     bool isValidArtworkSize(const QSize& size) const;
     bool isValidWallpaperImage(const QByteArray& data) const;
+    bool isValidComponentItem(const QJsonObject& item, const QSet<QString>& ids, const QSet<QString>& categoryIds,
+                              const QJsonObject& normalized);
     QJsonArray m_pages;
     QString m_homePageId;
     QJsonObject m_rootPage;
