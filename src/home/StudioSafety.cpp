@@ -206,10 +206,22 @@ bool StudioSession::diskRevisionUnchanged() const {
 }
 
 bool StudioSession::editingPermitted() {
+    if (!profileActive())
+        return false;
+    if (editorLocked())
+        return false;
+    return true;
+}
+
+bool StudioSession::profileActive() {
     if (m_active && !currentProfile()) {
         setError(tr("The profile changed. Reopen Skin Studio."));
         return false;
     }
+    return true;
+}
+
+bool StudioSession::editorLocked() {
     if (m_editorLocked || !ProfileManager::allows("edit")) {
         setError(tr("Editing is restricted. Unlock the editor or enable editing in Settings > Profiles."));
         return false;

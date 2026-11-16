@@ -384,7 +384,7 @@ void AudioSettings::submit(int volume, bool muted) {
 }
 
 void AudioSettings::enqueueRead() {
-    if (QFileInfo(m_mixerTool).fileName() == "pactl") {
+    if (isPactlMixer()) {
         m_commands.append(QStringList{"get-sink-volume", "@DEFAULT_SINK@"});
         m_commands.append(QStringList{"get-sink-mute", "@DEFAULT_SINK@"});
         m_commands.append(QStringList{"list", "sinks"});
@@ -393,6 +393,10 @@ void AudioSettings::enqueueRead() {
         m_commands.append(QStringList{"get-volume", "@DEFAULT_AUDIO_SINK@"});
         m_commands.append(QStringList{"status"});
     }
+}
+
+bool AudioSettings::isPactlMixer() {
+    return QFileInfo(m_mixerTool).fileName() == "pactl";
 }
 
 bool AudioSettings::selectOutput(const QString& id) {

@@ -19,15 +19,23 @@ QVariantMap CompatibilityRuntime::discover() {
 #ifndef Q_OS_LINUX
     return classify(false, false);
 #else
+    return discoverLinux();
+#endif
+}
+
+QVariantMap CompatibilityRuntime::discoverLinux() {
     const QFileInfo candidate("/usr/bin/wine");
-    if (!candidate.exists() && !candidate.isSymLink())
+    if (!isWineAvailable(candidate))
         return classify(false, false);
     if (!isWineBinaryValid(candidate))
         return classify(true, false);
     if (!isPathSecure(candidate))
         return classify(true, false);
     return classify(true, true);
-#endif
+}
+
+bool isWineAvailable(const QFileInfo& candidate) {
+    return candidate.exists() || candidate.isSymLink();
 }
 
 namespace {

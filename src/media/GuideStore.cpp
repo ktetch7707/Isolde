@@ -252,14 +252,22 @@ void GuideStore::invalidate() {
 }
 QVariantList GuideStore::channels() const {
     QVariantList result;
-    if (!m_ready)
+    if (!isReady())
         return result;
     QSqlQuery q(m_db);
-    if (!q.exec(ChannelSelect + " ORDER BY position,id LIMIT 1024"))
+    if (!executeChannelQuery(q))
         return result;
     while (q.next())
         result.append(channelRow(q));
     return result;
+}
+
+bool GuideStore::isReady() const {
+    return m_ready;
+}
+
+bool GuideStore::executeChannelQuery(QSqlQuery& q) const {
+    return q.exec(ChannelSelect + " ORDER BY position,id LIMIT 1024");
 }
 QVariantMap GuideStore::channel(const QString& id) const {
     if (!m_ready || !ComponentSchema::safeId(id))

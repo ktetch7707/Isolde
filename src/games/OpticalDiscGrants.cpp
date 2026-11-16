@@ -56,7 +56,7 @@ QString OpticalDiscGrants::authorize(const QString& profile, const QString& medi
 }
 
 QString OpticalDiscGrants::revoke(const QString& profile, const QString& mediaId) {
-    if (!validProfile(profile) || !valid(mediaId))
+    if (!isValidOpticalIdentity(profile, mediaId))
         return "Invalid profile-scoped optical media identity.";
     auto values = mediaIds(profile);
     if (!values.removeOne(mediaId))
@@ -65,4 +65,8 @@ QString OpticalDiscGrants::revoke(const QString& profile, const QString& mediaId
     store.setValue(key(profile), values);
     store.sync();
     return store.status() == QSettings::NoError ? QString() : "Could not update this profile's optical-media approval.";
+}
+
+bool isValidOpticalIdentity(const QString& profile, const QString& mediaId) {
+    return validProfile(profile) && valid(mediaId);
 }

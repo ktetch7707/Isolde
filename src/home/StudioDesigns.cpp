@@ -108,12 +108,19 @@ QJsonObject mergeDesignLibrary(QJsonObject& incoming, const QJsonObject& existin
     return merged;
 }
 QJsonObject selectedPage(QJsonObject document, const QString& id) {
-    if (!id.isEmpty()) {
-        for (const auto& value : document["pages"].toArray())
-            if (value.toObject()["id"] == id)
-                return value.toObject()["layout"].toObject();
-        return {};
-    }
+    if (id.isEmpty())
+        return removeStudioKeys(document);
+    return findPageLayout(document, id);
+}
+
+QJsonObject findPageLayout(QJsonObject document, const QString& id) {
+    for (const auto& value : document["pages"].toArray())
+        if (value.toObject()["id"] == id)
+            return value.toObject()["layout"].toObject();
+    return {};
+}
+
+QJsonObject removeStudioKeys(QJsonObject document) {
     for (const auto& key : {"pages", "homePageId", "rootPage", "studioAppearance"})
         document.remove(key);
     return document;

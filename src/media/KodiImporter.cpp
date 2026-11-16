@@ -11,8 +11,8 @@
 
 namespace {
 bool ordinaryPath(QString path) {
-    for (; !path.isEmpty();) {
-        if (QFileInfo(path).isSymLink())
+    while (!path.isEmpty()) {
+        if (isSymlink(path))
             return false;
         const auto parent = QFileInfo(path).absolutePath();
         if (parent == path)
@@ -20,6 +20,10 @@ bool ordinaryPath(QString path) {
         path = parent;
     }
     return true;
+}
+
+bool isSymlink(const QString& path) {
+    return QFileInfo(path).isSymLink();
 }
 } // namespace
 

@@ -160,15 +160,18 @@ void GameLibrary::cancelEmulatorSetup() {
     if (!setupBusy())
         return;
     m_setupCanceled = true;
-#ifdef Q_OS_UNIX
-    if (m_setup.processId() > 0)
-        ::kill(pid_t(m_setup.processId()), SIGTERM);
-#else
-    m_setup.terminate();
-#endif
+    stopSetupProcess(m_setup);
     m_setupStatus =
         "Finishing the current package operation safely. Wait before retrying; existing games and saves are untouched.";
-    emit setupChanged();
+}
+
+void stopSetupProcess(QProcess& process) {
+#ifdef Q_OS_UNIX
+    if (process.processId() > 0)
+        ::kill(pid_t(process.processId()), SIGTERM);
+#else
+    process.terminate();
+#endif
 }
 
 QString GameLibrary::addGameWithOrigin(const QVariantMap& input, const QString& origin) {

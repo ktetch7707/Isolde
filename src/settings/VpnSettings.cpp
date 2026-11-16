@@ -58,13 +58,21 @@ VpnSettings::VpnSettings(QString profile, QObject* parent) : QObject(parent), m_
 VpnSettings::~VpnSettings() {
     m_timer.stop();
     m_process.disconnect(this);
-    if (m_process.state() != QProcess::NotRunning) {
-        m_process.terminate();
-        if (!m_process.waitForFinished(45000)) {
-            m_process.kill();
-            m_process.waitForFinished(1000);
+    stopProcess(m_process);
+}
+
+void stopProcess(QProcess& process) {
+    if (process.state() != QProcess::NotRunning) {
+        process.terminate();
+        if (!waitForProcessFinished(process, 45000)) {
+            process.kill();
+            process.waitForFinished(1000);
         }
     }
+}
+
+bool waitForProcessFinished(QProcess& process, int msecs) {
+    return process.waitForFinished(msecs);
 }
 void VpnSettings::perform(const QString& action,
                           const QString& target,

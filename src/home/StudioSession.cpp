@@ -110,13 +110,17 @@ void StudioSession::invalidate() {
 bool StudioSession::open(const QByteArray& committedDocument) {
     if (!validDraft(committedDocument))
         return false;
+    applyCommittedDocument(committedDocument);
+    return true;
+}
+
+void StudioSession::applyCommittedDocument(const QByteArray& committedDocument) {
     m_committed = committedDocument;
     m_draft = committedDocument;
     m_undo.clear();
     m_redo.clear();
     setError({});
     emit changed();
-    return true;
 }
 
 bool StudioSession::pushEdit(const QByteArray& candidateDraft) {
@@ -146,12 +150,8 @@ bool StudioSession::pushEdit(const QByteArray& candidateDraft) {
 }
 
 bool StudioSession::undo() {
-    if (!editingPermitted())
+    if (!canUndoRedo(m_undo.isEmpty(), "Nothing to undo."))
         return false;
-    if (m_undo.isEmpty()) {
-        setError(QStringLiteral("Nothing to undo."));
-        return false;
-    }
     m_redo.push(m_draft);
     m_draft = m_undo.pop();
     setError({});
@@ -160,16 +160,22 @@ bool StudioSession::undo() {
 }
 
 bool StudioSession::redo() {
-    if (!editingPermitted())
+    if (!canUndoRedo(m_redo.isEmpty(), "Nothing to redo."))
         return false;
-    if (m_redo.isEmpty()) {
-        setError(QStringLiteral("Nothing to redo."));
-        return false;
-    }
     m_undo.push(m_draft);
     m_draft = m_redo.pop();
     setError({});
     emit changed();
+    return true;
+}
+
+bool StudioSession::canUndoRedo(bool isEmpty, const char* message) {
+    if (!editingPermitted())
+        return false;
+    if (isEmpty) {
+        setError(QStringLiteral(message));
+        return false;
+    }
     return true;
 }
 
@@ -281,9 +287,15 @@ bool StudioSession::isStaleAgainst(const QByteArray& currentApplied) const {
         return true;
     QByteArray mine, theirs;
     StudioSession* self = const_cast<StudioSession*>(this);
-    if (!self->canonicalize(m_committed, currentApplied, mine, theirs))
+    if (!canonicalizeCommitted(m_committed, currentApplied, mine, theirs))
         return true;
     return mine != theirs;
+}
+
+bool StudioSession::canonicalizeCommitted(const QByteArray& committed, const QByteArray& currentApplied,
+                                           QByteArray& mine, QByteArray& theirs) const {
+    StudioSession* self = const_cast<StudioSession*>(this);
+    return self->canonicalize(committed, currentApplied, mine, theirs);
 }
 
 bool StudioSession::validDraft(const QByteArray& data) {

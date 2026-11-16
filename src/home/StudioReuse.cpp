@@ -69,10 +69,14 @@ QString fresh(const QString& base, const QJsonArray& nodes) {
         ids.insert(value.toObject()["id"].toString());
     for (int i = 1; i <= 65536; ++i) {
         const auto id = QString("%1-%2").arg(base.left(50)).arg(i);
-        if (!ids.contains(id))
+        if (isUniqueId(id, ids))
             return id;
     }
     return {};
+}
+
+bool isUniqueId(const QString& id, const QSet<QString>& ids) {
+    return !ids.contains(id);
 }
 QJsonArray
 instantiate(const QJsonArray& definition, QJsonArray existing, const QJsonObject& destination, const QString& link) {

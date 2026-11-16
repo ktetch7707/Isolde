@@ -311,15 +311,23 @@ QVariantMap OpticalDiscIdentify::identityForDevice(const QString& device) {
 }
 
 QVariantMap OpticalDiscIdentify::identityForContent(QVariantMap descriptor, const QString& contentId) {
-    if (!QRegularExpression("^[0-9a-f]{64}$").match(contentId).hasMatch())
+    if (!contentIdValid(contentId))
         return {};
     descriptor["mediaId"] = contentId;
+    ensureMediaSetDefaults(descriptor, contentId);
+    return OpticalDiscIdentify::rootReference(descriptor).isEmpty() ? QVariantMap{} : descriptor;
+}
+
+bool contentIdValid(const QString& contentId) {
+    return QRegularExpression("^[0-9a-f]{64}$").match(contentId).hasMatch();
+}
+
+void ensureMediaSetDefaults(QVariantMap& descriptor, const QString& contentId) {
     if (descriptor.value("mediaSetId").toString().isEmpty()) {
         descriptor["mediaSetId"] = contentId;
         descriptor["discNumber"] = 1;
         descriptor["discCount"] = 1;
     }
-    return OpticalDiscIdentify::rootReference(descriptor).isEmpty() ? QVariantMap{} : descriptor;
 }
 
 QString OpticalDiscIdentify::rootReference(const QVariantMap& disc) {

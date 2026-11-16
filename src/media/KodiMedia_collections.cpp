@@ -17,7 +17,7 @@ void KodiMedia::savePlaylist(const QString& name) {
             {{"name", name.trimmed()}, {"kind", m_mediaKind}, {"view", m_viewKind}, {"value", m_viewValue}});
 }
 void KodiMedia::renamePlaylist(const QString& name, const QString& newName) {
-    if (m_busy || m_playbackActive || !validPlaylistName(name) || !validPlaylistName(newName) || name == newName) {
+    if (!canRenamePlaylist(name, newName)) {
         m_playlistStatus = "Cannot rename this playlist. Choose a valid name and retry.";
         emit changed();
         return;
@@ -29,8 +29,19 @@ void KodiMedia::renamePlaylist(const QString& name, const QString& newName) {
     emit changed();
     request("Isolde.RenamePlaylist", {{"name", name.trimmed()}, {"newName", newName.trimmed()}});
 }
+
+bool canRenamePlaylist(const QString& name, const QString& newName) {
+    return !m_busy && !m_playbackActive && validPlaylistName(name) && validPlaylistName(newName) && name != newName;
+}
+    ++m_generation;
+    m_busy = true;
+    m_stage = 10;
+    m_playlistStatus = "Renaming Kodi playlist…";
+    emit changed();
+    request("Isolde.RenamePlaylist", {{"name", name.trimmed()}, {"newName", newName.trimmed()}});
+}
 void KodiMedia::deletePlaylist(const QString& name) {
-    if (m_busy || m_playbackActive || !validPlaylistName(name)) {
+    if (!canDeletePlaylist(name)) {
         m_playlistStatus = "Cannot delete this playlist. Choose a valid playlist and retry.";
         emit changed();
         return;
@@ -41,6 +52,10 @@ void KodiMedia::deletePlaylist(const QString& name) {
     m_playlistStatus = "Deleting Kodi playlist…";
     emit changed();
     request("Isolde.DeletePlaylist", {{"name", name.trimmed()}});
+}
+
+bool canDeletePlaylist(const QString& name) {
+    return !m_busy && !m_playbackActive && validPlaylistName(name);
 }
 void KodiMedia::reorderPlaylist(const QString& name, const QVariantList& order) {
     if (m_busy || m_playbackActive || !validPlaylistName(name) || order.isEmpty() || order.size() > 256 ||
@@ -119,7 +134,7 @@ void KodiMedia::previewPlaylist(const QString& name, const QString& view, const 
     request("Isolde.PreviewPlaylistRule", {{"name", name}, {"view", view}, {"value", value}});
 }
 void KodiMedia::loadPlaylistMembers(const QString& name) {
-    if (m_busy || m_playbackActive || !validPlaylistName(name))
+    if (!canLoadPlaylistMembers(name))
         return;
     ++m_generation;
     m_busy = true;
@@ -130,6 +145,10 @@ void KodiMedia::loadPlaylistMembers(const QString& name) {
     m_playlistStatus = "Loading playlist members…";
     emit changed();
     request("Isolde.GetPlaylistOrder", {{"name", name}});
+}
+
+bool canLoadPlaylistMembers(const QString& name) {
+    return !m_busy && !m_playbackActive && validPlaylistName(name);
 }
 QVariantList KodiMedia::collections() const {
     if (m_retired)

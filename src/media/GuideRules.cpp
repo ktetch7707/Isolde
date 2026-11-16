@@ -28,12 +28,16 @@ bool text(const QVariant& v, int limit, bool empty = false) {
     if (v.metaType().id() != QMetaType::QString)
         return false;
     const auto s = v.toString();
-    if ((!empty && s.trimmed().isEmpty()) || s.size() > limit)
+    if (!isValidText(s, empty, limit))
         return false;
     for (const auto c : s)
         if (c.unicode() < 32)
             return false;
     return true;
+}
+
+bool isValidText(const QString& s, bool empty, int limit) {
+    return !( (!empty && s.trimmed().isEmpty()) || s.size() > limit );
 }
 QVariantMap reject(QString* error, const QString& message) {
     if (error)

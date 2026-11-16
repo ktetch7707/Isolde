@@ -324,8 +324,12 @@ void AppCatalog::browseOnlineStore(const QString& query) {
         return;
     }
     m_storeQuery = query.trimmed();
+    beginOnlineSearch(m_storeQuery);
+}
+
+void AppCatalog::beginOnlineSearch(const QString& query) {
     if (m_onlineStoreSearch)
-        searchStore(m_storeQuery);
+        searchStore(query);
     else
         setOnlineStoreSearch(true);
 }
@@ -717,13 +721,19 @@ bool AppCatalog::loadStateFile(const QString& stateReadPath) {
 bool AppCatalog::loadStateAndroidContainment(const QJsonObject& stateObject) {
     const auto presentation = stateObject.value("androidContainment");
     if (!presentation.isUndefined()) {
-        if (!presentation.isString() || (presentation != "fullscreen" && presentation != "windowed")) {
+        if (!isValidAndroidContainment(presentation)) {
             setError(tr("Invalid Android presentation preference."));
             return false;
         }
         m_androidContainment = presentation.toString();
     }
     return true;
+}
+
+bool AppCatalog::isValidAndroidContainment(const QVariant& presentation) {
+    if (!presentation.isString())
+        return false;
+    return presentation == "fullscreen" || presentation == "windowed";
 }
 
 bool AppCatalog::loadStateUpdatePreferences(const QJsonObject& stateObject) {

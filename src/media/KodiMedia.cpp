@@ -301,7 +301,7 @@ void KodiMedia::openPlaylists() {
     restoreBrowse({"playlists", "all", {}, {}, -1, -1, 0, 0});
 }
 void KodiMedia::openHistory(int count) {
-    if (count < 1 || count > 50 || !canNavigate())
+    if (!validateHistoryCount(count) || !canNavigate())
         return;
     const int selected = m_mediaKind == "history" ? m_selectedIndex : 0;
     m_historyLimit = count;
@@ -310,6 +310,10 @@ void KodiMedia::openHistory(int count) {
     m_pendingDirectKind.clear();
     m_pendingDirectId = 0;
     restoreBrowse({"history", "watched", {}, {}, -1, -1, 0, selected});
+}
+
+bool validateHistoryCount(int count) {
+    return count >= 1 && count <= 50;
 }
 void KodiMedia::setAppOpenings(const QVariantList& items) {
     if (m_retired || items.size() > 50)

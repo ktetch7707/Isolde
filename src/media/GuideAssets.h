@@ -44,8 +44,7 @@ inline QString path(const QString& profile, const QString& relative) {
     return target;
 }
 inline bool write(const QString& profile, const QString& relative, const QByteArray& bytes) {
-    if (name(bytes) != relative || path(profile, relative).isEmpty() ||
-        !QDir().mkpath(QDir(profile).filePath("artwork")))
+    if (!canWriteArtwork(profile, relative, bytes))
         return false;
     const auto target = path(profile, relative);
     if (target.isEmpty())
@@ -53,6 +52,11 @@ inline bool write(const QString& profile, const QString& relative, const QByteAr
     QSaveFile file(target);
     file.setDirectWriteFallback(false);
     return file.open(QIODevice::WriteOnly) && file.write(bytes) == bytes.size() && file.commit();
+}
+
+bool canWriteArtwork(const QString& profile, const QString& relative, const QByteArray& bytes) {
+    return name(bytes) == relative && !path(profile, relative).isEmpty() &&
+           QDir().mkpath(QDir(profile).filePath("artwork"));
 }
 inline QString source(const QString& profile, const QString& relative) {
     const auto target = path(profile, relative);

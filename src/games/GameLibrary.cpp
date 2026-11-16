@@ -75,10 +75,14 @@ bool approvedMediaDirectory(const QString& profile, const QString& path) {
     for (const auto& grant : MediaGrants::folders(profile)) {
         if (!MediaGrants::validate(grant, false).isEmpty())
             continue;
-        if (path == grant || path.startsWith(grant + '/'))
+        if (isGrantPathMatch(path, grant))
             return true;
     }
     return false;
+}
+
+bool isGrantPathMatch(const QString& path, const QString& grant) {
+    return path == grant || path.startsWith(grant + '/');
 }
 QByteArray normalizeArtwork(const QByteArray& source) {
     if (source.isEmpty() || source.size() > MaxArtworkSourceBytes)
@@ -193,7 +197,7 @@ QVariantMap row(const QSqlQuery& query, const QString& artworkDirectory) {
             {"artwork", artwork}};
 }
 QString sourceKind(const QString& runtime, const QString& root, const QString& profile) {
-    if (runtime == "steam")
+    if (isSteamRuntime(runtime))
         return "steam-app";
     if (OpticalDiscIdentify::isRootReference(root))
         return "optical-media";
@@ -202,6 +206,10 @@ QString sourceKind(const QString& runtime, const QString& root, const QString& p
     if (!root.isEmpty())
         return "external-folder";
     return "runtime-entry";
+}
+
+bool isSteamRuntime(const QString& runtime) {
+    return runtime == "steam";
 }
 QVariantMap sourceProvenance(const QString& runtime,
                              const QString& root,
@@ -954,15 +962,17 @@ QVariantMap GameLibrary::emulatorCoverage() const {
 }
 
 QVariantMap GameLibrary::emulatorSettings(const QString& id) {
-    if (!m_ready) {
-        fail(tr("This games profile is no longer active."));
+    if (!profileReady())
         return {};
-    }
     QString error;
     const auto value = GameEmulators::settings(m_emulatorProfile, id, &error);
     if (value.isEmpty())
         fail(error);
     return value;
+}
+
+bool GameLibrary::profileReady() const {
+    return m_ready;
 }
 
 bool GameLibrary::configureEmulator(const QString& id, const QVariantMap& options, const QString& firmware) {

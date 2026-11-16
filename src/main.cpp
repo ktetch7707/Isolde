@@ -598,14 +598,18 @@ struct ProfileRuntime {
 
     void setupKodiServiceReady() {
         QObject::connect(&setup, &SetupState::changed, &kodiService, [this] {
-            if (setup.complete() && !kodiImporter.importInProgress() && !kodiImporter.recoveryPending())
+            if (canStartKodiService())
                 kodiService.start();
         });
         if (setup.complete())
             QTimer::singleShot(1500, &kodiService, [this] {
-                if (!kodiImporter.importInProgress() && !kodiImporter.recoveryPending())
+                if (canStartKodiService())
                     kodiService.start();
             });
+    }
+
+    bool canStartKodiService() {
+        return setup.complete() && !kodiImporter.importInProgress() && !kodiImporter.recoveryPending();
     }
 
     void handleLaunchArguments() {

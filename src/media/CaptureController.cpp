@@ -650,14 +650,22 @@ bool CaptureController::applyConfiguration(const QVariantMap& configuration) {
 }
 
 bool CaptureController::canSwitchInput(int input) const {
-    if (input < 1 || input > 8 || m_captureDeviceId.isEmpty() || m_serialPortName.isEmpty() ||
-        !m_serialPortNames.contains(m_serialPortName))
+    if (!isValidInput(input))
         return false;
     const bool videoPresent = hasDevice(m_videoDevices, m_captureDeviceId);
     const bool formatPresent = hasVideoFormat(m_captureDeviceId, m_videoFormatKey);
     if (!videoPresent || !formatPresent)
         return false;
     const auto command = commandForInput(m_commandTemplate, input);
+    return isValidCommand(command);
+}
+
+bool CaptureController::isValidInput(int input) const {
+    return input >= 1 && input <= 8 && !m_captureDeviceId.isEmpty() &&
+           !m_serialPortName.isEmpty() && m_serialPortNames.contains(m_serialPortName);
+}
+
+bool CaptureController::isValidCommand(const QString& command) const {
     return !command.isEmpty() && m_baudRate > 0;
 }
 

@@ -69,8 +69,11 @@ class ChromiumRemotePipe {
         ::close(output[1]);
         output[1] = -1;
         send("Target.setDiscoverTargets", {{"discover", true}});
-        QTimer::singleShot(15000, &owner, [this] {
-            if (!ready && child.state() == QProcess::Running)
+        auto shouldFail = [this]() {
+            return !ready && child.state() == QProcess::Running;
+        };
+        QTimer::singleShot(15000, &owner, [this, shouldFail] {
+            if (shouldFail())
                 failure();
         });
     }

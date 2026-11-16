@@ -370,7 +370,7 @@ void InputManager::cancelBinding() {
 }
 
 bool InputManager::clearBinding(int command) {
-    if (command <= None || command > Search)
+    if (!isValidCommand(command))
         return false;
     auto bindings = m_bindings;
     bindings.remove(command);
@@ -379,6 +379,10 @@ bool InputManager::clearBinding(int command) {
     m_bindings = bindings;
     cancelBinding();
     return true;
+}
+
+bool InputManager::isValidCommand(int command) {
+    return command > None && command <= Search;
 }
 
 bool InputManager::resetBindings() {

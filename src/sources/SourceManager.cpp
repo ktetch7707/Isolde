@@ -21,7 +21,7 @@ namespace {
 
 bool unredirectedStatePath(const QString& path) {
     const QFileInfo file(path);
-    if (!file.isAbsolute() || file.isSymLink())
+    if (!isAbsoluteRegularPath(file))
         return false;
     QDir directory(file.absolutePath());
     do {
@@ -29,6 +29,10 @@ bool unredirectedStatePath(const QString& path) {
             return false;
     } while (directory.cdUp());
     return true;
+}
+
+bool isAbsoluteRegularPath(const QFileInfo& file) {
+    return file.isAbsolute() && !file.isSymLink();
 }
 
 QString stableSourceId(const QString& path) {
