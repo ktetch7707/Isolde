@@ -1108,13 +1108,16 @@ bool HomeLayout::isValidRootPage(const QJsonObject& object, const QJsonObject& r
             valid = false;
     const auto position = rootPage.value("position");
     const auto name = rootPage.value("name").toString();
-    if (!name.isString() || name.trimmed().isEmpty() || name.size() > 80 || name.contains(QChar::Null) ||
-        !rootPage.value("visible").isBool() || !position.isDouble() || position.toDouble() != position.toInt() ||
-        position.toInt() < 0 || position.toInt() > pages.size() ||
+    if (!isValidRootPageName(name) || !rootPage.value("visible").isBool() || !position.isDouble() ||
+        position.toDouble() != position.toInt() || position.toInt() < 0 || position.toInt() > pages.size() ||
         (!rootPage.value("visible").toBool() && homePageFromObject(object).isEmpty()) ||
         pages.size() + (rootPage.value("visible").toBool() ? 1 : 0) > 64)
         valid = false;
     return valid;
+}
+
+bool HomeLayout::isValidRootPageName(const QString& name) const {
+    return name.isString() && !name.trimmed().isEmpty() && name.size() <= 80 && !name.contains(QChar::Null);
 }
 
 QVariant HomeLayout::homePageFromObject(const QJsonObject& object) {
