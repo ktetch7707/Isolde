@@ -293,7 +293,6 @@ void LayoutPersistenceTests::starterPageUpdatesPreserveDesignAndRollback() {
             components[i] = c;
         }
     }
-    }
     document["components"] = components;
     auto pages = document["pages"].toArray();
     while (pages.size() > 2) pages.takeLast();
