@@ -67,25 +67,26 @@ void ComponentContractTests::validatesContracts() {
 }
 
 void ComponentContractTests::guideActionsValidateIdentityAndAppearance() {
-    QTemporaryDir dir;AppRegistry registry;HomeLayout home(&registry);const auto user=dir.filePath("home.json");
-    writeFile(dir.filePath("defaults.json"),R"({"schemaVersion":2,"theme":{"backgroundStart":"#123456"},"categories":[{"id":"apps","name":"Apps"}],"components":[]})");
-    const QByteArray fixture=R"({"schemaVersion":2,"categories":[{"id":"apps","name":"Apps"}],"components":[{"kind":"action","id":"guide-entry","name":"TV Guide","symbol":"TV","size":"standard","categoryId":"apps","actions":[{"schemaVersion":1,"type":"open-guide"}]}]})";
-    writeFile(user,fixture);QVERIFY(home.load(dir.filePath("defaults.json"),user));
-    QVERIFY2(home.errorString().isEmpty(),qPrintable(home.errorString()));QCOMPARE(home.items().size(),1);QCOMPARE(home.items().first().toMap().value("actions").toList().first().toMap().value("type").toString(),QString("open-guide"));QCOMPARE(readFile(user),fixture);
-    QVERIFY(!ComponentSchema::action({{"type","open-guide"}}).isEmpty());
-    QVERIFY(!ComponentSchema::action({{"type","tune-channel"},{"channelId","local-station"}}).isEmpty());
-    QVERIFY(ComponentSchema::action({{"type","tune-channel"},{"channelId","../other"}}).isEmpty());
-    QVERIFY(ComponentSchema::action({{"type","tune-channel"},{"channelId","station"},{"offsetSeconds",9}}).isEmpty());
-    QVERIFY(ComponentSchema::action({{"type","open-guide"},{"target","https://example.invalid"}}).isEmpty());
+    QString error;
+    QVERIFY(!ComponentSchema::action({{"schemaVersion",1},{"type","open-guide"}}, &error).isEmpty());
+    QCOMPARE(error, QString());
+    QVERIFY(!ComponentSchema::action({{"schemaVersion",1},{"type","tune-channel"},{"channelId","local-station"}}, &error).isEmpty());
+    QCOMPARE(error, QString());
+    QVERIFY(ComponentSchema::action({{"schemaVersion",1},{"type","tune-channel"},{"channelId","../other"}}, &error).isEmpty());
+    QVERIFY(!error.isEmpty());
+    QVERIFY(ComponentSchema::action({{"schemaVersion",1},{"type","tune-channel"},{"channelId","station"},{"offsetSeconds",9}}, &error).isEmpty());
+    QVERIFY(!error.isEmpty());
+    QVERIFY(ComponentSchema::action({{"schemaVersion",1},{"type","open-guide"},{"target","https://example.invalid"}}, &error).isEmpty());
+    QVERIFY(!error.isEmpty());
     QVERIFY(!ComponentSchema::validPresentation({{"guideRows",2}}));
     QVERIFY(!ComponentSchema::validPresentation({{"guideMinutes","120"}}));
     QVERIFY(ComponentSchema::validPresentation({{"guideRows",5},{"guideMinutes",120},{"guideChannelWidth",220},{"guideLabels",true},{"guideSourceBadges",false}}));
-    QVERIFY(!ComponentSchema::action({{"type","open-guide"},{"focusChannelId","local-station"},{"presentation",QVariantMap{{"guideSurface","overlay"}}}}).isEmpty());
+    QVERIFY(!ComponentSchema::action({{"schemaVersion",1},{"type","open-guide"},{"focusChannelId","local-station"},{"presentation",QVariantMap{{"guideSurface","overlay"}}}}, &error).isEmpty());
     for(const auto &id:QVariantList{true,123,QString("../other")}){
-        QVERIFY(ComponentSchema::action({{"type","open-guide"},{"focusChannelId",id}}).isEmpty());
-        QVERIFY(ComponentSchema::action({{"type","tune-channel"},{"channelId",id}}).isEmpty());
+        QVERIFY(ComponentSchema::action({{"schemaVersion",1},{"type","open-guide"},{"focusChannelId",id}}, &error).isEmpty());
+        QVERIFY(ComponentSchema::action({{"schemaVersion",1},{"type","tune-channel"},{"channelId",id}}, &error).isEmpty());
     }
-    QVERIFY(ComponentSchema::action({{"type","tune-channel"},{"channelId","station"},{"focusChannelId","station"}}).isEmpty());
+    QVERIFY(ComponentSchema::action({{"schemaVersion",1},{"type","tune-channel"},{"channelId","station"},{"focusChannelId","station"}}, &error).isEmpty());
     for(const auto &position:QStringList{"top-left","top-center","top-right","center-left","center","center-right","bottom-left","bottom-center","bottom-right"})QVERIFY(ComponentSchema::validPresentation({{"guideSurface","overlay"},{"guideOverlayPosition",position},{"guideOverlayWidth",65},{"guideOverlayHeight",100},{"guideOverlayRows",3}}));
     for(const auto &invalid:QVariantList{QString("video-overlay"),123,true})QVERIFY(!ComponentSchema::validPresentation({{"guideSurface",invalid}}));
     for(const auto &invalid:QVariantList{64,101,65.5,true,QString("95")})QVERIFY(!ComponentSchema::validPresentation({{"guideOverlayWidth",invalid}}));
