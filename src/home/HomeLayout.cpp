@@ -207,6 +207,10 @@ bool readableStudioAppearance(QVariantMap values) {
         return false;
     if (!normalizeAppearance(values))
         return false;
+    return validateSurfaceColors(values) && validateFocusColor(values);
+}
+
+bool validateSurfaceColors(QVariantMap values) {
     const auto surface = QColor(values.value("surfaceColor").toString()),
                selected = QColor(values.value("selectedColor").toString());
     for (const auto& key : QStringList{"textColor", "mutedColor"}) {
@@ -216,7 +220,13 @@ bool readableStudioAppearance(QVariantMap values) {
             contrast(ink, selected) < HomeLayout::MinTextContrast)
             return false;
     }
+    return true;
+}
+
+bool validateFocusColor(QVariantMap values) {
     const auto focus = QColor(values.value("focusColor").toString());
+    const auto surface = QColor(values.value("surfaceColor").toString());
+    const auto selected = QColor(values.value("selectedColor").toString());
     return focus.isValid() && contrast(focus, surface) >= HomeLayout::MinFocusContrast &&
            contrast(focus, selected) >= HomeLayout::MinFocusContrast;
 }
@@ -433,28 +443,41 @@ QVariantList HomeLayout::sourceChoices(const QString& itemId) const {
             continue;
         const auto actionList = normalizedActionForItem(item);
         const auto type = actionList.isEmpty() ? QString() : actionList.first().toMap().value("type").toString();
-        if (type == "switch-input") {
-            for (int input = ComponentSchema::MinHdmiInput; input <= ComponentSchema::MaxHdmiInput; ++input)
-                choices.append(QVariantMap{{"id", QString::number(input)}, {"name", QString("HDMI %1").arg(input)}});
-        } else if (type == "open-collection" || type == "play-movie" || type == "open-show") {
-            for (const auto& entry : m_collections)
-                choices.append(QVariantMap{{"id", entry.toMap().value("id")}, {"name", entry.toMap().value("name")}});
-        } else
-            for (const auto& entry : m_registry->apps()) {
-                const auto app = entry.toMap();
-                if (type == "launch-app" || app.value("handledActions").toStringList().contains(type))
-                    choices.append(QVariantMap{{"id", app.value("id")}, {"name", app.value("name")}});
-            }
+        appendSourceChoicesForType(choices, type);
         break;
     }
     return choices;
 }
+
+void HomeLayout::appendSourceChoicesForType(QVariantList& choices, const QString& type) const {
+    if (type == "switch-input") {
+        appendHdmiInputChoices(choices);
+    } else if (type == "open-collection" || type == "play-movie" || type == "open-show") {
+        appendCollectionChoices(choices);
+    } else {
+        appendAppChoices(choices, type);
+    }
+}
+
+void HomeLayout::appendHdmiInputChoices(QVariantList& choices) const {
+    for (int input = ComponentSchema::MinHdmiInput; input <= ComponentSchema::MaxHdmiInput; ++input)
+        choices.append(QVariantMap{{"id", QString::number(input)}, {"name", QString("HDMI %1").arg(input)}});
+}
+
+void HomeLayout::appendCollectionChoices(QVariantList& choices) const {
+    for (const auto& entry : m_collections)
+        choices.append(QVariantMap{{"id", entry.toMap().value("id")}, {"name", entry.toMap().value("name")}});
+}
+
+void HomeLayout::appendAppChoices(QVariantList& choices, const QString& type) const {
+    for (const auto& entry : m_registry->apps()) {
+        const auto app = entry.toMap();
+        if (type == "launch-app" || app.value("handledActions").toStringList().contains(type))
+            choices.append(QVariantMap{{"id", app.value("id")}, {"name", app.value("name")}});
+    }
+}
 bool HomeLayout::rebindSource(const QString& itemId, const QString& sourceId) {
-    bool compatible = false;
-    for (const auto& choice : sourceChoices(itemId))
-        if (choice.toMap().value("id") == sourceId)
-            compatible = true;
-    if (!compatible) {
+    if (!sourceIsCompatible(itemId, sourceId)) {
         setError(tr("Choose a compatible installed source."));
         return false;
     }
@@ -462,35 +485,53 @@ bool HomeLayout::rebindSource(const QString& itemId, const QString& sourceId) {
         auto item = m_items[i].toObject();
         if (item.value("id") != itemId)
             continue;
-        const auto previous = item;
-        auto actionList = normalizedActionForItem(item);
-        if (actionList.isEmpty())
-            continue;
-        auto first = actionList.first().toMap();
-        const auto type = first.value("type").toString();
-        if (type == "launch-app") {
-            first["appId"] = sourceId;
-            if (item.value("kind") == "app")
-                item["appId"] = sourceId;
-        } else if (type == "open-collection" || type == "play-movie" || type == "open-show")
-            first["collectionId"] = sourceId;
-        else if (type == "switch-input")
-            first["input"] = sourceId.toInt();
-        else
-            first["openWith"] = sourceId;
-        actionList[0] = QJsonObject::fromVariantMap(first);
-        item["actions"] = QJsonArray::fromVariantList(actionList);
-        item.remove("action");
-        item = QJsonObject::fromVariantMap(ComponentSchema::component(item.toVariantMap(), true));
-        m_items[i] = item;
-        if (!save()) {
-            m_items[i] = previous;
-            return false;
-        }
-        emit layoutChanged();
-        return true;
+        return rebindItemAt(i, item, sourceId);
     }
     return false;
+}
+
+bool HomeLayout::sourceIsCompatible(const QString& itemId, const QString& sourceId) const {
+    for (const auto& choice : sourceChoices(itemId))
+        if (choice.toMap().value("id") == sourceId)
+            return true;
+    return false;
+}
+
+bool HomeLayout::rebindItemAt(qsizetype i, const QJsonObject& item, const QString& sourceId) {
+    auto actionList = normalizedActionForItem(item);
+    if (actionList.isEmpty())
+        return false;
+    auto first = actionList.first().toMap();
+    const auto type = first.value("type").toString();
+    if (type == "launch-app")
+        setAppId(first, item, sourceId);
+    else if (type == "open-collection" || type == "play-movie" || type == "open-show")
+        first["collectionId"] = sourceId;
+    else if (type == "switch-input")
+        first["input"] = sourceId.toInt();
+    else
+        first["openWith"] = sourceId;
+    actionList[0] = QJsonObject::fromVariantMap(first);
+    item["actions"] = QJsonArray::fromVariantList(actionList);
+    item.remove("action");
+    item = QJsonObject::fromVariantMap(ComponentSchema::component(item.toVariantMap(), true));
+    m_items[i] = item;
+    if (!save()) {
+        m_items[i] = previousItem(i);
+        return false;
+    }
+    emit layoutChanged();
+    return true;
+}
+
+QJsonObject HomeLayout::previousItem(qsizetype i) const {
+    return m_items[i].toObject();
+}
+
+void HomeLayout::setAppId(QJsonObject& first, const QJsonObject& item, const QString& sourceId) {
+    first["appId"] = sourceId;
+    if (item.value("kind") == "app")
+        first["appId"] = sourceId;
 }
 QVariantList HomeLayout::categories() const {
     return m_categories.toVariantList();
@@ -500,11 +541,7 @@ QVariantList HomeLayout::sections() const {
     const auto resolved = items();
     for (const auto& categoryValue : m_categories) {
         const auto category = categoryValue.toObject();
-        QVariantList categoryItems;
-        for (const auto& itemValue : resolved)
-            if (itemValue.toMap().value("parentId").toString().isEmpty() &&
-                itemValue.toMap().value("categoryId").toString() == category.value("id").toString())
-                categoryItems.append(itemValue);
+        auto categoryItems = resolveCategoryItems(resolved, category);
         if (!categoryItems.isEmpty() || category["presentation"].toObject()["variant"] == "library" ||
             grid().value("mode") == "sections") {
             auto section = category.toVariantMap();
@@ -512,14 +549,29 @@ QVariantList HomeLayout::sections() const {
             result.append(section);
         }
     }
+    auto uncategorized = resolveUncategorized(resolved);
+    if (!uncategorized.isEmpty() || grid().value("mode") == "sections")
+        result.append(QVariantMap{{"id", ""}, {"name", tr("Uncategorized")}, {"items", uncategorized}});
+    return result;
+}
+
+QVariantList HomeLayout::resolveCategoryItems(const QVariantList& resolved, const QJsonObject& category) const {
+    QVariantList categoryItems;
+    const auto categoryId = category.value("id").toString();
+    for (const auto& itemValue : resolved)
+        if (itemValue.toMap().value("parentId").toString().isEmpty() &&
+            itemValue.toMap().value("categoryId").toString() == categoryId)
+            categoryItems.append(itemValue);
+    return categoryItems;
+}
+
+QVariantList HomeLayout::resolveUncategorized(const QVariantList& resolved) const {
     QVariantList uncategorized;
     for (const auto& itemValue : resolved)
         if (itemValue.toMap().value("parentId").toString().isEmpty() &&
             itemValue.toMap().value("categoryId").toString().isEmpty())
             uncategorized.append(itemValue);
-    if (!uncategorized.isEmpty() || grid().value("mode") == "sections")
-        result.append(QVariantMap{{"id", ""}, {"name", tr("Uncategorized")}, {"items", uncategorized}});
-    return result;
+    return uncategorized;
 }
 bool HomeLayout::brandVisible() const {
     return m_brandVisible;

@@ -247,6 +247,18 @@ class HomeLayout final : public QObject {
     double numericRangeLow(const QString& key);
     double numericRangeHigh(const QString& key);
     bool isValidNumber(double number, bool ok, double low, double high, const QString& key);
+    bool validateSurfaceColors(QVariantMap values);
+    bool validateFocusColor(QVariantMap values);
+    void appendSourceChoicesForType(QVariantList& choices, const QString& type) const;
+    void appendHdmiInputChoices(QVariantList& choices) const;
+    void appendCollectionChoices(QVariantList& choices) const;
+    void appendAppChoices(QVariantList& choices, const QString& type) const;
+    bool sourceIsCompatible(const QString& itemId, const QString& sourceId) const;
+    bool rebindItemAt(qsizetype i, const QJsonObject& item, const QString& sourceId);
+    QJsonObject previousItem(qsizetype i) const;
+    void setAppId(QJsonObject& first, const QJsonObject& item, const QString& sourceId);
+    QVariantList resolveCategoryItems(const QVariantList& resolved, const QJsonObject& category) const;
+    QVariantList resolveUncategorized(const QVariantList& resolved) const;
     void appendRootPage(QVariantList& result) const;
     QJsonArray m_pages;
     QString m_homePageId;
