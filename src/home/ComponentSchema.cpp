@@ -970,10 +970,13 @@ QVariantMap ComponentSchema::component(const QVariantMap &input, bool legacy, QS
             if(music)source["kind"]="music";
             if(guide)source["kind"]="guide";
         } else {
-            const auto list = input["actions"].toList();
-            const auto normalized = actions(list, error);
-            if (normalized.isEmpty()) return {};
-            result["actions"] = normalized;
+            QVariantList normalizedList;
+            if (input.contains("actions")) {
+                const auto list = input.value("actions").toList();
+                normalizedList = actions(list, error);
+                if (normalizedList.isEmpty()) return {};
+                result["actions"] = normalizedList;
+            }
             source={{"schemaVersion",1},{"provider","shell"},{"kind",type}};
         }
     } else if (type == "clock" || type == "text" || type=="shape" || type=="container") {
@@ -985,26 +988,30 @@ QVariantMap ComponentSchema::component(const QVariantMap &input, bool legacy, QS
     } else {
         QVariantList normalizedList;
         QString actionType;
-        const auto list = input.value("actions").toList();
-        normalizedList = actions(list, error);
-        if (normalizedList.isEmpty()) return {};
-        actionType = normalizedList.first().toMap().value("type").toString();
+        if (input.contains("actions")) {
+            const auto list = input.value("actions").toList();
+            normalizedList = actions(list, error);
+            if (normalizedList.isEmpty()) return {};
+            result["actions"] = normalizedList;
+            actionType = normalizedList.first().toMap().value("type").toString();
+        }
         if (kind != "app" && kind != "action") return reject(error, "Invalid launcher kind.");
-        if (kind == "app" && (actionType != "launch-app" || input.value("appId") != normalizedList.first().toMap().value("appId")))
+        if (kind == "app" && !normalizedList.isEmpty() && (actionType != "launch-app" || input.value("appId") != normalizedList.first().toMap().value("appId")))
             return reject(error, "App binding does not match its action.");
-        if (kind == "action" && input.value("name").toString().trimmed().isEmpty()) return reject(error, "A launcher needs a name.");
+        if (kind == "action" && normalizedList.isEmpty() && input.value("name").toString().trimmed().isEmpty()) return reject(error, "A launcher needs a name.");
         source = {{"schemaVersion", 1}};
-        const auto first = normalizedList.first().toMap();
-        if (actionType == "launch-app") source.insert({{"provider", "apps"}, {"kind", "app"}, {"id", first.value("appId")}});
-        else if (actionType == "open-collection" || actionType == "play-movie" || actionType == "open-show")
-            source.insert({{"provider", "kodi"}, {"kind", "collection"}, {"id", first.value("collectionId")}});
-        else if (actionType == "open-page") source.insert({{"provider","shell"},{"kind","page"},{"id",first.value("pageId")}});
-        else if (actionType == "open-guide") source.insert({{"provider","isolde"},{"kind","guide"}});
-        else if (actionType == "switch-input") source.insert({{"provider", "isolde"}, {"kind", "capture-input"}, {"id", QString::number(first.value("input").toInt())}});
-        else if (actionType.startsWith("open-")) source.insert({{"provider", "handler"}, {"kind", actionType}, {"id", first.value("openWith")}});
-        else source.insert({{"provider", "shell"}, {"kind", actionType}});
-        if (type == "media-shelf" && actionType != "open-collection") return reject(error, "A media shelf requires a collection source.");
-        result["actions"] = normalizedList;
+        if (!normalizedList.isEmpty()) {
+            const auto first = normalizedList.first().toMap();
+            if (actionType == "launch-app") source.insert({{"provider", "apps"}, {"kind", "app"}, {"id", first.value("appId")}});
+            else if (actionType == "open-collection" || actionType == "play-movie" || actionType == "open-show")
+                source.insert({{"provider", "kodi"}, {"kind", "collection"}, {"id", first.value("collectionId")}});
+            else if (actionType == "open-page") source.insert({{"provider","shell"},{"kind","page"},{"id",first.value("pageId")}});
+            else if (actionType == "open-guide") source.insert({{"provider","isolde"},{"kind","guide"}});
+            else if (actionType == "switch-input") source.insert({{"provider", "isolde"}, {"kind", "capture-input"}, {"id", QString::number(first.value("input").toInt())}});
+            else if (actionType.startsWith("open-")) source.insert({{"provider", "handler"}, {"kind", actionType}, {"id", first.value("openWith")}});
+            else source.insert({{"provider", "shell"}, {"kind", actionType}});
+        }
+        if (type == "media-shelf" && !normalizedList.isEmpty() && actionType != "open-collection") return reject(error, "A media shelf requires a collection source.");
     }
     // A source is a capability binding, never a second conflicting launch route.
     if (!legacy && input.value("source").toMap() != source) return reject(error, "Source binding does not match its action.");
