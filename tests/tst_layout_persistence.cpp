@@ -285,10 +285,14 @@ void LayoutPersistenceTests::starterPageUpdatesPreserveDesignAndRollback() {
     for (int i = 0; i < components.size(); ++i) {
         auto c = components[i].toObject(); const auto id = c["id"].toString();
         if (id == "music" || id == "games" || id == "guide") {
-            c["actions"] = QJsonArray::fromVariantList(QVariantList{QVariantMap(id == "guide" ? QVariantMap{{"type","settings"},{"section",4}} : QVariantMap{{"type","app-drawer"}})}});
+            QVariantMap actionMap;
+            if (id == "guide") actionMap = QVariantMap{{"type","settings"},{"section",4}};
+            else actionMap = QVariantMap{{"type","app-drawer"}};
+            c["actions"] = QJsonArray::fromVariantList(QVariantList{actionMap});
             if(c["componentType"]!="button")c["source"] = QJsonObject{{"schemaVersion",1},{"kind",id == "guide" ? "settings" : "app-drawer"},{"provider","shell"}};
             components[i] = c;
         }
+    }
     }
     document["components"] = components;
     auto pages = document["pages"].toArray();
