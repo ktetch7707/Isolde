@@ -262,6 +262,11 @@ class HomeLayout final : public QObject {
     bool isValidComponentOpacity(const QJsonObject& item);
     bool isValidPageEntry(const QJsonArray& pages, const QJsonValue& entry,
                            QSet<QString>& pageIds, QJsonArray& pagesOut) const;
+    bool isValidRootPageName(const QString& name) const;
+    bool validateActionTileParams(const QString& cleanName, const QString& cleanActionType,
+                                   const QString& cleanTarget, const QString& cleanOpenWith) const;
+    bool categoryIdExists(const QString& categoryId) const;
+    QString generateActionTileId(const QString& cleanName) const;
     QJsonArray m_pages;
     QString m_homePageId;
     QJsonObject m_rootPage;
