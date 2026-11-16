@@ -473,11 +473,7 @@ QVariantList HomeLayout::sections() const {
     const auto resolved = items();
     for (const auto& categoryValue : m_categories) {
         const auto category = categoryValue.toObject();
-        QVariantList categoryItems;
-        for (const auto& itemValue : resolved)
-            if (itemValue.toMap().value("parentId").toString().isEmpty() &&
-                itemValue.toMap().value("categoryId").toString() == category.value("id").toString())
-                categoryItems.append(itemValue);
+        const auto categoryItems = resolveCategoryItems(resolved, category);
         if (!categoryItems.isEmpty() || category["presentation"].toObject()["variant"] == "library" ||
             grid().value("mode") == "sections") {
             auto section = category.toVariantMap();
@@ -485,14 +481,29 @@ QVariantList HomeLayout::sections() const {
             result.append(section);
         }
     }
+    auto uncategorized = resolveUncategorizedItems(resolved);
+    if (!uncategorized.isEmpty() || grid().value("mode") == "sections")
+        result.append(QVariantMap{{"id", ""}, {"name", tr("Uncategorized")}, {"items", uncategorized}});
+    return result;
+}
+
+QVariantList HomeLayout::resolveCategoryItems(const QVariantList& resolved, const QJsonObject& category) const {
+    QVariantList categoryItems;
+    const auto categoryId = category.value("id").toString();
+    for (const auto& itemValue : resolved)
+        if (itemValue.toMap().value("parentId").toString().isEmpty() &&
+            itemValue.toMap().value("categoryId").toString() == categoryId)
+            categoryItems.append(itemValue);
+    return categoryItems;
+}
+
+QVariantList HomeLayout::resolveUncategorizedItems(const QVariantList& resolved) const {
     QVariantList uncategorized;
     for (const auto& itemValue : resolved)
         if (itemValue.toMap().value("parentId").toString().isEmpty() &&
             itemValue.toMap().value("categoryId").toString().isEmpty())
             uncategorized.append(itemValue);
-    if (!uncategorized.isEmpty() || grid().value("mode") == "sections")
-        result.append(QVariantMap{{"id", ""}, {"name", tr("Uncategorized")}, {"items", uncategorized}});
-    return result;
+    return uncategorized;
 }
 bool HomeLayout::brandVisible() const {
     return m_brandVisible;
@@ -617,19 +628,30 @@ QVariantList HomeLayout::captureArtworkChoices() const {
     for (const auto& file : files) {
         if (result.size() >= 256)
             break;
+        if (!isValidArtworkFile(file))
+            continue;
         const auto relative = QStringLiteral("artwork/") + file.fileName();
         const auto resolved = managedArtworkSource(relative);
-        if (resolved.isEmpty() || file.size() <= 0 || file.size() > MaxArtworkSize ||
-            (relative.endsWith(".gif") && file.size() > 2 * 1024 * 1024))
+        if (resolved.isEmpty())
             continue;
         QImageReader reader(QUrl(resolved).toLocalFile());
         const auto size = reader.size();
-        if (!reader.canRead() || !size.isValid() || size.width() > 16384 || size.height() > 16384 ||
-            qint64(size.width()) * size.height() > 32 * 1024 * 1024)
+        if (!isValidArtworkSize(size))
             continue;
         result.append(QVariantMap{{"id", relative}, {"name", file.completeBaseName()}});
     }
     return result;
+}
+
+bool HomeLayout::isValidArtworkFile(const QFileInfo& file) const {
+    if (file.size() <= 0 || file.size() > MaxArtworkSize)
+        return false;
+    return file.size() <= 2 * 1024 * 1024 || !file.fileName().endsWith(".gif");
+}
+
+bool HomeLayout::isValidArtworkSize(const QSize& size) const {
+    return size.isValid() && size.width() <= 16384 && size.height() <= 16384 &&
+           qint64(size.width()) * size.height() <= 32 * 1024 * 1024;
 }
 QVariantList HomeLayout::captureArtworkSource(int input) const {
     if (input < 1 || input > 8)
@@ -735,12 +757,11 @@ bool HomeLayout::setWallpaper(const QString& sourceUrl) {
     if (!source.open(QIODevice::ReadOnly) || source.size() > HomeLayout::MaxArtworkSize)
         return false;
     const auto data = source.readAll();
-    const bool png = data.startsWith(QByteArray::fromHex("89504e470d0a1a0a"));
-    if (!png && !data.startsWith(QByteArray::fromHex("ffd8ff")))
+    if (!isValidWallpaperImage(data))
         return false;
     const auto relative = "artwork/wallpaper-" +
                           QString::fromLatin1(QCryptographicHash::hash(data, QCryptographicHash::Sha256).toHex()) +
-                          (png ? ".png" : ".jpg");
+                          (data.startsWith(QByteArray::fromHex("89504e470d0a1a0a")) ? ".png" : ".jpg");
     const auto directory = QFileInfo(m_userPath).absolutePath();
     if (!QDir().mkpath(QDir(directory).filePath("artwork")))
         return false;
@@ -752,6 +773,12 @@ bool HomeLayout::setWallpaper(const QString& sourceUrl) {
         config = {{"schemaVersion", 1}, {"enabled", true}};
     config["wallpaper"] = relative;
     return setComposition(config);
+}
+
+bool HomeLayout::isValidWallpaperImage(const QByteArray& data) const {
+    if (data.startsWith(QByteArray::fromHex("89504e470d0a1a0a")))
+        return true;
+    return data.startsWith(QByteArray::fromHex("ffd8ff"));
 }
 bool HomeLayout::setItemPresentation(const QString& id, const QVariantMap& value) {
     for (qsizetype i = 0; i < m_items.size(); ++i) {
@@ -840,20 +867,13 @@ bool HomeLayout::load(const QString& defaultPath, const QString& userPath) {
     return true;
 }
 bool HomeLayout::loadDocument(const QByteArray& data, bool userDocument) {
-    if (data.size() > 4 * 1024 * 1024) {
-        setError(tr("Home layout exceeds the supported size."));
+    QJsonDocument document;
+    if (!parseLayoutDocument(data, document))
         return false;
-    }
-    QJsonParseError error;
-    const auto document = QJsonDocument::fromJson(data, &error);
-    const int version = document.object().value("schemaVersion").toInt();
+    const auto version = document.object().value("schemaVersion").toInt();
     const auto entries = document.object().value(version == 1 ? "items" : "components");
-    if (error.error != QJsonParseError::NoError || !document.isObject() || (version != 1 && version != 2) ||
-        !entries.isArray() || data.size() > 4 * 1024 * 1024 || entries.toArray().size() > 1024) {
-        setError(userDocument ? tr("User Home layout is invalid; defaults were restored.")
-                              : tr("Default Home layout is invalid."));
+    if (!validateDocumentStructure(document, version, entries, userDocument))
         return false;
-    }
     const auto object = document.object();
     QString designError;
     if (!m_owner && !DesignSystem::validDocument(object, &designError)) {
@@ -861,80 +881,21 @@ bool HomeLayout::loadDocument(const QByteArray& data, bool userDocument) {
         return false;
     }
     QJsonArray pages;
-    if (object.contains("pages") && (!object["pages"].isArray() || object["pages"].toArray().size() > 64 || m_owner)) {
-        setError(tr("Invalid page collection."));
+    if (!validatePages(object, pages, userDocument))
         return false;
-    }
-    QSet<QString> pageIds;
-    for (const auto& entry : object["pages"].toArray()) {
-        const auto page = entry.toObject();
-        const auto id = page["id"].toString();
-        HomeLayout validator(m_registry);
-        validator.m_owner = this;
-        if (!ComponentSchema::safeId(id) || pageIds.contains(id) || page["name"].toString().trimmed().isEmpty() ||
-            page["name"].toString().size() > 80 || !page["layout"].isObject() ||
-            !validator.loadDocument(QJsonDocument(page["layout"].toObject()).toJson(), false)) {
-            setError(tr("Page %1 has an invalid identity, name or layout: %2")
-                         .arg(page["name"].toString(), validator.errorString()));
-            return false;
-        }
-        pageIds.insert(id);
-        pages.append(page);
-    }
     const auto homePage = object.value("homePageId");
     const auto rootPage = object.value("rootPage").toObject();
     const auto editorAppearance = object.value("studioAppearance").toObject().toVariantMap();
-    if (object.contains("studioAppearance")) {
-        auto effective = appearanceDefaults();
-        const auto packaged = studioOptions().value("appearance").toMap();
-        for (auto it = packaged.cbegin(); it != packaged.cend(); ++it)
-            effective[it.key()] = it.value();
-        for (auto it = editorAppearance.cbegin(); it != editorAppearance.cend(); ++it)
-            effective[it.key()] = it.value();
-        if (m_owner || !object["studioAppearance"].isObject() || !readableStudioAppearance(effective)) {
-            setError(tr("Studio colors must keep text and focus readable on normal and selected surfaces."));
-            return false;
-        }
-    }
-    if (object.contains("rootPage")) {
-        bool valid = !m_owner && object["rootPage"].isObject();
-        for (auto it = rootPage.begin(); it != rootPage.end(); ++it)
-            if (!QStringList{"name", "visible", "position"}.contains(it.key()))
-                valid = false;
-        const auto position = rootPage.value("position");
-        if (!rootPage.value("name").isString() || rootPage.value("name").toString().trimmed().isEmpty() ||
-            rootPage.value("name").toString().size() > 80 || rootPage.value("name").toString().contains(QChar::Null) ||
-            !rootPage.value("visible").isBool() || !position.isDouble() || position.toDouble() != position.toInt() ||
-            position.toInt() < 0 || position.toInt() > pages.size() ||
-            (!rootPage.value("visible").toBool() && homePage.toString().isEmpty()) ||
-            pages.size() + (rootPage.value("visible").toBool() ? 1 : 0) > 64)
-            valid = false;
-        if (!valid) {
-            setError(tr("Root page metadata is invalid. Nothing changed."));
-            return false;
-        }
-    } else if (!m_owner && pages.size() >= 64) {
-        setError(tr("The interface exceeds the 64-page limit including Home."));
+    if (!validateStudioAppearance(object, editorAppearance, userDocument))
         return false;
-    }
-    if (object.contains("homePageId") && (m_owner || !homePage.isString() ||
-                                          (!homePage.toString().isEmpty() && !pageIds.contains(homePage.toString())))) {
-        setError(tr("The designated Home page does not exist."));
+    if (!validateRootPage(object, rootPage, pages, userDocument))
         return false;
-    }
+    if (!validateHomePageId(object, homePage, pages))
+        return false;
     const auto theme = object.value("theme").toObject();
     auto composition = object.value("composition").toObject().toVariantMap();
-    if (composition.contains("appGallery") && !ComponentSchema::validComposition(composition)) {
-        auto fallbackComposition = composition;
-        fallbackComposition.remove("appGallery");
-        if (ComponentSchema::validComposition(fallbackComposition))
-            composition = fallbackComposition;
-    }
-    if ((object.contains("composition") && !object["composition"].isObject()) ||
-        !ComponentSchema::validComposition(composition)) {
-        setError(tr("Home composition is invalid."));
+    if (!validateComposition(object, composition))
         return false;
-    }
     const QColor start(theme.contains("backgroundStart")
                            ? theme.value("backgroundStart").toString()
                            : m_defaultTheme.value("backgroundStart", m_initialBackgroundStart).toString());
@@ -1006,6 +967,175 @@ bool HomeLayout::loadDocument(const QByteArray& data, bool userDocument) {
     QSet<QString> ids;
     QSet<QString> categoryIds;
     const auto categoryArray = object.value("categories").toArray();
+    if (!validateCategories(categoryArray, ids))
+        return false;
+    QJsonArray components;
+    if (!validateComponents(entries, version, categoryIds, components))
+        return false;
+    QString hierarchyError;
+    if (!ComponentSchema::hierarchyFits(components, composition, categoryArray, &hierarchyError)) {
+        setError(hierarchyError);
+        return false;
+    }
+    m_items = components;
+    m_pages = pages;
+    m_homePageId = homePage.toString();
+    m_rootPage = rootPage;
+    m_studioAppearance = editorAppearance;
+    m_composition = composition;
+    m_appearance = presentation;
+    m_themeKeys.clear();
+    for (const auto& key : theme.keys())
+        m_themeKeys.insert(key);
+    if (userDocument && version == 1)
+        m_legacyDocument = data;
+    m_categories = categoryArray;
+    m_brandVisible = theme.value("brandVisible").toBool(false);
+    m_backgroundStart = start.name();
+    m_backgroundEnd = end.name();
+    m_tileRoundness = qBound(0.0, theme.value("tileRoundness").toDouble(0.18), 1.0);
+    setError({});
+    return true;
+}
+
+bool HomeLayout::parseLayoutDocument(const QByteArray& data, QJsonDocument& document) {
+    QJsonParseError error;
+    document = QJsonDocument::fromJson(data, &error);
+    if (error.error != QJsonParseError::NoError || !document.isObject()) {
+        setError(tr("Home layout is not valid JSON."));
+        return false;
+    }
+    return true;
+}
+
+bool HomeLayout::validateDocumentStructure(const QJsonDocument& document, int version, const QJsonValue& entries,
+                                           bool userDocument) {
+    if (dataSizeExceedsLimit(document)) {
+        setError(tr("Home layout exceeds the supported size."));
+        return false;
+    }
+    if (version != 1 && version != 2) {
+        setError(userDocument ? tr("User Home layout is invalid; defaults were restored.")
+                              : tr("Default Home layout is invalid."));
+        return false;
+    }
+    if (!entries.isArray() || entries.toArray().size() > 1024) {
+        setError(userDocument ? tr("User Home layout is invalid; defaults were restored.")
+                              : tr("Default Home layout is invalid."));
+        return false;
+    }
+    return true;
+}
+
+bool HomeLayout::dataSizeExceedsLimit(const QJsonDocument& document) {
+    return document.toJson().size() > 4 * 1024 * 1024;
+}
+
+bool HomeLayout::validatePages(const QJsonObject& object, QJsonArray& pages, bool userDocument) {
+    if (object.contains("pages") && (!object["pages"].isArray() || object["pages"].toArray().size() > 64 || m_owner)) {
+        setError(tr("Invalid page collection."));
+        return false;
+    }
+    QSet<QString> pageIds;
+    for (const auto& entry : object["pages"].toArray()) {
+        const auto page = entry.toObject();
+        const auto id = page["id"].toString();
+        HomeLayout validator(m_registry);
+        validator.m_owner = this;
+        if (!ComponentSchema::safeId(id) || pageIds.contains(id) || page["name"].toString().trimmed().isEmpty() ||
+            page["name"].toString().size() > 80 || !page["layout"].isObject() ||
+            !validator.loadDocument(QJsonDocument(page["layout"].toObject()).toJson(), false)) {
+            setError(tr("Page %1 has an invalid identity, name or layout: %2")
+                         .arg(page["name"].toString(), validator.errorString()));
+            return false;
+        }
+        pageIds.insert(id);
+        pages.append(page);
+    }
+    return true;
+}
+
+bool HomeLayout::validateStudioAppearance(const QJsonObject& object, const QVariantMap& editorAppearance,
+                                          bool userDocument) {
+    if (!object.contains("studioAppearance"))
+        return true;
+    auto effective = appearanceDefaults();
+    const auto packaged = studioOptions().value("appearance").toMap();
+    for (auto it = packaged.cbegin(); it != packaged.cend(); ++it)
+        effective[it.key()] = it.value();
+    for (auto it = editorAppearance.cbegin(); it != editorAppearance.cend(); ++it)
+        effective[it.key()] = it.value();
+    if (m_owner || !object["studioAppearance"].isObject() || !readableStudioAppearance(effective)) {
+        setError(tr("Studio colors must keep text and focus readable on normal and selected surfaces."));
+        return false;
+    }
+    return true;
+}
+
+bool HomeLayout::validateRootPage(const QJsonObject& object, const QJsonObject& rootPage, const QJsonArray& pages,
+                                   bool userDocument) {
+    if (!object.contains("rootPage")) {
+        if (!m_owner && pages.size() >= 64) {
+            setError(tr("The interface exceeds the 64-page limit including Home."));
+            return false;
+        }
+        return true;
+    }
+    bool valid = !m_owner && object["rootPage"].isObject();
+    for (auto it = rootPage.begin(); it != rootPage.end(); ++it)
+        if (!QStringList{"name", "visible", "position"}.contains(it.key()))
+            valid = false;
+    const auto position = rootPage.value("position");
+    if (!rootPage.value("name").isString() || rootPage.value("name").toString().trimmed().isEmpty() ||
+        rootPage.value("name").toString().size() > 80 || rootPage.value("name").toString().contains(QChar::Null) ||
+        !rootPage.value("visible").isBool() || !position.isDouble() || position.toDouble() != position.toInt() ||
+        position.toInt() < 0 || position.toInt() > pages.size() ||
+        (!rootPage.value("visible").toBool() && homePageFromObject(object).isEmpty()) ||
+        pages.size() + (rootPage.value("visible").toBool() ? 1 : 0) > 64)
+        valid = false;
+    if (!valid) {
+        setError(tr("Root page metadata is invalid. Nothing changed."));
+        return false;
+    }
+    return true;
+}
+
+QVariant HomeLayout::homePageFromObject(const QJsonObject& object) {
+    return object.value("homePageId");
+}
+
+bool HomeLayout::validateHomePageId(const QJsonObject& object, const QVariant& homePage, const QJsonArray& pages) {
+    if (!object.contains("homePageId"))
+        return true;
+    if (m_owner)
+        return true;
+    if (!homePage.isString()) {
+        setError(tr("The designated Home page does not exist."));
+        return false;
+    }
+    if (!homePage.toString().isEmpty() && !pageIdsFromArray(pages).contains(homePage.toString())) {
+        setError(tr("The designated Home page does not exist."));
+        return false;
+    }
+    return true;
+}
+
+bool HomeLayout::validateComposition(const QJsonObject& object, QVariantMap& composition) {
+    if (composition.contains("appGallery") && !ComponentSchema::validComposition(composition)) {
+        auto fallbackComposition = composition;
+        fallbackComposition.remove("appGallery");
+        if (ComponentSchema::validComposition(fallbackComposition))
+            composition = fallbackComposition;
+    }
+    if ((object.contains("composition") && !object["composition"].isObject()) ||
+        !ComponentSchema::validComposition(composition)) {
+        setError(tr("Home composition is invalid."));
+        return false;
+    }
+    return true;
+}
+
+bool HomeLayout::validateCategories(const QJsonArray& categoryArray, QSet<QString>& categoryIds) {
     if (categoryArray.size() > HomeLayout::MaxLayoutCategories) {
         setError(tr("Too many Home categories."));
         return false;
@@ -1022,7 +1152,12 @@ bool HomeLayout::loadDocument(const QByteArray& data, bool userDocument) {
         }
         categoryIds.insert(id);
     }
-    QJsonArray components;
+    return true;
+}
+
+bool HomeLayout::validateComponents(const QJsonValue& entries, int version, const QSet<QString>& categoryIds,
+                                     QJsonArray& components) {
+    QSet<QString> ids;
     for (const auto& value : entries.toArray()) {
         QString componentError;
         const auto normalized =
@@ -1051,31 +1186,9 @@ bool HomeLayout::loadDocument(const QByteArray& data, bool userDocument) {
         ids.insert(id);
         components.append(item);
     }
-    QString hierarchyError;
-    if (!ComponentSchema::hierarchyFits(components, composition, categoryArray, &hierarchyError)) {
-        setError(hierarchyError);
-        return false;
-    }
-    m_items = components;
-    m_pages = pages;
-    m_homePageId = homePage.toString();
-    m_rootPage = rootPage;
-    m_studioAppearance = editorAppearance;
-    m_composition = composition;
-    m_appearance = presentation;
-    m_themeKeys.clear();
-    for (const auto& key : theme.keys())
-        m_themeKeys.insert(key);
-    if (userDocument && version == 1)
-        m_legacyDocument = data;
-    m_categories = categoryArray;
-    m_brandVisible = theme.value("brandVisible").toBool(false);
-    m_backgroundStart = start.name();
-    m_backgroundEnd = end.name();
-    m_tileRoundness = qBound(0.0, theme.value("tileRoundness").toDouble(0.18), 1.0);
-    setError({});
     return true;
 }
+
 bool HomeLayout::addAppTile(const QString& appId) {
     const auto* definition = m_registry->find(appId);
     if (!definition)

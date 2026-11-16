@@ -220,6 +220,15 @@ class HomeLayout final : public QObject {
     friend class PageModel;
     friend class StudioSession;
     bool loadDocument(const QByteArray& data, bool userDocument);
+    bool parseLayoutDocument(const QByteArray& data, QJsonDocument& document);
+    bool validateDocumentStructure(const QJsonDocument& document, int version, const QJsonValue& entries, bool userDocument);
+    bool validatePages(const QJsonObject& object, QJsonArray& pages, bool userDocument);
+    bool validateStudioAppearance(const QJsonObject& object, const QVariantMap& editorAppearance, bool userDocument);
+    bool validateRootPage(const QJsonObject& object, const QJsonObject& rootPage, const QJsonArray& pages, bool userDocument);
+    bool validateHomePageId(const QJsonObject& object, const QVariant& homePage, const QJsonArray& pages);
+    bool validateComposition(const QJsonObject& object, QVariantMap& composition);
+    bool validateCategories(const QJsonArray& categoryArray, QSet<QString>& categoryIds);
+    bool validateComponents(const QJsonValue& entries, int version, const QSet<QString>& categoryIds, QJsonArray& components);
     bool save();
     QByteArray documentData() const;
     QString skinDirectory() const;
@@ -241,6 +250,11 @@ class HomeLayout final : public QObject {
     void appendHdmiInputChoices(QVariantList& choices) const;
     void appendCollectionChoices(QVariantList& choices) const;
     void appendAppChoices(QVariantList& choices, const QString& type) const;
+    bool resolveCategoryItems(const QVariantList& resolved, const QJsonObject& category) const;
+    QVariantList resolveUncategorizedItems(const QVariantList& resolved) const;
+    bool isValidArtworkFile(const QFileInfo& file) const;
+    bool isValidArtworkSize(const QSize& size) const;
+    bool isValidWallpaperImage(const QByteArray& data) const;
     QJsonArray m_pages;
     QString m_homePageId;
     QJsonObject m_rootPage;
