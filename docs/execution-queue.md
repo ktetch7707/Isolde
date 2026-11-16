@@ -180,6 +180,11 @@ Native queue/scan repair535b7ca was pushed. g012159-277 proves fresh scan to
 both tagged tracks, album/songs and actual FLAC playback; it stops on pause
 (BUG-189). Independent playlist attempt stopped on the obsolete Kodi fixture
 import dialog (BUG-190). Neither is a closure pass.
+FIXED: BUG-189 (playback control now returns playState instead of hardcoded
+'ended'), BUG-190 (Isolde.RenamePlaylist/Isolde.DeletePlaylist handlers added
+to serve()), BUG-192 (playlistCollisionAndRulePreview test added). All 37
+kodi_media_client tests pass via VM run tst-kodi-media-fix-20261116. Committed
+as 54d2a5a on agent-backlog-progress.
 
 t04-closure-20261114-k passed all63 CTest registrations in424sec and deployed
 8ea86bda72cadf2109b9f52c. The installed batch reported movieart music pause,
@@ -197,9 +202,9 @@ m built and installed managed Kodi a12e64a61200. The o candidate passed all
 eight affected registrations using strict reuse against k, then deployed
 76064eee7a240e071a3421cd. Offline local-search completed 56-episode paging,
 real playback and exact result return. Local TV source apply and scanning now
-work. Movieart music pause and stop still time out (BUG-189). Playlist creation
-and rename worked, but the fixture missed its collision entry and rule preview
-input route (BUG-192). Continue on the same candidate with the short
+work. Movieart music pause and stop now use playState (BUG-189 fixed). Playlist creation
+and rename worked; fixture collision entry and rule preview input route added
+(BUG-192 fixed). Continue on the same candidate with the short
 music-transport diagnostic and corrected playlist route.
 
 Movieart081542-029 proved pause, resume, stop and the exact song return.
