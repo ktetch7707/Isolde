@@ -233,6 +233,8 @@ class HomeLayout final : public QObject {
     QSet<QString> computeHiddenItemIds() const;
     void appendItem(const QJsonValue& value, QVariantList& result, const QSet<QString>& hidden) const;
     void setItemCommonFields(QVariantMap& item, const QJsonObject& object) const;
+    void setItemAppFields(QVariantMap& item, const QJsonObject& object) const;
+    void setItemActionFields(QVariantMap& item, const QJsonObject& object) const;
     QString itemLogo(QVariantMap& item, const QJsonObject& object, const QVariantList& actionList) const;
     void setItemUnavailableReason(QVariantMap& item, const QJsonObject& object, const QVariantList& actionList) const;
     QJsonArray m_pages;

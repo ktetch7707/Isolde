@@ -118,8 +118,15 @@ bool validateNumericKey(const QString& key, const QVariant& variant, const QVari
     const double number = variant.toDouble(&ok);
     const double low = numericRangeLow(key);
     const double high = numericRangeHigh(key);
-    return ok && qIsFinite(number) && number >= low && number <= high &&
-           !(key == "homeColumns" || key == "spacing") || number == qFloor(number);
+    return isValidNumberValue(number, ok, low, high, key);
+}
+
+bool isValidNumberValue(double number, bool ok, double low, double high, const QString& key) {
+    if (!ok || !qIsFinite(number) || number < low || number > high)
+        return false;
+    if (key == "homeColumns" || key == "spacing")
+        return number == qFloor(number);
+    return true;
 }
 
 double numericRangeLow(const QString& key) {
@@ -276,31 +283,39 @@ void HomeLayout::appendItem(const QJsonValue& value, QVariantList& result, const
 }
 
 void HomeLayout::setItemCommonFields(QVariantMap& item, const QJsonObject& object) const {
-    if (item.value("kind") == QStringLiteral("app")) {
-        const auto appId = item.value("appId").toString();
-        const auto* app = m_registry->find(appId);
-        item.insert("name",
-                    !item.value("name").toString().isEmpty() ? item.value("name")
-                    : app                                    ? app->name
-                                                             : appId);
-        item.insert("section", app ? app->section : QStringLiteral("Missing app"));
-        const auto tileSymbol = item.value("symbol").toString();
-        const auto tileAccent = item.value("accent").toString();
-        item.insert("symbol", tileSymbol.isEmpty() ? (app ? app->symbol : "?") : tileSymbol);
-        item.insert("accent", tileAccent.isEmpty() ? (app ? app->accent.name() : "#64748B") : tileAccent);
-        item.insert("presentationMode", app ? app->presentationMode : "native-tv");
-        item.insert("networkRequirement", app ? app->networkRequirement : "none");
-    } else if (item.value("kind") == QStringLiteral("action")) {
-        const auto section = item.value("section").toString();
-        const auto symbol = item.value("symbol").toString();
-        const auto accent = item.value("accent").toString();
-        const auto networkRequirement = item.value("networkRequirement").toString();
-        item.insert("section", section.isEmpty() ? tr("Custom") : section);
-        item.insert("symbol", symbol.isEmpty() ? QStringLiteral("•") : symbol);
-        item.insert("accent", accent.isEmpty() ? QStringLiteral("#64748B") : accent);
-        item.insert("networkRequirement",
-                    networkRequirement.isEmpty() ? QStringLiteral("none") : networkRequirement);
-    }
+    const auto kind = item.value("kind").toString();
+    if (kind == QStringLiteral("app"))
+        setItemAppFields(item, object);
+    else if (kind == QStringLiteral("action"))
+        setItemActionFields(item);
+}
+
+void HomeLayout::setItemAppFields(QVariantMap& item, const QJsonObject& object) const {
+    const auto appId = item.value("appId").toString();
+    const auto* app = m_registry->find(appId);
+    item.insert("name",
+                !item.value("name").toString().isEmpty() ? item.value("name")
+                : app                                    ? app->name
+                                                         : appId);
+    item.insert("section", app ? app->section : QStringLiteral("Missing app"));
+    const auto tileSymbol = item.value("symbol").toString();
+    const auto tileAccent = item.value("accent").toString();
+    item.insert("symbol", tileSymbol.isEmpty() ? (app ? app->symbol : "?") : tileSymbol);
+    item.insert("accent", tileAccent.isEmpty() ? (app ? app->accent.name() : "#64748B") : tileAccent);
+    item.insert("presentationMode", app ? app->presentationMode : "native-tv");
+    item.insert("networkRequirement", app ? app->networkRequirement : "none");
+}
+
+void HomeLayout::setItemActionFields(QVariantMap& item, const QJsonObject& object) const {
+    const auto section = item.value("section").toString();
+    const auto symbol = item.value("symbol").toString();
+    const auto accent = item.value("accent").toString();
+    const auto networkRequirement = item.value("networkRequirement").toString();
+    item.insert("section", section.isEmpty() ? tr("Custom") : section);
+    item.insert("symbol", symbol.isEmpty() ? QStringLiteral("•") : symbol);
+    item.insert("accent", accent.isEmpty() ? QStringLiteral("#64748B") : accent);
+    item.insert("networkRequirement",
+                networkRequirement.isEmpty() ? QStringLiteral("none") : networkRequirement);
 }
 
 QString HomeLayout::logoFromItem(QVariantMap& item, const QJsonObject& object, const QVariantList& actionList) const {
