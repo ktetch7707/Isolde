@@ -256,7 +256,7 @@ void KodiMedia::moveCollection(const QString& id, int offset) {
         }
 }
 void KodiMedia::playCollectionMovie(const QString& id, int movieId) {
-    if (movieId < 1 || m_playbackActive || (m_busy && m_stage != 0 && m_stage != 1))
+    if (!canPlayCollectionMovie(id, movieId))
         return;
     for (const auto& entry : collections()) {
         if (entry.toMap().value("id") == id && entry.toMap().value("media", "movies").toString() == "movies") {
@@ -266,6 +266,10 @@ void KodiMedia::playCollectionMovie(const QString& id, int movieId) {
             return;
         }
     }
+}
+
+bool KodiMedia::canPlayCollectionMovie(const QString& id, int movieId) {
+    return movieId >= 1 && !m_playbackActive && !(m_busy && m_stage != 0 && m_stage != 1);
 }
 void KodiMedia::openCollectionShow(const QString& id, int tvShowId) {
     if (tvShowId < 1 || !canNavigate())

@@ -275,15 +275,14 @@ QJsonObject HomeLayout::skinSnapshot(const QString& id) const {
 }
 bool HomeLayout::applySkin(const QString& id) {
     const auto skin = skinSnapshot(id);
-    if (skin["schemaVersion"].toDouble(-1) != 1 || !skin["layout"].isObject() || !skin["assets"].isObject()) {
-        setError(tr("This skin is missing or invalid."));
+    if (!isValidSkin(skin))
         return false;
-    }
-    if (skin.contains("pagePolicy") && skin["pagePolicy"] != "add-missing") {
-        setError(tr("Unsupported skin page policy."));
-        return false;
-    }
     return applySkinDocument(skin["layout"].toObject(), skin["assets"].toObject(), skin["pagePolicy"] == "add-missing");
+}
+
+bool HomeLayout::isValidSkin(const QJsonObject& skin) {
+    return skin["schemaVersion"].toDouble(-1) == 1 && skin["layout"].isObject() && skin["assets"].isObject() &&
+           (!skin.contains("pagePolicy") || skin["pagePolicy"] == "add-missing");
 }
 QVariantList HomeLayout::skinPageUpdates(const QString& id) const {
     if (m_owner || (id != "builtin-pastel" && id != "builtin-lounge"))

@@ -23,6 +23,7 @@ class KodiShelves final : public QObject {
 
   private:
     void rebuild();
+    void openShelf(const Shelf& shelf);
     QString m_profile, m_testDirectory;
     KodiMedia* m_library;
     bool m_available = false;

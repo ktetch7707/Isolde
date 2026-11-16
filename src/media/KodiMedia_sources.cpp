@@ -37,7 +37,7 @@ void KodiMedia::refreshSources() {
     request("Isolde.GetSources");
 }
 void KodiMedia::previewSource(const QVariantMap& source) {
-    if (m_busy || m_playbackActive || !m_sourceGuard || !m_sourceGuard())
+    if (!canPreviewSource())
         return;
     m_sourceDraft = source;
     m_sourcePreviewReady = false;
@@ -47,6 +47,10 @@ void KodiMedia::previewSource(const QVariantMap& source) {
     m_sourceStatus = "Validating source draft · nothing saved…";
     emit changed();
     request("Isolde.PreviewSource", {{"source", QJsonObject::fromVariantMap(source)}});
+}
+
+bool KodiMedia::canPreviewSource() const {
+    return !m_busy && !m_playbackActive && m_sourceGuard && m_sourceGuard();
 }
 void KodiMedia::applySource(const QVariantMap& source) {
     if (m_busy || m_playbackActive || !m_sourceGuard || !m_sourceGuard())

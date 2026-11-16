@@ -73,14 +73,17 @@ void KodiShelves::invalidateAllShelves() {
 void KodiShelves::refresh() {
     if (!m_available)
         return;
-    for (const auto& shelf : m_shelves) {
-        if (shelf.definition.value("kind") == "manual")
-            shelf.client->openCollection(shelf.definition.value("id").toString());
-        else
-            shelf.client->openView(shelf.definition.value("media", "movies").toString(),
-                                   shelf.definition.value("kind").toString(),
-                                   shelf.definition.value("value").toString());
-    }
+    for (const auto& shelf : m_shelves)
+        openShelf(shelf);
+}
+
+void KodiShelves::openShelf(const Shelf& shelf) {
+    if (shelf.definition.value("kind") == "manual")
+        shelf.client->openCollection(shelf.definition.value("id").toString());
+    else
+        shelf.client->openView(shelf.definition.value("media", "movies").toString(),
+                               shelf.definition.value("kind").toString(),
+                               shelf.definition.value("value").toString());
 }
 QVariantList KodiShelves::sections() const {
     QVariantList result;
