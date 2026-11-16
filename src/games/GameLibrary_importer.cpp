@@ -1,4 +1,4 @@
-#include "GameLibrary.h"
+﻿#include "GameLibrary.h"
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
@@ -15,7 +15,8 @@
 #include "GameEmulators.h"
 #include "ManagedGamePaths.h"
 #include "MediaGrants.h"
-#include "OpticalDiscAdapter.h"
+#include "OpticalDiscIdentity.h"
+#include "OpticalDiscMount.h"
 #include "OpticalDiscGrants.h"
 #include "SteamLibraryGrants.h"
 
@@ -29,15 +30,15 @@
 
 QString GameLibrary::checkedTarget(const QString& root, const QString& relative) {
     QString validatedRoot = root;
-    const bool optical = OpticalDiscAdapter::isRootReference(root);
+    const bool optical = OpticalDiscIdentify::isRootReference(root);
     if (optical) {
-        const auto mediaId = OpticalDiscAdapter::mediaIdFromRoot(root);
+        const auto mediaId = OpticalDiscIdentify::mediaIdFromRoot(root);
         if (!OpticalDiscGrants::approved(m_emulatorProfile, mediaId)) {
             fail(tr("This profile has not approved that optical identity. Insert the disc and explicitly approve it in "
                     "Games."));
             return {};
         }
-        const auto media = OpticalDiscAdapter::resolveRootReference(root);
+        const auto media = OpticalDiscClassify::resolveRootReference(root);
         const auto disc = media.value("disc").toMap();
         if (media.value("state") != "ready") {
             const auto number = media.value("expectedDisc").toInt();
@@ -418,22 +419,22 @@ bool GameLibrary::removeSteamLibrary(const QString& path) {
 }
 
 QVariantList GameLibrary::mountedOpticalDiscs() const {
-    return m_ready ? OpticalDiscAdapter::mountedDiscs() : QVariantList{};
+    return m_ready ? OpticalDiscHash::mountedDiscs() : QVariantList{};
 }
 
 QVariantList GameLibrary::refreshOpticalDiscs() const {
     if (!m_ready)
         return {};
-    for (const auto& item : OpticalDiscAdapter::mountedDiscs())
-        OpticalDiscAdapter::retryIdentity(item.toMap().value("device").toString());
-    return OpticalDiscAdapter::mountedDiscs();
+    for (const auto& item : OpticalDiscHash::mountedDiscs())
+        OpticalDiscProbe::retryIdentity(item.toMap().value("device").toString());
+    return OpticalDiscHash::mountedDiscs();
 }
 
 QVariantMap GameLibrary::revalidateOpticalDisc(const QString& observationId, const QString& device) const {
     if (!m_ready || !QRegularExpression("^[0-9a-f]{64}$").match(observationId).hasMatch() ||
         !QRegularExpression("^/dev/sr[0-9]{1,3}$").match(device).hasMatch())
         return {{"schemaVersion", 1}, {"state", "invalid"}};
-    return OpticalDiscAdapter::revalidate(observationId, device);
+    return OpticalDiscProbe::revalidate(observationId, device);
 }
 
 bool GameLibrary::registerOpticalGame(const QString& title,
@@ -455,7 +456,7 @@ bool GameLibrary::registerOpticalGame(const QString& title,
         return {};
     }
     const auto disc = media.value("disc").toMap();
-    const auto root = OpticalDiscAdapter::rootReference(disc);
+    const auto root = OpticalDiscIdentify::rootReference(disc);
     if (root.isEmpty() || !disc.value("directPlaySupported").toBool()) {
         fail(disc.value("mountTracking") == "unavailable"
                  ? tr("This system cannot identify the mounted disc instance. Direct Play is unavailable; update the "
@@ -525,7 +526,7 @@ bool GameLibrary::mountOpticalDisc(const QString& observationId, const QString& 
         return fail(
             tr("The selected disc or drive changed. Refresh optical media and review it again before mounting."));
     QString error;
-    if (!OpticalDiscAdapter::mountReadOnly(device, &error))
+    if (!OpticalDiscMount::mountReadOnly(device, &error))
         return fail(error);
     m_error.clear();
     emit errorChanged();
@@ -544,7 +545,7 @@ bool GameLibrary::ejectOpticalDisc(const QString& observationId, const QString& 
         return fail(
             tr("The selected disc or drive changed. Refresh optical media and review it again before ejecting."));
     QString error;
-    if (!OpticalDiscAdapter::eject(device, &error))
+    if (!OpticalDiscMount::eject(device, &error))
         return fail(error);
     m_error.clear();
     emit errorChanged();
@@ -1132,3 +1133,5 @@ bool GameLibrary::uninstallManagedGame(const QString& id, bool confirmed) {
     emit portableInstallChanged();
     return true;
 }
+
+

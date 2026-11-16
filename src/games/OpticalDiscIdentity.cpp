@@ -1,12 +1,6 @@
-#include "OpticalDiscAdapter.h"
+#include "OpticalDiscIdentity.h"
 
 #include <QCryptographicHash>
-#include <QDBusConnection>
-#include <QDBusInterface>
-#include <QDBusMessage>
-#include <QDBusObjectPath>
-#include <QDBusVariant>
-#include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QMap>
@@ -101,7 +95,7 @@ QVariantMap udfDescriptorForDevice(QFile* file, quint64 size) {
     const auto descriptors = file->read(qint64(length));
     if (quint64(descriptors.size()) != length)
         return {};
-    return OpticalDiscAdapter::parseUdfVolumeDescriptors(anchor, descriptors, quint32(location));
+    return OpticalDiscParse::parseUdfVolumeDescriptors(anchor, descriptors, quint32(location));
 }
 
 QByteArray udfDstringAscii(const QByteArray& field, bool* valid) {
@@ -182,10 +176,10 @@ QVariantMap contentIdentity(const QString& device) {
         QVariantMap iso9660Descriptor, udfDescriptor;
         if (diskInfo(input, &before, &bytes) && before == sequence && bytes == size) {
             if (size >= 17 * 2048 && input.seek(16 * 2048))
-                iso9660Descriptor = OpticalDiscAdapter::parseIsoVolumeDescriptor(input.read(2048));
+                iso9660Descriptor = OpticalDiscParse::parseIsoVolumeDescriptor(input.read(2048));
             udfDescriptor = udfDescriptorForDevice(&input, size);
             if (input.seek(0))
-                digest = OpticalDiscAdapter::hashContent(&input, size);
+                digest = OpticalDiscHash::hashContent(&input, size);
             if (::ioctl(input.handle(), BLKGETDISKSEQ, &after) != 0 ||
                 ::ioctl(input.handle(), BLKGETSIZE64, &afterSize) != 0 || after != sequence || afterSize != size)
                 digest.clear();
@@ -206,61 +200,7 @@ QVariantMap contentIdentity(const QString& device) {
 }
 } // namespace
 
-QString OpticalDiscAdapter::mountObservationId(const QString& device,
-                                               const QString& filesystem,
-                                               const QString& label,
-                                               const QString& root,
-                                               const QString& sequence,
-                                               const QString& hashState,
-                                               const QString& mediaId,
-                                               const QString& mountInstance) {
-    const auto fields = QStringList{device, filesystem, label, root, sequence, hashState, mediaId, mountInstance};
-    QCryptographicHash hash(QCryptographicHash::Sha256);
-    for (const auto& field : fields) {
-        const auto bytes = field.toUtf8();
-        hash.addData(QByteArray::number(bytes.size()));
-        hash.addData(":", 1);
-        hash.addData(bytes);
-    }
-    return QString::fromLatin1(hash.result().toHex());
-}
-
-QByteArray OpticalDiscAdapter::hashContent(QIODevice* input, quint64 size) {
-    if (!input || !input->isReadable() || !size || size > MaxOpticalBytes)
-        return {};
-    QCryptographicHash hash(QCryptographicHash::Sha256);
-    quint64 remaining = size;
-    while (remaining) {
-        const auto chunk = input->read(qint64(qMin<quint64>(remaining, 1024 * 1024)));
-        if (chunk.isEmpty())
-            return {};
-        hash.addData(chunk);
-        remaining -= quint64(chunk.size());
-    }
-    return hash.result();
-}
-
-void OpticalDiscAdapter::retryIdentity(const QString& device) {
-    auto* cache = hashCache();
-    QMutexLocker lock(&cache->mutex);
-    auto entry = cache->hashes.find(device);
-    if (entry != cache->hashes.end() && entry->state == "unreadable")
-        cache->hashes.erase(entry);
-}
-
-QVariantMap OpticalDiscAdapter::identityForContent(QVariantMap descriptor, const QString& contentId) {
-    if (!QRegularExpression("^[0-9a-f]{64}$").match(contentId).hasMatch())
-        return {};
-    descriptor["mediaId"] = contentId;
-    if (descriptor.value("mediaSetId").toString().isEmpty()) {
-        descriptor["mediaSetId"] = contentId;
-        descriptor["discNumber"] = 1;
-        descriptor["discCount"] = 1;
-    }
-    return rootReference(descriptor).isEmpty() ? QVariantMap{} : descriptor;
-}
-
-QVariantMap OpticalDiscAdapter::parseIsoVolumeDescriptor(const QByteArray& descriptor) {
+QVariantMap OpticalDiscParse::parseIsoVolumeDescriptor(const QByteArray& descriptor) {
     if (descriptor.size() != 2048 || quint8(descriptor[0]) != 1 || descriptor.mid(1, 5) != "CD001" ||
         quint8(descriptor[6]) != 1)
         return {};
@@ -283,9 +223,9 @@ QVariantMap OpticalDiscAdapter::parseIsoVolumeDescriptor(const QByteArray& descr
         {"volumeIdentifier", QString::fromLatin1(volumeId)}};
 }
 
-QVariantMap OpticalDiscAdapter::parseUdfVolumeDescriptors(const QByteArray& anchorDescriptor,
-                                                          const QByteArray& volumeDescriptors,
-                                                          quint32 sequenceLocation) {
+QVariantMap OpticalDiscParse::parseUdfVolumeDescriptors(const QByteArray& anchorDescriptor,
+                                                        const QByteArray& volumeDescriptors,
+                                                        quint32 sequenceLocation) {
     constexpr int sectorSize = 2048;
     constexpr int maxDescriptorBytes = 2 * 1024 * 1024;
     if (!validUdfTag(anchorDescriptor, 8, 256) || le16(anchorDescriptor, 0) != 2 || volumeDescriptors.isEmpty() ||
@@ -351,9 +291,9 @@ QVariantMap OpticalDiscAdapter::parseUdfVolumeDescriptors(const QByteArray& anch
         {"volumeIdentifier", QString::fromLatin1(volumeId)}};
 }
 
-QVariantMap OpticalDiscAdapter::descriptorForFilesystem(const QString& filesystem,
-                                                        const QVariantMap& iso9660Descriptor,
-                                                        const QVariantMap& udfDescriptor) {
+QVariantMap OpticalDiscParse::descriptorForFilesystem(const QString& filesystem,
+                                                      const QVariantMap& iso9660Descriptor,
+                                                      const QVariantMap& udfDescriptor) {
     if (filesystem == "iso9660")
         return iso9660Descriptor;
     if (filesystem == "udf")
@@ -361,16 +301,28 @@ QVariantMap OpticalDiscAdapter::descriptorForFilesystem(const QString& filesyste
     return {};
 }
 
-QVariantMap OpticalDiscAdapter::identityForDevice(const QString& device) {
+QVariantMap OpticalDiscIdentify::identityForDevice(const QString& device) {
     if (!QRegularExpression("^/dev/sr[0-9]{1,3}$").match(device).hasMatch())
         return {};
     QFile block(device);
     if (!block.open(QIODevice::ReadOnly) || !block.seek(16 * 2048))
         return {};
-    return parseIsoVolumeDescriptor(block.read(2048));
+    return OpticalDiscParse::parseIsoVolumeDescriptor(block.read(2048));
 }
 
-QString OpticalDiscAdapter::rootReference(const QVariantMap& disc) {
+QVariantMap OpticalDiscIdentify::identityForContent(QVariantMap descriptor, const QString& contentId) {
+    if (!QRegularExpression("^[0-9a-f]{64}$").match(contentId).hasMatch())
+        return {};
+    descriptor["mediaId"] = contentId;
+    if (descriptor.value("mediaSetId").toString().isEmpty()) {
+        descriptor["mediaSetId"] = contentId;
+        descriptor["discNumber"] = 1;
+        descriptor["discCount"] = 1;
+    }
+    return OpticalDiscIdentify::rootReference(descriptor).isEmpty() ? QVariantMap{} : descriptor;
+}
+
+QString OpticalDiscIdentify::rootReference(const QVariantMap& disc) {
     const auto id = disc.value("mediaId").toString();
     const auto set = disc.value("mediaSetId").toString();
     const int number = disc.value("discNumber").toInt(), count = disc.value("discCount").toInt();
@@ -380,7 +332,7 @@ QString OpticalDiscAdapter::rootReference(const QVariantMap& disc) {
     return "/__isolde_optical__/" + id + "/" + set + "/" + QString::number(number) + "/" + QString::number(count);
 }
 
-bool OpticalDiscAdapter::isRootReference(const QString& root) {
+bool OpticalDiscIdentify::isRootReference(const QString& root) {
     static const QRegularExpression pattern(
         "^/__isolde_optical__/([0-9a-f]{64})/([0-9a-f]{64})/([1-9][0-9]?)/([1-9][0-9]?)$");
     const auto match = pattern.match(root);
@@ -391,16 +343,16 @@ bool OpticalDiscAdapter::isRootReference(const QString& root) {
     return numberOk && countOk && number <= count && count <= 99 && QDir::cleanPath(root) == root;
 }
 
-QString OpticalDiscAdapter::mediaIdFromRoot(const QString& root) {
+QString OpticalDiscIdentify::mediaIdFromRoot(const QString& root) {
     if (!isRootReference(root))
         return {};
     return root.split('/').at(2);
 }
 
-QVariantMap OpticalDiscAdapter::currentMedia(const QString& mediaId) {
+QVariantMap OpticalDiscClassify::currentMedia(const QString& mediaId) {
     if (!QRegularExpression("^[0-9a-f]{64}$").match(mediaId).hasMatch())
         return {{"state", "invalid"}};
-    for (const auto& item : mountedDiscs()) {
+    for (const auto& item : OpticalDiscHash::mountedDiscs()) {
         const auto disc = item.toMap();
         if (disc.value("state") == "mounted" && disc.value("mediaId") == mediaId)
             return {{"state", "ready"}, {"disc", disc}};
@@ -408,12 +360,12 @@ QVariantMap OpticalDiscAdapter::currentMedia(const QString& mediaId) {
     return {{"state", "missing"}};
 }
 
-QVariantMap OpticalDiscAdapter::resolveRootReference(const QString& root) {
-    return classifyRootReference(root, mountedDiscs());
+QVariantMap OpticalDiscClassify::resolveRootReference(const QString& root) {
+    return classifyRootReference(root, OpticalDiscHash::mountedDiscs());
 }
 
-QVariantMap OpticalDiscAdapter::classifyRootReference(const QString& root, const QVariantList& currentDiscs) {
-    if (!isRootReference(root))
+QVariantMap OpticalDiscClassify::classifyRootReference(const QString& root, const QVariantList& currentDiscs) {
+    if (!OpticalDiscIdentify::isRootReference(root))
         return {{"state", "invalid"}};
     const auto parts = root.split('/');
     const auto mediaId = parts.at(2), setId = parts.at(3);
@@ -437,11 +389,11 @@ QVariantMap OpticalDiscAdapter::classifyRootReference(const QString& root, const
     return {{"state", "missing"}, {"expectedDisc", expectedNumber}, {"discCount", expectedCount}};
 }
 
-QVariantMap OpticalDiscAdapter::classifySession(const QString& reference,
-                                                const QString& pinnedRoot,
-                                                bool approved,
-                                                const QVariantList& currentDiscs,
-                                                const QString& pinnedObservation) {
+QVariantMap OpticalDiscClassify::classifySession(const QString& reference,
+                                                 const QString& pinnedRoot,
+                                                 bool approved,
+                                                 const QVariantList& currentDiscs,
+                                                 const QString& pinnedObservation) {
     auto classified = classifyRootReference(reference, currentDiscs);
     for (const auto& item : currentDiscs) {
         const auto disc = item.toMap();
@@ -480,17 +432,7 @@ QVariantMap OpticalDiscAdapter::classifySession(const QString& reference,
                                     "reconnect the expected disc, then retry Play."}};
 }
 
-QVariantMap OpticalDiscAdapter::latchSession(const QVariantMap& previous, QVariantMap current) {
-    const auto previousState = previous.value("state").toString();
-    if (current.value("state") == "pinned" && !previousState.isEmpty() && previousState != "pinned") {
-        current["state"] = "interrupted";
-        current["recovery"] = "The original session mount cannot be restored by reinsertion. Return Home and retry "
-                              "Play with the expected disc.";
-    }
-    return current;
-}
-
-QVariantList OpticalDiscAdapter::mountedDiscs() {
+QVariantList OpticalDiscHash::mountedDiscs() {
     QVariantList result;
     QSet<QString> mountedDevices;
     for (const auto& storage : QStorageInfo::mountedVolumes()) {
@@ -509,23 +451,24 @@ QVariantList OpticalDiscAdapter::mountedDiscs() {
         mountedDevices.insert(device);
         const auto content = contentIdentity(device);
         const auto contentId = content.value("contentId").toString();
-        const auto descriptor = descriptorForFilesystem(
+        const auto descriptor = OpticalDiscParse::descriptorForFilesystem(
             filesystem, content.value("iso9660Descriptor").toMap(), content.value("udfDescriptor").toMap());
         const auto identity =
-            content.value("hashState") == "ready" ? identityForContent(descriptor, contentId) : QVariantMap{};
+            content.value("hashState") == "ready" ? OpticalDiscIdentify::identityForContent(descriptor, contentId)
+                                                  : QVariantMap{};
 #ifdef Q_OS_LINUX
         const auto instance = mountInstance(root);
 #else
         const QString instance;
 #endif
-        const auto observationId = mountObservationId(device,
-                                                      filesystem,
-                                                      storage.name(),
-                                                      root,
-                                                      content.value("diskSequence").toString(),
-                                                      content.value("hashState").toString(),
-                                                      identity.value("mediaId").toString(),
-                                                      instance);
+        const auto observationId = OpticalDiscHash::mountObservationId(device,
+                                                                       filesystem,
+                                                                       storage.name(),
+                                                                       root,
+                                                                       content.value("diskSequence").toString(),
+                                                                       content.value("hashState").toString(),
+                                                                       identity.value("mediaId").toString(),
+                                                                       instance);
         result.append(QVariantMap{
             {"schemaVersion", 1},
             {"sourceType", "pc-optical-disc"},
@@ -544,7 +487,7 @@ QVariantList OpticalDiscAdapter::mountedDiscs() {
             {"discCount", identity.value("discCount")},
             {"volumeIdentifier", identity.value("volumeIdentifier")},
             {"hashState", content.value("hashState")},
-            {"directPlaySupported", !instance.isEmpty() && !contentId.isEmpty() && !rootReference(identity).isEmpty()},
+            {"directPlaySupported", !instance.isEmpty() && !contentId.isEmpty() && !OpticalDiscIdentify::rootReference(identity).isEmpty()},
             {"readOnly", true},
             {"state", "mounted"}});
         if (result.size() >= 4)
@@ -570,8 +513,8 @@ QVariantList OpticalDiscAdapter::mountedDiscs() {
             if (diskInfo(block, &diskSequence, &diskSize))
                 sequence = QString::number(diskSequence);
 #endif
-            const auto observationId =
-                mountObservationId(device, "unknown", {}, {}, sequence, "unmounted", QString::number(sectors), {});
+            const auto observationId = OpticalDiscHash::mountObservationId(
+                device, "unknown", {}, {}, sequence, "unmounted", QString::number(sectors), {});
             result.append(QVariantMap{{"schemaVersion", 1},
                                       {"sourceType", "pc-optical-disc"},
                                       {"observationId", observationId},
@@ -596,163 +539,43 @@ QVariantList OpticalDiscAdapter::mountedDiscs() {
     return result;
 }
 
-QVariantMap OpticalDiscAdapter::revalidate(const QString& observationId, const QString& device) {
-    return classifyRevalidation(observationId, device, mountedDiscs());
+QByteArray OpticalDiscHash::hashContent(QIODevice* input, quint64 size) {
+    if (!input || !input->isReadable() || !size || size > MaxOpticalBytes)
+        return {};
+    QCryptographicHash hash(QCryptographicHash::Sha256);
+    quint64 remaining = size;
+    while (remaining) {
+        const auto chunk = input->read(qint64(qMin<quint64>(remaining, 1024 * 1024)));
+        if (chunk.isEmpty())
+            return {};
+        hash.addData(chunk);
+        remaining -= quint64(chunk.size());
+    }
+    return hash.result();
 }
 
-bool OpticalDiscAdapter::mountReadOnly(const QString& device, QString* error) {
-    bool available = false;
-    for (const auto& item : mountedDiscs()) {
-        const auto disc = item.toMap();
-        if (disc.value("device") == device && disc.value("state") == "unmounted")
-            available = true;
+QString OpticalDiscHash::mountObservationId(const QString& device,
+                                            const QString& filesystem,
+                                            const QString& label,
+                                            const QString& root,
+                                            const QString& sequence,
+                                            const QString& hashState,
+                                            const QString& mediaId,
+                                            const QString& mountInstance) {
+    const auto fields = QStringList{device, filesystem, label, root, sequence, hashState, mediaId, mountInstance};
+    QCryptographicHash hash(QCryptographicHash::Sha256);
+    for (const auto& field : fields) {
+        const auto bytes = field.toUtf8();
+        hash.addData(QByteArray::number(bytes.size()));
+        hash.addData(":", 1);
+        hash.addData(bytes);
     }
-    const auto call = [](const QString& service,
-                         const QString& path,
-                         const QString& interface,
-                         const QString& method,
-                         const QVariantList& arguments) {
-        QDBusInterface object(service, path, interface, QDBusConnection::systemBus());
-        return object.callWithArgumentList(QDBus::Block, method, arguments);
-    };
-    QString mountPoint;
-    if (!mountUsing(device, available, call, &mountPoint, error))
-        return false;
-    QStorageInfo mounted(mountPoint);
-    mounted.refresh();
-    if (!mounted.isValid() || !mounted.isReady() || !mounted.isReadOnly() ||
-        QString::fromLatin1(mounted.device()) != device) {
-        if (error)
-            *error = "A mount was requested, but Isolde could not verify the same optical device is mounted read-only. "
-                     "Do not use it until refreshed.";
-        return false;
-    }
-    return true;
+    return QString::fromLatin1(hash.result().toHex());
 }
 
-bool OpticalDiscAdapter::mountUsing(
-    const QString& device, bool mediaAvailable, const DbusCall& call, QString* mountPoint, QString* error) {
-    if (error)
-        error->clear();
-    if (mountPoint)
-        mountPoint->clear();
-    if (!QRegularExpression("^/dev/sr[0-9]{1,3}$").match(device).hasMatch()) {
-        if (error)
-            *error = "Invalid optical device.";
-        return false;
-    }
-    if (!mediaAvailable) {
-        if (error)
-            *error = "No unmounted optical media is available in this drive. Refresh and retry.";
-        return false;
-    }
-    if (!call) {
-        if (error)
-            *error = "Read-only mount is unavailable; the optical drive service is not responding.";
-        return false;
-    }
-    const auto object = "/org/freedesktop/UDisks2/block_devices/" + device.mid(QString("/dev/").size());
-    const auto reply = call("org.freedesktop.UDisks2",
-                            object,
-                            "org.freedesktop.UDisks2.Filesystem",
-                            "Mount",
-                            {QVariantMap{{"options", "ro"}}});
-    if (reply.type() == QDBusMessage::ErrorMessage) {
-        if (error)
-            *error = "The disc could not be mounted read-only. Check that media is present and readable, then refresh; "
-                     "no installer or disc content was started.";
-        return false;
-    }
-    if (reply.arguments().isEmpty()) {
-        if (error)
-            *error = "The drive did not confirm a mountpoint. Refresh optical media before continuing.";
-        return false;
-    }
-    const auto path = reply.arguments().first().toString();
-    if (!QDir::isAbsolutePath(path) || QDir::cleanPath(path) != path) {
-        if (error)
-            *error = "The drive returned an invalid mountpoint. Refresh optical media before continuing.";
-        return false;
-    }
-    if (mountPoint)
-        *mountPoint = path;
-    return true;
-}
-
-bool OpticalDiscAdapter::eject(const QString& device, QString* error) {
-    bool mounted = false;
-    for (const auto& volume : QStorageInfo::mountedVolumes())
-        mounted |= volume.isValid() && volume.isReady() && QString::fromLatin1(volume.device()) == device;
-    const auto arbitration = opticalSessionArbitration(device);
-    if (arbitration.value("state").toString() == "blocked") {
-        if (error)
-            *error = "The disc is in use by an active game session. Stop the session or return Home before ejecting.";
-        return false;
-    }
-    const auto call = [](const QString& service,
-                         const QString& path,
-                         const QString& interface,
-                         const QString& method,
-                         const QVariantList& arguments) {
-        QDBusInterface object(service, path, interface, QDBusConnection::systemBus());
-        return object.callWithArgumentList(QDBus::Block, method, arguments);
-    };
-    return ejectUsing(device, mounted, call, error);
-}
-
-bool OpticalDiscAdapter::ejectUsing(const QString& device, bool mounted, const DbusCall& call, QString* error) {
-    if (error)
-        error->clear();
-    if (!QRegularExpression("^/dev/sr[0-9]{1,3}$").match(device).hasMatch()) {
-        if (error)
-            *error = "Invalid optical device.";
-        return false;
-    }
-    if (!call) {
-        if (error)
-            *error = "Safe eject is unavailable; the optical drive service is not responding.";
-        return false;
-    }
-    const auto name = device.mid(QString("/dev/").size());
-    const auto object = "/org/freedesktop/UDisks2/block_devices/" + name;
-    if (mounted) {
-        const auto reply =
-            call("org.freedesktop.UDisks2", object, "org.freedesktop.UDisks2.Filesystem", "Unmount", {QVariantMap{}});
-        if (reply.type() == QDBusMessage::ErrorMessage) {
-            if (error)
-                *error = "The disc is in use and could not be safely unmounted. Close the game or operation and retry.";
-            return false;
-        }
-    }
-    const auto driveReply = call("org.freedesktop.UDisks2",
-                                 object,
-                                 "org.freedesktop.DBus.Properties",
-                                 "Get",
-                                 {QString("org.freedesktop.UDisks2.Block"), QString("Drive")});
-    if (driveReply.type() == QDBusMessage::ErrorMessage || driveReply.arguments().isEmpty()) {
-        if (error)
-            *error = "Safe eject is unavailable; the optical drive service is not responding.";
-        return false;
-    }
-    const auto drivePath = driveReply.arguments().at(0).value<QDBusVariant>().variant().value<QDBusObjectPath>().path();
-    if (drivePath.isEmpty() || drivePath == "/") {
-        if (error)
-            *error = "Safe eject is unavailable; the optical drive identity is incomplete.";
-        return false;
-    }
-    const auto reply =
-        call("org.freedesktop.UDisks2", drivePath, "org.freedesktop.UDisks2.Drive", "Eject", {QVariantMap{}});
-    if (reply.type() == QDBusMessage::ErrorMessage) {
-        if (error)
-            *error = "The drive refused safe eject because media is busy or unavailable. Nothing was force-ejected.";
-        return false;
-    }
-    return true;
-}
-
-QVariantMap OpticalDiscAdapter::classifyRevalidation(const QString& observationId,
-                                                     const QString& device,
-                                                     const QVariantList& currentDiscs) {
+QVariantMap OpticalDiscProbe::classifyRevalidation(const QString& observationId,
+                                                   const QString& device,
+                                                   const QVariantList& currentDiscs) {
     for (const auto& item : currentDiscs) {
         const auto disc = item.toMap();
         if (disc.value("observationId") == observationId && disc.value("device") == device)
@@ -768,112 +591,19 @@ QVariantMap OpticalDiscAdapter::classifyRevalidation(const QString& observationI
     return {{"schemaVersion", 1}, {"state", "missing"}};
 }
 
-namespace {
-struct SwapSession {
-    int expectedDiscNumber = 0;
-    QString expectedMediaSetId;
-    QString state; // "awaiting-swap", "swapped", "completed"
-};
-QMap<QString, SwapSession>& swapSessions() {
-    static QMap<QString, SwapSession> sessions;
-    return sessions;
-}
-} // namespace
-QVariantMap OpticalDiscAdapter::requestDiscSwap(const QString& sessionId,
-                                                int expectedDiscNumber,
-                                                const QString& expectedMediaSetId) {
-    if (sessionId.isEmpty() || expectedDiscNumber < 1 || expectedMediaSetId.isEmpty())
-        return {{"state", "invalid"}};
-    auto& sessions = swapSessions();
-    sessions.insert(sessionId, {expectedDiscNumber, expectedMediaSetId, "awaiting-swap"});
-    return {{"schemaVersion", 1},
-            {"state", "awaiting-swap"},
-            {"sessionId", sessionId},
-            {"expectedDisc", expectedDiscNumber},
-            {"discCount", 0}};
-}
-QVariantMap
-OpticalDiscAdapter::completeDiscSwap(const QString& sessionId, const QString& observationId, const QString& device) {
-    auto& sessions = swapSessions();
-    auto it = sessions.find(sessionId);
-    if (it == sessions.end())
-        return {{"state", "invalid"}};
-    const auto& session = it.value();
-    if (session.state != "awaiting-swap")
-        return {{"state", "invalid"}};
-    const auto current = mountedDiscs();
-    for (const auto& item : current) {
-        const auto disc = item.toMap();
-        if (disc.value("state") != "mounted")
-            continue;
-        if (disc.value("observationId") == observationId && disc.value("device") == device) {
-            const auto mediaSetId = disc.value("mediaSetId").toString();
-            const auto discNumber = disc.value("discNumber").toInt();
-            if (mediaSetId == session.expectedMediaSetId && discNumber == session.expectedDiscNumber) {
-                SwapSession updated = session;
-                updated.state = "swapped";
-                sessions.insert(sessionId, updated);
-                return {{"schemaVersion", 1}, {"state", "swapped"}, {"sessionId", sessionId}, {"disc", disc}};
-            }
-            return {{"schemaVersion", 1},
-                    {"state", "wrong-disc"},
-                    {"sessionId", sessionId},
-                    {"expectedDisc", session.expectedDiscNumber},
-                    {"gotDisc", discNumber}};
-        }
-    }
-    return {{"schemaVersion", 1},
-            {"state", "missing"},
-            {"sessionId", sessionId},
-            {"expectedDisc", session.expectedDiscNumber}};
-}
-QVariantMap OpticalDiscAdapter::swapSessionState(const QString& sessionId) {
-    auto& sessions = swapSessions();
-    auto it = sessions.find(sessionId);
-    if (it == sessions.end())
-        return {{"state", "invalid"}};
-    return {{"schemaVersion", 1}, {"state", it.value().state}, {"sessionId", sessionId}};
+QVariantMap OpticalDiscProbe::revalidate(const QString& observationId, const QString& device) {
+    return classifyRevalidation(observationId, device, OpticalDiscHash::mountedDiscs());
 }
 
-namespace {
-struct OpticalSession {
-    QString mediaId;
-    QString device;
-    QString state; // "active"
-};
-QMap<QString, OpticalSession>& opticalSessions() {
-    static QMap<QString, OpticalSession> sessions;
-    return sessions;
-}
-} // namespace
-QString
-OpticalDiscAdapter::registerOpticalSession(const QString& sessionId, const QString& mediaId, const QString& device) {
-    if (sessionId.isEmpty() || mediaId.isEmpty() || device.isEmpty())
-        return {};
-    auto& sessions = opticalSessions();
-    sessions.insert(sessionId, {mediaId, device, "active"});
-    return sessionId;
-}
-void OpticalDiscAdapter::releaseOpticalSession(const QString& sessionId) {
-    auto& sessions = opticalSessions();
-    sessions.remove(sessionId);
-}
-QVariantMap OpticalDiscAdapter::opticalSessionArbitration(const QString& device) {
-    if (device.isEmpty())
-        return {{"state", "invalid"}};
-    QVariantList blocking;
-    for (const auto& key : opticalSessions().keys()) {
-        const auto& session = opticalSessions().value(key);
-        if (session.device == device) {
-            blocking.append(QVariantMap{{"sessionId", key}, {"mediaId", session.mediaId}, {"state", session.state}});
-        }
-    }
-    if (blocking.isEmpty())
-        return {{"schemaVersion", 1}, {"state", "clear"}, {"device", device}};
-    return {{"schemaVersion", 1}, {"state", "blocked"}, {"device", device}, {"blockingSessions", blocking}};
+void OpticalDiscProbe::retryIdentity(const QString& device) {
+    auto* cache = hashCache();
+    QMutexLocker lock(&cache->mutex);
+    auto entry = cache->hashes.find(device);
+    if (entry != cache->hashes.end() && entry->state == "unreadable")
+        cache->hashes.erase(entry);
 }
 
-QVariantMap OpticalDiscAdapter::deviceDiagnostics(const QString& device) {
+QVariantMap OpticalDiscProbe::deviceDiagnostics(const QString& device) {
     if (!QRegularExpression("^/dev/sr[0-9]{1,3}$").match(device).hasMatch())
         return {{"schemaVersion", 1}, {"state", "invalid"}, {"device", device}};
     QFileInfo block(device);

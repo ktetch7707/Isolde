@@ -1,4 +1,5 @@
-#include "GameLibrary.h"
+﻿#include "GameLibrary.h"
+#include "OpticalDiscIdentity.h"
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -628,7 +629,7 @@ bool GameLibrary::restoreCatalog(const QString& source, bool confirmed) {
         if (ComponentSchema::gameRegistration(registration, &schemaError).isEmpty())
             return fail(schemaError);
         const auto root = registration.value("root").toString();
-        if (!root.isEmpty() && !OpticalDiscAdapter::isRootReference(root) &&
+        if (!root.isEmpty() && !OpticalDiscIdentify::isRootReference(root) &&
             !MediaGrants::validate(root, false).isEmpty())
             return fail(tr("Backup refers to a game folder not authorized in this profile."));
         if (object.value("franchise").toString() != object.value("franchise").toString().trimmed())
@@ -715,7 +716,7 @@ bool GameLibrary::restoreCatalog(const QString& source, bool confirmed) {
         if (ComponentSchema::gameRegistration(registration, &schemaError).isEmpty())
             return fail(schemaError);
         const auto root = registration.value("root").toString();
-        if (!root.isEmpty() && !OpticalDiscAdapter::isRootReference(root) &&
+        if (!root.isEmpty() && !OpticalDiscIdentify::isRootReference(root) &&
             !MediaGrants::validate(root, false).isEmpty())
             return fail(tr("Backup edition refers to a game folder not authorized in this profile."));
         const auto folded = registration.value("platform").toString().toCaseFolded();
@@ -994,3 +995,5 @@ bool GameLibrary::restoreCatalog(const QString& source, bool confirmed) {
     emit changed();
     return true;
 }
+
+

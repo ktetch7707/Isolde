@@ -29,25 +29,29 @@
     }
   },
   "baseline": {
-    "lizard_warnings_total": 340,
+    "lizard_warnings_total": 339,
     "lizard_warnings_by_category": {
       "cyclomatic_complexity_over_10": "see baseline_lizard.csv",
       "function_length_over_60": "see baseline_lizard.csv",
       "parameter_count_over_5": "see baseline_lizard.csv"
     },
-    "class_size_violations": [
-      "src/app/LocalCatalogProvider.h: class 'LocalCatalogProvider' has 9 public methods (max 5)",
-      "src/app/StoreProvider.h: class 'StoreProvider' has 21 methods (max 20)",
-      "src/app/StoreProvider.h: class 'StoreProvider' has 21 public methods (max 5)",
-      "src/games/OpticalDiscAdapter.h: class 'OpticalDiscAdapter' has 29 methods (max 20)",
-      "src/games/OpticalDiscAdapter.h: class 'OpticalDiscAdapter' has 29 public methods (max 5)",
-      "src/media/AudioCaptureAdapter.h: class 'AudioCaptureAdapter' has 7 public methods (max 5)",
-      "src/media/VideoCaptureAdapter.h: class 'VideoCaptureAdapter' has 10 public methods (max 5)",
-      "src/sessions/AppSession.h: class 'AppSession' has 11 public methods (max 5)"
-    ],
-    "class_size_violation_count": 8,
+    "class_size_violations": [],
+    "class_size_violation_count": 0,
     "class_size_fixed": [
-      "src/app/AppCatalog.h: class 'Entry' split into EntryCore/EntryMetadata/EntrySetup nested structs (13 -> 5/4/4 members)"
+      "src/app/AppCatalog.h: class 'Entry' split into EntryCore/EntryMetadata/EntrySetup nested structs (13 -> 5/4/4 members)",
+      "src/app/LocalCatalogProvider.h: providerId/providerName/isOnline moved to protected (9 -> 4 public methods)",
+      "src/app/StoreProvider.h: split into StoreIdentityProvider (3), StoreSearchProvider (5), StoreUpdateProvider (5), StoreArtifactProvider (3) interfaces",
+      "src/games/OpticalDiscAdapter.h: split into OpticalDiscParse (3), OpticalDiscIdentify (5), OpticalDiscClassify (4), OpticalDiscHash (4), OpticalDiscProbe (4) classes",
+      "src/media/AudioCaptureAdapter.h: split into AudioCaptureDevices (2), AudioCaptureControl (3), AudioCaptureAdapter (3 signals) classes",
+      "src/media/VideoCaptureAdapter.h: split into VideoCaptureDevices (2), VideoCaptureControl (4), VideoCaptureAudio (1), VideoCaptureAdapter (3 signals) classes",
+      "src/sessions/AppSession.h: split into AppSessionInfo (data), AppSessionControl (4 methods), AppSession (4 methods + 3 signals)"
+    ],
+    "lizard_fixed": [
+      "CompatibilityRuntime::discover: extracted isWineBinaryValid/isPathSecure (CCN 16 -> ~4)",
+      "GameEmulators::valid: extracted per-field validators (CCN 12 -> ~1)",
+      "GameEmulators::prunePsxFirmware: extracted shouldRetirePsxFirmware (CCN 14 -> ~5)",
+      "GameEmulators::pruneFirmware: extracted shouldRetireFirmware (CCN 17 -> ~5)",
+      "AppArtwork::cutout: extracted isUniformBackdrop (CCN 11 -> ~7)"
     ],
     "clang_tidy": "not run locally - CMake/Qt6 not available on this host; baseline will be established on first CI run"
   },
@@ -56,7 +60,7 @@
     "CI must fail on any violation NOT in this baseline.",
     "Files modified by a pull request are checked fully - baseline does not hide violations in changed files.",
     "Limits are NOT weakened to make existing code pass.",
-    "Remaining class-size violations are interface/API contracts (abstract base classes, overridden virtuals, static utility classes) that cannot be reduced without breaking the API.",
-    "Lizard fixes applied: CompatibilityRuntime::discover, GameEmulators::valid, GameEmulators::prunePsxFirmware, GameEmulators::pruneFirmware, AppArtwork::cutout"
+    "All class-size violations have been resolved (0 remaining).",
+    "339 lizard warnings remain in large functions (e.g., AppCatalog::load CCN 142, AppArtwork::cleanBackground CCN 74, ProfileRuntime::ProfileRuntime CCN 98) - these require significant refactoring and are tracked as technical debt."
   ]
 }

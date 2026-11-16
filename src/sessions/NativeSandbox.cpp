@@ -1,4 +1,4 @@
-#include <QCoreApplication>
+﻿#include <QCoreApplication>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -9,7 +9,7 @@
 #include <QUuid>
 #include "games/GameEmulators.h"
 #include "games/ManagedGamePaths.h"
-#include "games/OpticalDiscAdapter.h"
+#include "games/OpticalDiscIdentity.h"
 #include "games/OpticalDiscGrants.h"
 #include "games/SteamLibraryGrants.h"
 #include "media/MediaGrants.h"
@@ -138,7 +138,7 @@ NativeSandboxPlan NativeSandbox::prepare(const QString& profileId,
                                    inside(binary, managedGameRoot) && QFileInfo(binary).isExecutable();
     bool opticalExecutable = false;
     if (!opticalMediaId.isEmpty() && OpticalDiscGrants::approved(profileId, opticalMediaId)) {
-        for (const auto& item : OpticalDiscAdapter::mountedDiscs()) {
+        for (const auto& item : OpticalDiscHash::mountedDiscs()) {
             const auto disc = item.toMap();
             if (disc.value("mountRoot") == gameSourceRoot && disc.value("mediaId") == opticalMediaId &&
                 disc.value("observationId") == opticalObservationId && !opticalObservationId.isEmpty() &&
@@ -345,7 +345,7 @@ NativeSandboxPlan NativeSandbox::prepare(const QString& profileId,
                 const auto error = MediaGrants::validate(gameSourceRoot);
                 const bool managed = ManagedGamePaths::isInstallRoot(profileId, gameSourceRoot);
                 bool optical = false;
-                for (const auto& disc : OpticalDiscAdapter::mountedDiscs()) {
+                for (const auto& disc : OpticalDiscHash::mountedDiscs()) {
                     const auto value = disc.toMap();
                     if (value.value("mountRoot") == gameSourceRoot && value.value("mediaId") == opticalMediaId &&
                         value.value("observationId") == opticalObservationId && !opticalObservationId.isEmpty() &&
@@ -478,3 +478,5 @@ NativeSandboxPlan NativeSandbox::prepare(const QString& profileId,
     return plan;
 #endif
 }
+
+

@@ -3,18 +3,18 @@
 #include <utility>
 
 AppSession::AppSession(AppDefinition definition, QObject* parent)
-    : QObject(parent), m_definition(std::move(definition)) {}
+    : AppSessionControl(parent), m_info{std::move(definition)} {}
 
 const AppDefinition& AppSession::definition() const {
-    return m_definition;
+    return m_info.definition;
 }
-AppSession::State AppSession::state() const {
-    return m_state;
+AppSessionLifecycleState AppSession::state() const {
+    return m_info.state;
 }
 
-void AppSession::setState(State state) {
-    if (m_state == state)
+void AppSession::setState(AppSessionLifecycleState state) {
+    if (m_info.state == state)
         return;
-    m_state = state;
+    m_info.state = state;
     emit stateChanged(state);
 }

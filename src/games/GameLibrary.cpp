@@ -1,4 +1,4 @@
-#include <QBuffer>
+﻿#include <QBuffer>
 #include <QCoreApplication>
 #include <QCryptographicHash>
 #include <QFile>
@@ -12,7 +12,7 @@
 #include "GameLibrary.h"
 #include "GameResourceLimits.h"
 #include "ManagedGamePaths.h"
-#include "OpticalDiscAdapter.h"
+#include "OpticalDiscIdentity.h"
 #include "OpticalDiscGrants.h"
 #include "SteamLibraryGrants.h"
 #include "app/AppCatalog.h"
@@ -195,7 +195,7 @@ QVariantMap row(const QSqlQuery& query, const QString& artworkDirectory) {
 QString sourceKind(const QString& runtime, const QString& root, const QString& profile) {
     if (runtime == "steam")
         return "steam-app";
-    if (OpticalDiscAdapter::isRootReference(root))
+    if (OpticalDiscIdentify::isRootReference(root))
         return "optical-media";
     if (ManagedGamePaths::isInstallRoot(profile, root, false))
         return "isolde-managed-install";
@@ -216,8 +216,8 @@ QVariantMap sourceProvenance(const QString& runtime,
     QString reference = target;
     if (kind == "steam-app")
         reference = target;
-    else if (OpticalDiscAdapter::isRootReference(root))
-        reference = OpticalDiscAdapter::mediaIdFromRoot(root);
+    else if (OpticalDiscIdentify::isRootReference(root))
+        reference = OpticalDiscIdentify::mediaIdFromRoot(root);
     else if (!root.isEmpty())
         reference = QDir(root).filePath(target);
     return {{"sourceKind", kind},
@@ -307,7 +307,7 @@ GameLibrary::GameLibrary(const QString& path, AppRegistry* apps, QObject* parent
         m_setupOutput = (m_setupOutput + output).right(8192);
         const auto lines = QString::fromLocal8Bit(output).split('\n', Qt::SkipEmptyParts);
         if (!lines.isEmpty())
-            m_setupStatus = tr("Installing verified runtimes · %1").arg(lines.constLast().trimmed().left(160));
+            m_setupStatus = tr("Installing verified runtimes Â· %1").arg(lines.constLast().trimmed().left(160));
         emit setupChanged();
     };
     connect(&m_setup, &QProcess::readyReadStandardOutput, this, [this, setupProgress] {
@@ -531,7 +531,7 @@ GameLibrary::GameLibrary(const QString& path, AppRegistry* apps, QObject* parent
                     m_portableInstallStatus = "Windows executable inspection failed. No installer was run.";
                 } else {
                     m_portableInstallStatus =
-                        tr("Windows executable: %1 · %2 · %3 bytes\nSHA-256: %4\n"
+                        tr("Windows executable: %1 Â· %2 Â· %3 bytes\nSHA-256: %4\n"
                            "Inspection does not verify its publisher, ownership, safety or installer type. "
                            "Installation remains unsupported; no code was run and no files were installed.")
                             .arg(metadata.value("format").toString(), metadata.value("architecture").toString())
@@ -698,7 +698,7 @@ GameLibrary::GameLibrary(const QString& path, AppRegistry* apps, QObject* parent
     connect(&m_opticalRefreshTimer, &QTimer::timeout, this, [this] {
         if (!m_ready)
             return;
-        const auto discs = OpticalDiscAdapter::mountedDiscs();
+        const auto discs = OpticalDiscHash::mountedDiscs();
         QStringList ids;
         for (const auto& item : discs)
             ids.append(item.toMap().value("observationId").toString());
@@ -864,7 +864,7 @@ GameLibrary::GameLibrary(const QString& path, AppRegistry* apps, QObject* parent
     }
     query.finish();
     m_ready = true;
-    for (const auto& disc : OpticalDiscAdapter::mountedDiscs())
+    for (const auto& disc : OpticalDiscHash::mountedDiscs())
         m_lastOpticalObservationIds.append(disc.toMap().value("observationId").toString());
     m_lastOpticalObservationIds.sort();
     m_opticalRefreshTimer.start();
@@ -1430,8 +1430,8 @@ QVariantMap GameLibrary::details(const QString& id) {
         return {};
     auto result = row(query, artworkDirectory());
     result["sourceKind"] = sourceKind(query.value(3).toString(), query.value(10).toString(), m_emulatorProfile);
-    result["sourceReference"] = OpticalDiscAdapter::isRootReference(query.value(10).toString())
-                                    ? OpticalDiscAdapter::mediaIdFromRoot(query.value(10).toString())
+    result["sourceReference"] = OpticalDiscIdentify::isRootReference(query.value(10).toString())
+                                    ? OpticalDiscIdentify::mediaIdFromRoot(query.value(10).toString())
                                     : query.value(11).toString();
     result["acquisitionProvenance"] = QVariantMap{{"recorded", false},
                                                   {"sourceKind", "not-recorded"},
@@ -1741,8 +1741,8 @@ QVariantMap GameLibrary::resolveLaunch(const QString& id, const QString& edition
     const auto target = checkedTarget(root, relative);
     if (target.isEmpty())
         return {};
-    const bool optical = OpticalDiscAdapter::isRootReference(root);
-    const auto media = optical ? OpticalDiscAdapter::resolveRootReference(root).value("disc").toMap() : QVariantMap{};
+    const bool optical = OpticalDiscIdentify::isRootReference(root);
+    const auto media = optical ? OpticalDiscClassify::resolveRootReference(root).value("disc").toMap() : QVariantMap{};
     const auto sourceRoot = optical ? media.value("mountRoot").toString() : root;
     QVariantMap action{{"type", "open-file"}, {"openWith", runtime}, {"target", target}, {"sourceRoot", sourceRoot}};
     if (optical) {
@@ -1823,3 +1823,5 @@ bool GameLibrary::steamGameContainsAppId(const QString& id, const QString& ident
 QString GameLibrary::addEdition(const QString& id, const QVariantMap& input) {
     return addEditionWithOrigin(id, input, "manual-registration");
 }
+
+

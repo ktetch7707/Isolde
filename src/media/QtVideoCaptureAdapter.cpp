@@ -114,3 +114,7 @@ void QtVideoCaptureAdapter::stop() {
         m_camera.stop();
     m_session.setCamera(nullptr);
 }
+
+QObject* QtVideoCaptureAdapter::audioContext() override {
+    return &m_session;
+}

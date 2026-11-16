@@ -177,7 +177,17 @@ def count_class_metrics(body_code: str):
         re.MULTILINE
     )
 
-    methods = method_pattern.findall(body_code)
+    methods = []
+    for m in method_pattern.finditer(body_code):
+        full_match = m.group(0).strip()
+        method_name = m.group(1)
+        # Skip constructors: explicit ClassName(args) where return type == class name
+        if full_match.startswith("explicit ") and " " + method_name + "(" in full_match:
+            continue
+        # Skip return statements: return TypeName(args)
+        if full_match.startswith("return "):
+            continue
+        methods.append(method_name)
 
     # Data member: type name [ = value ] ;  (not followed by ( )
     member_pattern = re.compile(
@@ -210,7 +220,15 @@ def count_class_metrics(body_code: str):
 
     for access, seg in segments:
         if access == 'public':
-            public_method_count += len(method_pattern.findall(seg))
+            seg_methods = 0
+            for m in method_pattern.finditer(seg):
+                fm = m.group(0).strip()
+                if fm.startswith("explicit ") and " " + m.group(1) + "(" in fm:
+                    continue
+                if fm.startswith("return "):
+                    continue
+                seg_methods += 1
+            public_method_count += seg_methods
 
     return {
         'lines': line_count,

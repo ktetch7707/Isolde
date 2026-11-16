@@ -253,6 +253,12 @@ QVector<int> floodFillConnected(const QImage& image, std::function<bool(QRgb)> m
 }
 } // namespace
 
+inline bool isUniformBackdrop(const QImage& image, std::function<bool(QRgb)> matches) {
+    const int w = image.width(), h = image.height();
+    return matches(image.pixel(0, 0)) && matches(image.pixel(w - 1, 0)) &&
+           matches(image.pixel(0, h - 1)) && matches(image.pixel(w - 1, h - 1));
+}
+
 inline QImage cutout(const QImage& source) {
     if (source.isNull() || source.width() > 512 || source.height() > 512)
         return source;
@@ -264,8 +270,7 @@ inline QImage cutout(const QImage& source) {
                                                 std::abs(qGreen(pixel) - qGreen(background)),
                                                 std::abs(qBlue(pixel) - qBlue(background))}) <= 18;
     };
-    if (!matches(background) || !matches(image.pixel(w - 1, 0)) || !matches(image.pixel(0, h - 1)) ||
-        !matches(image.pixel(w - 1, h - 1)))
+    if (!isUniformBackdrop(image, matches))
         return source;
     const auto pending = floodFillConnected(image, matches);
     if (pending.size() > w * h * .95)

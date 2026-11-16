@@ -1,4 +1,4 @@
-#include "sessions/SessionManager.h"
+﻿#include "sessions/SessionManager.h"
 
 #include <QCoreApplication>
 #include <QDateTime>
@@ -13,7 +13,8 @@
 #include <QStandardPaths>
 #include <QUuid>
 #include "games/ManagedGamePaths.h"
-#include "games/OpticalDiscAdapter.h"
+#include "games/OpticalDiscIdentity.h"
+#include "games/OpticalDiscSession.h"
 #include "games/OpticalDiscGrants.h"
 #include "home/ComponentSchema.h"
 #include "media/MediaGrants.h"
@@ -181,15 +182,15 @@ void SessionManager::refreshOpticalSession() {
     if (m_session) {
         const auto config = m_session->definition().launchConfiguration;
         const auto reference = config.value("opticalReference").toString();
-        if (OpticalDiscAdapter::isRootReference(reference)) {
+        if (OpticalDiscIdentify::isRootReference(reference)) {
             const auto profile = qApp->property("isoldeProfile").toString();
-            status = OpticalDiscAdapter::classifySession(
+            status = OpticalDiscClassify::classifySession(
                 reference,
                 config.value("gameSourceRoot").toString(),
-                OpticalDiscGrants::approved(profile, OpticalDiscAdapter::mediaIdFromRoot(reference)),
-                OpticalDiscAdapter::mountedDiscs(),
+                OpticalDiscGrants::approved(profile, OpticalDiscIdentify::mediaIdFromRoot(reference)),
+                OpticalDiscHash::mountedDiscs(),
                 config.value("opticalObservationId").toString());
-            status = OpticalDiscAdapter::latchSession(m_opticalSessionStatus, status);
+            status = OpticalDiscSession::latchSession(m_opticalSessionStatus, status);
         }
     }
     if (status != m_opticalSessionStatus) {
@@ -439,12 +440,12 @@ bool SessionManager::launchGameFile(const QVariantMap& input, const QString& sou
     const auto opticalReference = input.value("opticalReference").toString();
     const auto opticalObservationId = input.value("opticalObservationId").toString();
     bool optical = false;
-    const auto discs = OpticalDiscAdapter::mountedDiscs();
+    const auto discs = OpticalDiscHash::mountedDiscs();
     for (const auto& item : discs) {
         const auto disc = item.toMap();
         if (disc.value("mountRoot") == sourceRoot && disc.value("mediaId") == opticalMediaId &&
             disc.value("observationId") == opticalObservationId &&
-            OpticalDiscAdapter::classifyRootReference(opticalReference, {disc}).value("state") == "ready" &&
+            OpticalDiscClassify::classifyRootReference(opticalReference, {disc}).value("state") == "ready" &&
             OpticalDiscGrants::approved(profile, opticalMediaId) && disc.value("directPlaySupported").toBool())
             optical = true;
     }
@@ -453,8 +454,8 @@ bool SessionManager::launchGameFile(const QVariantMap& input, const QString& sou
         (!(managed || optical) || (executable.open(QIODevice::ReadOnly) && executable.read(4) == QByteArray("\x7f"
                                                                                                             "ELF",
                                                                                                             4)));
-    if ((!opticalMediaId.isEmpty() && (!optical || !OpticalDiscAdapter::isRootReference(opticalReference) ||
-                                       OpticalDiscAdapter::mediaIdFromRoot(opticalReference) != opticalMediaId)) ||
+    if ((!opticalMediaId.isEmpty() && (!optical || !OpticalDiscIdentify::isRootReference(opticalReference) ||
+                                       OpticalDiscIdentify::mediaIdFromRoot(opticalReference) != opticalMediaId)) ||
         (opticalMediaId.isEmpty() && (!opticalReference.isEmpty() || !opticalObservationId.isEmpty())) ||
         (!error.isEmpty() && !managed && !optical) || !nativeElf || input.value("type").toString() != "open-file" ||
         !runtime || runtime->type != "desktop" ||
@@ -579,3 +580,5 @@ void SessionManager::goHome() {
     else
         emit returnedHome(m_previousFocusId);
 }
+
+
