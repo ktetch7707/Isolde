@@ -202,10 +202,15 @@ m built and installed managed Kodi a12e64a61200. The o candidate passed all
 eight affected registrations using strict reuse against k, then deployed
 76064eee7a240e071a3421cd. Offline local-search completed 56-episode paging,
 real playback and exact result return. Local TV source apply and scanning now
-work. Movieart music pause and stop now use playState (BUG-189 fixed). Playlist creation
-and rename worked; fixture collision entry and rule preview input route added
-(BUG-192 fixed). Continue on the same candidate with the short
-music-transport diagnostic and corrected playlist route.
+work. Movieart music pause and stop now use playState (BUG-189 fixed). Playlist creation,
+rename and delete handlers added to serve() test fixture (BUG-190 fixed).
+Playlist collision entry and rule preview input route added, plus
+playlistCollisionAndRulePreview test (BUG-192 fixed). Multiple actions per button
+supported across ComponentSchema, HomeLayout, PageModel, ActionDispatcher and QML
+editors. Skin Studio rebrand: Page Studio renamed to Skin Studio across QML, C++,
+docs, config, tools. Settings: Added 'Display & Skins' category with Skins row;
+SkinPicker.qml with Apply/Edit/Duplicate/Delete and Add. Continue on the same
+candidate with the short music-transport diagnostic and corrected playlist route.
 
 Movieart081542-029 proved pause, resume, stop and the exact song return.
 Import then failed to produce its backup receipt. The preview frame showed
