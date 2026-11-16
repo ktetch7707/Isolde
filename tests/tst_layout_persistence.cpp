@@ -292,7 +292,7 @@ void LayoutPersistenceTests::starterPageUpdatesPreserveDesignAndRollback() {
     }
     document["components"] = components;
     auto pages = document["pages"].toArray();
-    while (pages.size() > 2) pages.removeLast();
+    while (pages.size() > 2) pages.takeLast();
     document["pages"] = pages;
     QVERIFY2(layout.applyStudioDraft(QJsonDocument(document).toJson()), qPrintable(layout.errorString()));
     QVERIFY(layout.setAppearance({{"fontFamily","Serif"}}));
