@@ -1,4 +1,4 @@
-#include "../tst_component_common.h"
+#include "tst_component_common.h"
 #include "../src/home/HomeLayout.h"
 #include "../src/home/StudioSession.h"
 #include "../src/home/ThemeColors.h"

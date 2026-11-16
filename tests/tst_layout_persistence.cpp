@@ -1,4 +1,4 @@
-#include "../tst_component_common.h"
+#include "tst_component_common.h"
 #include "../src/home/HomeLayout.h"
 #include "../src/home/PageModel.h"
 #include "../src/home/ComponentSchema.h"

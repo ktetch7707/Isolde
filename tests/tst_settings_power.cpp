@@ -1,4 +1,4 @@
-#include "../tst_component_common.h"
+#include "tst_component_common.h"
 #include "../src/home/HomeLayout.h"
 #include "../src/settings/SearchSettings.h"
 #include "../src/settings/PowerSettings.h"
