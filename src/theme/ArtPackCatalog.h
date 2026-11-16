@@ -27,6 +27,9 @@ class ArtPackCatalog final : public QObject {
 
   private:
     void setError(const QString& message);
+    QString resolveConfigPath(const QString& path, const QString& defaultName,
+                              const QString& resourceName);
+    bool loadFromFile(const QString& resolvedPath);
 
     QVariantList m_packs;
     QVariantList m_artwork;

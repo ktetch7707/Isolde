@@ -30,6 +30,9 @@ class AppRegistry final : public QObject {
 
   private:
     void setError(const QString& message);
+    QString resolveConfigPath(const QString& path, const QString& defaultName,
+                              const QString& resourceName);
+    bool loadFromFile(const QString& resolvedPath);
     QVector<AppDefinition> m_apps;
     QString m_errorString;
 };

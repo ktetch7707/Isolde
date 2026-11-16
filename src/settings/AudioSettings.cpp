@@ -3,6 +3,13 @@
 #include <QCoreApplication>
 #include <QDataStream>
 #include <QFileInfo>
+
+void stopProcess(QProcess& process) {
+    if (process.state() != QProcess::NotRunning) {
+        process.kill();
+        process.waitForFinished(1000);
+    }
+}
 #include <QProcess>
 #include <QRegularExpression>
 #include <QSettings>
@@ -97,14 +104,15 @@ AudioSettings::AudioSettings(QObject* parent, const QString& mixerExecutable, co
 
 AudioSettings::~AudioSettings() {
     m_testPlayer.disconnect(this);
-    if (m_testPlayer.state() != QProcess::NotRunning) {
-        m_testPlayer.kill();
-        m_testPlayer.waitForFinished(1000);
-    }
+    stopProcess(m_testPlayer);
     m_process.disconnect(this);
-    if (m_process.state() != QProcess::NotRunning) {
-        m_process.kill();
-        m_process.waitForFinished(1000);
+    stopProcess(m_process);
+}
+
+void stopProcess(QProcess& process) {
+    if (process.state() != QProcess::NotRunning) {
+        process.kill();
+        process.waitForFinished(1000);
     }
 }
 
@@ -372,15 +380,19 @@ void AudioSettings::submit(int volume, bool muted) {
     m_targetVolume = volume;
     m_targetMuted = muted;
     if (!m_mixerEnabled) {
-        m_volume = volume;
-        m_muted = muted;
-        save();
-        emit changed();
+        applyVolumeDirectly(volume, muted);
         return;
     }
     m_pending = true;
     if (!m_active && m_process.state() == QProcess::NotRunning)
         runNext();
+}
+
+void AudioSettings::applyVolumeDirectly(int volume, bool muted) {
+    m_volume = volume;
+    m_muted = muted;
+    save();
+    emit changed();
 }
 
 void AudioSettings::enqueueRead() {

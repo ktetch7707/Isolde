@@ -26,12 +26,22 @@ QString ArtPackCatalog::errorString() const {
 }
 
 bool ArtPackCatalog::load(const QString& path) {
+    return loadFromFile(resolveConfigPath(path, QStringLiteral("config/art-packs.json"),
+                                          QStringLiteral(":/config/art-packs.json")));
+}
+
+QString ArtPackCatalog::resolveConfigPath(const QString& path, const QString& defaultName,
+                                          const QString& resourceName) {
     QString resolvedPath = path;
     if (resolvedPath.isEmpty()) {
-        resolvedPath = QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("config/art-packs.json"));
+        resolvedPath = QDir(QCoreApplication::applicationDirPath()).filePath(defaultName);
         if (!QFile::exists(resolvedPath))
-            resolvedPath = QStringLiteral(":/config/art-packs.json");
+            resolvedPath = resourceName;
     }
+    return resolvedPath;
+}
+
+bool ArtPackCatalog::loadFromFile(const QString& resolvedPath) {
     QFile file(resolvedPath);
     if (!file.open(QIODevice::ReadOnly)) {
         setError(tr("Unable to open art pack catalog: %1").arg(resolvedPath));

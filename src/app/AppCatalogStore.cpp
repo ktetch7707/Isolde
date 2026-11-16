@@ -163,13 +163,17 @@ void AppCatalog::cancelOperation() {
     m_cancelRequested = true;
     m_operationStatus = m_operation == "setup" ? tr("Cancelling after the current system step...")
                                                : tr("Cancelling and restoring the previous Android data...");
+    abortDownloadOrProcess();
+    emit entriesChanged();
+}
+
+void AppCatalog::abortDownloadOrProcess() {
     if (m_downloadReply)
         m_downloadReply->abort();
     else if (m_operation == "setup")
         m_androidProcess.write("cancel\n");
     else
         m_androidProcess.terminate();
-    emit entriesChanged();
 }
 
 bool AppCatalog::setupAndroid(bool softwareRendering) {
