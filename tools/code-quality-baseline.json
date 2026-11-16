@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "generated": "2026-11-16",
+  "checker": "isolde-code-quality",
+  "limits": {
+    "clang_tidy": {
+      "cognitive_complexity_threshold": 15,
+      "function_size_line_threshold": 60,
+      "function_size_statement_threshold": 30,
+      "function_size_branch_threshold": 10,
+      "function_size_nesting_threshold": 3,
+      "function_size_parameter_threshold": 5,
+      "function_size_variable_threshold": 8,
+      "warnings_as_errors": [
+        "readability-function-cognitive-complexity",
+        "readability-function-size"
+      ]
+    },
+    "lizard": {
+      "cyclomatic_complexity_max": 10,
+      "function_length_max": 60,
+      "parameters_max": 5
+    },
+    "class_size": {
+      "max_class_lines": 300,
+      "max_methods": 20,
+      "max_data_members": 10,
+      "max_public_methods": 5
+    }
+  },
+  "baseline": {
+    "lizard_warnings_total": 343,
+    "lizard_warnings_by_category": {
+      "cyclomatic_complexity_over_10": "see baseline_lizard.csv",
+      "function_length_over_60": "see baseline_lizard.csv",
+      "parameter_count_over_5": "see baseline_lizard.csv"
+    },
+    "class_size_violations": [
+      "src/app/AppCatalog.h: class 'Entry' has 13 data members (max 10)",
+      "src/app/LocalCatalogProvider.h: class 'LocalCatalogProvider' has 9 public methods (max 5)",
+      "src/app/StoreProvider.h: class 'StoreProvider' has 21 methods (max 20)",
+      "src/app/StoreProvider.h: class 'StoreProvider' has 21 public methods (max 5)",
+      "src/games/OpticalDiscAdapter.h: class 'OpticalDiscAdapter' has 29 methods (max 20)",
+      "src/games/OpticalDiscAdapter.h: class 'OpticalDiscAdapter' has 29 public methods (max 5)",
+      "src/media/AudioCaptureAdapter.h: class 'AudioCaptureAdapter' has 7 public methods (max 5)",
+      "src/media/VideoCaptureAdapter.h: class 'VideoCaptureAdapter' has 10 public methods (max 5)",
+      "src/sessions/AppSession.h: class 'AppSession' has 11 public methods (max 5)"
+    ],
+    "class_size_violation_count": 9,
+    "clang_tidy": "not run locally - CMake/Qt6 not available on this host; baseline will be established on first CI run"
+  },
+  "notes": [
+    "This baseline documents pre-existing violations.",
+    "CI must fail on any violation NOT in this baseline.",
+    "Files modified by a pull request are checked fully - baseline does not hide violations in changed files.",
+    "Limits are NOT weakened to make existing code pass."
+  ]
+}

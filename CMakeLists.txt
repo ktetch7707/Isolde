@@ -5,6 +5,7 @@ project(Isolde VERSION 0.0.1.2 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 find_package(Qt6 6.4 REQUIRED COMPONENTS Core Gui Network DBus Qml Quick Test WebEngineQuick WebChannel Multimedia SerialPort Sql)
 qt_standard_project_setup(REQUIRES 6.4)
@@ -153,6 +154,25 @@ add_library(isolde_core STATIC
 target_include_directories(isolde_core PUBLIC src)
 target_compile_definitions(isolde_core PRIVATE ISOLDE_GAME_RUNTIME_SOURCE="${CMAKE_CURRENT_SOURCE_DIR}/config/game-runtimes.json")
 target_link_libraries(isolde_core PUBLIC Qt6::Core Qt6::Gui Qt6::Network Qt6::DBus Qt6::Multimedia Qt6::SerialPort Qt6::Sql)
+
+if(MSVC)
+    target_compile_options(isolde_core PRIVATE /W4 /WX /permissive-)
+else()
+    target_compile_options(isolde_core PRIVATE
+        -Wall
+        -Wextra
+        -Wpedantic
+        -Wconversion
+        -Wsign-conversion
+        -Wshadow
+        -Wnon-virtual-dtor
+        -Wold-style-cast
+        -Woverloaded-virtual
+        -Wnull-dereference
+        -Wdouble-promotion
+        -Wformat=2
+        -Werror)
+endif()
 qt_add_resources(isolde_core "remote_buttons" PREFIX "/" FILES config/remote-buttons.json)
 qt_add_resources(isolde_core "kodi_capabilities" PREFIX "/" FILES config/kodi-capabilities.json)
 
