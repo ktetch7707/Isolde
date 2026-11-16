@@ -61,6 +61,11 @@ class AppCatalog final : public QObject {
         return m_providerResults;
     }
     Q_INVOKABLE void setStoreProvider(StoreProvider* provider);
+    bool isValidStoreProvider(StoreProvider* provider) const;
+    void onStoreResultsChanged();
+    void onStoreUpdatesChanged();
+    void processStoreUpdateResult(const QVariant& value);
+    void onStoreProviderError(const QString& error);
     Q_INVOKABLE StoreProvider* storeProvider() const {
         return m_provider;
     }
@@ -94,6 +99,9 @@ class AppCatalog final : public QObject {
     Q_INVOKABLE bool
     load(const QString& catalogPath = {}, const QString& statePath = {}, const QString& installRoot = {});
     Q_INVOKABLE bool install(const QString& id);
+    bool isInstallableEntry(const AppCatalogEntry* entry, const QString& id);
+    bool stagePackageDirectory(const AppCatalogEntry* entry, const QString& id, bool& createdPackage);
+    bool registerAndSaveInstall(const AppCatalogEntry* entry, const QString& id, bool createdPackage);
     Q_INVOKABLE bool uninstall(const QString& id);
     Q_INVOKABLE bool isInstalled(const QString& id) const;
     Q_INVOKABLE QString packageState(const QString& id) const;
@@ -158,6 +166,8 @@ class AppCatalog final : public QObject {
     [[nodiscard]] bool validateStoreSizes(const QJsonObject& options);
     [[nodiscard]] bool validateStoreDetailRatio(const QJsonObject& options);
     [[nodiscard]] bool validateStorePlatforms(const QJsonObject& options);
+    [[nodiscard]] bool validateStorePlatformOptions(const QJsonArray& platforms, const QJsonObject& options);
+    [[nodiscard]] bool validateStorePlatformItem(const QJsonObject& p, QSet<QString>& types);
     [[nodiscard]] bool validateStoreWebOptions(const QJsonObject& options);
     [[nodiscard]] bool validateStoreAppOptions(const QJsonObject& options);
     [[nodiscard]] bool loadPackageEntries(const QJsonDocument& document,
@@ -171,6 +181,18 @@ class AppCatalog final : public QObject {
     [[nodiscard]] bool loadStateInstalledApps(const QJsonObject& stateObject);
     [[nodiscard]] bool parseFdroidEntry(const QJsonObject& data, Entry* entry);
     [[nodiscard]] bool parseWebEntry(const QJsonObject& data, Entry* entry);
+    bool validateWebEntryFields(const QJsonObject& data);
+    bool validateWebEntryValues(const QJsonObject& data, const QString& name, const QUrl& url,
+                                const QString& backend);
+    bool addressSizeValid(const QUrl& url);
+    bool validateWebEntryId(const QJsonObject& data, const QString& id);
+    QUrl webEntryOrigin(const QUrl& url);
+    void configureWebEntryApp(Entry* entry, const QString& id, const QString& name, const QString& backend,
+                              const QString& canonical, const QUrl& origin, const QJsonObject& storeOptions);
+    bool configureWebEntryChromium(Entry* entry, const QJsonObject& storeOptions);
+    bool validateWebEntryAppearance(Entry* entry, const QJsonObject& storeOptions);
+    void finalizeWebEntry(Entry* entry, const QString& id, const QString& canonical, const QString& publisher,
+                          const QJsonObject& storeOptions, const QJsonObject& data);
     [[nodiscard]] bool validateProviderStorage(const QString& installRoot, const QString& id,
                                                 const QString& version);
     [[nodiscard]] bool writeProviderPackage(const QString& staging, const QString& directory,
@@ -191,6 +213,12 @@ class AppCatalog final : public QObject {
     bool customEntry(const QJsonObject& data, Entry* entry);
     bool installCustom(const QJsonObject& data);
     bool beginDownload(const QVariantMap& result, bool update);
+    bool validBeginDownloadArgs() const;
+    bool validateArtifactUrl(const QUrl& artifactUrl) const;
+    bool setupDownloadState(const QVariantMap& result, const QString& storeId, bool update);
+    bool validateDownloadResult(const QVariantMap& result);
+    void initializeDownloadOperation(const QVariantMap& result, bool update);
+    bool startDownload(const QUrl& artifactUrl);
     bool commitUpdate(const Entry& entry);
     void androidEvent(const QJsonObject& event);
 
