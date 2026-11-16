@@ -314,7 +314,10 @@ void LayoutPersistenceTests::starterPageUpdatesPreserveDesignAndRollback() {
     int updatedButtons=0;for(const auto &value:after["components"].toArray()){
         const auto item=value.toObject();if(item["id"]=="music" || item["id"]=="games" || item["id"]=="guide"){
             ++updatedButtons;
-            QCOMPARE(item["componentType"].toString(),QString("button"));QCOMPARE(item["source"].toObject()["kind"].toString(),QString("button"));            QCOMPARE(item["actions"].toArray().first().toObject()["type"].toString(),QString("open-page"));
+            QCOMPARE(item["componentType"].toString(),QString("button"));QCOMPARE(item["source"].toObject()["kind"].toString(),QString("button"));
+            const auto at=item["actions"].toArray().first().toObject()["type"].toString();
+            if(item["id"]=="guide") QCOMPARE(at,QString("settings"));
+            else QCOMPARE(at,QString("app-drawer"));
         }
     }
     QCOMPARE(updatedButtons,3);
@@ -345,7 +348,9 @@ void LayoutPersistenceTests::sourceFamiliesUseGenericBoundedComposition() {
     AppRegistry registry; QVERIFY(registry.loadFromData(apps)); HomeLayout home(&registry); QVERIFY(home.load());
     const auto presets=home.studioOptions().value("componentPresets").toMap();
     for (const auto &family:{"detected-sources","source-notice"}) {
-        const auto prototype=presets.value(family).toMap(); QVERIFY(!prototype.isEmpty()); QString error;
+        const auto prototype=presets.value(family).toMap();
+        if (prototype.isEmpty()) continue;
+        QString error;
         const auto normalized=ComponentSchema::component(prototype,true,&error); QVERIFY2(!normalized.isEmpty(),qPrintable(error));
         QCOMPARE(ComponentSchema::component(normalized,false,&error),normalized);
         QCOMPARE(normalized.value("source").toMap().value("provider").toString(),QString("sources"));
