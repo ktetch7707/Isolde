@@ -230,6 +230,8 @@ class HomeLayout final : public QObject {
     void syncPages();
     QString pageKey(const QString& id) const;
     bool isPageId(const QString& id) const;
+    QSet<QString> computeHiddenIds() const;
+    bool appendItem(const QJsonValue& value, QVariantList& result, const QSet<QString>& hidden);
     QJsonArray m_pages;
     QString m_homePageId;
     QJsonObject m_rootPage;

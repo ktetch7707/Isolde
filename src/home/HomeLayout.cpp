@@ -192,6 +192,20 @@ HomeLayout::HomeLayout(AppRegistry* registry, QObject* parent) : QObject(parent)
 
 QVariantList HomeLayout::items() const {
     QVariantList result;
+    const auto hidden = computeHiddenIds();
+    for (const auto& categoryValue : m_categories) {
+        const auto categoryId = categoryValue.toObject().value("id").toString();
+        for (const auto& value : m_items)
+            if (value.toObject().value("categoryId").toString() == categoryId)
+                appendItem(value, result, hidden);
+    }
+    for (const auto& value : m_items)
+        if (value.toObject().value("categoryId").toString().isEmpty())
+            appendItem(value, result, hidden);
+    return result;
+}
+
+QSet<QString> HomeLayout::computeHiddenIds() const {
     QSet<QString> hidden;
     if (!m_draftOnly) {
         for (const auto& entry : m_items)
@@ -204,79 +218,72 @@ QVariantList HomeLayout::items() const {
                     hidden.insert(item["id"].toString());
             }
     }
-    const auto appendItem = [this, &result, &hidden](const QJsonValue& value) {
-        const auto object = value.toObject();
-        if (hidden.contains(object["id"].toString()))
-            return;
-        auto item = object.toVariantMap();
-        item["presentation"] = componentPresentation(item.value("presentation").toMap());
-        const auto actionList = normalizedActionForItem(object);
-        if (!actionList.isEmpty()) {
-            item.insert("actionType", actionList.first().toMap().value(QStringLiteral("type")).toString());
-            item.insert("actions", actionList);
-        }
-        if (item.value("kind") == QStringLiteral("app")) {
-            const auto appId = item.value("appId").toString();
-            const auto* app = m_registry->find(appId);
-            item.insert("name",
-                        !item.value("name").toString().isEmpty() ? item.value("name")
-                        : app                                    ? app->name
-                                                                 : appId);
-            item.insert("section", app ? app->section : QStringLiteral("Missing app"));
-            const auto tileSymbol = item.value("symbol").toString();
-            const auto tileAccent = item.value("accent").toString();
-            item.insert("symbol", tileSymbol.isEmpty() ? (app ? app->symbol : "?") : tileSymbol);
-            item.insert("accent", tileAccent.isEmpty() ? (app ? app->accent.name() : "#64748B") : tileAccent);
-            item.insert("presentationMode", app ? app->presentationMode : "native-tv");
-            item.insert("networkRequirement", app ? app->networkRequirement : "none");
-        } else if (item.value("kind") == QStringLiteral("action")) {
-            const auto section = item.value("section").toString();
-            const auto symbol = item.value("symbol").toString();
-            const auto accent = item.value("accent").toString();
-            const auto networkRequirement = item.value("networkRequirement").toString();
-            item.insert("section", section.isEmpty() ? tr("Custom") : section);
-            item.insert("symbol", symbol.isEmpty() ? QStringLiteral("•") : symbol);
-            item.insert("accent", accent.isEmpty() ? QStringLiteral("#64748B") : accent);
-            item.insert("networkRequirement",
-                        networkRequirement.isEmpty() ? QStringLiteral("none") : networkRequirement);
-        }
-        const auto logoFile = item.value("customLogo").toString();
-        auto logo = resolveArtwork(logoFile);
-        if (logoFile.isEmpty() && !actionList.isEmpty() && actionList.first().toMap().value("type") == "launch-app") {
-            const auto actionMap = actionList.first().toMap();
-            if (const auto* app = m_registry->find(actionMap.value("appId").toString())) {
-                const auto mode = item.value("presentation").toMap().value("logoMode").toString();
-                logo = mode == "monochrome" && !app->inkIconSource.isEmpty()  ? app->inkIconSource
-                       : mode == "cutout" && !app->cutoutIconSource.isEmpty() ? app->cutoutIconSource
-                                                                              : app->iconSource;
-                item["cutoutLogoSource"] = app->cutoutIconSource;
-                item["inkLogoSource"] = app->inkIconSource;
-                item["inkAvailable"] = !app->inkIconSource.isEmpty();
-                item["iconOpticalScale"] = app->iconOpticalScale;
-                item["iconContrastBackdrop"] = app->iconContrastBackdrop;
-            }
-        }
-        item.insert("logoSource", logo);
-        auto unavailable = ComponentSchema::unavailable(
-            actionList.isEmpty() ? QVariantMap() : actionList.first().toMap(), m_registry, m_collections);
-        if (unavailable.isEmpty() && !actionList.isEmpty() &&
-            actionList.first().toMap().value("type").toString() == "switch-input" && !m_captureInputsReady)
-            unavailable = "Configure Settings → System → HDMI Inputs";
-        if (object.value("requiredCapability") == "capture-inputs" && !m_captureInputsReady)
-            unavailable = tr("HDMI capture unavailable · configure inputs in Settings");
-        item.insert("unavailableReason", unavailable);
-        result.append(ComponentSchema::component(item, true));
-    };
-    for (const auto& categoryValue : m_categories) {
-        const auto categoryId = categoryValue.toObject().value("id").toString();
-        for (const auto& value : m_items)
-            if (value.toObject().value("categoryId").toString() == categoryId)
-                appendItem(value);
+    return hidden;
+}
+
+bool HomeLayout::appendItem(const QJsonValue& value, QVariantList& result, const QSet<QString>& hidden) {
+    const auto object = value.toObject();
+    if (hidden.contains(object["id"].toString()))
+        return false;
+    auto item = object.toVariantMap();
+    item["presentation"] = componentPresentation(item.value("presentation").toMap());
+    const auto actionList = normalizedActionForItem(object);
+    if (!actionList.isEmpty()) {
+        item.insert("actionType", actionList.first().toMap().value(QStringLiteral("type")).toString());
+        item.insert("actions", actionList);
     }
-    for (const auto& value : m_items)
-        if (value.toObject().value("categoryId").toString().isEmpty())
-            appendItem(value);
-    return result;
+    if (item.value("kind") == QStringLiteral("app")) {
+        const auto appId = item.value("appId").toString();
+        const auto* app = m_registry->find(appId);
+        item.insert("name",
+                    !item.value("name").toString().isEmpty() ? item.value("name")
+                    : app                                    ? app->name
+                                                             : appId);
+        item.insert("section", app ? app->section : QStringLiteral("Missing app"));
+        const auto tileSymbol = item.value("symbol").toString();
+        const auto tileAccent = item.value("accent").toString();
+        item.insert("symbol", tileSymbol.isEmpty() ? (app ? app->symbol : "?") : tileSymbol);
+        item.insert("accent", tileAccent.isEmpty() ? (app ? app->accent.name() : "#64748B") : tileAccent);
+        item.insert("presentationMode", app ? app->presentationMode : "native-tv");
+        item.insert("networkRequirement", app ? app->networkRequirement : "none");
+    } else if (item.value("kind") == QStringLiteral("action")) {
+        const auto section = item.value("section").toString();
+        const auto symbol = item.value("symbol").toString();
+        const auto accent = item.value("accent").toString();
+        const auto networkRequirement = item.value("networkRequirement").toString();
+        item.insert("section", section.isEmpty() ? tr("Custom") : section);
+        item.insert("symbol", symbol.isEmpty() ? QStringLiteral("•") : symbol);
+        item.insert("accent", accent.isEmpty() ? QStringLiteral("#64748B") : accent);
+        item.insert("networkRequirement",
+                    networkRequirement.isEmpty() ? QStringLiteral("none") : networkRequirement);
+    }
+    const auto logoFile = item.value("customLogo").toString();
+    auto logo = resolveArtwork(logoFile);
+    if (logoFile.isEmpty() && !actionList.isEmpty() && actionList.first().toMap().value("type") == "launch-app") {
+        const auto actionMap = actionList.first().toMap();
+        if (const auto* app = m_registry->find(actionMap.value("appId").toString())) {
+            const auto mode = item.value("presentation").toMap().value("logoMode").toString();
+            logo = mode == "monochrome" && !app->inkIconSource.isEmpty()  ? app->inkIconSource
+                   : mode == "cutout" && !app->cutoutIconSource.isEmpty() ? app->cutoutIconSource
+                                                                           : app->iconSource;
+            item["cutoutLogoSource"] = app->cutoutIconSource;
+            item["inkLogoSource"] = app->inkIconSource;
+            item["inkAvailable"] = !app->inkIconSource.isEmpty();
+            item["iconOpticalScale"] = app->iconOpticalScale;
+            item["iconContrastBackdrop"] = app->iconContrastBackdrop;
+        }
+    }
+    item.insert("logoSource", logo);
+    auto unavailable = ComponentSchema::unavailable(
+        actionList.isEmpty() ? QVariantMap() : actionList.first().toMap(), m_registry, m_collections);
+    if (unavailable.isEmpty() && !actionList.isEmpty() &&
+        actionList.first().toMap().value("type").toString() == "switch-input" && !m_captureInputsReady)
+        unavailable = "Configure Settings → System → HDMI Inputs";
+    if (object.value("requiredCapability") == "capture-inputs" && !m_captureInputsReady)
+        unavailable = tr("HDMI capture unavailable · configure inputs in Settings");
+    item.insert("unavailableReason", unavailable);
+    result.append(ComponentSchema::component(item, true));
+    return true;
 }
 
 QVariantMap HomeLayout::componentPresentation(const QVariantMap& authored) const {

@@ -207,6 +207,11 @@ class GameLibrary final : public QObject {
     bool installationExists(const QString& runtime, const QString& root, const QString& target);
     bool catalogReferencesRoot(const QString& root, bool* referenced);
     bool platformAvailable(const QString& platform);
+    QString buildSelectClause() const;
+    QString buildWhereClause(const QString& view, const QString& search, const QString& platform) const;
+    QString buildOrderByClause(const QString& view) const;
+    void bindQueryParameters(QSqlQuery& query, const QString& view, const QString& search,
+                             const QString& platform, int offset) const;
     bool ensureOrganizationSchema();
     bool ensureRichMetadataSchema();
     bool ensureArtworkSchema();

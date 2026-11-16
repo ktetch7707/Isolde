@@ -503,10 +503,8 @@ bool GameEmulators::configure(
     auto value = settings(profile, id, error);
     if (value.isEmpty())
         return false;
-    if (options.size() != 2 || !options.contains("video") || !options.contains("controller")) {
-        *error = "Choose known emulator settings only.";
+    if (!validateConfigureOptions(options, error))
         return false;
-    }
     value["video"] = options.value("video");
     value["controller"] = options.value("controller");
     if (!valid(value) || (id != "dolphin" && value.value("controller").toString() != "xbox")) {
@@ -521,20 +519,49 @@ bool GameEmulators::configure(
     const auto root = home(profile, id);
     if (!setup.isEmpty()) {
         if (!firmware.isEmpty()) {
-            const auto kind = setup.value("firmwareKind").toString();
-            if (kind == "none") {
-                *error = "This runtime does not require imported firmware.";
+            if (!importFirmwareWithSetup(root, setup, firmware, value, error))
                 return false;
-            }
-            const auto name = importSetupAsset(root, firmware, kind, error);
-            if (name.isEmpty())
-                return false;
-            value["firmware"] = name;
         }
         return save(root + "/.config/isolde-emulator/settings.json", QJsonDocument::fromVariant(value).toJson(), error);
     }
+    if (!importFirmwareWithoutSetup(root, setup, firmware, id, value, error))
+        return false;
+    if (!save(root + "/.config/isolde-emulator/settings.json", QJsonDocument::fromVariant(value).toJson(), error))
+        return false;
+    QString cleanupError;
+    if (id == "retroarch-psx")
+        prunePsxFirmware(root, value.value("firmware").toString(), &cleanupError);
+    else
+        pruneFirmware(root, value.value("firmware").toString(), &cleanupError);
+    return true;
+}
+
+bool GameEmulators::validateConfigureOptions(const QVariantMap& options, QString* error) {
+    if (options.size() != 2 || !options.contains("video") || !options.contains("controller")) {
+        *error = "Choose known emulator settings only.";
+        return false;
+    }
+    return true;
+}
+
+bool GameEmulators::importFirmwareWithSetup(const QString& root, const QVariantMap& setup, const QString& firmware,
+                                            QVariantMap& value, QString* error) {
+    const auto kind = setup.value("firmwareKind").toString();
+    if (kind == "none") {
+        *error = "This runtime does not require imported firmware.";
+        return false;
+    }
+    const auto name = importSetupAsset(root, firmware, kind, error);
+    if (name.isEmpty())
+        return false;
+    value["firmware"] = name;
+    return true;
+}
+
+bool GameEmulators::importFirmwareWithoutSetup(const QString& root, const QVariantMap& setup, const QString& firmware,
+                                               const QString& id, QVariantMap& value, QString* error) {
     if (!firmware.isEmpty()) {
-        if (!definition(id).value("firmwareRequired").toBool()) {
+        if (!setup.value("firmwareRequired").toBool()) {
             *error = "This runtime does not require imported firmware.";
             return false;
         }
@@ -579,13 +606,6 @@ bool GameEmulators::configure(
             return false;
         value["firmware"] = name;
     }
-    if (!save(root + "/.config/isolde-emulator/settings.json", QJsonDocument::fromVariant(value).toJson(), error))
-        return false;
-    QString cleanupError;
-    if (id == "retroarch-psx")
-        prunePsxFirmware(root, value.value("firmware").toString(), &cleanupError);
-    else
-        pruneFirmware(root, value.value("firmware").toString(), &cleanupError);
     return true;
 }
 bool GameEmulators::setupAssetReady(const QString& profile, const QString& id, QString* error) {

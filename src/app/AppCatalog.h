@@ -175,6 +175,8 @@ class AppCatalog final : public QObject {
                                                 const QString& version);
     [[nodiscard]] bool writeProviderPackage(const QString& staging, const QString& directory,
                                              const QByteArray& downloadData, const QByteArray& manifestData);
+    [[nodiscard]] bool canUpdateOrAddEntry(const Entry* previous, bool updating, quint64 newVersion);
+    [[nodiscard]] bool verifyExistingPackage(const QString& directory, const QByteArray& manifestData);
     [[nodiscard]] bool resolveProviderInstall(const QString& id, QString& localId);
     const Entry* findEntry(const QString& id) const;
     bool saveState();

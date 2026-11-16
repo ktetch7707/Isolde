@@ -986,6 +986,28 @@ QString GameLibrary::addGame(const QVariantMap& input) {
 QVariantList GameLibrary::page(const QString& view, const QString& search, int offset, const QString& platform) {
     if (!m_ready)
         return {};
+    if (!validatePageQuery(view, search, offset, platform))
+        return {};
+    if (view == "continue" && !m_hasActivity)
+        return {};
+    if ((view == "franchise" || view == "tag") && !m_hasMetadata)
+        return {};
+    QSqlQuery query(m_db);
+    query.prepare(buildSelectClause() + " " + buildWhereClause(view, search, platform) + " " +
+                  buildOrderByClause(view) + " LIMIT 50 OFFSET ?");
+    bindQueryParameters(query, view, search, platform, offset);
+    if (!query.exec()) {
+        fail(query.lastError().text());
+        return {};
+    }
+    QVariantList result;
+    while (query.next())
+        result.append(row(query, artworkDirectory()));
+    return result;
+}
+
+bool GameLibrary::validatePageQuery(const QString& view, const QString& search, int offset,
+                                    const QString& platform) {
     if (!QStringList{"all", "recent", "favorites", "search", "platform", "continue", "franchise", "tag"}.contains(
             view) ||
         search.size() > 160 || search.contains(QChar::Null) || offset < 0 || offset >= MaxGames || offset % PageSize ||
@@ -993,13 +1015,12 @@ QVariantList GameLibrary::page(const QString& view, const QString& search, int o
         (view == "platform" && (platform.trimmed().isEmpty() || platform != platform.trimmed())) ||
         ((view == "franchise" || view == "tag") && (search.trimmed().isEmpty() || search != search.trimmed()))) {
         fail(tr("Invalid games query."));
-        return {};
+        return false;
     }
-    if (view == "continue" && !m_hasActivity)
-        return {};
-    if ((view == "franchise" || view == "tag") && !m_hasMetadata)
-        return {};
-    QSqlQuery query(m_db);
+    return true;
+}
+
+QString GameLibrary::buildSelectClause() const {
     QString sql =
         "SELECT g.id,g.title,g.platform,g.runtime,g.favorite," +
         (m_hasMetadata ? QString("COALESCE(m.franchise,''),COALESCE(m.tags,'[]')") : QString("'', '[]'")) +
@@ -1009,7 +1030,12 @@ QVariantList GameLibrary::page(const QString& view, const QString& search, int o
         sql += " LEFT JOIN game_activity a ON a.game_id=g.id";
     if (m_hasMetadata)
         sql += " LEFT JOIN game_metadata m ON m.game_id=g.id";
-    sql += " WHERE (?=0 OR g.favorite=1) AND (?='' OR lower(g.platform)=lower(?)";
+    return sql;
+}
+
+QString GameLibrary::buildWhereClause(const QString& view, const QString& search, const QString& platform) const {
+    QString sql =
+        "WHERE (?=0 OR g.favorite=1) AND (?='' OR lower(g.platform)=lower(?)";
     if (m_hasEditions)
         sql += " OR EXISTS(SELECT 1 FROM game_editions e WHERE e.game_id=g.id AND lower(e.platform)=lower(?))";
     sql += ")";
@@ -1027,12 +1053,18 @@ QVariantList GameLibrary::page(const QString& view, const QString& search, int o
     }
     if (view == "continue")
         sql += " AND a.game_id IS NOT NULL";
-    sql += " ORDER BY " +
+    return sql;
+}
+
+QString GameLibrary::buildOrderByClause(const QString& view) const {
+    return "ORDER BY " +
            QString(view == "recent"     ? "g.added DESC,g.id"
                    : view == "continue" ? "a.last_played DESC,g.id"
-                                        : "g.title COLLATE NOCASE,g.id") +
-           " LIMIT 50 OFFSET ?";
-    query.prepare(sql);
+                                        : "g.title COLLATE NOCASE,g.id");
+}
+
+void GameLibrary::bindQueryParameters(QSqlQuery& query, const QString& view, const QString& search,
+                                       const QString& platform, int offset) const {
     query.addBindValue(view == "favorites" ? 1 : 0);
     query.addBindValue(view == "platform" ? platform : QStringLiteral(""));
     query.addBindValue(view == "platform" ? platform : QStringLiteral(""));
@@ -1050,14 +1082,6 @@ QVariantList GameLibrary::page(const QString& view, const QString& search, int o
         }
     }
     query.addBindValue(offset);
-    if (!query.exec()) {
-        fail(query.lastError().text());
-        return {};
-    }
-    QVariantList result;
-    while (query.next())
-        result.append(row(query, artworkDirectory()));
-    return result;
 }
 
 bool GameLibrary::ensureOrganizationSchema() {

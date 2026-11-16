@@ -1204,26 +1204,16 @@ bool AppCatalog::stageProviderArtifact(const QString& storeId, const QVariantMap
         return false;
     const auto* previous = findEntry(id);
     const bool updating = previous && isInstalled(id);
-    if ((previous && !updating) || (!updating && m_customPackages.size() >= 256) ||
-        (updating && entry.core.version.toULongLong() <= previous->version.toULongLong())) {
-        setError(tr("App already registered, update is not newer, or profile app limit reached."));
+    if (!canUpdateOrAddEntry(previous, updating, entry.core.version.toULongLong()))
         return false;
-    }
     const auto directory = QDir(m_installRoot).filePath(id + "/" + entry.core.version);
     const auto staging = QDir(m_installRoot).filePath(".staging-" + id);
     QDir().mkpath(m_installRoot);
     if (!validateProviderStorage(m_installRoot, id, entry.core.version))
         return false;
     if (QFileInfo(directory).exists()) {
-        QFile manifestFile(directory + "/manifest.json"), apkFile(directory + "/app.apk");
-        if (QFileInfo(manifestFile).isSymLink() || QFileInfo(apkFile).isSymLink() ||
-            QFileInfo(manifestFile).size() > 65536 || QFileInfo(apkFile).size() > 128 * 1024 * 1024 ||
-            !manifestFile.open(QIODevice::ReadOnly) || manifestFile.readAll() != entry.setup.manifestData ||
-            !apkFile.open(QIODevice::ReadOnly) ||
-            QCryptographicHash::hash(apkFile.readAll(), QCryptographicHash::Sha256) != m_downloadExpectedHash) {
-            setError(tr("Existing staged package differs from this verified update. Preserve it and retry recovery."));
+        if (!verifyExistingPackage(directory, entry.setup.manifestData))
             return false;
-        }
     } else {
         if (!writeProviderPackage(staging, directory, m_downloadData, entry.setup.manifestData)) {
             QDir(staging).removeRecursively();
@@ -1241,6 +1231,28 @@ bool AppCatalog::stageProviderArtifact(const QString& storeId, const QVariantMap
         else
             m_entries.removeLast();
         QDir(directory).removeRecursively();
+        return false;
+    }
+    return true;
+}
+
+bool AppCatalog::canUpdateOrAddEntry(const Entry* previous, bool updating, quint64 newVersion) {
+    if ((previous && !updating) || (!updating && m_customPackages.size() >= 256) ||
+        (updating && newVersion <= previous->core.version.toULongLong())) {
+        setError(tr("App already registered, update is not newer, or profile app limit reached."));
+        return false;
+    }
+    return true;
+}
+
+bool AppCatalog::verifyExistingPackage(const QString& directory, const QByteArray& manifestData) {
+    QFile manifestFile(directory + "/manifest.json"), apkFile(directory + "/app.apk");
+    if (QFileInfo(manifestFile).isSymLink() || QFileInfo(apkFile).isSymLink() ||
+        QFileInfo(manifestFile).size() > 65536 || QFileInfo(apkFile).size() > 128 * 1024 * 1024 ||
+        !manifestFile.open(QIODevice::ReadOnly) || manifestFile.readAll() != manifestData ||
+        !apkFile.open(QIODevice::ReadOnly) ||
+        QCryptographicHash::hash(apkFile.readAll(), QCryptographicHash::Sha256) != m_downloadExpectedHash) {
+        setError(tr("Existing staged package differs from this verified update. Preserve it and retry recovery."));
         return false;
     }
     return true;

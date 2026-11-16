@@ -42,6 +42,10 @@ class FdroidProvider final : public StoreProvider {
 
   private:
     void start(int page, bool updates = false);
+    QString resolveHelperPath() const;
+    void connectProcessSignals(QProcess* process, std::shared_ptr<QByteArray> output, int page, bool updates);
+    QStringList buildArguments(const QString& helper, const QString& cache, const QString& query,
+                               int page, bool updates) const;
     QVariantMap result(const QString& storeId) const;
     QPointer<QProcess> m_process;
     QString m_query;

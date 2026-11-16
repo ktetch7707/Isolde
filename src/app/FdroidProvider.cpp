@@ -75,13 +75,8 @@ void FdroidProvider::start(int page, bool updates) {
         emit providerError(tr("Invalid Store profile."));
         return;
     }
-    QString helper;
+    const auto helper = resolveHelperPath();
     const auto base = QCoreApplication::applicationDirPath();
-    for (const auto& path : {base + "/../share/isolde/fdroid-store.py", base + "/share/isolde/fdroid-store.py"})
-        if (QFileInfo(path).isFile()) {
-            helper = QFileInfo(path).absoluteFilePath();
-            break;
-        }
     const auto python = QStandardPaths::findExecutable("python3");
     if (helper.isEmpty() || python.isEmpty()) {
         emit providerError(tr("F-Droid browsing support is missing. Repair the Isolde installation."));
@@ -94,6 +89,45 @@ void FdroidProvider::start(int page, bool updates) {
     m_status = tr("Loading and verifying F-Droid apps…");
     emit resultsChanged();
     auto output = std::make_shared<QByteArray>();
+    connectProcessSignals(process, output, page, updates);
+    auto* timer = new QTimer(process);
+    timer->setSingleShot(true);
+    connect(timer, &QTimer::timeout, process, &QProcess::kill);
+    timer->start(150000);
+    process->setProgram(python);
+    process->setArguments(buildArguments(helper, cache, m_query, page, updates));
+    process->start();
+}
+
+QVariantMap FdroidProvider::result(const QString& storeId) const {
+    for (const auto& value : m_results) {
+        const auto map = value.toMap();
+        if (map.value("storeId").toString() == storeId)
+            return map;
+    }
+    return {};
+}
+
+QUrl FdroidProvider::artifactUrl(const QString& storeId) const {
+    return QUrl(result(storeId).value("downloadUrl").toString());
+}
+QByteArray FdroidProvider::artifactHash(const QString& storeId) const {
+    return QByteArray::fromHex(result(storeId).value("sha256").toByteArray());
+}
+QString FdroidProvider::provenanceText(const QString& storeId) const {
+    return result(storeId).value("provenance").toString();
+}
+
+QString FdroidProvider::resolveHelperPath() const {
+    const auto base = QCoreApplication::applicationDirPath();
+    for (const auto& path : {base + "/../share/isolde/fdroid-store.py", base + "/share/isolde/fdroid-store.py"})
+        if (QFileInfo(path).isFile())
+            return QFileInfo(path).absoluteFilePath();
+    return {};
+}
+
+void FdroidProvider::connectProcessSignals(QProcess* process, std::shared_ptr<QByteArray> output, int page,
+                                            bool updates) {
     connect(process, &QProcess::readyReadStandardOutput, this, [process, output] {
         *output += process->readAllStandardOutput();
         if (output->size() > 4 * 1024 * 1024)
@@ -148,34 +182,13 @@ void FdroidProvider::start(int page, bool updates) {
                     tr("F-Droid · Page %1 · %2 matching apps").arg(page + 1).arg(document.value("total").toInt());
                 emit resultsChanged();
             });
-    auto* timer = new QTimer(process);
-    timer->setSingleShot(true);
-    connect(timer, &QTimer::timeout, process, &QProcess::kill);
-    timer->start(150000);
-    process->setProgram(python);
-    QStringList arguments{
-        helper, "--cache", cache, "--query", updates ? QString() : m_query, "--page", QString::number(page)};
+}
+
+QStringList FdroidProvider::buildArguments(const QString& helper, const QString& cache, const QString& query,
+                                            int page, bool updates) const {
+    QStringList arguments{helper, "--cache", cache, "--query", updates ? QString() : query, "--page",
+                          QString::number(page)};
     if (updates)
         arguments << "--packages" << m_updateQuery.join(',');
-    process->setArguments(arguments);
-    process->start();
-}
-
-QVariantMap FdroidProvider::result(const QString& storeId) const {
-    for (const auto& value : m_results) {
-        const auto map = value.toMap();
-        if (map.value("storeId").toString() == storeId)
-            return map;
-    }
-    return {};
-}
-
-QUrl FdroidProvider::artifactUrl(const QString& storeId) const {
-    return QUrl(result(storeId).value("downloadUrl").toString());
-}
-QByteArray FdroidProvider::artifactHash(const QString& storeId) const {
-    return QByteArray::fromHex(result(storeId).value("sha256").toByteArray());
-}
-QString FdroidProvider::provenanceText(const QString& storeId) const {
-    return result(storeId).value("provenance").toString();
+    return arguments;
 }
