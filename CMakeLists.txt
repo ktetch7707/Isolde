@@ -21,6 +21,8 @@ add_library(isolde_core STATIC
     src/media/GuideRules.cpp
     src/media/GuideRules.h
     src/games/GameLibrary.cpp
+    src/games/GameLibrary_importer.cpp
+    src/games/GameLibrary_collections.cpp
     src/games/CompatibilityRuntime.cpp
     src/games/CompatibilityRuntime.h
     src/games/SteamLibraryGrants.cpp
@@ -45,6 +47,9 @@ add_library(isolde_core STATIC
     src/settings/ComponentHealth.cpp
     src/settings/ComponentHealth.h
     src/media/KodiMedia.cpp
+    src/media/KodiMedia_collections.cpp
+    src/media/KodiMedia_sources.cpp
+    src/media/KodiMedia_execute.cpp
     src/media/KodiMedia.h
     src/media/OnlineDiscovery.cpp
     src/media/OnlineSubtitleRepository.cpp
@@ -84,7 +89,11 @@ add_library(isolde_core STATIC
     src/app/AppRegistry.cpp
     src/app/AppRegistry.h
     src/home/HomeLayout.cpp
+    src/home/HomeLayout_studio.cpp
     src/home/StudioSession.cpp
+    src/home/StudioSession_artwork.cpp
+    src/home/StudioSession_components.cpp
+    src/home/StudioSession_execute.cpp
     src/home/StudioSafety.cpp
     src/home/DesignSystem.cpp
     src/home/DesignSystem.h
