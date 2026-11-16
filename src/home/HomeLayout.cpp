@@ -1322,17 +1322,30 @@ bool HomeLayout::addActionTile(const QString& name,
 bool HomeLayout::validateActionTileParams(const QString& cleanName, const QString& cleanActionType,
                                            const QString& cleanTarget, const QString& cleanOpenWith) const {
     const auto captureInput = cleanActionType == QStringLiteral("switch-input");
-    if (cleanName.isEmpty() || cleanTarget.isEmpty() || !isSupportedActionType(cleanActionType) ||
-        cleanActionType == QStringLiteral("launch-app") || cleanActionType == QStringLiteral("desktop-mode") ||
-        (captureInput && !cleanOpenWith.isEmpty()) ||
-        (!captureInput &&
-         (!isSafeActionId(cleanOpenWith) ||
-          (!cleanOpenWith.isEmpty() && cleanOpenWith != QStringLiteral("system") && !m_registry->find(cleanOpenWith)))))
-        return false;
-    if (!captureInput && !cleanOpenWith.isEmpty() && cleanOpenWith != QStringLiteral("system") &&
-        !m_registry->find(cleanOpenWith)->handledActions.contains(cleanActionType))
+    if (!isValidActionTileParams(cleanName, cleanActionType, cleanTarget, cleanOpenWith, captureInput))
         return false;
     return true;
+}
+
+bool HomeLayout::isValidActionTileParams(const QString& cleanName, const QString& cleanActionType,
+                                          const QString& cleanTarget, const QString& cleanOpenWith,
+                                          bool captureInput) const {
+    return cleanName.isEmpty() || cleanTarget.isEmpty() || !isSupportedActionType(cleanActionType) ||
+           isInvalidActionType(cleanActionType) ||
+           (captureInput && !cleanOpenWith.isEmpty()) ||
+           (!captureInput && !isValidOpenWith(cleanOpenWith)) ||
+           (!captureInput && !cleanOpenWith.isEmpty() && cleanOpenWith != QStringLiteral("system") &&
+            !m_registry->find(cleanOpenWith)->handledActions.contains(cleanActionType));
+}
+
+bool HomeLayout::isInvalidActionType(const QString& actionType) const {
+    return actionType == QStringLiteral("launch-app") || actionType == QStringLiteral("desktop-mode");
+}
+
+bool HomeLayout::isValidOpenWith(const QString& cleanOpenWith) const {
+    return isSafeActionId(cleanOpenWith) &&
+           (cleanOpenWith.isEmpty() || cleanOpenWith == QStringLiteral("system") ||
+            m_registry->find(cleanOpenWith));
 }
 
 bool HomeLayout::categoryIdExists(const QString& categoryId) const {

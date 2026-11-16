@@ -265,6 +265,11 @@ class HomeLayout final : public QObject {
     bool isValidRootPageName(const QString& name) const;
     bool validateActionTileParams(const QString& cleanName, const QString& cleanActionType,
                                    const QString& cleanTarget, const QString& cleanOpenWith) const;
+    bool isValidActionTileParams(const QString& cleanName, const QString& cleanActionType,
+                                  const QString& cleanTarget, const QString& cleanOpenWith,
+                                  bool captureInput) const;
+    bool isInvalidActionType(const QString& actionType) const;
+    bool isValidOpenWith(const QString& cleanOpenWith) const;
     bool categoryIdExists(const QString& categoryId) const;
     QString generateActionTileId(const QString& cleanName) const;
     QJsonArray m_pages;
