@@ -149,6 +149,26 @@ class AppCatalog final : public QObject {
         EntryMetadata meta;
         EntrySetup setup;
     };
+    [[nodiscard]] QString resolveCatalogPath(const QString& catalogPath) const;
+    [[nodiscard]] bool resolveStateAndInstallPaths(const QString& statePath,
+                                                    const QString& installRoot,
+                                                    const QString& profile);
+    [[nodiscard]] bool loadStoreOptions(const QJsonObject& options);
+    [[nodiscard]] bool validateStoreOptionKeys(const QJsonObject& options);
+    [[nodiscard]] bool validateStoreSizes(const QJsonObject& options);
+    [[nodiscard]] bool validateStoreDetailRatio(const QJsonObject& options);
+    [[nodiscard]] bool validateStorePlatforms(const QJsonObject& options);
+    [[nodiscard]] bool validateStoreWebOptions(const QJsonObject& options);
+    [[nodiscard]] bool validateStoreAppOptions(const QJsonObject& options);
+    [[nodiscard]] bool loadPackageEntries(const QJsonDocument& document,
+                                           const QDir& catalogDirectory,
+                                           QVector<Entry>& loaded);
+    [[nodiscard]] bool loadPackageEntry(const QJsonValue& value,
+                                         const QDir& catalogDirectory,
+                                         Entry& entry);
+    [[nodiscard]] bool loadStateFile(const QString& stateReadPath);
+    [[nodiscard]] bool loadStateCustomPackages(const QJsonObject& stateObject);
+    [[nodiscard]] bool loadStateInstalledApps(const QJsonObject& stateObject);
     const Entry* findEntry(const QString& id) const;
     bool saveState();
     void setError(const QString& message);

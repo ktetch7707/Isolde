@@ -1,4 +1,4 @@
-#include "app/AppCatalog.h"
+﻿#include "app/AppCatalog.h"
 #include "settings/ProfileManager.h"
 
 #include <QCoreApplication>
@@ -394,36 +394,11 @@ bool AppCatalog::load(const QString& catalogPath, const QString& statePath, cons
         setError(tr("Finish the current app operation before reloading the catalog."));
         return false;
     }
-    QString source = catalogPath;
-    if (source.isEmpty()) {
-        source = QDir(QCoreApplication::applicationDirPath()).filePath("config/catalog.json");
-        if (!QFile::exists(source))
-            source = QStringLiteral(":/config/catalog.json");
-    }
-    m_statePath =
-        statePath.isEmpty()
-            ? QDir(QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation)).filePath("installed-apps.json")
-            : statePath;
-    m_installRoot = installRoot.isEmpty()
-                        ? QDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)).filePath("packages")
-                        : installRoot;
-    m_legacyInstallRoot.clear();
-    QString stateReadPath = m_statePath;
+    const auto source = resolveCatalogPath(catalogPath);
     const auto configuredProfile = qApp->property("isoldeProfile").toString();
     const auto profile = configuredProfile.isEmpty() ? QString("default") : configuredProfile;
-    if (statePath.isEmpty() && installRoot.isEmpty()) {
-        static const QRegularExpression uuid("^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$");
-        if (profile != "default" && !uuid.match(profile).hasMatch()) {
-            setError(tr("Invalid app profile."));
-            return false;
-        }
-        m_legacyInstallRoot = m_installRoot;
-        m_statePath = QFileInfo(m_statePath).absolutePath() + "/profiles/" + profile + "/installed-apps.json";
-        m_installRoot += "/profiles/" + profile;
-        if (QFile::exists(m_statePath))
-            stateReadPath = m_statePath;
-    }
-
+    if (!resolveStateAndInstallPaths(statePath, installRoot, profile))
+        return false;
     QFile file(source);
     if (!file.open(QIODevice::ReadOnly)) {
         setError(tr("Unable to open app catalog: %1").arg(source));
@@ -436,81 +411,85 @@ bool AppCatalog::load(const QString& catalogPath, const QString& statePath, cons
         setError(tr("Invalid app catalog: %1").arg(parseError.errorString()));
         return false;
     }
-
     const auto options = document.object().value("store").toObject();
-    if (!options.isEmpty()) {
-        const QSet<QString> allowed{"platforms",
-                                    "columns",
-                                    "spacing",
-                                    "cardHeight",
-                                    "detailRatio",
-                                    "webBackend",
-                                    "webDesktopId",
-                                    "webCategory",
-                                    "appSection",
-                                    "appAccent",
-                                    "androidContainment"};
-        for (const auto& key : options.keys())
-            if (!allowed.contains(key)) {
-                setError(tr("Unknown Store presentation field."));
-                return false;
-            }
-        for (const auto& key : QStringList{"columns", "spacing", "cardHeight"})
-            if (!options.value(key).isDouble() || options.value(key).toDouble() != options.value(key).toInt()) {
-                setError(tr("Store sizes must use whole numbers."));
-                return false;
-            }
-        if (options.contains("detailRatio") &&
-            (!options.value("detailRatio").isDouble() || options.value("detailRatio").toDouble() < 0.25 ||
-             options.value("detailRatio").toDouble() > 0.5)) {
-            setError(tr("Invalid Store details size."));
+    if (!loadStoreOptions(options))
+        return false;
+    QVector<Entry> loaded;
+    const QDir catalogDirectory(QFileInfo(source).absolutePath());
+    if (!loadPackageEntries(document, catalogDirectory, loaded))
+        return false;
+    m_entries = std::move(loaded);
+    m_installedIds.clear();
+    m_packageStates.clear();
+    m_failureReasons.clear();
+    m_customPackages.clear();
+    m_updatesDisabled.clear();
+    m_availableUpdates.clear();
+    m_storeTransaction.clear();
+    cleanStagingDirectories();
+    if (!loadStateFile(m_statePath))
+        return false;
+    setError({});
+    emit entriesChanged();
+    return true;
+}
+
+QString AppCatalog::resolveCatalogPath(const QString& catalogPath) const {
+    if (!catalogPath.isEmpty())
+        return catalogPath;
+    const auto defaultPath =
+        QDir(QCoreApplication::applicationDirPath()).filePath("config/catalog.json");
+    if (QFile::exists(defaultPath))
+        return defaultPath;
+    return QStringLiteral(":/config/catalog.json");
+}
+
+bool AppCatalog::resolveStateAndInstallPaths(const QString& statePath,
+                                             const QString& installRoot,
+                                             const QString& profile) {
+    m_statePath =
+        statePath.isEmpty()
+            ? QDir(QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation)).filePath("installed-apps.json")
+            : statePath;
+    m_installRoot = installRoot.isEmpty()
+                            ? QDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)).filePath("packages")
+                            : installRoot;
+    m_legacyInstallRoot.clear();
+    if (statePath.isEmpty() && installRoot.isEmpty()) {
+        static const QRegularExpression uuid("^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$");
+        if (profile != "default" && !uuid.match(profile).hasMatch()) {
+            setError(tr("Invalid app profile."));
             return false;
         }
-        const auto platforms = options.value("platforms").toArray();
-        if (platforms.size() != 2 || options.value("columns").toInt() < 1 || options.value("columns").toInt() > 4 ||
-            options.value("spacing").toInt() < 8 || options.value("spacing").toInt() > 48 ||
-            options.value("cardHeight").toInt() < 100 || options.value("cardHeight").toInt() > 220) {
-            setError(tr("Invalid Store presentation."));
-            return false;
-        }
-        QSet<QString> types;
-        if (options.contains("webBackend") &&
-            (options.value("webBackend") != "chromium" && options.value("webBackend") != "embedded")) {
-            setError(tr("Invalid web app backend."));
-            return false;
-        }
-        if (options.contains("webDesktopId") && !QRegularExpression("^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$")
-                                                     .match(options.value("webDesktopId").toString())
-                                                     .hasMatch()) {
-            setError(tr("Invalid web browser identity."));
-            return false;
-        }
-        if (options.contains("appAccent") && !QColor(options.value("appAccent").toString()).isValid()) {
-            setError(tr("Invalid Store app color."));
-            return false;
-        }
-        for (const auto& key : QStringList{"webCategory", "appSection"})
-            if (options.contains(key) &&
-                (options.value(key).toString().isEmpty() || options.value(key).toString().size() > 80)) {
-                setError(tr("Invalid Store app label."));
-                return false;
-            }
-        for (const auto& item : platforms) {
-            const auto p = item.toObject();
-            const auto type = p.value("type").toString();
-            for (const auto& key : p.keys())
-                if (key != "type" && key != "label") {
-                    setError(tr("Unknown Store platform field."));
-                    return false;
-                }
-            if ((type != "web" && type != "android") || types.contains(type) || p.value("label").toString().isEmpty() ||
-                p.value("label").toString().size() > 40) {
-                setError(tr("Invalid Store platforms."));
-                return false;
-            }
-            types.insert(type);
-        }
+        m_legacyInstallRoot = m_installRoot;
+        m_statePath = QFileInfo(m_statePath).absolutePath() + "/profiles/" + profile + "/installed-apps.json";
+        m_installRoot += "/profiles/" + profile;
     }
+    return true;
+}
+
+void AppCatalog::cleanStagingDirectories() {
+    QDir installDirectory(m_installRoot);
+    for (const auto& name :
+         installDirectory.entryList({QStringLiteral(".staging-*")}, QDir::Dirs | QDir::NoDotAndDotDot))
+        QDir(installDirectory.filePath(name)).removeRecursively();
+}
+
+bool AppCatalog::loadStoreOptions(const QJsonObject& options) {
+    if (options.isEmpty())
+        return true;
+    if (!validateStoreOptionKeys(options))
+        return false;
+    if (!validateStoreSizes(options))
+        return false;
+    if (!validateStoreDetailRatio(options))
+        return false;
+    if (!validateStorePlatforms(options))
+        return false;
+    if (!validateStoreWebOptions(options))
+        return false;
+    if (!validateStoreAppOptions(options))
+        return false;
     if (options.contains("androidContainment") && !options.value("androidContainment").isString()) {
         setError(tr("Invalid Android presentation mode."));
         return false;
@@ -521,227 +500,326 @@ bool AppCatalog::load(const QString& catalogPath, const QString& statePath, cons
         setError(tr("Invalid Android presentation mode."));
         return false;
     }
-    QVector<Entry> loaded;
+    return true;
+}
+
+bool AppCatalog::validateStoreOptionKeys(const QJsonObject& options) {
+    const QSet<QString> allowed{"platforms",
+                                "columns",
+                                "spacing",
+                                "cardHeight",
+                                "detailRatio",
+                                "webBackend",
+                                "webDesktopId",
+                                "webCategory",
+                                "appSection",
+                                "appAccent",
+                                "androidContainment"};
+    for (const auto& key : options.keys())
+        if (!allowed.contains(key)) {
+            setError(tr("Unknown Store presentation field."));
+            return false;
+        }
+    return true;
+}
+
+bool AppCatalog::validateStoreSizes(const QJsonObject& options) {
+    for (const auto& key : QStringList{"columns", "spacing", "cardHeight"})
+        if (!options.value(key).isDouble() || options.value(key).toDouble() != options.value(key).toInt()) {
+            setError(tr("Store sizes must use whole numbers."));
+            return false;
+        }
+    return true;
+}
+
+bool AppCatalog::validateStoreDetailRatio(const QJsonObject& options) {
+    if (options.contains("detailRatio") &&
+        (!options.value("detailRatio").isDouble() || options.value("detailRatio").toDouble() < 0.25 ||
+         options.value("detailRatio").toDouble() > 0.5)) {
+        setError(tr("Invalid Store details size."));
+        return false;
+    }
+    return true;
+}
+
+bool AppCatalog::validateStorePlatforms(const QJsonObject& options) {
+    const auto platforms = options.value("platforms").toArray();
+    if (platforms.size() != 2 || options.value("columns").toInt() < 1 || options.value("columns").toInt() > 4 ||
+        options.value("spacing").toInt() < 8 || options.value("spacing").toInt() > 48 ||
+        options.value("cardHeight").toInt() < 100 || options.value("cardHeight").toInt() > 220) {
+        setError(tr("Invalid Store presentation."));
+        return false;
+    }
+    QSet<QString> types;
+    for (const auto& item : platforms) {
+        const auto p = item.toObject();
+        const auto type = p.value("type").toString();
+        for (const auto& key : p.keys())
+            if (key != "type" && key != "label") {
+                setError(tr("Unknown Store platform field."));
+                return false;
+            }
+        if ((type != "web" && type != "android") || types.contains(type) || p.value("label").toString().isEmpty() ||
+            p.value("label").toString().size() > 40) {
+            setError(tr("Invalid Store platforms."));
+            return false;
+        }
+        types.insert(type);
+    }
+    return true;
+}
+
+bool AppCatalog::validateStoreWebOptions(const QJsonObject& options) {
+    if (options.contains("webBackend") &&
+        (options.value("webBackend") != "chromium" && options.value("webBackend") != "embedded")) {
+        setError(tr("Invalid web app backend."));
+        return false;
+    }
+    if (options.contains("webDesktopId") && !QRegularExpression("^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$")
+                                                 .match(options.value("webDesktopId").toString())
+                                                 .hasMatch()) {
+        setError(tr("Invalid web browser identity."));
+        return false;
+    }
+    return true;
+}
+
+bool AppCatalog::validateStoreAppOptions(const QJsonObject& options) {
+    if (options.contains("appAccent") && !QColor(options.value("appAccent").toString()).isValid()) {
+        setError(tr("Invalid Store app color."));
+        return false;
+    }
+    for (const auto& key : QStringList{"webCategory", "appSection"})
+        if (options.contains(key) &&
+            (options.value(key).toString().isEmpty() || options.value(key).toString().size() > 80)) {
+            setError(tr("Invalid Store app label."));
+            return false;
+        }
+    return true;
+}
+
+bool AppCatalog::loadPackageEntries(const QJsonDocument& document,
+                                     const QDir& catalogDirectory,
+                                     QVector<Entry>& loaded) {
     QSet<QString> ids;
-    const QDir catalogDirectory(QFileInfo(source).absolutePath());
+    static const QRegularExpression manifestName("^packages/[a-z0-9][a-z0-9.-]{0,79}/manifest\\.json$");
     for (const auto& value : document.object().value("packages").toArray()) {
-        static const QRegularExpression manifestName("^packages/[a-z0-9][a-z0-9.-]{0,79}/manifest\\.json$");
-        if (!value.isString() || !manifestName.match(value.toString()).hasMatch()) {
-            setError(tr("Unsafe package manifest path."));
-            return false;
-        }
-        const auto manifestPath = catalogDirectory.filePath(value.toString());
-        QFile manifestFile(manifestPath);
-        if (!manifestFile.open(QIODevice::ReadOnly)) {
-            setError(tr("Unable to open package manifest: %1").arg(manifestPath));
-            return false;
-        }
-        const auto manifestData = manifestFile.readAll();
-        QJsonParseError manifestError;
-        const auto manifestDocument = QJsonDocument::fromJson(manifestData, &manifestError);
-        if (manifestError.error != QJsonParseError::NoError || !manifestDocument.isObject()) {
-            setError(tr("Invalid package manifest: %1").arg(manifestPath));
-            return false;
-        }
-        const auto object = manifestDocument.object();
-        const auto appObject = object.value("app").toObject();
         Entry entry;
-        entry.core.packageId = object.value("packageId").toString().trimmed();
-        entry.core.app.id = appObject.value("id").toString().trimmed();
-        entry.core.app.name = object.value("name").toString().trimmed();
-        entry.core.app.type = appObject.value("type").toString().trimmed();
-        entry.core.app.presentationMode =
-            appObject.value("presentationMode").toString(QStringLiteral("native-tv")).trimmed();
-        entry.core.app.networkRequirement =
-            appObject.value("networkRequirement")
-                .toString(entry.core.app.type == QStringLiteral("web") ? QStringLiteral("internet") : QStringLiteral("none"))
-                .trimmed();
-        entry.core.app.handledActions = readStringArray(appObject.value(QStringLiteral("handledActions")).toArray());
-        entry.core.app.section = appObject.value("section").toString().trimmed();
-        entry.core.app.symbol = appObject.value("symbol").toString().trimmed();
-        entry.core.app.accent = QColor(appObject.value("accent").toString());
-        entry.core.app.launchConfiguration = appObject.toVariantMap();
-        entry.core.category = object.value("category").toString().trimmed();
-        entry.core.version = object.value("version").toString().trimmed();
-        entry.core.minIsoldeVersion = object.value("minIsoldeVersion").toString().trimmed();
-        entry.meta.description = object.value("description").toString().trimmed();
-        entry.meta.publisher = object.value("publisher").toString().trimmed();
-        entry.meta.provenance = object.value("provenance").toString().trimmed();
-        const auto setupObject = object.value(QStringLiteral("setup")).toObject();
-        entry.setup.setupRequired = setupObject.value(QStringLiteral("required")).toBool(false);
-        entry.setup.setupPrompt = setupObject.value(QStringLiteral("prompt")).toString().trimmed();
-        for (const auto& capability : object.value("capabilities").toArray())
-            entry.meta.capabilities.append(capability.toString());
-        entry.setup.manifestData = manifestData;
-        static const QRegularExpression safeId(QStringLiteral("^[a-z0-9][a-z0-9.-]*$"));
-        static const QRegularExpression safeDesktopId(QStringLiteral("^[A-Za-z0-9][A-Za-z0-9._-]*$"));
-        static const QRegularExpression safeBusName(QStringLiteral("^[A-Za-z_][A-Za-z0-9_.-]*$"));
-        static const QSet<QString> presentationModes{QStringLiteral("native-tv"),
-                                                     QStringLiteral("web-kiosk"),
-                                                     QStringLiteral("media"),
-                                                     QStringLiteral("capture"),
-                                                     QStringLiteral("game-hub"),
-                                                     QStringLiteral("game"),
-                                                     QStringLiteral("disc-media"),
-                                                     QStringLiteral("disc-game"),
-                                                     QStringLiteral("utility-desktop"),
-                                                     QStringLiteral("desktop-bridge")};
-        static const QSet<QString> networkRequirements{
-            QStringLiteral("none"), QStringLiteral("local-network"), QStringLiteral("internet")};
-        static const QSet<QString> handledActionTypes{QStringLiteral("open-folder"),
-                                                      QStringLiteral("open-file"),
-                                                      QStringLiteral("open-url"),
-                                                      QStringLiteral("open-disc")};
-        const auto desktopId = appObject.value("desktopId").toString();
-        const auto busName = appObject.value("mprisBusName").toString();
-        const auto windowClass = appObject.value("windowClass").toString();
-        const auto containment = appObject.value("containment").toString();
-        const auto url = QUrl(appObject.value(QStringLiteral("url")).toString());
-        bool validOrigins = true;
-        for (const auto& origin : appObject.value(QStringLiteral("allowedOrigins")).toArray())
-            validOrigins = validOrigins && isSafeWebOrigin(origin.toString());
-        const bool validDesktop = entry.core.app.type != QStringLiteral("desktop") ||
-                                  (safeDesktopId.match(desktopId).hasMatch() &&
-                                   (busName.isEmpty() || safeBusName.match(busName).hasMatch()) &&
-                                   (windowClass.isEmpty() || safeBusName.match(windowClass).hasMatch()) &&
-                                   (containment.isEmpty() || containment == QStringLiteral("fullscreen")));
-        const bool validWeb = entry.core.app.type != QStringLiteral("web") || (isSafeWebUrl(url) && validOrigins);
-        bool validHandledActions = true;
-        for (const auto& handledAction : entry.core.app.handledActions)
-            validHandledActions = validHandledActions && handledActionTypes.contains(handledAction);
-        const bool validActionHandlers = isValidActionHandlers(appObject, entry.core.app.handledActions);
-        const bool compatible = QVersionNumber::fromString(QCoreApplication::applicationVersion()) >=
-                                QVersionNumber::fromString(entry.core.minIsoldeVersion);
-        if (object.value("schemaVersion").toInt() != 1 || !safeId.match(entry.core.packageId).hasMatch() ||
-            entry.core.packageId != entry.core.app.id || !entry.core.app.isValid() || ids.contains(entry.core.app.id) ||
-            !entry.core.app.accent.isValid() || entry.core.category.isEmpty() || entry.meta.publisher.isEmpty() ||
-            !presentationModes.contains(entry.core.app.presentationMode) ||
-            !networkRequirements.contains(entry.core.app.networkRequirement) || !validHandledActions ||
-            !validActionHandlers || entry.core.version.size() > 80 || QVersionNumber::fromString(entry.core.version).isNull() ||
-            !QRegularExpression("^[0-9]+(?:\\.[0-9]+){0,3}(?:-[A-Za-z0-9.-]+)?$").match(entry.core.version).hasMatch() ||
-            !compatible || entry.meta.description.isEmpty() || (entry.setup.setupRequired && entry.setup.setupPrompt.isEmpty()) ||
-            !validDesktop || !validWeb) {
-            setError(tr("Catalog entries require unique IDs and complete, valid metadata."));
+        if (!loadPackageEntry(value, catalogDirectory, entry))
             return false;
-        }
+        if (!validateEntryFields(entry.core.app.id.toUtf8().constData(), ids))
+            return false;
         ids.insert(entry.core.app.id);
         loaded.append(entry);
     }
-    m_entries = std::move(loaded);
-    m_installedIds.clear();
-    m_packageStates.clear();
-    m_failureReasons.clear();
-    m_customPackages.clear();
-    m_updatesDisabled.clear();
-    m_availableUpdates.clear();
-    m_storeTransaction.clear();
-    QDir installDirectory(m_installRoot);
-    for (const auto& name :
-         installDirectory.entryList({QStringLiteral(".staging-*")}, QDir::Dirs | QDir::NoDotAndDotDot))
-        QDir(installDirectory.filePath(name)).removeRecursively();
+    return true;
+}
 
+bool AppCatalog::loadPackageEntry(const QJsonValue& value,
+                                   const QDir& catalogDirectory,
+                                   Entry& entry) {
+    static const QRegularExpression safeId(QStringLiteral("^[a-z0-9][a-z0-9.-]*$"));
+    static const QRegularExpression safeDesktopId(QStringLiteral("^[A-Za-z0-9][A-Za-z0-9._-]*$"));
+    static const QRegularExpression safeBusName(QStringLiteral("^[A-Za-z_][A-Za-z0-9_.-]*$"));
+    static const QSet<QString> presentationModes{QStringLiteral("native-tv"),
+                                                 QStringLiteral("web-kiosk"),
+                                                 QStringLiteral("media"),
+                                                 QStringLiteral("capture"),
+                                                 QStringLiteral("game-hub"),
+                                                 QStringLiteral("game"),
+                                                 QStringLiteral("disc-media"),
+                                                 QStringLiteral("disc-game"),
+                                                 QStringLiteral("utility-desktop"),
+                                                 QStringLiteral("desktop-bridge")};
+    static const QSet<QString> networkRequirements{
+        QStringLiteral("none"), QStringLiteral("local-network"), QStringLiteral("internet")};
+    static const QSet<QString> handledActionTypes{QStringLiteral("open-folder"),
+                                                  QStringLiteral("open-file"),
+                                                  QStringLiteral("open-url"),
+                                                  QStringLiteral("open-disc")};
+    if (!value.isString() || !manifestName.match(value.toString()).hasMatch()) {
+        setError(tr("Unsafe package manifest path."));
+        return false;
+    }
+    const auto manifestPath = catalogDirectory.filePath(value.toString());
+    QFile manifestFile(manifestPath);
+    if (!manifestFile.open(QIODevice::ReadOnly)) {
+        setError(tr("Unable to open package manifest: %1").arg(manifestPath));
+        return false;
+    }
+    const auto manifestData = manifestFile.readAll();
+    QJsonParseError manifestError;
+    const auto manifestDocument = QJsonDocument::fromJson(manifestData, &manifestError);
+    if (manifestError.error != QJsonParseError::NoError || !manifestDocument.isObject()) {
+        setError(tr("Invalid package manifest: %1").arg(manifestPath));
+        return false;
+    }
+    const auto object = manifestDocument.object();
+    const auto appObject = object.value("app").toObject();
+    entry.core.packageId = object.value("packageId").toString().trimmed();
+    entry.core.app.id = appObject.value("id").toString().trimmed();
+    entry.core.app.name = appObject.value("name").toString().trimmed();
+    entry.core.app.type = appObject.value("type").toString().trimmed();
+    entry.core.app.presentationMode =
+        appObject.value("presentationMode").toString(QStringLiteral("native-tv")).trimmed();
+    entry.core.app.networkRequirement =
+        appObject.value("networkRequirement")
+            .toString(entry.core.app.type == QStringLiteral("web") ? QStringLiteral("internet") : QStringLiteral("none"))
+            .trimmed();
+    entry.core.app.handledActions = readStringArray(appObject.value(QStringLiteral("handledActions")).toArray());
+    entry.core.app.section = appObject.value("section").toString().trimmed();
+    entry.core.app.symbol = appObject.value("symbol").toString().trimmed();
+    entry.core.app.accent = QColor(appObject.value("accent").toString());
+    entry.core.app.launchConfiguration = appObject.toVariantMap();
+    entry.core.category = object.value("category").toString().trimmed();
+    entry.core.version = object.value("version").toString().trimmed();
+    entry.core.minIsoldeVersion = object.value("minIsoldeVersion").toString().trimmed();
+    entry.meta.description = object.value("description").toString().trimmed();
+    entry.meta.publisher = object.value("publisher").toString().trimmed();
+    entry.meta.provenance = object.value("provenance").toString().trimmed();
+    const auto setupObject = object.value(QStringLiteral("setup")).toObject();
+    entry.setup.setupRequired = setupObject.value(QStringLiteral("required")).toBool(false);
+    entry.setup.setupPrompt = setupObject.value(QStringLiteral("prompt")).toString().trimmed();
+    for (const auto& capability : object.value("capabilities").toArray())
+        entry.meta.capabilities.append(capability.toString());
+    entry.setup.manifestData = manifestData;
+    return true;
+}
+
+bool AppCatalog::loadStateFile(const QString& stateReadPath) {
     QFile state(stateReadPath);
-    if (state.exists() && state.open(QIODevice::ReadOnly)) {
-        if (state.size() > 1024 * 1024) {
-            setError(tr("App activation state exceeds its limit."));
+    if (!state.exists())
+        return true;
+    if (!state.open(QIODevice::ReadOnly)) {
+        setError(tr("Unable to open app activation state."));
+        return false;
+    }
+    if (state.size() > 1024 * 1024) {
+        setError(tr("App activation state exceeds its limit."));
+        return false;
+    }
+    const auto stateObject = QJsonDocument::fromJson(state.readAll()).object();
+    if (stateReadPath == m_statePath) {
+        if (!loadStateAndroidContainment(stateObject))
+            return false;
+        if (!loadStateUpdatePreferences(stateObject))
+            return false;
+        if (!loadStateStoreTransaction(stateObject))
+            return false;
+        if (!loadStateCustomPackages(stateObject))
+            return false;
+    }
+    if (!loadStateInstalledApps(stateObject))
+        return false;
+    return true;
+}
+
+bool AppCatalog::loadStateAndroidContainment(const QJsonObject& stateObject) {
+    const auto presentation = stateObject.value("androidContainment");
+    if (!presentation.isUndefined()) {
+        if (!presentation.isString() || (presentation != "fullscreen" && presentation != "windowed")) {
+            setError(tr("Invalid Android presentation preference."));
             return false;
         }
-        const auto stateObject = QJsonDocument::fromJson(state.readAll()).object();
-        if (stateReadPath == m_statePath) {
-            const auto presentation = stateObject.value("androidContainment");
-            if (!presentation.isUndefined()) {
-                if (!presentation.isString() || (presentation != "fullscreen" && presentation != "windowed")) {
-                    setError(tr("Invalid Android presentation preference."));
-                    return false;
-                }
-                m_androidContainment = presentation.toString();
-            }
-            const auto disabled = stateObject.value("updatesDisabled");
-            if (!disabled.isUndefined() && (!disabled.isArray() || disabled.toArray().size() > 256)) {
-                setError(tr("Invalid update preferences."));
-                return false;
-            }
-            for (const auto& value : disabled.toArray()) {
-                const auto id = value.toString();
-                if (!QRegularExpression("^fdroid-[a-f0-9]{24}$").match(id).hasMatch()) {
-                    setError(tr("Invalid update preference identity."));
-                    return false;
-                }
-                m_updatesDisabled.insert(id);
-            }
-            const auto transaction = stateObject.value("storeTransaction");
-            if (!transaction.isUndefined() && !transaction.isString()) {
-                setError(tr("Invalid app transaction identity."));
-                return false;
-            }
-            m_storeTransaction = transaction.toString();
-            if (!m_storeTransaction.isEmpty() &&
-                !QRegularExpression("^[a-f0-9]{32}$").match(m_storeTransaction).hasMatch()) {
-                setError(tr("Invalid app transaction identity."));
-                return false;
-            }
+        m_androidContainment = presentation.toString();
+    }
+    return true;
+}
+
+bool AppCatalog::loadStateUpdatePreferences(const QJsonObject& stateObject) {
+    const auto disabled = stateObject.value("updatesDisabled");
+    if (!disabled.isUndefined() && (!disabled.isArray() || disabled.toArray().size() > 256)) {
+        setError(tr("Invalid update preferences."));
+        return false;
+    }
+    for (const auto& value : disabled.toArray()) {
+        const auto id = value.toString();
+        if (!QRegularExpression("^fdroid-[a-f0-9]{24}$").match(id).hasMatch()) {
+            setError(tr("Invalid update preference identity."));
+            return false;
         }
-        if (stateReadPath == m_statePath) {
-            const auto custom = stateObject.value("customPackages").toObject();
-            if (custom.size() > 256) {
-                setError(tr("Too many custom apps in this profile."));
-                return false;
-            }
-            for (auto it = custom.begin(); it != custom.end(); ++it) {
-                if (!QRegularExpression("^(web|fdroid)-[a-f0-9]{24}$").match(it.key()).hasMatch() ||
-                    !QRegularExpression("^[0-9]{1,18}(?:\\.[0-9]{1,18}){0,3}$")
-                         .match(it.value().toString())
-                         .hasMatch()) {
-                    setError(tr("Invalid custom app identity."));
-                    return false;
-                }
-                const auto path =
-                    QDir(m_installRoot).filePath(it.key() + "/" + it.value().toString() + "/manifest.json");
-                QFile customFile(path);
-                const auto info = QFileInfo(path), base = QFileInfo(m_installRoot);
-                if (info.isSymLink() || base.isSymLink() ||
-                    !info.canonicalFilePath().startsWith(base.canonicalFilePath() + "/") || info.size() > 65536 ||
-                    !customFile.open(QIODevice::ReadOnly)) {
-                    setError(tr("Unable to load this profile's custom app."));
-                    return false;
-                }
-                Entry entry;
-                if (!customEntry(QJsonDocument::fromJson(customFile.readAll()).object(), &entry) ||
-                    entry.core.app.id != it.key() || entry.core.version != it.value().toString() || findEntry(entry.core.app.id))
-                    return false;
-                m_entries.append(entry);
-                m_customPackages.insert(entry.core.app.id, entry.core.version);
-            }
+        m_updatesDisabled.insert(id);
+    }
+    return true;
+}
+
+bool AppCatalog::loadStateStoreTransaction(const QJsonObject& stateObject) {
+    const auto transaction = stateObject.value("storeTransaction");
+    if (!transaction.isUndefined() && !transaction.isString()) {
+        setError(tr("Invalid app transaction identity."));
+        return false;
+    }
+    m_storeTransaction = transaction.toString();
+    if (!m_storeTransaction.isEmpty() &&
+        !QRegularExpression("^[a-f0-9]{32}$").match(m_storeTransaction).hasMatch()) {
+        setError(tr("Invalid app transaction identity."));
+        return false;
+    }
+    return true;
+}
+
+bool AppCatalog::loadStateCustomPackages(const QJsonObject& stateObject) {
+    const auto custom = stateObject.value("customPackages").toObject();
+    if (custom.size() > 256) {
+        setError(tr("Too many custom apps in this profile."));
+        return false;
+    }
+    for (auto it = custom.begin(); it != custom.end(); ++it) {
+        if (!QRegularExpression("^(web|fdroid)-[a-f0-9]{24}$").match(it.key()).hasMatch() ||
+            !QRegularExpression("^[0-9]{1,18}(?:\\.[0-9]{1,18}){0,3}$")
+                 .match(it.value().toString())
+                 .hasMatch()) {
+            setError(tr("Invalid custom app identity."));
+            return false;
         }
-        const auto installed = stateObject.value("installed").toArray();
-        const auto packageStates = stateObject.value(QStringLiteral("packageStates")).toObject();
-        const auto failureReasons = stateObject.value(QStringLiteral("failureReasons")).toObject();
-        for (const auto& value : installed) {
-            if (const auto* entry = findEntry(value.toString())) {
-                const auto installedManifest =
-                    QDir(m_installRoot).filePath(entry->packageId + "/" + entry->version + "/manifest.json");
-                const auto legacyManifest =
-                    QDir(m_legacyInstallRoot).filePath(entry->packageId + "/" + entry->version + "/manifest.json");
-                if (QFile::exists(installedManifest) ||
-                    (!m_legacyInstallRoot.isEmpty() && QFile::exists(legacyManifest))) {
-                    m_installedIds.insert(entry->app.id);
-                    m_registry->addApp(entry->app);
-                    auto restoredState =
-                        packageStates.value(entry->app.id)
-                            .toString(entry->setupRequired ? QStringLiteral("needs-setup") : QStringLiteral("ready"));
-                    if (restoredState != QStringLiteral("needs-setup") && restoredState != QStringLiteral("ready") &&
-                        restoredState != QStringLiteral("failed"))
-                        restoredState = QStringLiteral("ready");
-                    m_packageStates.insert(entry->app.id, restoredState);
-                    const auto reason = failureReasons.value(entry->app.id).toString().trimmed();
-                    if (!reason.isEmpty())
-                        m_failureReasons.insert(entry->app.id, reason);
-                }
+        const auto path =
+            QDir(m_installRoot).filePath(it.key() + "/" + it.value().toString() + "/manifest.json");
+        QFile customFile(path);
+        const auto info = QFileInfo(path), base = QFileInfo(m_installRoot);
+        if (info.isSymLink() || base.isSymLink() ||
+            !info.canonicalFilePath().startsWith(base.canonicalFilePath() + "/") || info.size() > 65536 ||
+            !customFile.open(QIODevice::ReadOnly)) {
+            setError(tr("Unable to load this profile's custom app."));
+            return false;
+        }
+        Entry entry;
+        if (!customEntry(QJsonDocument::fromJson(customFile.readAll()).object(), &entry) ||
+            entry.core.app.id != it.key() || entry.core.version != it.value().toString() ||
+            findEntry(entry.core.app.id))
+            return false;
+        m_entries.append(entry);
+        m_customPackages.insert(entry.core.app.id, entry.core.version);
+    }
+    return true;
+}
+
+bool AppCatalog::loadStateInstalledApps(const QJsonObject& stateObject) {
+    const auto installed = stateObject.value("installed").toArray();
+    const auto packageStates = stateObject.value(QStringLiteral("packageStates")).toObject();
+    const auto failureReasons = stateObject.value(QStringLiteral("failureReasons")).toObject();
+    for (const auto& value : installed) {
+        if (const auto* entry = findEntry(value.toString())) {
+            const auto installedManifest =
+                QDir(m_installRoot).filePath(entry->packageId + "/" + entry->version + "/manifest.json");
+            const auto legacyManifest =
+                QDir(m_legacyInstallRoot).filePath(entry->packageId + "/" + entry->version + "/manifest.json");
+            if (QFile::exists(installedManifest) ||
+                (!m_legacyInstallRoot.isEmpty() && QFile::exists(legacyManifest))) {
+                m_installedIds.insert(entry->app.id);
+                m_registry->addApp(entry->app);
+                auto restoredState =
+                    packageStates.value(entry->app.id)
+                        .toString(entry->setupRequired ? QStringLiteral("needs-setup") : QStringLiteral("ready"));
+                if (restoredState != QStringLiteral("needs-setup") && restoredState != QStringLiteral("ready") &&
+                    restoredState != QStringLiteral("failed"))
+                    restoredState = QStringLiteral("ready");
+                m_packageStates.insert(entry->app.id, restoredState);
+                const auto reason = failureReasons.value(entry->app.id).toString().trimmed();
+                if (!reason.isEmpty())
+                    m_failureReasons.insert(entry->app.id, reason);
             }
         }
     }
-    setError({});
-    emit entriesChanged();
     return true;
 }
 
