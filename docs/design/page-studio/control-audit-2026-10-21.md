@@ -1,4 +1,4 @@
-# Page Studio control audit
+# Skin Studio control audit
 
 Source review requested by the user, 2026-10-21. This is an audit and implementation contract, not an installed usability test or completed UI work. Read alongside the existing usability audit and approved expansion. It adds no declined contrast assistant, focus-route editor, remote test mode, destination previews or asset-management library.
 

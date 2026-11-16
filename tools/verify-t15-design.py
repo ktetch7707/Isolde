@@ -1,5 +1,5 @@
-#!/usr/bin/env python3
-"""T15 static verification: Page Studio design pack coverage (no Qt build needed).
+#!/ usr / bin / env python3
+"""T15 static verification: Skin Studio design pack coverage (no Qt build needed).
 
 Checks (design state-transition/feature-coverage review for backlog T15):
   T15.1 feature map covers every CustomizeHomeView action label and PageManager
@@ -10,10 +10,9 @@ Checks (design state-transition/feature-coverage review for backlog T15):
         preview, apply error, nested scope) in TV and desktop forms.
   T15.3 state model covers D-pad/Confirm/Back/Menu for every state, field
         editing, focus restoration, error feedback and accessible movement
-        alternatives; remote-only constraint stated (no pointer/number keys/
-        hidden gestures).
-  T15.4 review records a designer-executed artifact walkthrough (no user
-        present) with resolved findings and measurable acceptance journeys;
+        alternatives;
+remote - only constraint stated(no pointer / number keys / hidden gestures).T15.4 review records a designer
+    - executed artifact walkthrough(no user present) with resolved findings and measurable acceptance journeys;
         user review explicitly deferred to T24 (no invented review evidence).
   Link check: every relative Markdown link in the pack resolves.
 Exit 0 = all checks pass. Prints PASS/FAIL per check.
@@ -45,8 +44,8 @@ fmap, wf, states, review = (read(n) for n in
                             ("feature-map.md", "wireframes.md",
                              "interaction-states.md", "review-and-acceptance.md"))
 
-# T15.1 — operation coverage from the live QML sources (label is not backend proof:
-# every label must also appear near a backend path in the map).
+#T15.1 — operation coverage from the live QML sources(label is not backend proof:
+#every label must also appear near a backend path in the map).
 chv = (ROOT / "qml" / "CustomizeHomeView.qml").read_text(encoding="utf-8")
 actions_block = chv.split("readonly property var actions: [", 1)[1].split("]", 1)[0]
 labels = set(re.findall(r'"([^"]+)"', actions_block))
@@ -70,7 +69,7 @@ for backend in ("moveItem", "setItemPlacement", "gridCollisions", "addActionTile
                 "drawerRequested", "searchToggle"):
     check(f"T15.1 backend evidence cited: {backend}", backend in fmap)
 
-# T15.2 — required screens, each with TV and desktop treatment.
+#T15.2 — required screens, each with TV and desktop treatment.
 for screen in ("Blank page", "Existing page", "Add (catalog)", "Selection and inspector",
                "Pick-up / drop", "Resize", "Collision", "Dirty exit", "Preview and Apply",
                "Nested scope"):
@@ -78,7 +77,7 @@ for screen in ("Blank page", "Existing page", "Add (catalog)", "Selection and in
 check("T15.2 TV and desktop forms present",
       "TV:" in wf and "Desktop:" in wf and "Parity note" in wf)
 
-# T15.3 — state model completeness.
+#T15.3 — state model completeness.
 for state in ("Canvas browsing", "Moving", "Resizing", "Collision dialog", "Context menu",
               "Inspector sheet", "Field editing", "Add catalog", "Pages / Layers drawer",
               "Preview / try navigation", "Apply summary", "Apply error", "Dirty-exit dialog"):
@@ -93,7 +92,7 @@ check("T15.3 accessible movement alternatives",
 check("T15.3 remote-only constraint stated",
       "No long press" in states and "number keys" in states and "hidden" in states)
 
-# T15.4 — designer walkthrough + journeys (user review deferred to T24).
+#T15.4 — designer walkthrough + journeys(user review deferred to T24).
 check("T15.4 designer walkthrough recorded (no user present)", "Designer walkthrough record" in review)
 check("T15.4 explicitly states no user review yet",
       "No user or representative review has taken place" in review)
@@ -103,7 +102,7 @@ check("T15.4 findings resolved", re.search(r"\| W\d+ \|.*\| (High|Medium|Low) \|
 check("T15.4 measurable acceptance journeys", all(f"| A{i} |" in review for i in range(1, 11)))
 check("T15.4 no-build claim present", "No application build is claimed" in review)
 
-# Relative link resolution inside the pack.
+#Relative link resolution inside the pack.
 bad_links = []
 for doc in PACK.glob("*.md"):
     for target in re.findall(r"\]\((\.\.?/[^)#]+)\)", doc.read_text(encoding="utf-8")):

@@ -1,68 +1,145 @@
-#!/usr/bin/env python3
-"""Exercise the built shell through X11 remote keys in a disposable profile.
+#!/ usr / bin / env python3
+""
+    "Exercise the built shell through X11 remote keys in a disposable profile.
 
-Requires the VM graphical session, wmctrl and Xlib. Temporarily stops the
-normal user service and restores it in finally. Never edits personal layouts.
-"""
-import argparse
-import ctypes
-import ctypes.util
-import fcntl
-import hashlib
-import importlib.util
-import re
-import json
-import os
-from pathlib import Path
-import subprocess
-import sys
-import tempfile
-import time
+    Requires the VM graphical session,
+    wmctrl and Xlib.Temporarily stops the normal user service and restores it in finally.Never edits personal layouts
+        .""
+         "
+    import argparse import ctypes import ctypes.util import fcntl import hashlib import importlib
+        .util import re import json import os import signal from pathlib import Path import subprocess import sys import
+            tempfile import time
 
+                def run(*args, **kwargs)
+    : return subprocess.run(args, check = True, text = True, capture_output = True, **kwargs)
+        .stdout
 
-def run(*args, **kwargs):
-    return subprocess.run(args, check=True, text=True, capture_output=True, **kwargs).stdout
+      def studio_page_menu(layout, key, action, extra_pages = 0)
+    : ""
+      "Navigate the grouped Studio menu using ordinary remote input."
+      "" offsets = {
+        "page" : 0,
+        "new" : 0,
+        "edit" : 1,
+        "add" : 2,
+        "appearance" : 3,
+        "layers" : 4,
+        "designs" : 5,
+        "reuse" : 5,
+        "editorSettings" : 6,
+        "safety" : 6,
+        "apply" : 7,
+        "versions" : 0
+    } key("Up", 30);
+key("Down") if action == "versions" : key("Up");
+key("Right", 2);
+key("Return");
+return key("Down", offsets[action]);
+key("Return") if action in("designs", "reuse") : key("Down", int(action == "reuse"));
+key("Return") elif action == "editorSettings" : key("Return") elif action == "new" : document = json.loads(
+    layout.read_text()) pages = len(document.get("pages", [])) +
+                                int(document.get("rootPage", {}).get("visible", True)) + extra_pages key("Down", pages);
+key("Return") elif action == "page" : document = json.loads(layout.read_text()) pages =
+    len(document.get("pages", [])) +
+    int(document.get("rootPage", {}).get("visible", True)) + extra_pages key("Down", pages + 1);
+key("Return")
 
+    def studio_legacy_menu(layout, key, index)
+    : actions = {
+          0 : "new",
+          1 : "page",
+          2 : "add",
+          3 : "appearance",
+          4 : "layers",
+          5 : "designs",
+          6 : "editorSettings",
+          7 : "apply",
+          8 : "edit"
+      } studio_page_menu(layout, key, actions[index])
 
-def studio_page_menu(layout, key, action, extra_pages=0):
-    """Use the shipped named menu order, including T22 reuse and T23 safety."""
-    document = json.loads(layout.read_text())
-    pages = len(document.get("pages", [])) + int(document.get("rootPage", {}).get("visible", True)) + extra_pages
-    offsets = {"add": 0, "appearance": 1, "layers": 2, "reuse": 3,
-               "designs": 4, "editorSettings": 5, "safety": 6, "apply": 7, "edit": 8}
-    index = 0 if action == "new" else 1 if action == "page" else 1 + pages + offsets[action]
-    key("Up", 30); key("Down"); key("Down", index); key("Return")
+          def studio_catalog_family(key, identity)
+    : options = json.loads((Path(__file__).resolve().parents[1] / "config/studio-defaults.json").read_text()) primary =
+          options["simpleStudio"]["basicFamilies"] if identity in primary
+    : index = primary.index(identity) else : key("Right", len(primary)); key("Return")
+        additional = [family for family in options["catalog"] if family["id"] not in primary]
+        index = next(i for i, family in enumerate(additional) if family["id"] == identity)
+    key("Right", index);
+key("Return")
 
+    def studio_advanced_inspector(key)
+    : key("Down", 30);
+key("Return") #Explicit Advanced settings from the short summary.
 
-def studio_legacy_menu(layout, key, index):
-    actions = {0:"new", 1:"page", 2:"add", 3:"appearance", 4:"layers",
-               5:"designs", 6:"editorSettings", 7:"apply", 8:"edit"}
-    studio_page_menu(layout, key, actions[index])
+    def studio_design_management(key)
+    : key("Down", 30);
+key("Up");
+key("Return");
+key("Up", 30) #Manage designs, before Back;
+orient to the first operation.
 
-
-def capture_x11_window(x11, display, window, path):
-    """Capture the owned installed window; XWayland's root drawable is not readable."""
-    from PIL import Image
-    class Frame(ctypes.Structure):
-        _fields_=[("width",ctypes.c_int),("height",ctypes.c_int),("xoffset",ctypes.c_int),("format",ctypes.c_int),
-            ("data",ctypes.c_void_p),("byte_order",ctypes.c_int),("bitmap_unit",ctypes.c_int),
-            ("bitmap_bit_order",ctypes.c_int),("bitmap_pad",ctypes.c_int),("depth",ctypes.c_int),
-            ("bytes_per_line",ctypes.c_int),("bits_per_pixel",ctypes.c_int),
-            ("red_mask",ctypes.c_ulong),("green_mask",ctypes.c_ulong),("blue_mask",ctypes.c_ulong)]
-    x11.XGetGeometry.argtypes=[ctypes.c_void_p,ctypes.c_ulong,ctypes.POINTER(ctypes.c_ulong),ctypes.POINTER(ctypes.c_int),ctypes.POINTER(ctypes.c_int),ctypes.POINTER(ctypes.c_uint),ctypes.POINTER(ctypes.c_uint),ctypes.POINTER(ctypes.c_uint),ctypes.POINTER(ctypes.c_uint)]
-    x11.XGetGeometry.restype=ctypes.c_int
-    owner=ctypes.c_ulong();left=ctypes.c_int();top=ctypes.c_int()
-    width=ctypes.c_uint();height=ctypes.c_uint();border=ctypes.c_uint();depth=ctypes.c_uint()
-    if not x11.XGetGeometry(display,window,ctypes.byref(owner),ctypes.byref(left),ctypes.byref(top),ctypes.byref(width),ctypes.byref(height),ctypes.byref(border),ctypes.byref(depth)):
-        raise RuntimeError("Cannot measure owned X11 acceptance window")
-    if not (0<width.value<=3840 and 0<height.value<=2160):raise RuntimeError("Unsupported acceptance window bounds")
-    x11.XGetImage.argtypes=[ctypes.c_void_p,ctypes.c_ulong,ctypes.c_int,ctypes.c_int,ctypes.c_uint,ctypes.c_uint,ctypes.c_ulong,ctypes.c_int]
-    x11.XGetImage.restype=ctypes.POINTER(Frame)
-    x11.XDestroyImage.argtypes=[ctypes.POINTER(Frame)];x11.XDestroyImage.restype=ctypes.c_int
-    frame=x11.XGetImage(display,window,0,0,width.value,height.value,ctypes.c_ulong(-1).value,2)
-    if not frame:raise RuntimeError("Cannot read owned X11 acceptance window")
-    try:
-        data=frame.contents
+    def capture_x11_window(x11, display, window, path)
+    : ""
+      "Capture the owned installed window; XWayland's root drawable is not readable."
+      "" from PIL import Image class Frame(ctypes.Structure)
+    : _fields_ =
+    [
+        ("width", ctypes.c_int),
+        ("height", ctypes.c_int),
+        ("xoffset", ctypes.c_int),
+        ("format", ctypes.c_int),
+        ("data", ctypes.c_void_p),
+        ("byte_order", ctypes.c_int),
+        ("bitmap_unit", ctypes.c_int),
+        ("bitmap_bit_order", ctypes.c_int),
+        ("bitmap_pad", ctypes.c_int),
+        ("depth", ctypes.c_int),
+        ("bytes_per_line", ctypes.c_int),
+        ("bits_per_pixel", ctypes.c_int),
+        ("red_mask", ctypes.c_ulong),
+        ("green_mask", ctypes.c_ulong),
+        ("blue_mask", ctypes.c_ulong)
+    ] x11.XGetGeometry.argtypes =
+        [
+            ctypes.c_void_p,
+            ctypes.c_ulong,
+            ctypes.POINTER(ctypes.c_ulong),
+            ctypes.POINTER(ctypes.c_int),
+            ctypes.POINTER(ctypes.c_int),
+            ctypes.POINTER(ctypes.c_uint),
+            ctypes.POINTER(ctypes.c_uint),
+            ctypes.POINTER(ctypes.c_uint),
+            ctypes.POINTER(ctypes.c_uint)
+        ] x11.XGetGeometry.restype = ctypes.c_int owner = ctypes.c_ulong();
+left = ctypes.c_int();
+top = ctypes.c_int() width = ctypes.c_uint();
+height = ctypes.c_uint();
+border = ctypes.c_uint();
+depth = ctypes.c_uint() if not x11
+            .XGetGeometry(display,
+                          window,
+                          ctypes.byref(owner),
+                          ctypes.byref(left),
+                          ctypes.byref(top),
+                          ctypes.byref(width),
+                          ctypes.byref(height),
+                          ctypes.byref(border),
+                          ctypes.byref(depth))
+    : raise RuntimeError("Cannot measure owned X11 acceptance window") if not(0 < width.value <= 3840 and
+                                                                              0 < height.value <= 2160)
+    : raise RuntimeError("Unsupported acceptance window bounds") x11.XGetImage.argtypes = [
+    ctypes.c_void_p,
+    ctypes.c_ulong,
+    ctypes.c_int,
+    ctypes.c_int,
+    ctypes.c_uint,
+    ctypes.c_uint,
+    ctypes.c_ulong,
+    ctypes.c_int
+] x11.XGetImage.restype = ctypes.POINTER(Frame) x11.XDestroyImage.argtypes = [ctypes.POINTER(Frame)];
+x11.XDestroyImage.restype = ctypes.c_int frame =
+    x11.XGetImage(display, window, 0, 0, width.value, height.value, ctypes.c_ulong(-1).value, 2) if not frame
+    : raise RuntimeError("Cannot read owned X11 acceptance window") try
+    : data=frame.contents
         if data.byte_order!=0 or data.bits_per_pixel not in (24,32) or (data.red_mask,data.green_mask,data.blue_mask)!=(0xff0000,0xff00,0xff):
             raise RuntimeError("Unsupported X11 acceptance pixel format")
         if data.width!=width.value or data.height!=height.value or not (data.width*data.bits_per_pixel//8<=data.bytes_per_line<=data.width*4+64):
@@ -77,8 +154,11 @@ def main():
     parser.add_argument("executable", type=Path)
     parser.add_argument("--inspect", action="store_true", help="Pause briefly on failure for a VM screenshot")
     parser.add_argument("--studio", action="store_true", help="Exercise draft canvas, remote editing, history, preview and Apply")
+    parser.add_argument("--sources-only", action="store_true", help="Exercise contained source policy and actions in a private XDG movie directory")
     parser.add_argument("--catalog", action="store_true", help="Exercise real remote image import, framing, GIF Apply and reopen")
     parser.add_argument("--collections", action="store_true", help="Exercise real collection registry/session lifecycle in a private profile")
+    parser.add_argument("--gallery-presentation-evidence", type=Path)
+    parser.add_argument("--gallery-presentation-digest")
     parser.add_argument("--themes-controls-only", action="store_true", help="Review Audio/Ambient values and explicit private draft discard")
     parser.add_argument("--themes-custom-only", action="store_true", help="Complete only the custom palette and private policy controls")
     parser.add_argument("--themes-faults-only", action="store_true", help="Review installed loading, RPC error and retry under three palettes")
@@ -88,6 +168,7 @@ def main():
     parser.add_argument("--desktop", action="store_true", help="Compare actual X11 pointer drag and remote saved output in the Studio fixture")
     parser.add_argument("--preview-seconds", type=int, default=0, choices=range(31), help="Hold the appearance preview for visual inspection")
     args = parser.parse_args()
+    if bool(args.gallery_presentation_evidence)!=bool(args.gallery_presentation_digest) or (args.gallery_presentation_evidence and not args.collections):parser.error("Verified gallery evidence is collections-only")
     if args.themes_faults_only or args.themes_custom_only or args.themes_controls_only: args.themes_only = True
     lock = open("/tmp/isolde-home-components-acceptance.lock", "a")
     fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -99,26 +180,54 @@ def main():
                 "items": [{"id": "personal-source", "kind": "app", "appId": "missing-source", "size": "wide", "opacity": 0.65}]}
     layout = config / "home-layout.json"
     if args.designs_only:
-        original["composition"]={"schemaVersion":1,"enabled":True,"grid":{"columns":4,"rows":3,"mode":"screen"}}
+        original["composition"]={
+        "schemaVersion" : 1, "enabled" : True, "grid" : {"columns" : 4, "rows" : 3, "mode" : "screen"}}
         original["items"][0].update(name="Design source",placement={"x":0,"y":0,"width":1,"height":1},presentation={"labelColor":"#e89ab0","radius":16})
     original_bytes = json.dumps(original).encode()
+    search_profile=None
+    if args.search_only:
+        import uuid
+        search_profile=str(uuid.uuid4())
+        original["items"]=[dict(id="apps-origin",kind="action",name="All Apps",size="wide",action=dict(type="open-apps"))]
+        original_bytes=json.dumps(original).encode()
+        (config/"profiles.json").write_text(json.dumps(dict(active="default",profiles=[dict(id="default",name="Household"),dict(id=search_profile,name="Other")])) )
+        other_layout=config/"profiles"/search_profile/"home-layout.json"
+        other_layout.parent.mkdir(parents=True);other_layout.write_bytes(original_bytes)
+    if args.sources_only:
+        original = json.loads((Path(__file__).resolve().parents[1]/"config/default-home-layout.json").read_text())
+        original_bytes = json.dumps(original).encode()
+        movies=evidence/"movies"; movies.mkdir()
+        for index in range(8): (movies/("Source %02d"%index)).mkdir()
+        (evidence/"config/user-dirs.dirs").write_text('XDG_VIDEOS_DIR="'+str(movies)+'"\n')
     if args.collections:
-        original_bytes, collection_fixture = prepare_collections(evidence, executable)
+        gallery_presentation=None
+        if args.gallery_presentation_evidence:
+            artifact=args.gallery_presentation_evidence
+            if artifact.resolve()!=artifact or not artifact.is_file() or artifact.stat().st_size>65536 or hashlib.sha256(artifact.read_bytes()).hexdigest()!=args.gallery_presentation_digest:raise RuntimeError("Native gallery presentation identity mismatch")
+            gallery_presentation=json.loads(artifact.read_text())
+            if not isinstance(gallery_presentation,dict) or not 1<=len(gallery_presentation)<=10:raise RuntimeError("Invalid native gallery presentation")
+        original_bytes, collection_fixture = prepare_collections(evidence, executable,gallery_presentation)
+        collection_fixture["galleryEvidenceDigest"]=args.gallery_presentation_digest
     if args.catalog:
         prepare_catalog(evidence)
-    theme_provider = prepare_theme_provider(evidence) if args.themes_only else None
+    theme_provider = prepare_theme_provider(evidence) if args.themes_only or args.search_only else None
     if args.themes_only:
         original = theme_document(2 if args.themes_custom_only else 0)
         original_bytes = json.dumps(original).encode()
     layout.write_bytes(original_bytes)
     (config / "device-setup.json").write_text(json.dumps({"version": 1, "step": 6, "complete": True}))
     (config / "Kodi.conf").write_text("[profiles]\ndefault\\kodi\\autoStart=false\n")
+    if args.search_only:
+        with (config/"Kodi.conf").open("a") as settings:settings.write(search_profile+"\\kodi\\autoStart=false\n")
     (config / "Isolde.conf").write_text("[sources]\nautomaticSourcesEnabled=false\n")
-    # SourceManager currently uses default QSettings (no organization set),
-    # whereas device audio/Kodi use explicit Isolde namespaces.
+#SourceManager currently uses default QSettings(no organization set),
+#whereas device audio / Kodi use explicit Isolde namespaces.
     default_settings = evidence / "config" / "Unknown Organization"
     default_settings.mkdir()
     (default_settings / "Isolde.conf").write_text("[sources]\nautomaticSourcesEnabled=false\n")
+    if args.sources_only:
+        for settings in (config,default_settings):
+            (settings/"Isolde.conf").write_text("")
     env = dict(os.environ)
     for line in run("systemctl", "--user", "show-environment").splitlines():
         key, _, value = line.partition("=")
@@ -143,14 +252,15 @@ def main():
     class Event(ctypes.Union):
         _fields_ = [("key", KeyEvent), ("padding", ctypes.c_long * 24)]
     x11.XSendEvent.argtypes = [ctypes.c_void_p, ctypes.c_ulong, ctypes.c_int, ctypes.c_long, ctypes.POINTER(Event)]
-    # Set before opening Xlib: it reads the process environment itself.
-    os.environ.update({key: env[key] for key in ("DISPLAY", "XAUTHORITY") if key in env})
+#Set before opening Xlib : it reads the process environment itself.
+    os.environ.update({
+    key: env[key] for key in ("DISPLAY", "XAUTHORITY") if key in env})
     display = x11.XOpenDisplay(env.get("DISPLAY", "").encode())
     if not display:
         raise RuntimeError("Cannot open the VM X11 display")
-    # XWayland can list a window before it is focusable. Without a custom
-    # error handler Xlib's default handler exits the process, which would skip
-    # the finally block and leave the user service stopped.
+#XWayland can list a window before it is focusable.Without a custom
+#error handler Xlib's default handler exits the process, which would skip
+#the finally block and leave the user service stopped.
     error_type = ctypes.CFUNCTYPE(ctypes.c_int, ctypes.c_void_p, ctypes.c_void_p)
     x11_errors = []
     error_handler = error_type(lambda _display, _event: x11_errors.append(1) or 0)
@@ -158,8 +268,8 @@ def main():
     x11.XSetErrorHandler(error_handler)
 
     def focus_window(target_window):
-        # The window may not be focusable yet; activating it through the
-        # window manager and retrying is enough for XSendEvent delivery.
+#The window may not be focusable yet; activating it through the
+#window manager and retrying is enough for XSendEvent delivery.
         focused = ctypes.c_ulong(); revert = ctypes.c_int()
         for _ in range(20):
             run("wmctrl", "-i", "-a", target_window, env=env)
@@ -180,8 +290,8 @@ def main():
         if not code:
             raise RuntimeError(f"No keycode for {name}")
         for _ in range(count):
-            # Window-targeted X11 events work on XWayland without injecting
-            # compositor-global shortcuts into other applications.
+#Window - targeted X11 events work on XWayland without injecting
+#compositor - global shortcuts into other applications.
             for event_type, mask in ((2, 1), (3, 2)):
                 event = Event()
                 event.key = KeyEvent(type=event_type, send_event=1, display=display, window=int(window, 16),
@@ -208,8 +318,8 @@ def main():
         raise RuntimeError(message + " did not complete; evidence: " + str(evidence))
 
     def pointer(event_type, x, y, held=False):
-        # Window-targeted events stay inside this disposable application's X11
-        # window. KeyEvent and XButtonEvent share the same wire field layout.
+#Window - targeted events stay inside this disposable application's X11
+#window.KeyEvent and XButtonEvent share the same wire field layout.
         geometry = next(line.split() for line in run("wmctrl", "-lG", env=env).splitlines()
                         if line.split()[0] == window)
         origin_x, origin_y, width, height = map(int, geometry[2:6])
@@ -227,17 +337,40 @@ def main():
 
     offline_module = None
     if args.designs_only or args.search_only:
-        # Reuse the frozen production-boundary fixture; deny only the child,
-        # preserving the oracle transport and local display/session sockets.
+#Reuse the frozen production - boundary fixture; deny only the child,
+#preserving the oracle transport and local display / session sockets.
         module_path = Path(__file__).with_name("guide-soak-acceptance.py")
         spec = importlib.util.spec_from_file_location("studio_offline_fixture", module_path)
         offline_module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(offline_module)
     active = subprocess.run(["systemctl", "--user", "is-active", "--quiet", "isolde.service"]).returncode == 0
     process = None
+    sound_module = None
+    sound_original_sink = None
+    sound_sink = "isolde_acceptance_" + evidence.name.rsplit("-", 1)[-1]
+    sound_observations = []
+    if args.themes_controls_only:
+        def cancel_audio_acceptance(_signal, _frame):
+#Bypass the optional failure - inspection pause so bounded runner
+#cancellation immediately executes output / service restoration.
+            raise KeyboardInterrupt("Audio acceptance cancelled")
+        signal.signal(signal.SIGTERM,cancel_audio_acceptance)
     try:
         if active:
             run("systemctl", "--user", "stop", "isolde.service")
+        if args.themes_controls_only:
+#Guest - only temporary output.Restore the exact previous default
+#before the ordinary service starts; never record physical output.
+            sound_original_sink=run("pactl","get-default-sink",env=env,timeout=10).strip()
+            if not sound_original_sink or "\n" in sound_original_sink:raise RuntimeError("Missing original guest output identity")
+            sound_module = run("pactl", "load-module", "module-null-sink",
+                               "sink_name="+sound_sink, "rate=48000", "channels=2",
+                               env=env, timeout=10).strip()
+            if not sound_module.isdecimal(): raise RuntimeError("Invalid temporary audio module identity")
+            run("pactl","set-default-sink",sound_sink,env=env,timeout=10)
+            run("pactl","set-sink-mute",sound_sink,"0",env=env,timeout=10)
+            env["PULSE_SINK"] = sound_sink
+            env["QT_LOGGING_RULES"] = "qt.multimedia.*=true"
         with (evidence / "shell.log").open("w") as log:
             def start_shell():
                 command = [str(executable), "--windowed"]
@@ -253,10 +386,12 @@ def main():
                             listing=run("wmctrl", "-lp", env=env)
                         except subprocess.CalledProcessError as error:
                             diagnostic=(error.stdout or "")+(error.stderr or "")
-                            if error.returncode!=1 or (diagnostic.strip() and "Cannot get client list properties" not in diagnostic):
+                            transient=("Cannot get client list properties" in diagnostic
+                                       or ("BadWindow (invalid Window parameter)" in diagnostic and "20 (X_GetProperty)" in diagnostic))
+                            if error.returncode!=1 or (diagnostic.strip() and not transient):
                                 print("WMCTRL_DISCOVERY_ERROR "+repr({"code":error.returncode,"stdout":error.stdout,"stderr":error.stderr}),flush=True)
                                 raise
-                            listing=""  # No client list during bounded private-window startup.
+                            listing=""  # Empty/stale client list during the same bounded startup wait.
                         for line in listing.splitlines():
                             fields = line.split(None, 4)
                             if len(fields) >= 3 and fields[2] == str(child.pid):
@@ -273,7 +408,7 @@ def main():
                     run("wmctrl", "-i", "-a", child_window, env=env)
                     return child, child_window, focus_window(child_window)
                 except BaseException:
-                    # Startup has not assigned the outer process yet.
+#Startup has not assigned the outer process yet.
                     if child.poll() is None:
                         child.terminate()
                         try:
@@ -302,6 +437,89 @@ def main():
                             raise RuntimeError("Studio exited during capture")
                         time.sleep(0.1)
 
+                if args.sources_only:
+                    phases=[]
+                    def snap(phase):
+                        time.sleep(.3);capture(phase);phases.append(phase)
+                    def source_center():
+                        key("Home");key("Up",30);key("Left",10);key("Return")
+#Use the packaged default, including its reserved Sources header.
+                    snap("sourcesdefault")
+                    source_center();snap("sourceslist")
+                    assert layout.read_bytes()==original_bytes,"Opening Sources changed the layout"
+#Mode is the second policy field; editing and cancelling must write nothing.
+                    key("Return");key("Down");key("Return");key("Return")
+                    snap("sourcesdraft");key("Escape",2)
+                    assert layout.read_bytes()==original_bytes,"Cancelled policy changed the layout"
+#Hide and restore through real remote actions, checking the durable decision.
+                    key("Up",30);key("Down",3);key("Return");key("Down",3);key("Return")
+                    decisions=config/"sources.json"
+                    expect(lambda:decisions.exists() and any(v.get("hidden") is True for v in json.loads(decisions.read_text())["decisions"].values()),"Remote Hide persisted")
+                    snap("sourceshidden")
+                    key("Up",30);key("Down",2);key("Return");key("Down");key("Return");key("Return")
+                    expect(lambda:not any(v.get("hidden") for v in json.loads(decisions.read_text())["decisions"].values()),"Remote Restore persisted")
+                    snap("sourcesrestored")
+                    assert layout.read_bytes()==original_bytes,"Hide/restore changed the layout"
+                    key("Up",30);key("Down",2);key("Return");key("Down");key("Return")
+                    key("Down");key("Return");key("Escape") # Keep confirmation is a private, cancellable step.
+                    assert layout.read_bytes()==original_bytes,"Cancelling Keep changed the layout"
+                    key("Down",4);key("Return");snap("sourceshandlers");key("Escape")
+                    disconnected=evidence/"disconnected";disconnected.mkdir()
+                    for path in movies.iterdir():path.rename(disconnected/path.name)
+                    time.sleep(6);key("Up",30);key("Return");snap("sourcesdisconnected")
+                    key("Escape")
+                    for path in disconnected.iterdir():path.rename(movies/path.name)
+                    key("Up",30);key("Down");key("Return");snap("sourcesretry")
+                    assert layout.read_bytes()==original_bytes,"Disconnect/retry changed the layout"
+#Render the same generic bounded component under dark and pastel palettes.
+                    defaults=json.loads((Path(__file__).resolve().parents[1]/"config/studio-defaults.json").read_text())
+                    key("Up",30);key("Return")
+                    for field_index,field in enumerate(defaults["sourcePolicyFields"]):
+                        key("Up",30);key("Down",field_index);key("Return")
+                        if field["key"] in ("reconnect","suppressPlayback","suppressSetup","suppressEditing"):key("Down")
+                        key("Return");key("Escape")
+                        assert layout.read_bytes()==original_bytes,"Policy field edited applied data before Save"
+                    snap("sourcespolicy")
+                    key("Down",len(defaults["sourcePolicyFields"]));key("Return")
+                    def saved_policy():return json.loads(layout.read_text()).get("theme",{}).get("sourcePolicy",{})
+                    expect(lambda:saved_policy().get("mode")=="off","Remote policy saved")
+                    applied=saved_policy()
+                    assert applied["pages"]==[] and applied["slots"]==["header-sources"] and applied["duration"]==0
+                    assert all(applied[field] is False for field in ("reconnect","suppressPlayback","suppressSetup","suppressEditing"))
+                    assert "movie-disc" not in applied["events"] and "movie-disc" not in applied["types"]
+                    snap("sourcespolicysaved")
+#Explicit handler / Keep confirmation uses the real durable model.
+                    before_keep=json.loads(layout.read_text())
+                    key("Up",30);key("Down",3);key("Return");key("Down",4);key("Return");key("Return")
+                    expect(lambda:any(v.get("handler") for v in json.loads(decisions.read_text())["decisions"].values()),"Remote handler saved")
+                    key("Down");key("Return");snap("sourceskeep")
+                    assert json.loads(layout.read_text())==before_keep,"Keep confirmation wrote before Confirm"
+                    key("Return")
+                    expect(lambda:len(json.loads(layout.read_text()).get("components",[]))==len(before_keep["components"])+1,"Remote Keep saved one tile")
+                    assert any(v.get("permanent") is True for v in json.loads(decisions.read_text())["decisions"].values())
+                    snap("sourceskept")
+                    for index,tag in enumerate(("dark","pastel")):
+                        process.terminate();process.wait(timeout=10)
+                        component=defaults["componentPresets"]["detected-sources"].copy()
+                        component.update(schemaVersion=1,id="contained-sources",name="Detected sources",source=dict(schemaVersion=1,provider="sources",kind="detected-sources"),placement=dict(x=0,y=0,width=4,height=2))
+                        notice=defaults["componentPresets"]["source-notice"].copy()
+                        notice.update(schemaVersion=1,id="source-status",source=dict(schemaVersion=1,provider="sources",kind="source-notice"),placement=dict(x=0,y=2,width=3,height=1))
+                        palette=theme_palettes()[index].copy()
+                        palette["sourcePolicy"]=dict(defaults["sourcePolicyDefaults"],mode="widget",duration=0)
+                        document=dict(schemaVersion=2,theme=palette,composition=dict(schemaVersion=1,enabled=True,headerControls=["sources","settings","edit"],grid=dict(columns=4,rows=3,mode="screen")),categories=[],components=[component,notice])
+                        original_bytes=json.dumps(document).encode();layout.write_bytes(original_bytes)
+                        process,window,focused=start_shell()
+                        snap(tag+"sourcesbounded")
+                        key("Menu");snap(tag+"sourcesactions");key("Escape")
+                        assert layout.read_bytes()==original_bytes,"Source Menu changed layout"
+                        process.terminate();process.wait(timeout=10)
+                        palette["sourcePolicy"]["mode"]="compact"
+                        original_bytes=json.dumps(document).encode();layout.write_bytes(original_bytes)
+                        process,window,focused=start_shell();snap(tag+"sourcesnotice")
+                        assert layout.read_bytes()==original_bytes,"Compact notice changed layout"
+                    (evidence/"result.json").write_text(json.dumps(dict(passed=True,journey="sources",freshProfile=True,normalProfileUsed=False,phases=phases,noUnintendedLayoutWrites=True,explicitPolicySave=True,remoteHandlerSaved=True,remoteKeepSaved=True,fixtureOnly=True,remoteHideRestore=True,policyCancelNoWrite=True),indent=2))
+                    return
+
                 if args.themes_only:
                     native_directory = evidence / "data/Isolde/native-profiles/default/kodi/home/.kodi/userdata"
                     native_before = {str(f.relative_to(native_directory)):hashlib.sha256(f.read_bytes()).hexdigest() for f in native_directory.glob("*.xml")}
@@ -312,16 +530,96 @@ def main():
                     def origin():
                         key("Home");key("Up",6);key("Down");key("Left",4);key("Return");key("Up",6);key("Down");key("Left",4)
                     def settings_section(index):
-                        origin();key("Up",6);key("Return");key("Up",8);key("Down",index);key("Return")
+                        routes=("network","studio","sources","remotes","system","profiles","vpn","store-preferences","media")
+                        settings_route(routes[index])
+                    def settings_route(route):
+                        categories=json.loads((Path(__file__).resolve().parents[1]/"config/studio-defaults.json").read_text())["settingsNavigation"]["categories"]
+                        matches=[(i,c) for i,c in enumerate(categories) if c.get("route")==route or any(r["route"]==route for r in c.get("rows",[]))]
+                        assert len(matches)==1,"Settings route must have exactly one category: "+route
+                        index,category=matches[0]
+                        origin();key("Up",6);key("Return");key("Up",30);key("Down",index);key("Return")
+                        if "rows" in category:
+                            row=next(i for i,r in enumerate(category["rows"]) if r["route"]==route)
+                            key("Up",30);key("Down",row);key("Return")
                     for sequence,case in enumerate((2,) if args.themes_custom_only else range(3)):
                         tag=("dark","pastel","custom")[case]
                         if sequence:
                             process.terminate();process.wait(timeout=10)
-                            original_bytes=json.dumps(theme_document(case)).encode();layout.write_bytes(original_bytes)
+                            next_document=theme_document(case)
+                            if args.themes_controls_only and case==2:
+                                for document in [next_document]+[page["layout"] for page in next_document["pages"]]:
+                                    document["theme"]["typographyScale"]=1.3
+                            original_bytes=json.dumps(next_document).encode();layout.write_bytes(original_bytes)
                             process,window,focused=start_shell()
                         if args.themes_controls_only:
-                            for row,name in ((1,"audio"),(2,"ambient")):
-                                settings_section(4);key("Up",12);key("Down",row);key("Return");snap(tag,name);key("Escape")
+                            if tag=="custom":
+                                settings_route("system")
+                                key("Up",12);key("Down",3);key("Return")
+                                snap(tag,"power")
+                                key("Down",2);key("Return")
+                                snap(tag,"powerconfirm")
+                                key("Escape")
+                                snap(tag,"powercancel")
+                            settings_route("interface-sounds");snap(tag,"sounds")
+                            key("Down");key("Right");key("Return")  # Apply the first available preview choice.
+                            fields=json.loads((Path(__file__).resolve().parents[1]/"config/interface-sounds.json").read_text())["fields"]
+                            preview_index=next(i for i,field in enumerate(fields) if field["key"]=="preview")
+                            def route_owned_audio():
+#Qt chooses an explicit QAudioDevice, which may
+#override PULSE_SINK.Move only streams whose
+#server - reported owner is this private shell.
+                                inputs=json.loads(run("pactl","--format=json","list","sink-inputs",env=env,timeout=5))
+                                owned=[]
+                                for stream in inputs:
+                                    if str(stream.get("properties",{}).get("application.process.id"))!=str(process.pid):continue
+                                    identity=stream.get("index")
+                                    if type(identity)!=int or identity<0:raise RuntimeError("Invalid owned audio stream identity")
+                                    run("pactl","move-sink-input",str(identity),sound_sink,env=env,timeout=5)
+                                    owned.append({
+    key:stream.get(key) for key in ("index","sink","mute","corked","volume")})
+                                (evidence/(tag+"sound-routing.json")).write_text(json.dumps(dict(pid=process.pid,target=sound_sink,owned=owned),indent=2))
+                                return owned
+                            def record_sound(label, stimulus):
+                                import array
+                                target=evidence/(tag+label+".pcm")
+                                route_owned_audio()
+                                with target.open("wb") as audio, (evidence/(tag+label+"-recorder.log")).open("w") as errors:
+                                    recorder=subprocess.Popen(["parec","--device="+sound_sink+".monitor","--format=s16le","--rate=48000","--channels=2","--latency-msec=50","--raw"],env=env,stdout=audio,stderr=errors)
+                                    try:
+                                        time.sleep(.3)
+                                        if recorder.poll() is not None: raise RuntimeError("Audio monitor failed to start")
+                                        stimulus()
+                                        for _ in range(6):route_owned_audio();time.sleep(.1)
+                                        time.sleep(1.4)
+                                        deadline=time.monotonic()+3
+                                        while target.stat().st_size<192000 and time.monotonic()<deadline:
+                                            if recorder.poll() is not None:raise RuntimeError("Audio monitor exited while collecting silence")
+                                            time.sleep(.1)
+                                    finally:
+                                        recorder.terminate()
+                                        try:recorder.wait(timeout=5)
+                                        except subprocess.TimeoutExpired:recorder.kill();recorder.wait(timeout=5)
+                                data=target.read_bytes()
+                                if not 96000<=len(data)<=2*1024*1024 or len(data)%2:
+                                    raise RuntimeError("Audio monitor produced invalid/bounded sample count")
+                                samples=array.array("h");samples.frombytes(data)
+                                if sys.byteorder!="little":samples.byteswap()
+                                observation=dict(palette=tag,case=label,bytes=len(data),peak=max(abs(n) for n in samples),nonzero=sum(n!=0 for n in samples),sha256=hashlib.sha256(data).hexdigest())
+                                sound_observations.append(observation)
+                                (evidence/"sound-output.json").write_text(json.dumps(sound_observations,indent=2))
+                                return observation
+                            key("Up",30);key("Down",preview_index);time.sleep(.5)
+                            audible=record_sound("preview",lambda:key("Return"))
+                            snap(tag,"soundpreview")
+                            assert audible["peak"]>50 and audible["nonzero"]>100,"Qt sound preview produced no audio on its isolated VM output"
+                            key("Up",30);key("Return");time.sleep(.5)  # Disable only this disposable profile's UI sounds.
+                            key("Down",preview_index);time.sleep(.5)
+                            silent=record_sound("disabled",lambda:key("Return"))
+                            assert silent["peak"]==0,"Disabled UI sounds produced output"
+                            snap(tag,"sounddisabled")
+                            key("Up",30);key("Return");key("Escape")
+                            for route,name in (("audio","audio"),("ambient","ambient")):
+                                settings_route(route);snap(tag,name);key("Escape")
                             key("Home");snap(tag,"return")
                             continue
                         if args.themes_faults_only:
@@ -331,8 +629,8 @@ def main():
                             key("Up",20);key("Right",20)
                             theme_provider.mode="loading";theme_provider.release.clear()
                             previous=theme_provider.completed_movies;key("Return")
-                            # Capture the real installed X11 frame before host transport
-                            # acknowledgement can outlast the production RPC deadline.
+#Capture the real installed X11 frame before host transport
+#acknowledgement can outlast the production RPC deadline.
                             capture_x11_window(x11,display,int(window,16),evidence/(tag+"loading-frame.png"))
                             theme_provider.release.set()
                             expect(lambda:theme_provider.completed_movies>previous,"Loading request completed")
@@ -360,9 +658,11 @@ def main():
                         for section,name in ((2,"sources"),(3,"remotes"),(5,"profiles"),(6,"vpn"),(7,"storepreferences")):
                             settings_section(section);snap(tag,name)
                         settings_section(4);snap(tag,"system")
-                        for row,name in ((0,"display"),(1,"audio"),(2,"ambient"),(6,"media"),(7,"components"),(8,"inputs")):
-                            settings_section(4);key("Up",12);key("Down",row);key("Return");snap(tag,name)
-                            if row==6:
+                        for route,name in (("display","display"),("audio","audio"),("ambient","ambient"),("media","media"),("system","components"),("capture","inputs")):
+                            settings_route(route)
+                            if name=="components":key("Up",12);key("Down");key("Return")
+                            snap(tag,name)
+                            if route=="media":
                                 key("Up",12);key("Down",6);key("Return");snap(tag,"folders")
                                 key("Escape");key("Down",2);key("Return");snap(tag,"import");key("Escape")
                             key("Escape")
@@ -386,19 +686,107 @@ def main():
                     native_after={str(f.relative_to(native_directory)):hashlib.sha256(f.read_bytes()).hexdigest() for f in native_directory.glob("*.xml")}
                     assert native_before==native_after and native_before,"Appearance changed native Kodi fixture settings"
                     assert not theme_provider.errors,theme_provider.errors
-                    (evidence/"result.json").write_text(json.dumps({"passed":True,"journey":"themecontrols" if args.themes_controls_only else "themecustom" if args.themes_custom_only else "themes","executable":str(executable),"freshProfile":True,"normalProfileUsed":False,"palettes":["custom"] if args.themes_custom_only else ["dark","pastel","custom"],"phases":phases,"fixtureOnly":True,"nativeKodiBefore":native_before,"nativeKodiAfter":native_after,"layoutBytesUnchanged":True},indent=2))
+                    result={
+        "passed" : True,
+                   "journey"
+            : "themecontrols" if args.themes_controls_only else "themecustom" if args.themes_custom_only else "themes",
+                   "executable" : str(executable),
+                                  "freshProfile" : True,
+                                                   "normalProfileUsed"
+            : False,
+              "palettes" : ["custom"] if args.themes_custom_only else["dark", "pastel", "custom"],
+              "phases" : phases,
+                         "fixtureOnly" : True,
+                                         "nativeKodiBefore" : native_before,
+                                                              "nativeKodiAfter" : native_after,
+                                                                                  "layoutBytesUnchanged" : True}
+                    if args.themes_controls_only:result.update(soundAcceptanceVersion=1,soundOutput=sound_observations,powerConfirmationReview=True)
+                    (evidence/"result.json").write_text(json.dumps(result,indent=2))
                     print("Evidence: "+str(evidence),flush=True)
                     return
                 if args.search_only:
-                    key("Up",30); capture("searchhome")
-                    key("Menu"); key("Return"); offline_module.remote_text(key,"settings")
-                    time.sleep(1); capture("offlinesearch")
-                    assert layout.read_bytes() == original_bytes
-                    key("Escape"); capture("offlinerecovery")
-                    assert layout.read_bytes() == original_bytes
+                    import configparser
+                    phases=[];owned_windows=[dict(pid=process.pid,window=window)]
+                    native_directory=evidence/"data/Isolde/native-profiles/default/kodi/home/.kodi/userdata"
+                    native_before={f.name:hashlib.sha256(f.read_bytes()).hexdigest() for f in native_directory.glob("*.xml")}
+                    def snap_search(phase):
+                        time.sleep(.35);capture(phase);phases.append(phase)
+                        assert layout.read_bytes()==original_bytes and other_layout.read_bytes()==original_bytes,"Search/profile workflow rewrote a layout"
+                    def preference(profile="default"):
+                        matches=[]
+                        section,option=("search","webEnabled") if profile=="default" else ("profiles",profile+"\\search\\webEnabled")
+                        for path in (config/"Isolde.conf",default_settings/"Isolde.conf"):
+                            settings=configparser.ConfigParser(interpolation=None,strict=False);settings.read(path,encoding="utf-8-sig")
+                            if settings.has_option(section,option):matches.append((path,settings.getboolean(section,option)))
+                        if len(matches)>1:raise RuntimeError("Ambiguous profile Search preference store")
+                        return matches[0] if matches else (None,False)
+                    def type_query(text):
+                        key("Return");offline_module.remote_text(key,text);time.sleep(.7)
+                    def open_gallery_search(gallery_phase=None,fresh_phase=None):
+                        key("Up",30);key("Down");key("Return")
+                        if gallery_phase:snap_search(gallery_phase)
+                        key("XF86Search")
+                        if fresh_phase:snap_search(fresh_phase)
+                    def profiles_screen():
+                        key("Escape",2);key("Home");key("Up",30);key("Return")
+                        categories=json.loads((Path(__file__).resolve().parents[1]/"config/studio-defaults.json").read_text())["settingsNavigation"]["categories"]
+                        index=next(i for i,c in enumerate(categories) if c.get("route")=="profiles")
+                        key("Up",30);key("Down",index);key("Return")
+                    title=next(line.split(None,4)[4] for line in run("wmctrl","-lp",env=env).splitlines() if line.split(None,4)[0]==window)
+                    def switch_profile(index,identity):
+                        nonlocal window,focused
+                        previous=window;key("Up",30);key("Down",index);key("Return")
+                        expect(lambda:json.loads((config/"profiles.json").read_text())["active"]==identity,"Production profile selection saved")
+                        def replacement():
+                            matches=[]
+                            for line in run("wmctrl","-lp",env=env).splitlines():
+                                fields=line.split(None,4)
+                                if len(fields)==5 and fields[2]==str(process.pid) and fields[4]==title and fields[0]!=previous:matches.append(fields[0])
+                            if len(matches)>1:raise RuntimeError("Ambiguous replacement profile window")
+                            return matches[0] if matches else None
+                        expect(replacement,"New owned profile runtime window")
+                        window=replacement();focused=focus_window(window);owned_windows.append(dict(pid=process.pid,window=window))
+                    key("Up",30);snap_search("searchhome")
+                    open_gallery_search("searchgallery");type_query("moonlit")
+                    expect(lambda:theme_provider.completed_movies>0 and any(r.get("method")=="VideoLibrary.GetMovies" and r.get("params",{}).get("filter",{}).get("value")=="moonlit" for r in theme_provider.requests),"Production Kodi Search client completed controlled UNIX metadata")
+                    snap_search("offlinemedia")
+                    key("Left");type_query("settings");snap_search("offlinesearch")
+                    key("Up");key("Right",3);key("Return")
+                    snap_search("offlinewebon")
+                    expect(lambda:preference()[1] is True,"Web On saved")
+                    key("Left");key("Right");assert preference()[1] is True,"Arrow navigation toggled Web"
+                    key("Return")
+                    expect(lambda:preference()[1] is False,"Web Off saved");snap_search("offlineweboff")
+                    key("Return");expect(lambda:preference()[1] is True,"Web On saved before cold restart")
+                    process.terminate();process.wait(timeout=10);process,window,focused=start_shell();owned_windows.append(dict(pid=process.pid,window=window))
+                    assert preference()[1] is True
+                    open_gallery_search();type_query("settings");snap_search("offlinewebpersisted")
+                    profiles_screen();switch_profile(1,search_profile)
+                    assert preference()[1] is True and preference(search_profile)[1] is False
+                    open_gallery_search(fresh_phase="offlineprofilefresh");type_query("settings");snap_search("offlineprofileoff")
+                    key("Up");key("Right",3);key("Return")
+                    expect(lambda:preference(search_profile)[1] is True,"Other profile Web On saved")
+                    assert preference()[1] is True;snap_search("offlineprofileon")
+                    profiles_screen();switch_profile(0,"default")
+                    open_gallery_search();type_query("settings");snap_search("offlinedefaulton")
+                    key("Up");key("Right",3);key("Return");expect(lambda:preference()[1] is False,"Default Web Off restored")
+                    store,_=preference()
+                    if store is None or store.resolve()!=store or not store.resolve().is_relative_to((evidence/"config").resolve()):raise RuntimeError("Unsafe fixture Search store")
+                    before_store=store.read_bytes();permissions=store.parent.stat().st_mode & 0o777
+                    try:
+                        store.parent.chmod(0o500);key("Return")
+                        assert preference()[1] is False and store.read_bytes()==before_store,"Failed Web save changed preference bytes"
+                        snap_search("offlinewebsavefailed")
+                    finally:store.parent.chmod(permissions)
+                    key("Return");expect(lambda:preference()[1] is True,"Web preference retry saved");snap_search("offlinewebretry")
+                    key("Return");expect(lambda:preference()[1] is False,"Default Web Off saved after retry");snap_search("offlinewebrestored")
+                    key("Escape");snap_search("searchgalleryreturn");key("Escape");snap_search("offlinerecovery")
                     network=json.loads((evidence/"network-denial.json").read_text())
                     assert network["socketErrnos"] == [101,101] and network["unixSocketAvailable"] is True
-                    (evidence/"result.json").write_text(json.dumps({"passed":True,"journey":"studio-search","freshProfile":True,"normalProfileUsed":False,"network":network},indent=2))
+                    native_after={f.name:hashlib.sha256(f.read_bytes()).hexdigest() for f in native_directory.glob("*.xml")}
+                    assert native_before and native_before==native_after and not theme_provider.errors
+                    assert preference()[1] is False and preference(search_profile)[1] is True and len({(s['pid'],s['window']) for s in owned_windows})==4
+                    (evidence/"result.json").write_text(json.dumps(dict(passed=True,journey="studio-search",freshProfile=True,normalProfileUsed=False,network=network,searchMatrixVersion=2,phases=phases,webToggleVerified=True,coldPreferenceVerified=True,profileSwitchVerified=True,preferenceWriteFailureVerified=True,localKodiBoundaryVerified=True,galleryOriginVerified=True,layoutBytesUnchanged=True,nativeKodiBefore=native_before,nativeKodiAfter=native_after,kodiBoundary="controlled-unix-rpc",ownedRuntimeWindows=owned_windows),indent=2))
                     print("Evidence: "+str(evidence),flush=True)
                     return
                 key("Return")  # Existing missing source -> Home editor.
@@ -428,13 +816,13 @@ def main():
                 assert layout.read_bytes() == original_bytes
                 key("Return")  # Open the catalog after accepting explicit conversion.
                 capture("catalog")
-                key("Down", 2); key("Right"); key("Return"); key("Return")  # Widgets -> Clock ghost.
+                studio_catalog_family(key, "widgets"); key("Return")  # Named Widgets -> Clock ghost.
                 key("Return")  # Add suggests the first free cell; one draft operation.
                 assert layout.read_bytes() == original_bytes
                 capture("edit")  # Actual full-size editing surface, without a Preview step.
 
                 def page_menu(index):
-                    # The named history row sits above the first page-menu item.
+#The named history row sits above the first page - menu item.
                     studio_legacy_menu(layout, key, index)
 
                 if args.desktop:
@@ -449,6 +837,7 @@ def main():
                         key("Escape"); key("Return")  # Close/reopen the actual editor.
                         page_menu(4)  # Named Layers.
                         key("Up", 30); key("Down"); key("Return")  # Explicit Clock, not runtime focus's source.
+                        key("Return")  # Page item -> Find on page, returning to the canvas.
 
                     key("Return"); key("Return"); key("Right"); key("Return")
                     remote = apply_at(2)
@@ -457,8 +846,8 @@ def main():
                     baseline = apply_at(1)
                     reopen_clock()
                     capture("baseline")
-                    # Fixture-relative centers: the selected Clock's full card,
-                    # then one free cell right. No tiny resize handle is used.
+#Fixture - relative centers : the selected Clock's full card,
+#then one free cell right.No tiny resize handle is used.
                     start, end = (0.225, 0.246), (0.335, 0.246)
                     pointer(4, *start); pointer(6, *end, held=True)
                     capture("pointer")
@@ -473,10 +862,10 @@ def main():
                     reopen_clock()
                     capture("pointerapplied")
 
-                    # Author the ordinary packaged 4x2 input group, then move
-                    # one of its children through the actual nested canvas.
+#Author the ordinary packaged 4x2 input group, then move
+#one of its children through the actual nested canvas.
                     key("Escape"); page_menu(2)
-                    key("Down", 2); key("Right"); key("Return"); key("Down", 3); key("Return")
+                    studio_catalog_family(key, "widgets"); key("Down", 3); key("Return")
                     key("Left", 20); key("Down"); key("Return")
                     key("Escape"); page_menu(7); key("Return")
                     expect(lambda: len(json.loads(layout.read_text())["components"]) == 11,
@@ -533,7 +922,7 @@ def main():
                     return
 
                 def undo_operation():
-                    key("Escape"); key("Up", 30); key("Left"); key("Return")  # Named Undo above the page menu.
+                    key("Escape"); key("Up", 30); key("Left",2); key("Return")  # Named Undo above the page menu.
                     key("Down"); key("Down", 2); key("Right")  # Add menu origin; same selected canvas item.
                     assert layout.read_bytes() == original_bytes
 
@@ -544,21 +933,21 @@ def main():
                 key("Return"); key("Return"); key("Left"); key("Return")
                 undo_operation()  # The whole reflow is one undo operation.
 
-                key("Return"); key("Down"); key("Return")  # Edit component.
+                key("Return"); key("Down"); key("Return"); studio_advanced_inspector(key)  # Advanced component controls.
                 key("Down", 2); key("Return"); key("Return")  # Layout -> Size sliders.
                 key("Right")  # Width slider increases with live preview.
                 capture("resize")
-                key("Escape"); key("Escape"); key("Escape")  # Cancel size, fields, inspector.
+                key("Escape",4)  # Cancel size, category, Advanced settings and component summary.
                 assert layout.read_bytes() == original_bytes
                 key("Return"); key("Return"); key("Right", 20); key("Escape")
                 assert layout.read_bytes() == original_bytes
 
-                key("Escape"); key("Up", 30); key("Left"); key("Return")  # Named Undo.
+                key("Escape"); key("Up", 30); key("Left",2); key("Return")  # Named Undo.
                 key("Right"); key("Return"); key("Down")  # Named Redo, then page menu.
-                studio_page_menu(layout,key,"safety"); key("Return")  # Named Try, versions & safety -> Try interaction.
+                studio_page_menu(layout,key,"apply"); key("Down",3); key("Return")  # Timed unsaved trial.
                 assert layout.read_bytes() == original_bytes
                 capture("studio")
-                key("Escape")
+                key("Escape"); key("Escape")
                 assert layout.read_bytes() == original_bytes
                 archive_block = Path(str(layout) + ".studio-versions.json")
                 assert not archive_block.exists()
@@ -581,7 +970,7 @@ def main():
                 key("Escape"); key("Return")  # Close and reopen Studio from the legacy entry.
                 assert layout.read_bytes() == applied
                 capture("applied")
-                page_menu(4); key("Down"); key("Return")  # Layers selects the original Clock.
+                page_menu(4); key("Down"); key("Return"); key("Return")  # Clock -> Find on page.
                 key("Return"); key("Down",3); key("Return")  # Original component context -> Delete.
                 capture("deleteconfirm")
                 assert layout.read_bytes() == applied
@@ -592,16 +981,16 @@ def main():
                 page_menu(7); key("Return")
                 expect(lambda:layout.read_bytes()==applied,"Delete then Undo restored exact applied component bytes")
                 key("Escape"); key("Return")
-                key("Down", 2); key("Return"); key("Down", 2); key("Right"); key("Return"); key("Down", 3); key("Return")  # Widgets -> packaged eight-slot group.
+                key("Down", 2); key("Return"); studio_catalog_family(key, "widgets"); key("Down", 3); key("Return")  # Named Widgets -> packaged eight-slot group.
                 key("Left", 2); key("Down"); key("Return")  # Place below the original components, with room beside the inspector.
                 assert layout.read_bytes() == applied
                 capture("group")
-                key("Return"); key("Down"); key("Return")  # Context -> Inspector.
+                key("Return"); key("Down"); key("Return"); studio_advanced_inspector(key)  # Context -> Advanced inspector.
                 capture("inspector")  # Controls fit beside this fixture group.
                 key("Return")  # Content properties.
                 capture("content")
                 key("Escape")  # Return to property groups.
-                key("Down", 5); key("Return"); key("Down", 7); key("Return")  # More -> Edit group contents.
+                key("Down", 4); key("Return"); key("Down", 7); key("Return")  # More -> Edit group contents.
                 assert layout.read_bytes() == applied
                 capture("inside")
                 key("Escape")  # Exact containing group selection.
@@ -621,13 +1010,13 @@ def main():
                 assert {(item["placement"]["x"], item["placement"]["y"]) for item in children} == {(x, y) for y in range(2) for x in range(4)}
                 grouped_bytes = layout.read_bytes()
                 page_menu(3)  # Named Page appearance from the Apply menu origin.
-                key("Down", 2); key("Return"); key("Return")  # Layout -> scrolling checkbox.
+                key("Down", 3); key("Return"); key("Return")  # Page layout -> scrolling checkbox.
                 key("Return")  # Preview enabled; no saved setting yet.
                 capture("scrollingoption")
                 assert layout.read_bytes() == grouped_bytes
                 key("Down"); key("Return"); key("Escape", 2)  # Done -> canvas.
                 key("Escape"); page_menu(4)  # Named Layers.
-                key("Down"); key("Return")  # Select Clock by its stable layer order.
+                key("Down"); key("Return"); key("Return")  # Clock -> Find on page.
                 key("Return"); key("Return"); key("Down", 15)
                 capture("scrolling")  # Three viewport heights below the first row, same card size.
                 assert layout.read_bytes() == grouped_bytes
@@ -708,9 +1097,19 @@ def main():
                 process.kill(); process.wait()
         if theme_provider:
             theme_provider.close()
-        x11.XCloseDisplay(display)
-        if active:
-            run("systemctl", "--user", "start", "isolde.service")
+        try:
+            if sound_original_sink is not None:
+                run("pactl","set-default-sink",sound_original_sink,env=env,timeout=10)
+            if sound_module is not None:
+                run("pactl","unload-module",sound_module,env=env,timeout=10)
+            if sound_original_sink is not None:
+                restored=run("pactl","get-default-sink",env=env,timeout=10).strip()
+                (evidence/"sound-output-restored.json").write_text(json.dumps(dict(original=sound_original_sink,restored=restored,moduleUnloaded=True),indent=2))
+                if restored!=sound_original_sink:raise RuntimeError("Guest default audio output was not restored")
+        finally:
+            x11.XCloseDisplay(display)
+            if active:
+                run("systemctl", "--user", "start", "isolde.service")
         result_path = evidence / "result.json"
         if result_path.is_file():
             result = json.loads(result_path.read_text())
@@ -752,6 +1151,23 @@ def theme_document(index):
                                      dict(id="theme-origin",name="Theme origin",layout=origin)])
 
 
+def filter_title_response(request, response):
+    """Honor the production title query at this controlled RPC boundary."""
+    query=request.get("params",{}).get("filter",{})
+    if query.get("field")!="title":return response
+    if query.get("operator")!="contains" or not isinstance(query.get("value"),str):
+        raise ValueError("Unsupported title filter in controlled Kodi fixture")
+    result=dict(response)
+    for field in ("movies","episodes","tvshows"):
+        if field not in result:continue
+        items=[item for item in result[field] if query["value"].casefold() in item.get("title","").casefold()]
+        result[field]=items
+        start=request.get("params",{}).get("limits",{}).get("start",0)
+        result["limits"]={
+        "start" : start, "end" : start + len(items), "total" : len(items)}
+    return result
+
+
 def prepare_theme_provider(evidence):
     from reference_collections import ReferenceCollections
     repository=Path(__file__).resolve().parents[1]
@@ -780,7 +1196,8 @@ def prepare_theme_provider(evidence):
                             message+=chunk
                         request=json.loads(message);self.requests.append(request)
                         movies=request["method"]=="VideoLibrary.GetMovies"
-                        response={"jsonrpc":"2.0","id":request["id"]}
+                        response={
+        "jsonrpc" : "2.0", "id" : request["id"]}
                         if movies and self.mode=="loading":
                             if not self.release.wait(15):raise ValueError("Theme loading gate not released")
                         if movies and self.mode=="error":
@@ -795,18 +1212,17 @@ def prepare_theme_provider(evidence):
             if method in {"VideoLibrary.GetTVShows","VideoLibrary.GetSeasons"}:
                 key="tvshows" if method.endswith("TVShows") else "seasons"
                 identity="tvshowid" if key=="tvshows" else "seasonid"
-                return {key:[{identity:7,"tvshowid":7,"title":"Isolated theme television", "season":1,"episode":1,"watchedepisodes":0}],"limits":{"start":0,"end":1,"total":1}}
-            return super().reply(request)
+                return filter_title_response(request,{key:[{identity:7,"tvshowid":7,"title":"Isolated theme television", "season":1,"episode":1,"watchedepisodes":0}],"limits":{"start":0,"end":1,"total":1}})
+            return filter_title_response(request,super().reply(request))
     provider=ThemeProvider(evidence,fixture,repository)
     native=evidence/"data/Isolde/native-profiles/default/kodi/home/.kodi/userdata"
     for name in ("guisettings.xml","sources.xml"):
         (native/name).write_text("<isolated-theme-fixture>keep native Kodi owned data</isolated-theme-fixture>")
     return provider
 
-
-# Collection acceptance stays in this helper so the SHA-addressed overlay
-# cannot import an unfrozen or accidentally modified dependency.
-def prepare_collections(evidence, executable):
+#Collection acceptance stays in this helper so the SHA - addressed overlay
+#cannot import an unfrozen or accidentally modified dependency.
+def prepare_collections(evidence, executable, gallery_presentation=None):
     repository = Path(__file__).resolve().parents[1]
     presets = json.loads((repository / "config/studio-defaults.json").read_text())["componentPresets"]
     def collection(identity, y, mode, ids, capacity):
@@ -843,6 +1259,7 @@ def prepare_collections(evidence, executable):
         if item["id"]!="app-openings":item["source"]=dict(schemaVersion=1,provider="shell",kind=item["componentType"])
     document=dict(schemaVersion=2,rootPage=dict(name="Home",visible=True,position=0),theme=dict(backgroundStart="#19191E",backgroundEnd="#101014",textColor="#FFFFFF",focusColor="#FFD166",surfaceColor="#28262F",motionEnabled=False),categories=[],components=items,
         composition=dict(schemaVersion=1,enabled=True,grid=dict(columns=8,rows=5,mode="screen"),headerControls=["settings"],showClock=False,navigation=[dict(id="home",name="Home")],initialTab="home"))
+    if gallery_presentation is not None:document["composition"]["appGallery"]=gallery_presentation
     package=repository/"config/packages/freetube/manifest.json"
     destination=evidence/"data/Isolde/packages/profiles/default/freetube/1.0.0/manifest.json"
     destination.parent.mkdir(parents=True);destination.write_bytes(package.read_bytes())
@@ -862,7 +1279,7 @@ def prepare_collections(evidence, executable):
         manifest=json.loads((repository/"config"/relative).read_text())
         app=manifest["app"]
         if app["type"] not in ("android","web") and app.get("presentationMode")!="web-kiosk":native.append(app["id"])
-    return json.dumps(document).encode(),dict(state=state,home=home,nativeIndex=native.index("freetube"),document=document)
+    return json.dumps(document).encode(),dict(state=state,home=home,nativeIndex=native.index("freetube"),document=document,galleryPresentation=gallery_presentation)
 
 
 COLLECTION_CLIENT = r'''
@@ -915,6 +1332,7 @@ x.XDestroyWindow(d,w);x.XFlush(d)
 
 
 def exercise_collections(evidence, executable, layout, original, fixture, key, pointer, run, env, poll, shell_window):
+    from guide_features import remote_text
     phases=[]
     def expect(predicate,message,timeout=30):
         deadline=time.monotonic()+timeout
@@ -931,7 +1349,7 @@ def exercise_collections(evidence, executable, layout, original, fixture, key, p
     def native_cycle(number,phase):
         expect(lambda:state().get("launches")==number and not state().get("exited"),"Real isolated client did not launch")
         assert state()["namespace"]=="1"
-        # Address the actual client window, preserving the shell key target.
+#Address the actual client window, preserving the shell key target.
         client_window=hex(state()["window"])
         run("wmctrl","-i","-a",client_window,env=env)
         send_client_key(client_window,"Right",env)
@@ -946,18 +1364,23 @@ def exercise_collections(evidence, executable, layout, original, fixture, key, p
         key("Up",12);key("Down",2)
     def store():
         top();key("Down",3);key("Return");time.sleep(1)
-        # Initial Android grid -> header -> Device apps, then catalog order.
-        key("Up");key("Left");key("Return")
+#Initial Android grid->tools->header->Device apps.
+        key("Up",2);key("Left");key("Return")
         index=fixture["nativeIndex"]
         key("Down",index//2)
         if index%2:key("Right")
         key("Return")
     capture("collectionhome")
     top();key("Return");capture("selectedgallery")
-    key("Right");key("Return");native_cycle(1,"collectionclient")
+    def filter_gallery(text):
+        key("Up",8);key("Return");remote_text(key,text);key("Down")
+        assert layout.read_bytes()==original,"Local gallery filter authored layout data"
+    filter_gallery("free");capture("collectionfilter")
+    key("Return");native_cycle(1,"collectionclient")
     capture("selectedreturn")
-    # Confirm without navigation must launch the exact remembered gallery app.
+#Confirm without navigation must launch the exact remembered gallery app.
     key("Return");native_cycle(2,"collectionrepeat")
+    filter_gallery("");capture("collectionfiltercleared")
     key("Escape");key("Escape");key("Down",2);key("Return");capture("buttongallery")
     key("Right");key("Return");native_cycle(3,"buttonclient")
     capture("buttonreturn")
@@ -968,23 +1391,27 @@ def exercise_collections(evidence, executable, layout, original, fixture, key, p
     expect(lambda:"freetube" not in json.loads(fixture["state"].read_text())["installed"],"Store removal failed")
     key("Escape",2);top();key("Down");capture("allremoved")
     key("Up");key("Return");capture("selectedmissing")
-    key("Right");key("Return");assert state()["launches"]==5
+#The dedicated gallery removes uninstalled entries; do not press Confirm
+#on the surviving neighbor and mistake a different app for a failed launch.
+    assert state()["launches"]==5
     capture("missingrefused");key("Escape");key("Escape")
     top();key("Down",3);key("Return");key("Return");key("Right");key("Return")
     expect(lambda:"freetube" in json.loads(fixture["state"].read_text())["installed"],"Store reinstall failed")
     key("Escape",2);top();key("Down");capture("allrestored")
     assert layout.read_bytes()==original,"Registry installation authored unexpected page placements"
-    key("Up");key("Return");key("Right");key("Return");native_cycle(6,"reinstalledclient")
+    key("Up");key("Return");filter_gallery("free");key("Return");native_cycle(6,"reinstalledclient")
     capture("reinstalledreturn")
     key("Escape",2);top();key("Down",4);capture("historyapp")
     key("Return");native_cycle(7,"historyclient");capture("historyreturned")
     key("Return");native_cycle(8,"historyrepeat");capture("historyrepeatreturn")
-    (evidence/"result.json").write_text(json.dumps(dict(passed=True,journey="collections",executable=str(executable),freshProfile=True,actualNativeInput=True,normalExit=True,exactGalleryReturn=True,buttonReturn=True,storeRemoveReinstall=True,layoutUnchanged=True,appHistoryVerified=True,appHistorySessionOnly=True,appHistoryReopenCycles=2,physicalHardwareVerified=False,thirdPartyClientVerified=False,captures=phases,clientState=state()),indent=2))
+    result=dict(passed=True,journey="collections",executable=str(executable),freshProfile=True,actualNativeInput=True,normalExit=True,exactGalleryReturn=True,buttonReturn=True,storeRemoveReinstall=True,layoutUnchanged=True,localFilterVerified=True,appHistoryVerified=True,appHistorySessionOnly=True,appHistoryReopenCycles=2,physicalHardwareVerified=False,thirdPartyClientVerified=False,captures=phases,clientState=state())
+    if fixture.get("galleryPresentation") is not None:result.update(galleryPresentationApplied=True,galleryPresentation=fixture["galleryPresentation"],galleryPresentationSha256=fixture["galleryEvidenceDigest"])
+    (evidence/"result.json").write_text(json.dumps(result,indent=2))
     print("Evidence: "+str(evidence),flush=True)
 
 
 def send_client_key(window,name,env):
-    # Client input uses its X11 window, never compositor/global shortcuts.
+#Client input uses its X11 window, never compositor / global shortcuts.
     display_api=ctypes.CDLL(ctypes.util.find_library("X11"))
     display_api.XOpenDisplay.argtypes=[ctypes.c_char_p];display_api.XOpenDisplay.restype=ctypes.c_void_p
     display_api.XStringToKeysym.argtypes=[ctypes.c_char_p];display_api.XStringToKeysym.restype=ctypes.c_ulong
@@ -1015,7 +1442,7 @@ def exercise_studio_colors(evidence,layout,key,capture,expect):
     def menu(index):
         studio_legacy_menu(layout,key,index)
     def page_color():
-        menu(3);key('Return');key('Return') # Colors, then Background top / solid.
+        menu(3);key('Return');key('Right');key('Return') # Theme colors -> Background swatch.
     def apply():
         key('Escape',2);menu(7);key('Return')
     key('Up',30);key('Right');key('Return') # Permanent Edit Home recovery.
@@ -1025,7 +1452,7 @@ def exercise_studio_colors(evidence,layout,key,capture,expect):
     key('Return');key('Down');key('Right',2);key('Return');key('Down',10);key('Up',2);key('Return')
     assert layout.read_bytes()==baseline
     apply()
-    expect(lambda:json.loads(layout.read_text()).get('theme',{}).get('backgroundStart')=='#e89ab0','Color Apply persisted the authored page background')
+    expect(lambda:json.loads(layout.read_text()).get('theme',{}).get('colorTheme',{}).get('colors',{}).get('background')=='#e89ab0','Color Apply persisted the authored page background')
     saved=layout.read_bytes();doc=json.loads(saved)
     assert doc['studioAppearance']['recentColors']==['#e89ab0']
     shot('colorapplied')
@@ -1053,20 +1480,20 @@ def exercise_studio_workflows(evidence,layout,key,capture,expect):
         phases.append(name);capture(name)
     def menu(index):
         studio_legacy_menu(layout,key,index)
-    def apply():
-        key('Escape',2);menu(7);key('Return')
-    key('Escape',3);menu(4);key('Up',30);key('Return') # Layers -> first authored shortcut.
-    key('Return');key('Down');key('Return');key('Down',2);key('Return');key('Return') # Edit -> Size & layout -> Outer size.
+    def apply(closing=2):
+        key('Escape',closing);menu(7);key('Return')
+    key('Escape',3);menu(4);key('Up',30);key('Return');key('Return') # First item -> Find on page.
+    key('Return');key('Down');key('Return');studio_advanced_inspector(key);key('Down',2);key('Return');key('Return') # Advanced -> Layout -> Outer size.
     key('Down',6);key('Return');key('Up',6);key('Right');shot('sizepreview')
     assert layout.read_bytes()==saved
     key('Escape');assert layout.read_bytes()==saved
-    key('Return');key('Down',6);key('Return');key('Up',6);key('Right');key('Down',2);key('Return');apply()
+    key('Return');key('Down',6);key('Return');key('Up',6);key('Right');key('Down',2);key('Return');apply(3)
     def sized():
         item=next(i for i in json.loads(layout.read_text())['components'] if i['id']=='personal-source')
         return item['placement']['width']==2 and item['placement']['height']==2 and item['presentation']['sizeAspectLocked'] is True
     expect(sized,'Proportional outer size applied atomically');saved=layout.read_bytes();shot('sizeapplied')
-    menu(3);key('Down',4);key('Return') # Page appearance -> Header.
-    fields=[f for f in json.loads((Path(__file__).resolve().parents[1]/'config/studio-defaults.json').read_text())['inspector']['pageFields'] if f['tab']=='Header' and not f.get('advanced')]
+    menu(3);key('Down',2);key('Return');key('Down',30);key('Up');key('Return') # Header -> Show advanced.
+    fields=[f for f in json.loads((Path(__file__).resolve().parents[1]/'config/studio-defaults.json').read_text())['inspector']['pageFields'] if f['tab']=='Header']
     def field(name):
         key('Up',30);key('Down',next(i for i,f in enumerate(fields) if f['key']==name));key('Return')
     field('headerMode');key('Up',30);key('Down');key('Return')
@@ -1077,7 +1504,7 @@ def exercise_studio_workflows(evidence,layout,key,capture,expect):
     saved=layout.read_bytes();shot('headerapplied')
     menu(4);key('Down',30);key('Return');shot('headerreopened');assert layout.read_bytes()==saved
     key('Escape',2);menu(6);key('Return');key('Right');shot('canvaszoom');assert layout.read_bytes()==saved
-    key('Escape');key('Down',2);key('Return');shot('resetcancel');key('Escape');assert layout.read_bytes()==saved
+    key('Escape',2);studio_page_menu(layout,key,'page');key('Down',9);key('Return');shot('resetcancel');key('Escape');assert layout.read_bytes()==saved
     return dict(proportionalSize=True,sizeCancel=True,headerApply=True,headerRecovery=True,cameraNoWrite=True,resetCancel=True,captures=phases)
 
 def exercise_studio_designs(evidence, layout, key, capture, expect, enter_from_settings=True):
@@ -1088,7 +1515,7 @@ def exercise_studio_designs(evidence, layout, key, capture, expect, enter_from_s
     def named(action, extra=0):
         studio_page_menu(layout,key,action,extra)
     def name_digit(digit):
-        key("Right",digit-1); key("Return"); key("Down",5); key("Return")
+        remote_text(str(digit))
     def apply(extra=0):
         named("apply",extra); key("Return")
     def current():
@@ -1097,7 +1524,11 @@ def exercise_studio_designs(evidence, layout, key, capture, expect, enter_from_s
         return current()["pages"][-1]["layout"]
     def remote_text(value, clear=False):
         source=(Path(__file__).resolve().parents[1]/"qml/OnScreenKeyboard.qml").read_text()
-        keys=json.loads(re.search(r'\n\s*: (\["1"[^\n]+\])',source).group(1))
+        letters=json.loads(re.search(r'const letters = shift\s*\?\s*\[[^\n]+\]\s*:\s*(\[[^\n]+\])',source).group(1))
+        composition=re.search(r'return (\[[^\n]+?\])\.concat\(letters, (\[[^\n]+?\]), actions\)',source)
+        actions=re.search(r'const actions = (\[[^\n]+?\])\.concat\(modes(?:,\s*(\[[^\n]+?\]))?\)',source)
+        modes=re.search(r'const modes = (\[[^\n]+?\])',source)
+        keys=json.loads(composition.group(1))+letters+json.loads(composition.group(2))+json.loads(actions.group(1))+json.loads(modes.group(1))+(json.loads(actions.group(2)) if actions.group(2) else [])
         current_index=0
         def choose(index):
             nonlocal current_index
@@ -1112,47 +1543,47 @@ def exercise_studio_designs(evidence, layout, key, capture, expect, enter_from_s
         for character in value:choose(keys.index(character))
         choose(keys.index("Done"))
     def background_rose():
-        named("appearance"); key("Return"); key("Return")
+        named("appearance"); key("Return"); key("Right"); key("Return")
         key("Down"); key("Right",2); key("Return")
         key("Down",10); key("Up",2); key("Return")  # Explicit Use color; Back would cancel the swatch.
         key("Escape",2); apply()
     baseline=layout.read_bytes()
     if enter_from_settings:key("Escape")  # Leave the preceding editor-settings workflow.
-    named("reuse"); key("Return"); name_digit(1)
+    named("reuse"); key("Return"); key("Down"); key("Return"); name_digit(1)
     shot("sharedstyle")
     assert layout.read_bytes()==baseline
     key("Up"); key("Return")  # Accept the one draft definition.
-    key("Down"); key("Return"); key("Return")  # Choose the saved style, keep default Cancel.
+    key("Up"); key("Return"); key("Return")  # Save returns to its row; choose Use, then the saved style.
     shot("sharedstyleimpact")
     assert layout.read_bytes()==baseline
-    key("Up"); key("Return"); key("Escape"); apply()
+    key("Up"); key("Return"); key("Escape",2); apply()
     expect(lambda:len(current()["composition"]["designLibrary"]["styles"])==1,"Named shared style applied through remote controls")
     saved=layout.read_bytes();shot("sharedstyleapplied")
     assert any(node.get("presentation",{}).get("styleId") for node in current()["components"])
-    named("reuse");key("Down",7);key("Return");name_digit(1)
+    named("reuse");key("Down");key("Return");key("Down");key("Return");name_digit(1)
     shot("savedcomponent");assert layout.read_bytes()==saved
-    key("Up");key("Return");key("Down",9);key("Return");key("Return")
+    key("Up");key("Return");key("Down");key("Return");key("Return")
     shot("linkedinstance");assert layout.read_bytes()==saved
-    key("Up");key("Return");key("Escape");apply()
+    key("Up");key("Return");key("Escape",2);apply()
     expect(lambda:any(node.get("linkedDesign") for node in current()["components"]),"Linked instance placed in a free cell and applied")
     linked=next(node for node in current()["components"] if node.get("linkedDesign"));linked_id=linked["id"]
     assert linked_id not in {node["id"] for node in json.loads(saved)["components"]}
     saved=layout.read_bytes();shot("linkedapplied")
-    named("layers");key("Down",100);key("Up",2);key("Return")  # Last component, before reading-order/Header commands.
-    named("reuse");key("Down",11);key("Return");shot("detacheddraft")
+    named("layers");key("Down",100);key("Up",3);key("Return");key("Return")  # Last component, before reading-order/Header commands.
+    named("reuse");key("Down");key("Return");key("Down",3);key("Return");key("Down");key("Return");shot("detacheddraft")
     assert layout.read_bytes()==saved
-    key("Up");key("Return");key("Escape");apply()
+    key("Up");key("Return");key("Escape",3);apply()
     expect(lambda:not next(node for node in current()["components"] if node["id"]==linked_id).get("linkedDesign"),"Detach preserved independent content and identity")
     original_root=current()["components"]
     shot("detachedapplied")
     named("new");name_digit(2)
-    # The unsaved page is already visible in Studio's menu; do not derive its count from applied bytes.
+#The unsaved page is already visible in Studio's menu; do not derive its count from applied bytes.
     named("apply",1);key("Return")
     expect(lambda:len(current().get("pages",[]))==1,"Created a named destination through the normal remote page flow")
     original_ids=[node["id"] for node in original_root]
     templates=json.loads((Path(__file__).resolve().parents[1]/"config/skins/templates.json").read_text())["templates"]
     for index,template in enumerate(templates):
-        saved=layout.read_bytes();named("designs");key("Return");key("Down",3+index);key("Return");key("Return")
+        saved=layout.read_bytes();named("designs");key("Down",3+index);key("Return")
         phase="template"+["compact","scrolling","poster","pastel"][index];shot(phase)
         assert layout.read_bytes()==saved  # Preview is private and Cancel remains the default.
         key("Up");key("Return");apply()
@@ -1160,30 +1591,30 @@ def exercise_studio_designs(evidence, layout, key, capture, expect, enter_from_s
         assert current()["components"]==original_root
         assert [node["id"] for node in current()["components"]]==original_ids
         background_rose()
-        expect(lambda:page_document()["theme"]["backgroundStart"]=="#e89ab0","Customized template color through named swatches: "+template["name"])
+        expect(lambda:page_document()["theme"].get("backgroundStart",page_document()["theme"].get("colorTheme",{}).get("colors",{}).get("background"))=="#e89ab0","Customized template color through named swatches: "+template["name"])
         assert current()["components"]==original_root
         shot(phase+"customized")
-    # A named version is durable metadata; choosing it previews without changing applied bytes.
-    saved=layout.read_bytes();named("safety");key("Down",2);key("Return");key("Return");name_digit(3)
+#A named version is durable metadata; choosing it previews without changing applied bytes.
+    saved=layout.read_bytes();named("versions");key("Down",len(json.loads(Path(str(layout)+".studio-versions.json").read_text())["versions"]));key("Return");name_digit(3)
     archive=Path(str(layout)+".studio-versions.json")
     expect(lambda:any(entry["name"]=="3" for entry in json.loads(archive.read_text())["versions"]),"Named milestone saved in the isolated profile")
     assert layout.read_bytes()==saved
     versions=json.loads(archive.read_text())["versions"];version_index=next(i for i,entry in enumerate(versions) if entry["name"]=="3")
-    key("Up",30);key("Down",3+version_index);key("Return");shot("versioncompare")
+    key("Up",30);key("Down",version_index);key("Return");shot("versioncompare")
     assert layout.read_bytes()==saved
     key("Return")  # Cancel is the initial review selection.
     assert layout.read_bytes()==saved
     key("Escape")
-    named("editorSettings");key("Down",2);key("Return");key("Down");key("Return")
+    named("page");key("Down",9);key("Return");key("Down");key("Return")
     shot("defaultsrestore")
     assert layout.read_bytes()==saved
     apply()
     expect(lambda:layout.read_bytes()!=saved,"Current-page defaults saved through normal remote controls")
     assert current()["components"]==original_root
     shot("defaultsapplied")
-    named("safety");key("Down",2);key("Return")
+    named("versions")
     versions=json.loads(archive.read_text())["versions"];version_index=next(i for i,entry in enumerate(versions) if entry["name"]=="3")
-    key("Up",30);key("Down",3+version_index);key("Return");shot("versionrestore")
+    key("Up",30);key("Down",version_index);key("Return");shot("versionrestore")
     key("Up");key("Return");apply()
     expect(lambda:layout.read_bytes()==saved,"Named current-page restore recovered the exact previous design")
     shot("versionrestored")
@@ -1192,14 +1623,14 @@ def exercise_studio_designs(evidence, layout, key, capture, expect, enter_from_s
         directory=Path(temporary)
         assert directory.resolve()==directory and directory.parent==Path("/tmp")
         portable=directory/"p.json"
-        named("designs");key("Down",2);key("Return");key("Return")
+        named("designs");studio_design_management(key);key("Down",2);key("Return");key("Return")
         remote_text(str(portable))
         expect(portable.is_file,"Portable current-page export saved through the remote keyboard")
         package=portable.read_bytes()
         assert str(directory).encode() not in package
         (evidence/"portable-export.json").write_bytes(package)
-        shot("portableexport");key("Escape")
-        saved=layout.read_bytes();named("designs");key("Down");key("Return");key("Down");key("Return")
+        shot("portableexport");key("Escape",2)
+        saved=layout.read_bytes();named("designs");studio_design_management(key);key("Down");key("Return");key("Down");key("Return")
         remote_text(str(directory),clear=True)
         key("Down",2);key("Return");key("Return");shot("portablepreview")
         assert layout.read_bytes()==saved
@@ -1209,7 +1640,7 @@ def exercise_studio_designs(evidence, layout, key, capture, expect, enter_from_s
         shot("portableapplied")
         saved=layout.read_bytes()
         Image.new("RGB",(80,45),(80,130,180)).save(directory/"r.png")
-        named("designs");key("Down",3);key("Return");key("Return");key("Down");key("Return")
+        named("designs");studio_design_management(key);key("Down",3);key("Return");key("Return");key("Down");key("Return")
         remote_text(str(directory),clear=True)
         key("Down",2);key("Return");shot("privatereference")
         assert layout.read_bytes()==saved
@@ -1269,7 +1700,7 @@ def exercise_catalog(evidence,executable,layout,original,key,run,env,poll):
     key('Down');key('Return');key('Return');capture('imageplaced')
     assert layout.read_bytes()==original
     key('Return');key('Down');key('Return');capture('imageinspector')
-    # Inspector opens on Content. The ordinary fields are derived from its packaged schema.
+#Inspector opens on Content.The ordinary fields are derived from its packaged schema.
     fields('Content','animateArtwork',start_tabs=True);capture('imagemotiondraft')
     assert layout.read_bytes()==original
     fields('Appearance','crop');capture('imageframing')

@@ -1,6 +1,6 @@
 # Configurable Home composition
 
-Planned editor replacement: [Page Studio](page-studio-redesign.md), backlog T15-T24, supersedes the immediate-save editing workflow described below once accepted. This document describes the existing composition contract; Studio extends it through validated data and a shared draft/geometry model, preserving legacy layouts and both visual fixtures. No editor replacement is implemented by this documentation change.
+Planned editor replacement: [Skin Studio](page-studio-redesign.md), backlog T15-T24, supersedes the immediate-save editing workflow described below once accepted. This document describes the existing composition contract; Studio extends it through validated data and a shared draft/geometry model, preserving legacy layouts and both visual fixtures. No editor replacement is implemented by this documentation change.
 
 Home supports an optional composed layout alongside existing grid layouts. Existing profiles are not rewritten or switched on startup. [The reference fixture](../tests/visual/home-reference/recreation-config.json) demonstrates a complete configuration. Its artwork and media/progress values are visual test data, not the user's library.
 

@@ -17,7 +17,11 @@ Item {
     property string message:"Choose what to add. Content comes first; placement follows on the full page."
     property string keyboardAction:""
     property string keyboardReturn:""
-    readonly property var families:options.catalog || []
+    property string playlistKind:""
+    readonly property var playlistClient:view==="playlists" && provider && provider.playlistCatalog ? provider.playlistCatalog() : null
+    property bool moreComponents:false
+    readonly property var primaryFamilies:((options.simpleStudio || {}).basicFamilies || []).map(id=>id==="clock"?{id:"clock",name:"Clock",description:"Time and date"}:(options.catalog || []).find(f=>f.id===id)).filter(f=>!!f).map(f=>Object.assign({},f,{name:((options.simpleStudio || {}).primaryLabels || {})[f.id] || f.name}))
+    readonly property var families:moreComponents?(options.catalog || []).filter(f=>!primaryFamilies.some(p=>p.id===f.id)):primaryFamilies.concat([{id:"more",name:"More components",description:"Shapes, groups, sources and other building blocks"}])
     readonly property var variants:(options.componentVariants || {})[family] || []
     readonly property var actions:(session?session.availableActions:[]).concat([{name:"Play a Kodi movie…",needsMedia:"movies"},{name:"Open a Kodi show…",needsMedia:"shows"}])
     readonly property var apps:actions.filter(a=>a.action && a.action.type==="launch-app" && (a.appType==="web" || a.appType==="desktop" || a.appType==="android"))
@@ -26,19 +30,21 @@ Item {
     signal picked(string type,var configuration)
     signal canceled()
     function variantItem(entry){const base=(options.componentPresets || {})[family] || {};return Object.assign({},base,{name:entry.name,presentation:Object.assign({},base.presentation || {},entry.presentation || {})})}
-    function begin(){view="families";selected=0;configuration=({});message="Choose what to add. Content comes first; placement follows on the full page."}
+    function begin(){moreComponents=false;view="families";selected=0;configuration=({});message="Choose what to add. Content comes first; placement follows on the full page."}
     function labels(){
         if(view==="shapes")return (options.shapeChoices || []).map(choice=>choice.name)
         if(view==="widgets")return ["Clock","Text / heading","Section / Group","Input slots · eight editable positions, capture availability required"]
         if(view==="links")return ["None · no action"].concat(actions.map(a=>a.name))
-        if(view==="media")return mediaChoices.map(m=>m.name)
+        if(view==="media")return mediaChoices.map(m=>m.name).concat((options.playlistShelfChoices || []).map(m=>m.name))
+        if(view==="playlists")return [qsTr("Refresh Kodi playlists")].concat(playlistClient?(playlistClient.items || []).map(i=>i.title || i.playlistName):[])
         if(view==="apps")return ["All installed apps","Use "+selectedApps.length+" selected apps"].concat(apps.map(a=>(selectedApps.indexOf(a.action.appId)>=0?"✓ ":"□ ")+a.name))
         if(view==="carousel")return ["Start with three editable buttons · links are unassigned","Start with an empty carousel"]
         if(view==="artwork")return ["Import a local PNG / JPEG / GIF…"].concat(assets.map(a=>a.name+" · "+a.width+" × "+a.height))
         return []
     }
     function chooseFamily(index){
-        const entry=families[index];if(!entry)return;family=entry.id;configuration=({});selected=0
+        const entry=families[index];if(!entry)return;if(entry.id==="more"){moreComponents=true;selected=0;return}family=entry.id;configuration=({});selected=0
+        if(family==="clock"){finish("clock");return}
         if(variants.length){view="variants";return}
         if(family==="button")view="links"
         else if(family==="shape")view="shapes"
@@ -70,7 +76,17 @@ Item {
         if(view==="families"){chooseFamily(selected);return}
         if(view==="widgets"){finish(["clock","text","container","input-panel"][selected]);return}
         if(view==="carousel"){if(selected===0)configuration={buttons:options.carouselStart || []};finish("carousel");return}
-        if(view==="media"){const source=mediaChoices[selected];configuration={presentation:{libraryKind:source.kind,libraryView:source.view,libraryValue:source.value || ""}};finish("library");return}
+        if(view==="media"){
+            const source=mediaChoices[selected]
+            if(!source){const choice=(options.playlistShelfChoices || [])[selected-mediaChoices.length];if(choice){playlistKind=choice.kind;view="playlists";selected=0}return}
+            configuration={presentation:{libraryKind:source.kind,libraryView:source.view,libraryValue:source.value || ""}};finish("library");return
+        }
+        if(view==="playlists"){
+            if(!playlistClient){message=qsTr("Kodi unavailable. Back returns without changes.");return}
+            if(!selected){provider.refresh(playlistClient);return}
+            const item=(playlistClient.items || [])[selected-1];if(!item || !item.playlistName)return
+            configuration={presentation:{libraryKind:playlistKind,libraryView:"playlist",libraryValue:item.playlistName}};finish("library");return
+        }
         if(view==="apps"){
             if(selected===0){configuration={appCollection:{mode:"all",ids:[]}};finish("app-bar");return}
             if(selected===1){configuration={apps:selectedApps};finish("app-bar");return}
@@ -92,7 +108,7 @@ Item {
         if(view==="apps"){if(appPicker)appPicker.handleCommand(command);return}
         if(view==="mediaAction"){media.handleCommand(command);return}
         if(view==="keyboard"){keyboard.handleCommand(command);return}
-        if(command===inputManager.back){if(view==="families")canceled();else{view="families";selected=Math.max(0,families.findIndex(f=>f.id===family))}return}
+        if(command===inputManager.back){if(view==="playlists"){view="media";selected=mediaChoices.length+Math.max(0,(options.playlistShelfChoices || []).findIndex(choice=>choice.kind===playlistKind))}else if(view==="families"){if(moreComponents){moreComponents=false;selected=primaryFamilies.length}else canceled()}else{view="families";selected=Math.max(0,families.findIndex(f=>f.id===family))}return}
         if(command===inputManager.confirm){activate();return}
         const count=view==="families"?families.length:view==="variants"?variants.length:labels().length,step=view==="families" || view==="variants"?2:1
         if(command===inputManager.navigateDown)selected=Math.min(count-1,selected+step)
@@ -106,8 +122,8 @@ Item {
         color:root.appearance.surfaceColor;radius:20*root.unit;border.width:2;border.color:root.appearance.focusColor
         Column {
             anchors.fill:parent;anchors.margins:24*root.unit;spacing:14*root.unit
-            Text {textFormat:Text.PlainText;font.family:root.appearance.fontFamily || "DejaVu Sans";text:root.view==="families"?"Add component":root.view==="variants"?"Choose a starting style":root.view==="widgets"?"Widgets":root.view==="links"?"On select":root.view==="media"?"Choose Kodi content":root.view==="apps"?"Choose installed apps":root.view==="artwork"?"Choose artwork":"Button carousel";color:root.appearance.textColor;font.pixelSize:28*root.unit}
-            Text {textFormat:Text.PlainText;font.family:root.appearance.fontFamily || "DejaVu Sans";width:parent.width;text:root.message;color:root.appearance.mutedColor;font.pixelSize:17*root.unit;wrapMode:Text.Wrap}
+            Text {textFormat:Text.PlainText;font.family:root.appearance.fontFamily || "DejaVu Sans";text:root.view==="families"?"Add component":root.view==="variants"?"Choose a starting style":root.view==="widgets"?"Widgets":root.view==="links"?"On select":root.view==="media"?"Choose Kodi content":root.view==="playlists"?qsTr("Choose a Kodi playlist"):root.view==="apps"?"Choose installed apps":root.view==="artwork"?"Choose artwork":"Button carousel";color:root.appearance.textColor;font.pixelSize:28*root.unit}
+            Text {textFormat:Text.PlainText;font.family:root.appearance.fontFamily || "DejaVu Sans";width:parent.width;text:root.view==="playlists" && root.playlistClient?root.playlistClient.status:root.message;color:root.appearance.mutedColor;font.pixelSize:17*root.unit;wrapMode:Text.Wrap}
             GridView {
                 id:grid;width:parent.width;height:parent.height-120*root.unit;visible:root.view==="families" || root.view==="variants";clip:true
                 cellWidth:width/2;cellHeight:height/3;model:root.view==="variants"?root.variants:root.families;currentIndex:root.selected
@@ -151,7 +167,7 @@ Item {
     Loader {
         id:actionLoader;anchors.fill:parent;visible:root.view==="links";active:root.visible && ["links","mediaAction","keyboard"].indexOf(root.view)>=0
         sourceComponent:Component {StudioActionPicker {
-            anchors.fill:parent;actions:[{name:"None · no action",action:{}}].concat(root.actions);appearance:root.appearance;categories:root.options.actionCategories || []
+            anchors.fill:parent;actions:[{name:"None · no action",action:{}}].concat(root.actions);appearance:root.appearance;categories:root.options.actionCategories || [];intents:(root.options.simpleStudio || {}).actionIntents || []
             onCanceled:{root.view="families";root.selected=Math.max(0,root.families.findIndex(f=>f.id===root.family))}
             onPicked:entry=>root.chooseAction(entry)
         }}

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/ usr / bin / env python3
 """Explicit Isolde-Test VPN setup. Never collect account credentials or keys."""
 import argparse
 import configparser
@@ -61,56 +61,50 @@ def check_copy_owner():
     if not ROOT_COPY or OWNER_PROCESS is None or ROOT_ABORTED:return
     pid, started, uid = OWNER_PROCESS
     try:
-        process = Path("/proc")/str(pid)
-        valid = process.stat().st_uid == uid and process.joinpath("stat").read_text().rsplit(")",1)[1].split()[19] == started
-    except OSError:valid = False
-    if not valid:
-        # Further commands are only the enclosing transaction's rollback.
-        ROOT_ABORTED = True
-        raise RuntimeError("VPN setup cancelled. The previous connection is being restored.")
+        process
+    = Path("/proc") / str(pid) valid =
+          process.stat().st_uid == uid and process.joinpath("stat").read_text().rsplit(")", 1)[1].split()[19] ==
+                                               started except OSError : valid = False if not valid :
+#Further commands are only the enclosing transaction's rollback.
+        ROOT_ABORTED =
+            True raise RuntimeError("VPN setup cancelled. The previous connection is being restored.")
 
+                def admin_command(program, *args, timeout = 180)
+        : if os.geteuid() == 0 : return command(program, *args, timeout = timeout)
+#Reuse the VM's existing narrowly delegated package-management grants.
+#This is a read - only authorization query, not a failed installation retry.
+                                     if program in("/usr/bin/apt-get", "/usr/bin/dpkg")
+        : permission =
+                subprocess.run([ "sudo", "-n", "-l", program, *args ],
+                               capture_output = True,
+                               timeout = 5) if permission.returncode ==
+                    0 : return command("sudo", "-n", program, *args, timeout = timeout) return command(
+                            "pkexec", program, *args, timeout = timeout)
 
-def admin_command(program, *args, timeout=180):
-    if os.geteuid() == 0:
-        return command(program, *args, timeout=timeout)
-    # Reuse the VM's existing narrowly delegated package-management grants.
-    # This is a read-only authorization query, not a failed installation retry.
-    if program in ("/usr/bin/apt-get", "/usr/bin/dpkg"):
-        permission = subprocess.run(["sudo", "-n", "-l", program, *args], capture_output=True, timeout=5)
-        if permission.returncode == 0:
-            return command("sudo", "-n", program, *args, timeout=timeout)
-    return command("pkexec", program, *args, timeout=timeout)
+                            def guest_only()
+        : if os.name != "posix" or
+                socket.gethostname() !=
+                    "isolde-test" : raise RuntimeError("VPN setup is available only inside Isolde-Test.")
 
+                                        def provider_package(provider)
+        : if provider not in PACKAGES : raise SetupError("Choose a supported VPN provider.") return PACKAGES[provider]
 
-def guest_only():
-    if os.name != "posix" or socket.gethostname() != "isolde-test":
-        raise RuntimeError("VPN setup is available only inside Isolde-Test.")
+                                        def system_user()
+        : if OWNER_USER : return OWNER_USER if os.name ==
+                    "posix" : import pwd return pwd.getpwuid(os.getuid())
+                                  .pw_name return getpass.getuser()
 
-
-def provider_package(provider):
-    if provider not in PACKAGES:
-        raise SetupError("Choose a supported VPN provider.")
-    return PACKAGES[provider]
-
-
-def system_user():
-    if OWNER_USER:return OWNER_USER
-    if os.name == "posix":
-        import pwd
-        return pwd.getpwuid(os.getuid()).pw_name
-    return getpass.getuser()
-
-
-def installed(provider):
-    try:
+                                      def installed(provider)
+        : try:
         return command("dpkg-query", "-W", "-f=${Status}", provider_package(provider)) == "install ok installed"
     except RuntimeError:
         return False
 
 
 def status():
-    providers = [{"id": p, "name": "Surfshark" if p == "surfshark" else "Proton VPN", "installed": installed(p)} for p in PACKAGES]
-    # No --show-secrets; only connection identity and activation state.
+    providers = [{
+            "id" : p, "name" : "Surfshark" if p == "surfshark" else "Proton VPN", "installed" : installed(p)} for p in PACKAGES]
+#No-- show - secrets; only connection identity and activation state.
     rows = command("nmcli", "-t", "--escape", "no", "-f", "UUID,TYPE,NAME", "connection", "show")
     active = command("nmcli", "-t", "-f", "UUID", "connection", "show", "--active").splitlines()
     connections = []
@@ -124,22 +118,16 @@ def status():
     for entry in owned:
         entry["active"] = entry["uuid"] in active
     return {"providers": providers, "connections": owned, "activeVpnCount": sum(c["active"] for c in connections),
-            "downloads": [{"name": p.name} for p in configuration_files()], "countries": countries()}
+            "downloads": [{"name": p.name} for p in configuration_files()], "countries": countries()
+        }
 
+def nm_bindings() : try : import gi gi
+    .require_version("NM", "1.0") from gi.repository import NM, GLib, Gio return NM, GLib,
+        Gio except(ImportError, ValueError)
+        : raise RuntimeError("Install a VPN provider to enable saved locations, then Refresh.") from None
 
-def nm_bindings():
-    try:
-        import gi
-        gi.require_version("NM", "1.0")
-        from gi.repository import NM, GLib, Gio
-        return NM, GLib, Gio
-    except (ImportError, ValueError):
-        raise RuntimeError("Install a VPN provider to enable saved locations, then Refresh.") from None
-
-
-def managed_connections():
-    try:
-        NM, _, _ = nm_bindings()
+          def managed_connections()
+        : try : NM, _, _ = nm_bindings()
     except RuntimeError:
         return []
     result = []
@@ -163,7 +151,7 @@ def location_identity(connection):
     if not match:return None
     identity = dict(zip(("profile","provider","country","name"),match.groups()))
     metadata = connection.get_setting_by_name("user")
-    # Optional user data must agree when a storage plugin preserves it.
+#Optional user data must agree when a storage plugin preserves it.
     if metadata and any(metadata.get_data("org.isolde."+key)!=identity[key] for key in ("profile","country","provider")):return None
     return identity
 
@@ -175,7 +163,8 @@ def countries():
         for item in json.loads(path.read_text()).get("3166-1", []):
             if re.fullmatch(r"[A-Z]{2}", item.get("alpha_2", "")):
                 result[item["alpha_2"]] = item.get("common_name", item["name"])
-    return [{"code": code, "name": result[code]} for code in ["CA", "US"] + sorted(set(result) - {"CA", "US"}, key=lambda c: result[c])]
+    return [{
+            "code" : code, "name" : result[code]} for code in ["CA", "US"] + sorted(set(result) - {"CA", "US"}, key=lambda c: result[c])]
 
 
 def configuration_files():
@@ -216,7 +205,8 @@ def validate_configuration(path):
 
 def import_configuration(name, provider, country):
     provider_package(provider)
-    if country not in {c["code"] for c in countries()}:
+    if country not in {c["code"] for c in countries()
+        }:
         raise SetupError("Choose the country used when downloading this configuration.")
     selected = next((p for p in configuration_files() if p.name == name), None)
     if selected is None:
@@ -246,8 +236,8 @@ def nm_async(start, finish, operation="save this location"):
         try: outcome["value"] = finish(owner, result)
         except Exception as error:
             outcome["error"] = True
-            # Numeric API error codes are safe; exception messages can contain
-            # provider data and are deliberately not forwarded.
+#Numeric API error codes are safe; exception messages can contain
+#provider data and are deliberately not forwarded.
             if isinstance(getattr(error, "code", None), int):outcome["code"] = error.code
         loop.quit()
     def expired():
@@ -290,8 +280,8 @@ def prepare_location(connection, provider, country, label):
     if wireguard is None or not 1 <= wireguard.get_peers_len() <= 8 or not wireguard.get_private_key():
         raise RuntimeError("Connect the provider app using WireGuard first, then Save connected location.")
     wireguard.set_property("private-key-flags", NM.SettingSecretFlags.NONE)
-    # Preserve the provider's peer routing (including private DNS peers).
-    # Add only the missing IPv6 catch-all, so unsupported IPv6 cannot escape.
+#Preserve the provider's peer routing (including private DNS peers).
+#Add only the missing IPv6 catch - all, so unsupported IPv6 cannot escape.
     routes = []
     default_peer = None
     for index in range(wireguard.get_peers_len()):
@@ -321,8 +311,8 @@ def prepare_location(connection, provider, country, label):
         connection.add_setting(ipv6)
     ipv6.set_property("method", "manual")
     if ipv6.get_num_addresses() == 0:
-        # IPv4-only providers drop unsupported IPv6 inside the tunnel.
-        # It must not escape through the physical default route.
+#IPv4 - only providers drop unsupported IPv6 inside the tunnel.
+#It must not escape through the physical default route.
         ipv6.add_address(NM.IPAddress.new(socket.AF_INET6, "fd00:6973:6f6c:6465::2", 128))
     ipv6.set_property("never-default", False)
     preserve_transport_routing(connection)
@@ -347,9 +337,14 @@ def preserve_transport_routing(connection):
         if priority<1 or any(r.get("priority") in (priority,priority+1) or str(r.get("table"))==str(table) for r in rules):
             raise SetupError("The saved VPN routing policy would conflict with an existing connection.")
         setting.set_property("route-table",table)
-        local=NM.IPRoutingRule.new(family);local.set_priority(priority);local.set_table(254);local.set_suppress_prefixlength(0)
-        tunnel=NM.IPRoutingRule.new(family);tunnel.set_priority(priority+1);tunnel.set_table(table);tunnel.set_fwmark(mark,0xffffffff);tunnel.set_invert(True)
-        setting.add_routing_rule(local);setting.add_routing_rule(tunnel)
+        local=NM.IPRoutingRule.new(family);
+local.set_priority(priority);
+local.set_table(254);
+local.set_suppress_prefixlength(0) tunnel = NM.IPRoutingRule.new(family);
+tunnel.set_priority(priority + 1);
+tunnel.set_table(table);
+tunnel.set_fwmark(mark, 0xffffffff);
+tunnel.set_invert(True) setting.add_routing_rule(local);setting.add_routing_rule(tunnel)
     wireguard.set_property("ip4-auto-default-route",NM.Ternary.FALSE)
     wireguard.set_property("ip6-auto-default-route",NM.Ternary.FALSE)
 
@@ -365,8 +360,8 @@ def save_location(connection, provider, country, label):
         outcome = owner.add_connection2_finish(result)
         return outcome[0] if isinstance(outcome,tuple) else outcome
     saved = nm_async(lambda cancel, callback: client.add_connection2(settings, NM.SettingsAddConnection2Flags.TO_DISK, options, False, cancel, callback, None),finished)
-    # Remote connection data is detached when its owning client disappears.
-    # Return an immutable identity while that client is still alive.
+#Remote connection data is detached when its owning client disappears.
+#Return an immutable identity while that client is still alive.
     saved_uuid = saved.get_uuid()
     persisted = location_identity(saved)
     if not persisted or any(persisted[key]!=value for key,value in {"profile":PROFILE,"country":country,"provider":provider}.items()):
@@ -377,16 +372,16 @@ def save_location(connection, provider, country, label):
 
 
 def capture_location(provider):
-    # Explicit user-authorized local transport-key copy into NetworkManager.
-    # No provider account storage is opened; any import snapshot is root-private.
+#Explicit user - authorized local transport - key copy into NetworkManager.
+#No provider account storage is opened; any import snapshot is root - private.
     provider_package(provider)
     active = active_connections()
     if len(active) != 1:
         raise RuntimeError("Open the provider app, sign in and connect to the country you want, then Save connected location.")
     source_uuid = active[0]["uuid"]
     NM, _, _ = nm_bindings()
-    # Keep the client alive throughout the asynchronous secret request. Remote
-    # connections are detached when their owning client is disposed.
+#Keep the client alive throughout the asynchronous secret request.Remote
+#connections are detached when their owning client is disposed.
     client = NM.Client.new(None)
     source = client.get_connection_by_uuid(source_uuid)
     if source is None or source.get_connection_type() != "wireguard":
@@ -407,37 +402,46 @@ def capture_location(provider):
             raise RuntimeError("Choose Install default VPN providers once to install Isolde's secure location-saving support.")
         result = subprocess.run(["pkexec", str(COPY_HELPER), "capture", provider, "--profile", PROFILE],
                                 capture_output=True, text=True, timeout=210)
-        document = json.loads(result.stdout) if len(result.stdout) <= 65536 and result.stdout.startswith("{") else {}
-        if result.returncode or not document:
-            failure = RuntimeError(document.get("error", "Approve the guest administrator prompt to save this location, then Refresh and retry."))
-            diagnostic = document.get("diagnostic", "")
-            if isinstance(diagnostic,str) and re.fullmatch(r"[A-Za-z0-9_<>/:-]{1,160}",diagnostic):failure.diagnostic = diagnostic
-            raise failure
-        saved = document.get("savedUuid", "")
-        if document.get("sourceUuid") != source_uuid or not re.fullmatch(r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}", saved):
-            raise SetupError("The saved location could not be confirmed. Refresh VPN settings.")
-        verified = verify_location(saved, document["country"])
-        return status() | verified | {"message": "Location saved and verified. Choose it for any app. No browser, configuration files or manual keys are needed."}
-    country = observed_country(source_uuid)
-    connection = NM.SimpleConnection.new_clone(source)
-    connection = transport_configuration(connection, active[0]["device"])
-    saved = save_location(connection, provider, country, "")
-    try:
-        verified = handoff_location(saved, source_uuid, country)
-    except BaseException:
-        try:
-            if not any(c["uuid"]==saved for c in active_connections()):command("nmcli","connection","delete","uuid",saved)
-        except Exception: pass
-        raise
-    return verified | {"savedUuid": saved, "sourceUuid":source_uuid, "country":country}
+        document = json.loads(result.stdout) if len(result.stdout) <= 65536 and result.stdout.startswith("{") else {
+    }
+if result
+    .returncode or not document : failure = RuntimeError(document.get(
+        "error", "Approve the guest administrator prompt to save this location, then Refresh and retry.")) diagnostic =
+        document.get("diagnostic", "") if isinstance (diagnostic, str) and
+        re.fullmatch(r "[A-Za-z0-9_<>/:-]{1,160}", diagnostic)
+        : failure.diagnostic = diagnostic raise failure saved =
+            document.get("savedUuid", "") if document.get("sourceUuid") != source_uuid or
+            not re.fullmatch(r "[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}", saved)
+        : raise SetupError("The saved location could not be confirmed. Refresh VPN settings.")
+              verified = verify_location(saved, document["country"]) return status() | verified | {
+                "message" : "Location saved and verified. Choose it for any app. No browser, configuration files or "
+                            "manual keys are needed."
+            } country = observed_country(source_uuid) connection = NM.SimpleConnection.new_clone(source) connection =
+                             transport_configuration(connection, active[0]["device"]) saved =
+                                 save_location(connection, provider, country, "") try : verified
+        = handoff_location(saved, source_uuid, country) except BaseException
+            : discard_failed_capture(saved) raise return verified |
+              {"savedUuid" : saved, "sourceUuid" : source_uuid, "country" : country}
+
+              def discard_failed_capture(uuid)
+            : global ROOT_ABORTED was_aborted = ROOT_ABORTED ROOT_ABORTED = True try:
+        if any(c["uuid"] == uuid for c in active_connections()):
+            raise RuntimeError("The saved VPN is still active.")
+        command("nmcli", "connection", "delete", "uuid", uuid)
+        if any(c["uuid"] == uuid for c in managed_connections()):
+            raise RuntimeError("The saved VPN still exists.")
+    except Exception as error:
+        raise RuntimeError("VPN capture failed; recovery or cleanup could not be confirmed. Refresh VPN settings before retrying.") from error
+    finally:
+        ROOT_ABORTED = was_aborted
 
 
 def transport_configuration(connection, device):
     global TRANSPORT_DIAGNOSTIC
     if not ROOT_COPY or not re.fullmatch(r"[A-Za-z0-9_.-]{1,15}",device):
         raise SetupError("The selected provider interface is unavailable. Reconnect its app and retry.")
-    # Read only the specifically approved active interface, never all devices
-    # or provider account files. The private snapshot is removed after import.
+#Read only the specifically approved active interface, never all devices
+# or provider account files.The private snapshot is removed after import.
     rows = [line.split("\t") for line in command("/usr/bin/wg","show",device,"dump").splitlines()]
     if not 2 <= len(rows) <= 9 or len(rows[0])!=4 or any(len(row)!=8 for row in rows[1:]):
         raise SetupError("The connected provider must have between one and eight WireGuard peers.")
@@ -495,8 +499,8 @@ def transport_configuration(connection, device):
         snapshot = Path(directory)/"location.conf"
         descriptor = os.open(snapshot,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
         with os.fdopen(descriptor,"w") as file:file.write(data)
-        # Values above are validated before writing. Unlike Advanced import,
-        # this trusted local snapshot preserves multiple standard Peer sections.
+#Values above are validated before writing.Unlike Advanced import,
+#this trusted local snapshot preserves multiple standard Peer sections.
         return NM.conn_wireguard_import(str(snapshot))
 
 
@@ -541,8 +545,8 @@ def install_copy_helper():
         for target, data in payload.items():
             installed = staging/target.relative_to("/")
             installed.parent.mkdir(parents=True, exist_ok=True)
-            installed.write_bytes(data);installed.chmod(0o755 if target == COPY_HELPER else 0o644)
-        metadata = staging/"DEBIAN";metadata.mkdir()
+            installed.write_bytes(data);
+installed.chmod(0o755 if target == COPY_HELPER else 0o644) metadata = staging / "DEBIAN";metadata.mkdir()
         for folder in (staging, *(p for p in staging.rglob("*") if p.is_dir())):folder.chmod(0o755)
         version = "1.0+" + hashlib.sha256(b"".join(payload.values())).hexdigest()[:16]
         (metadata/"control").write_text("Package: isolde-vpn-support\nVersion: " + version + "\nArchitecture: all\nMaintainer: Isolde\nDescription: Isolde local VPN connection-copy support\n")
@@ -576,7 +580,7 @@ def install(provider):
                 raise RuntimeError("Unexpected Surfshark signing key.")
             repository = Path(directory) / "surfshark.list"
             repository.write_text("deb [signed-by=/usr/share/keyrings/isolde-surfshark.asc] https://ocean.surfshark.com/debian stretch main\n")
-            # Only fixed system tools elevate. No Isolde/user-writable Python runs as root.
+#Only fixed system tools elevate.No Isolde / user - writable Python runs as root.
             admin_command("/usr/bin/install", "-m", "644", str(key), "/usr/share/keyrings/isolde-surfshark.asc", timeout=120)
             admin_command("/usr/bin/install", "-m", "644", str(repository), "/etc/apt/sources.list.d/isolde-surfshark.list", timeout=120)
             admin_command("/usr/bin/apt-get", "update", timeout=180)
@@ -610,7 +614,7 @@ def open_provider(provider):
         raise RuntimeError("Install this provider first.")
     files = command("dpkg-query", "-L", provider_package(provider)).splitlines()
     desktops = [Path(p) for p in files if p.startswith("/usr/share/applications/") and p.endswith(".desktop")]
-    # Proton's metapackage can keep the launcher in its GTK dependency.
+#Proton's metapackage can keep the launcher in its GTK dependency.
     if not desktops and provider == "protonvpn":
         files = command("dpkg-query", "-L", "proton-vpn-gtk-app").splitlines()
         desktops = [Path(p) for p in files if p.startswith("/usr/share/applications/") and p.endswith(".desktop")]
@@ -674,15 +678,27 @@ def observed_country(uuid, previous=None):
 
 def verify_location(uuid, country, previous=None):
     device = vpn_device(uuid,previous)
-    for family, destination in [("-4", "1.1.1.1"), ("-6", "2606:4700:4700::1111")]:
-        # During capture the native client's policy still owns normal traffic.
-        # Prove the new interface independently before handing over that policy.
+    destinations = [("-4", "1.1.1.1"), ("-6", "2606:4700:4700::1111")]
+    if not previous:
+        _, separator, dns = command("resolvectl", "dns", device).partition("):")
+        _, domain_separator, domains = command("resolvectl", "domain", device).partition("):")
+        if not separator or not domain_separator or "~." not in domains.split() or not 1 <= len(dns.split()) <= 8:
+            raise RuntimeError("The selected VPN does not own the default DNS route. The app was not opened.")
+        for value in dns.split():
+            try:
+                address = ipaddress.ip_address(value)
+            except ValueError as error:
+                raise RuntimeError("The selected VPN returned an invalid DNS address.") from error
+            destinations.append((f"-{address.version}", str(address)))
+    for family, destination in destinations:
+#During capture the native client's policy still owns normal traffic.
+#Prove the new interface independently before handing over that policy.
         arguments = ("oif",device) if previous else ()
         route = json.loads(command("ip", "-j", family, "route", "get", destination,*arguments))
         if not route or any(r.get("dev") != device for r in route):
             raise RuntimeError("Traffic is not routed through the selected VPN. The app was not opened.")
-    # An explicit connect/launch is consent for this bounded online country check.
-    # Bind the request to the verified VPN interface. No raw address is retained.
+#An explicit connect / launch is consent for this bounded online country check.
+#Bind the request to the verified VPN interface.No raw address is retained.
     observed = observed_country(uuid,previous)
     if observed != country:
         raise RuntimeError("The VPN's observed country does not match the chosen location. The app was not opened.")
@@ -695,8 +711,9 @@ def privileged_switch(uuid, disconnect=False):
     args = ["pkexec",str(COPY_HELPER),"switch",uuid,"--profile",PROFILE]
     if disconnect:args.append("--disconnect")
     result = subprocess.run(args,capture_output=True,text=True,timeout=100)
-    document = json.loads(result.stdout) if len(result.stdout)<=65536 and result.stdout.startswith("{") else {}
-    if result.returncode or not document:
+    document = json.loads(result.stdout) if len(result.stdout)<=65536 and result.stdout.startswith("{") else {
+    }
+if result.returncode or not document:
         failure = RuntimeError(document.get("error","VPN switching permission is unavailable. Reinstall VPN support and retry."))
         diagnostic=document.get("diagnostic","")
         if isinstance(diagnostic,str) and re.fullmatch(r"[A-Za-z0-9_<>/:-]{1,160}",diagnostic):failure.diagnostic=diagnostic
@@ -714,32 +731,53 @@ def disconnect_owned_location(uuid):
     return {"message":"Saved VPN location disconnected."}
 
 
+def rollback_location(uuid, previous):
+    global ROOT_ABORTED
+    was_aborted = ROOT_ABORTED
+    ROOT_ABORTED = True
+    try:
+        active = active_connections()
+        allowed = {uuid}
+        if previous:
+            allowed.add(previous)
+        if any(c["uuid"] not in allowed for c in active):
+            raise RuntimeError("Another VPN became active during recovery.")
+        if any(c["uuid"] == uuid for c in active):
+            command("nmcli", "--wait", "10", "connection", "down", "uuid", uuid)
+        active = active_connections()
+        if any(c["uuid"] != previous for c in active):
+            raise RuntimeError("The new VPN could not be disconnected.")
+        if previous and not any(c["uuid"] == previous for c in active):
+            command("nmcli", "--wait", "20", "connection", "up", "uuid", previous)
+        active = active_connections()
+        if len(active) != int(bool(previous)) or (previous and active[0]["uuid"] != previous):
+            raise RuntimeError("The previous VPN state could not be confirmed.")
+    except Exception as error:
+        raise RuntimeError("VPN switching failed and recovery could not be confirmed. Refresh VPN settings before retrying.") from error
+    finally:
+        ROOT_ABORTED = was_aborted
+
+
 def handoff_location(uuid, source_uuid, country):
     if not ROOT_COPY:raise SetupError("Use the installed location-saving support.")
-    if uuid not in {c["uuid"] for c in managed_connections()} or active_connections()!=[{"uuid":source_uuid,"device":vpn_device(source_uuid)}]:
-        raise SetupError("The selected provider connection changed. Refresh and retry.")
-    # The native source has incomplete NM settings. Keep its kernel interface
-    # alive until the new tunnel has independently passed routing/country checks.
-    source_stopped=False
-    try:
-        command("nmcli","--wait","20","connection","up","uuid",uuid)
-        verified=verify_location(uuid,country,source_uuid)
-        command("nmcli","--wait","20","connection","down","uuid",source_uuid)
-        source_stopped=True
-        return verify_location(uuid,country)
-    except BaseException as error:
-        signal.signal(signal.SIGTERM,signal.SIG_IGN)
-        try:
-            device=vpn_device(uuid,source_uuid)
+    if uuid not in {c["uuid"] for c in managed_connections()
+        }
+or active_connections() != [ {"uuid" : source_uuid, "device" : vpn_device(source_uuid)} ]
+    : raise SetupError("The selected provider connection changed. Refresh and retry.")
+#The native source has incomplete NM settings.Keep its kernel interface
+#alive until the new tunnel has independently passed routing / country checks.
+          try
+    : command("nmcli", "--wait", "20", "connection", "up", "uuid", uuid) verified
+    = verify_location(uuid, country, source_uuid) command(
+          "nmcli", "--wait", "20", "connection", "down", "uuid", source_uuid) return verify_location(uuid, country)
+          except BaseException as error : signal.signal(signal.SIGTERM, signal.SIG_IGN) try
+        : device=vpn_device(uuid,source_uuid)
             handshakes=command("/usr/bin/wg","show",device,"latest-handshakes")
             timestamps=[int(row.split()[1]) for row in handshakes.splitlines() if len(row.split())==2 and row.split()[1].isdecimal()]
             recent=any(time.time()-stamp<120 for stamp in timestamps if stamp)
             error.diagnostic=getattr(error,"diagnostic","handoff")+"/"+TRANSPORT_DIAGNOSTIC+"/handshake-"+str(int(recent))
         except Exception:pass
-        if source_stopped:
-            raise RuntimeError("The saved VPN passed verification, but provider handoff changed afterward. Refresh VPN status before retrying.") from None
-        try:command("nmcli","--wait","10","connection","down","uuid",uuid)
-        except Exception:pass
+        rollback_location(uuid, source_uuid)
         raise
 
 
@@ -757,31 +795,18 @@ def switch_location(uuid, handoff_from=None):
     changing = not previous or previous[0]["uuid"] != uuid
     old = previous[0]["uuid"] if previous and changing else None
     try:
-        if old:
+            if old:
             command("nmcli", "--wait", "20", "connection", "down", "uuid", old)
         if changing:
             command("nmcli", "--wait", "20", "connection", "up", "uuid", uuid)
         result = verify_location(uuid, owned[uuid]["country"])
         return result | {"message": "VPN location verified. Opening your app."}
     except BaseException:
-        # Cancel and failures restore only the exact previous owned connection.
-        # Never disconnect a tunnel that was already active on entry.
+#Cancel and failures restore only the exact previous owned connection.
+#Never disconnect a tunnel that was already active on entry.
         if changing:
             signal.signal(signal.SIGTERM, signal.SIG_IGN)
-            try:
-                current = active_connections()
-                target_active = any(c["uuid"] == uuid for c in current)
-                old_active = any(c["uuid"] == old for c in current)
-            except Exception:
-                target_active = True
-                old_active = False
-            try:
-                if target_active:command("nmcli", "--wait", "10", "connection", "down", "uuid", uuid)
-            except Exception: pass
-            if old and not old_active:
-                try: command("nmcli", "--wait", "20", "connection", "up", "uuid", old)
-                except Exception:
-                    raise RuntimeError("VPN switching failed and the previous VPN could not be restored. Refresh VPN settings before retrying.") from None
+            rollback_location(uuid, old)
         raise
 
 
@@ -797,14 +822,14 @@ def main():
     try:
         guest_only()
         global PROFILE
-        if args.profile != "default" and not re.fullmatch(r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}", args.profile):
+                    if args.profile != "default" and not re.fullmatch(r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}", args.profile):
             raise SetupError("Invalid Isolde profile.")
         PROFILE = args.profile
         if args.disconnect and args.action!="switch":raise SetupError("Invalid VPN operation.")
         global ROOT_COPY, OWNER_USER, OWNER_PROCESS
         if hasattr(os, "geteuid") and os.geteuid() == 0:
-            # Only the installed root-owned entrypoint may perform a privileged
-            # copy, for the actual caller established by pkexec.
+#Only the installed root - owned entrypoint may perform a privileged
+#copy, for the actual caller established by pkexec.
             caller = os.environ.get("PKEXEC_UID", "")
             if args.action not in ("capture","switch") or not caller.isdecimal() or int(caller) == 0 or Path(__file__).resolve() != COPY_HELPER:
                 raise SetupError("Use Isolde's installed VPN setup to request this operation.")
@@ -831,7 +856,7 @@ def main():
         else: result = connection_action(args.action, args.target)
         print(json.dumps(result))
     except Exception as error:
-        # Never forward command output, account data, or private keys.
+#Never forward command output, account data, or private keys.
         message = str(error) if isinstance(error, (RuntimeError, SetupError)) else "VPN setup or configuration validation failed. Check the selected configuration, Refresh and retry."
         trace = error.__traceback__
         while trace and trace.tb_next:trace = trace.tb_next

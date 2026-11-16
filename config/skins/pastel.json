@@ -157,10 +157,10 @@
         "kind": "widget",
         "id": "hdmi1",
         "name": "HDMI 1",
-        "action": {
+        "actions": [ {
           "type": "settings",
           "section": 4
-        },
+        } ],
         "categoryId": "shortcuts",
         "presentation": {
           "selectedLabelColor": "#a24562",
@@ -187,10 +187,10 @@
         "kind": "widget",
         "id": "hdmi2",
         "name": "HDMI 2",
-        "action": {
+        "actions": [ {
           "type": "settings",
           "section": 4
-        },
+        } ],
         "categoryId": "shortcuts",
         "presentation": {
           "selectedLabelColor": "#a24562",
@@ -217,10 +217,10 @@
         "kind": "widget",
         "id": "hdmi3",
         "name": "HDMI 3",
-        "action": {
+        "actions": [ {
           "type": "settings",
           "section": 4
-        },
+        } ],
         "categoryId": "shortcuts",
         "presentation": {
           "selectedLabelColor": "#a24562",
@@ -247,10 +247,10 @@
         "kind": "widget",
         "id": "hdmi4",
         "name": "HDMI 4",
-        "action": {
+        "actions": [ {
           "type": "settings",
           "section": 4
-        },
+        } ],
         "categoryId": "shortcuts",
         "presentation": {
           "selectedLabelColor": "#a24562",
@@ -277,9 +277,9 @@
         "kind": "widget",
         "id": "desktop",
         "name": "Desktop",
-        "action": {
+        "actions": [ {
           "type": "desktop-mode"
-        },
+        } ],
         "categoryId": "shortcuts",
         "presentation": {
           "selectedLabelColor": "#a24562",
@@ -306,10 +306,10 @@
         "kind": "widget",
         "id": "guide",
         "name": "TV Guide",
-        "action": {
+        "actions": [ {
           "type": "open-page",
           "pageId": "live-tv"
-        },
+        } ],
         "categoryId": "shortcuts",
         "presentation": {
           "selectedLabelColor": "#a24562",
@@ -336,10 +336,10 @@
         "kind": "widget",
         "id": "movies",
         "name": "Movies",
-        "action": {
+        "actions": [ {
           "pageId": "library-movies",
           "type": "open-page"
-        },
+        } ],
         "categoryId": "shortcuts",
         "presentation": {
           "selectedLabelColor": "#a24562",
@@ -366,10 +366,10 @@
         "kind": "widget",
         "id": "shows",
         "name": "TV Shows",
-        "action": {
+        "actions": [ {
           "pageId": "library-shows",
           "type": "open-page"
-        },
+        } ],
         "categoryId": "shortcuts",
         "presentation": {
           "selectedLabelColor": "#a24562",
@@ -396,10 +396,10 @@
         "kind": "widget",
         "id": "music",
         "name": "Music",
-        "action": {
+        "actions": [ {
           "pageId": "library-music",
           "type": "open-page"
-        },
+        } ],
         "categoryId": "shortcuts",
         "presentation": {
           "selectedLabelColor": "#a24562",
@@ -426,10 +426,10 @@
         "kind": "widget",
         "id": "games",
         "name": "Games",
-        "action": {
+        "actions": [ {
           "type": "open-page",
           "pageId": "library-games"
-        },
+        } ],
         "categoryId": "shortcuts",
         "presentation": {
           "selectedLabelColor": "#a24562",
@@ -721,10 +721,10 @@
                 "variant": "source",
                 "icon": "music"
               },
-              "action": {
+              "actions": [ {
                 "appId": "kodi",
                 "type": "launch-app"
-              },
+              } ],
               "schemaVersion": 1,
               "categoryId": "library",
               "widgetType": "button",
@@ -875,10 +875,10 @@
                 "variant": "source",
                 "icon": "gamepad"
               },
-              "action": {
+              "actions": [ {
                 "appId": "app-store",
                 "type": "launch-app"
-              },
+              } ],
               "schemaVersion": 1,
               "categoryId": "library",
               "widgetType": "button",
@@ -986,10 +986,10 @@
                 "provider": "shell"
               },
               "name": "Manage TV sources in Kodi",
-              "action": {
+              "actions": [ {
                 "type": "launch-app",
                 "appId": "kodi"
-              },
+              } ],
               "kind": "widget",
               "schemaVersion": 1,
               "categoryId": "library"

@@ -12,13 +12,30 @@ Window {
     readonly property real uiScaleFactor: displaySettings.uiScale / 100
     readonly property int safeAreaPixels: Math.round(Math.min(width, height) * displaySettings.safeArea / 100)
     property string shellProfileId: profileManager.activeId
+    property var settingsStoreReturn: null
     onShellProfileIdChanged: Qt.callLater(() => {
+        settingsStoreReturn = null
         commandCenter.themeOrigin = ""
         kodiLibrary.themeOrigin = ""
         store.themeOrigin = ""
         allApps.clearLaunchAttempt()
     })
     property bool ambientActive: false
+    Binding { target: inputManager; property: "ambientInputActive"; value: window.ambientActive }
+    Connections {
+        target: inputManager
+        function onAmbientWakeRequested() {
+            window.ambientActive = false
+            window.resetIdleTimer()
+        }
+        function onInputActivity() { window.resetIdleTimer() }
+    }
+    Binding {
+        target:interfaceSounds;property:"suppressed"
+        value:!window.active || window.ambientActive || captureSession.open || desktopMode.active
+            || (sessionManager.active && ["settings","store","customize"].indexOf(sessionManager.currentAppType)<0)
+    }
+    Binding {target:interfaceSounds;property:"playbackActive";value:kodiMedia.playbackActive}
     readonly property bool homeArtworkMotionActive:!sessionManager.active && !ambientActive && !commandCenter.open && !allApps.open && !kodiLibrary.open && !captureSession.open && !tvGuide.open && !kodiMedia.playbackActive
     property var galleryReturnPageState: null
     property bool searchFromGallery: false
@@ -29,7 +46,7 @@ Window {
     property bool launchErrorSteamGame: false
     property bool desktopHidden:false
     property int desktopRestoreVisibility:Window.FullScreen
-    DesktopReturnWindow {controller:desktopMode;appearance:homeLayout.homeAppearance}
+    DesktopReturnWindow {controller:desktopMode;appearance:homeLayout.homeAppearance;nativeSessionActive:sessionManager.active}
     Window {
         id:opticalSessionNotice
         readonly property var status:sessionManager.opticalSessionStatus
@@ -87,7 +104,7 @@ Window {
         function onChanged(){
             if(desktopMode.active && !desktopMode.nativeMode && !window.desktopHidden){window.desktopRestoreVisibility=window.visibility;window.desktopHidden=true;window.visibility=Window.Hidden}
             else if(!desktopMode.active && window.desktopHidden){window.desktopHidden=false;window.visibility=window.desktopRestoreVisibility;window.raise();window.requestActivate()}
-            if(desktopMode.active || desktopMode.busy)idleTimer.stop();else idleTimer.restart()
+            if(desktopMode.active || desktopMode.busy)idleTimer.stop();else window.resetIdleTimer()
             if(desktopMode.errorString){window.launchErrorSteamGame=false;window.launchErrorAppId="";window.launchErrorText=desktopMode.errorString}
         }
         function onReturned(origin){window.raise();window.requestActivate();if(!desktopMode.nativeMode)Qt.callLater(()=>{if(pageSurface.open)pageSurface.restoreOrigin(origin);else home.restoreFocus(origin)})}
@@ -126,6 +143,27 @@ Window {
         }
     }
 
+    function restoreSettingsFromStore() {
+        const saved = settingsStoreReturn
+        Qt.callLater(() => {
+            if (!saved || settingsStoreReturn !== saved || saved.profile !== profileManager.activeId || sessionManager.active) return
+            settingsStoreReturn = null
+            if (actionDispatcher.dispatch({type:"settings",section:-1}, saved.origin)) {
+                allApps.open = false
+                settings.openAppsSettings()
+            }
+        })
+    }
+
+    function openStoreFromSettings() {
+        const saved = {profile:profileManager.activeId, origin:actionDispatcher.currentOrigin()}
+        sessionManager.exitCurrent()
+        allApps.open = false
+        settingsStoreReturn = saved
+        store.themeOrigin = ""
+        if (!actionDispatcher.dispatch({type:"launch-app",appId:"app-store"}, saved.origin)) restoreSettingsFromStore()
+    }
+
     function closeAllAppsToOrigin(originId) {
         allApps.clearLaunchAttempt()
         allApps.open = false
@@ -136,6 +174,7 @@ Window {
     }
 
     function showDesignatedHome() {
+        settingsStoreReturn = null
         guideSearchReturn=null
         galleryReturnPageState = null
         searchFromGallery = false
@@ -151,14 +190,28 @@ Window {
     }
     Component.onCompleted:Qt.callLater(()=>{if(setupState.complete && homeLayout.homePageId)window.showDesignatedHome()})
 
+    function ambientIdleAllowed() {
+        const internalSession=!sessionManager.active || ["settings","store","customize"].indexOf(sessionManager.currentAppType)>=0
+        return internalSession && !captureSession.open && !kodiMedia.playbackActive
+            && !desktopMode.active && !desktopMode.busy && !appVpn.busy && !actionDispatcher.guideTransitionPending
+    }
+
+    function resetIdleTimer() {
+        if (setupState.complete && ambientSettings.enabled && !ambientActive) idleTimer.restart()
+    }
+
     function handleCommand(command) {
+        if (sessionManager.active && sessionManager.currentAppType === "settings" && settings.remoteEditing) {
+            settings.handleCommand(command); return
+        }
+        if (typeof interfaceSounds !== "undefined" && !ambientActive) interfaceSounds.playCommand(command)
         if(appVpn.busy && appVpn.pendingApp){
             if(command===inputManager.back || command===inputManager.home)appVpn.cancel()
             return
         }
         if(desktopMode.busy || desktopMode.active && !desktopMode.nativeMode){if(command===inputManager.back || command===inputManager.home || desktopMode.active && command===inputManager.confirm)desktopMode.cancel();return}
         if(desktopMode.active && desktopMode.nativeMode && (command===inputManager.home || command===inputManager.back)){desktopMode.cancel();return}
-        idleTimer.restart()
+        resetIdleTimer()
         if(actionDispatcher.guideTransitionPending){
             if(command===inputManager.home){actionDispatcher.cancelGuidePlayback();window.showDesignatedHome()}
             else if(command===inputManager.back){actionDispatcher.cancelGuidePlayback();guideController.refresh()}
@@ -171,7 +224,7 @@ Window {
         if (kodiMedia.playbackActive) {
             if (command === inputManager.home) kodiMedia.playbackControl("home")
             else if (command === inputManager.back) kodiMedia.playbackControl("stop")
-            else if (command === inputManager.menu) subtitleTrackPicker.open = true
+            else if (command === inputManager.menu) playbackOptions.showControls()
             else if (command === inputManager.playPause || command === inputManager.confirm) kodiMedia.playbackControl("pause")
             else if (command === inputManager.navigateLeft) kodiMedia.playbackControl("backward")
             else if (command === inputManager.navigateRight) kodiMedia.playbackControl("forward")
@@ -221,7 +274,7 @@ Window {
         if (kodiLibrary.open && !sessionManager.active) { kodiLibrary.handleCommand(command); return }
         if (!sessionManager.active && pageSurface.open) {
             pageSurface.handleCommand(command)
-        } else if (!sessionManager.active && command===inputManager.menu && (home.widgetActive || home.groupActive)) {
+        } else if (!sessionManager.active && command===inputManager.menu && home.contextualMenuAvailable) {
             home.handleCommand(command)
         } else if (!sessionManager.active && (command === inputManager.menu || command === inputManager.search)) {
             window.openSearchFromPage()
@@ -274,9 +327,9 @@ Window {
     Timer {
         id: idleTimer
         running: setupState.complete && ambientSettings.enabled && !window.ambientActive
-        repeat: false
+        repeat: true
         interval: ambientSettings.timeoutMinutes * 60000
-        onTriggered:         if (!sessionManager.active && !captureSession.open && !commandCenter.open && !allApps.open && !kodiLibrary.open && !kodiMedia.playbackActive) window.ambientActive = true
+        onTriggered: if (setupState.complete && ambientSettings.enabled && window.ambientIdleAllowed()) window.ambientActive = true
     }
 
     Item {
@@ -303,6 +356,10 @@ Window {
             focus: true
             Keys.onPressed: event => {
                 const command = inputManager.commandForKey(event.key)
+                if (event.isAutoRepeat && command === inputManager.confirm && settings.powerConfirmation) {
+                    event.accepted = true
+                    return
+                }
                 if (window.ambientActive || command !== inputManager.none) {
                     window.handleCommand(command)
                     event.accepted = true
@@ -401,6 +458,7 @@ Window {
                 editPageId: pageSurface.open ? pageSurface.activeId : ""
                 editComponentId: pageSurface.open ? pageSurface.focusedComponentId : home.focusedItemId
                 onPreviewAmbientRequested: window.ambientActive = true
+                onStoreRequested: window.openStoreFromSettings()
                 onPageRequested:id=>{ sessionManager.goHome(); actionDispatcher.dispatch({type:"open-page",pageId:id},"") }
             }
 
@@ -606,8 +664,10 @@ Window {
         packages: appCatalog.entries
         searchSettings: searchPreferences
         onlineDiscovery: discoveryProvider
+        playbackPreferences: kodiService
         appearance:window.shellAppearance("search", themeOrigin)
         property string themeOrigin: ""
+        property bool playbackOriginLibraryOpen: false
         movieSearchClient: searchMovies
         showSearchClient: searchShows
         episodeSearchClient: searchEpisodes
@@ -645,10 +705,10 @@ Window {
             if (sessionManager.launch("settings")) settings.openSection(section)
         }
         onMediaRequested: (mediaType, mediaId, query, collectionId, pageStart) => {
-            const libraryWasOpen = kodiLibrary.open
+            commandCenter.playbackOriginLibraryOpen = kodiLibrary.open
             kodiLibrary.open = true
             kodiLibrary.returnToHomeAfterPlayback = false
-            kodiLibrary.returnToSearchAfterPlayback = !libraryWasOpen && (mediaType === "movie" || mediaType === "episode")
+            kodiLibrary.returnToSearchAfterPlayback = mediaType === "movie" || mediaType === "episode"
             if (mediaType === "collection") kodiMedia.openCollection(collectionId)
             else if (mediaType === "show") kodiMedia.openShowResult(query, mediaId, pageStart)
             else kodiMedia.playMedia(mediaType, mediaId, true)
@@ -679,6 +739,7 @@ Window {
         appearance: window.shellAppearance("kodi", "")
         onCloseRequested: open = false
     }
+    PlaybackOptionsWindow { id:playbackOptions;kodiClient:kodiMedia;appearance:window.shellAppearance("kodi",kodiLibrary.themeOrigin);uiScale:window.uiScaleFactor;safeInset:window.safeAreaPixels }
     CaptureSessionView {
         id: captureSession
         anchors.fill: parent
@@ -705,8 +766,9 @@ Window {
             const items = lists[m] || []
             for (let i = 0; i < items.length; ++i) {
                 const item = items[i]
-                if (!item.action || item.action.type !== "switch-input"
-                        || item.action.input !== input || !item.customLogo) continue
+                const firstAction = item.actions && item.actions.length>0 ? item.actions[0] : undefined
+                if (!firstAction || firstAction.type !== "switch-input"
+                        || firstAction.input !== input || !item.customLogo) continue
                 const resolved = homeLayout.resolveArtwork(item.customLogo)
                 if (!resolved) continue
                 if (item.id === originId) return resolved
@@ -745,6 +807,10 @@ Window {
         target: sessionManager
         function onReturnedHome(appId) {
             if(appId && store.returnAppId===appId){store.returnAppId="";Qt.callLater(()=>sessionManager.launch("app-store"))}
+            else if(appId === "app-store" && settingsStoreReturn && !store.returnAppId) {
+                allApps.open=false
+                window.restoreSettingsFromStore()
+            }
         }
         function onSessionRejected(reason) {
             window.launchErrorSteamGame=false
@@ -817,6 +883,7 @@ Window {
     }
     Connections {
         target: kodiLibrary
+        function onSearchReturnRequested() { kodiLibrary.open = commandCenter.playbackOriginLibraryOpen; commandCenter.open = true }
         function onSearchRequested() { commandCenter.themeOrigin = kodiLibrary.themeOrigin; commandCenter.pageId = ""; commandCenter.pageSources = []; commandCenter.open = true }
     }
 }

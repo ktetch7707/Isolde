@@ -16,6 +16,7 @@
     "cardHeight": 142,
     "detailRatio": 0.42,
     "webBackend": "chromium",
+    "androidContainment": "fullscreen",
     "webDesktopId": "google-chrome",
     "webCategory": "Web apps",
     "appSection": "Apps",
@@ -50,6 +51,12 @@
     "packages/retroarch-snes/manifest.json",
     "packages/retroarch-psx/manifest.json",
     "packages/retroarch-ds/manifest.json",
-    "packages/retroarch-vb/manifest.json"
+    "packages/retroarch-vb/manifest.json",
+    "packages/rpcs3/manifest.json",
+    "packages/shadps4/manifest.json",
+    "packages/vita3k/manifest.json",
+    "packages/xemu/manifest.json",
+    "packages/xenia/manifest.json",
+    "packages/cemu/manifest.json"
   ]
 }

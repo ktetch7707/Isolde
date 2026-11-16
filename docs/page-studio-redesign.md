@@ -1,4 +1,4 @@
-# Page Studio — visual page builder
+# Skin Studio — visual page builder
 
 **UX revision, 2026-10-19:** [Page-first Studio](design/page-studio/page-first-design.md) governs the workspace, page/Home operations, context windows, component catalog and Home-based Settings theme. The user rejected the provisional screenshots. Its full-size page with an overlaying left page menu supersedes the fitted-canvas/top-toolbar/parallel-panel proposals below, including conflicting Confirm/Back transitions. Those older schematics are historical, not implementation targets. Backend safety contracts remain requirements. This is design feedback, not installed usability acceptance.
 
@@ -27,7 +27,7 @@ Desktop/wide-screen schematic (labels illustrate configurable content):
 
 ```text
 +--------------------------------------------------------------------------+
-| Page Studio | Home v | Edit: Home / Source grid | Draft: 3 changes         |
+| Skin Studio | Home v | Edit: Home / Source grid | Draft: 3 changes         |
 | Add | Pages & layers | Undo | Redo | Grid | Fit | Preview | Apply          |
 +----------------+--------------------------------------+------------------+
 | PAGES          |  TV canvas: current device aspect     | SOURCE GRID      |
@@ -193,6 +193,6 @@ Old T06 maps to T17–T21/T24; T07 maps to T16/T23/T24; T08 maps to T22/T23/T24.
 
 This revision authorizes planning only in this chat. No VM update, deployment, application implementation or new dependency is part of the planning change.
 
-## 12. Original Page Studio planning revision verification (historical)
+## 12. Original Skin Studio planning revision verification (historical)
 
 Checked the documentation-only diff, local Markdown links, scope mappings, active-task checkbox percentages and dependency graph. There are 20 active tasks with percentage sum 275, giving 14% overall; T15-T24 remain 0%. No active dependency points to struck/superseded work and the graph has no cycles. Every new task has entry documents/files, scope, a completion gate and verification/evidence requirements. Check log: `C:/Users/kketc/.codex/visualizations/2026/10/19/01a15691-1cd3-77d0-928f-854e1c7a566b/page-studio-planning-20261019.log`. Application tests and VM runs were not repeated for this documentation-only revision. These checks verify the plan's consistency, not editor implementation or usability.

@@ -7,6 +7,7 @@ Item {
     Rectangle {anchors.fill:parent;z:-1;color:shell.surface}
     property var appearance: ({})
     property int selectedIndex: 0
+    property bool detailsFocused: false
     property int keyboardMode: 0
     property var draft: ({})
     property bool draftDirty: false
@@ -243,6 +244,15 @@ Item {
     function handleCommand(command) {
         if (artworkEditing) { handleArtworkCommand(command); return }
         if (keyboardMode) { keyboard.handleCommand(command); return }
+        if(command===inputManager.menu){detailsFocused=!detailsFocused;return}
+        if(detailsFocused){
+            if(command===inputManager.back || command===inputManager.confirm)detailsFocused=false
+            else if(command===inputManager.navigateUp || command===inputManager.navigateDown){
+                const direction=command===inputManager.navigateUp?-1:1
+                previewScroll.contentY=Math.max(0,Math.min(Math.max(0,previewScroll.contentHeight-previewScroll.height),previewScroll.contentY+direction*60*shell.textScale))
+            }
+            return
+        }
         if (command === inputManager.back) {
             actionDispatcher.dispatchEditorAction({type: "capture-switch-cancel"})
             if (draftDirty) cancelDraft()
@@ -257,6 +267,7 @@ Item {
     }
 
     onVisibleChanged: {
+        detailsFocused=false
         if (visible) {
             captureController.setVideoOutput(previewOutput)
             resetDraft()
@@ -319,36 +330,40 @@ Item {
             width: root.leftColumnWidth
             height: parent.height
             spacing: 10 * shell.gapScale
-            Text { font.family: shell.fontFamily; text: "HDMI INPUTS"; color: shell.text; font.pixelSize: 30 * shell.textScale; font.weight: Font.DemiBold }
+            Text { id:captureHeading; width:parent.width;wrapMode:Text.WordWrap;font.family: shell.fontFamily; text: "HDMI INPUTS"; color: shell.text; font.pixelSize: 30 * shell.textScale; font.weight: Font.DemiBold }
             Text { font.family: shell.fontFamily;
+                id:captureDescription
                 width: parent.width; text: "Choose the capture card and audio input. Then select the RS-232 port and a command format from the switch manual. No command is sent until you press Send test switch.";
                 color: shell.muted; font.pixelSize: 16 * shell.textScale; wrapMode: Text.WordWrap
             }
             ListView {
                 id: optionList
-                width: parent.width; height: parent.height - 125; clip: true; spacing: 5 * shell.gapScale
+                width: parent.width; height: Math.max(0,parent.height-captureHeading.height-captureDescription.height-captureHint.height-3*parent.spacing); clip: true; spacing: 5 * shell.gapScale
                 model: root.rows; currentIndex: root.selectedIndex
                 delegate: Rectangle {
                     required property int index
                     required property var modelData
-                    width: optionList.width; height: 49; radius: 7
+                    width: optionList.width; height: Math.max(49*shell.textScale,captureRowLabel.implicitHeight+20); radius: shell.radius
                     color: root.selectedIndex === index ? shell.selected : shell.surface
                     border.width: root.selectedIndex === index ? 2 : 1
                     border.color: root.selectedIndex === index ? shell.selectedFocus : shell.outline
-                    Text { font.family: shell.fontFamily; anchors.left: parent.left; anchors.leftMargin: 12; anchors.verticalCenter: parent.verticalCenter; width: parent.width * 0.42; text: modelData.name; color: (root.selectedIndex === index) ? shell.selectedText : shell.text; font.pixelSize: 15 * shell.textScale; wrapMode: Text.WordWrap }
+                    Text { id:captureRowLabel; font.family: shell.fontFamily; anchors.left: parent.left; anchors.leftMargin: 12; anchors.verticalCenter: parent.verticalCenter; width: Math.max(0, parent.width * 0.43 - 24); text: modelData.name; color: (root.selectedIndex === index) ? shell.selectedText : shell.text; font.pixelSize: 15 * shell.textScale; wrapMode: Text.WordWrap }
                     Text { font.family: shell.fontFamily; anchors.left: parent.left; anchors.leftMargin: parent.width * 0.43; anchors.right: parent.right; anchors.rightMargin: 10; anchors.verticalCenter: parent.verticalCenter; text: modelData.value; color: (root.selectedIndex === index) ? shell.selectedText : shell.text; font.pixelSize: 14 * shell.textScale; elide: Text.ElideRight }
                     MouseArea { anchors.fill: parent; onClicked: { root.selectedIndex = index; root.activateSelected() } }
                 }
             }
-            Text { font.family: shell.fontFamily; width: parent.width; text: "‹ › Preview choices · OK edit/apply · Back discard pending changes"; color: shell.muted; font.pixelSize: 15 * shell.textScale }
+            Text { id:captureHint; wrapMode:Text.WordWrap;font.family: shell.fontFamily; width: parent.width; text: "‹ › Preview choices · OK edit/apply · Back discard · Menu details"; color: shell.muted; font.pixelSize: 15 * shell.textScale }
         }
 
-        Column {
-            width: root.width - root.leftColumnWidth - 24
+        Flickable {
+            id:previewScroll
+            width: Math.max(0, root.width - root.leftColumnWidth - parent.spacing)
             height: parent.height
-            spacing: 10 * shell.gapScale
+            clip:true;contentHeight:previewColumn.implicitHeight;boundsBehavior:Flickable.StopAtBounds
+            Column {
+            id:previewColumn;width:parent.width;spacing:10*shell.gapScale
             Rectangle {
-                width: parent.width; height: parent.height * 0.72; radius: shell.radius; color: shell.input; clip: true
+                width: parent.width; height:Math.min(root.height*0.72,width*9/16); radius: shell.radius; color: shell.input; clip: true
                 VideoOutput { id: previewOutput; anchors.fill: parent; fillMode: VideoOutput.PreserveAspectFit; visible: captureController.previewActive }
                 Rectangle {
                     visible: root.draftDirty && captureController.previewActive
@@ -392,6 +407,9 @@ Item {
                 width: parent.width; text: "Generic command formats are examples, not guaranteed switch protocols. Use the exact command from your switch manual. A sent command is not confirmation that routing changed; visually verify the source.";
                 color: shell.warning; font.pixelSize: 15 * shell.textScale; wrapMode: Text.WordWrap
             }
+            Text { width:parent.width;text:qsTr("Menu opens details · Up/Down scroll · Back returns to the selected setting");wrapMode:Text.WordWrap;color:shell.muted;font.family:shell.fontFamily;font.pixelSize:15*shell.textScale }
+            }
+            Rectangle {parent:root; x:previewScroll.x;y:previewScroll.y;width:previewScroll.width;height:previewScroll.height;visible:root.detailsFocused;color:"transparent";border.width:2;border.color:shell.focus;radius:shell.radius}
         }
     }
 

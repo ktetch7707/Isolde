@@ -1,85 +1,18 @@
-import importlib.util
-import json
-from pathlib import Path
-import tempfile
-import unittest
-import runpy
-import sys
-import types
-from unittest.mock import patch
+import importlib.util import json from pathlib import Path import tempfile import unittest import runpy import sys import types from unittest.mock import patch
 
-spec = importlib.util.spec_from_file_location("playback", Path(__file__).resolve().parents[1] / "kodi/service.isolde.bridge/playback.py")
-module = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(module)
+    spec = importlib.util.spec_from_file_location("playback", Path(__file__).resolve().parents[1] / "kodi/service.isolde.bridge/playback.py") module = importlib.util.module_from_spec(spec) spec.loader.exec_module(module)
 
+                                                                                                                                                                                           class PlaybackTests(unittest.TestCase) : def test_service_pumps_callbacks_and_accepts_normalized_remote_sender(self) : events =[] monitors =[] class Monitor : def __init__(self) : monitors.append(self) def abortRequested(self) : return False def waitForAbort(self, timeout) : events.append("pump") return events.count("pump") == 2 class Player : managed = True movie = None def __init__(self, * args, ** kwargs) : pass def control(self, action) : events.append(action) class Bridge : def __init__(self, * args) : pass def start(self) : pass def poll(self) : if "pump" not in events : monitors[0].onNotification("isolde", "Other.pause", "") def close(self) : events.append("closed") fake = types.SimpleNamespace(Monitor = Monitor, executeJSONRPC = lambda _ : None, executebuiltin = lambda _ : None, log = lambda * args : None, LOGINFO = 1, LOGWARNING = 2, LOGERROR = 3) modules = {"xbmc" : fake, "xbmcvfs" : types.SimpleNamespace(translatePath = lambda p : p, File = lambda _ : self.fail("Callback test must not request an image")), "bridge" : types.SimpleNamespace(LocalBridge = Bridge), "playback" : types.SimpleNamespace(Playback = Player), "artwork" : types.SimpleNamespace(Artwork = lambda * args : None), "sources" : types.SimpleNamespace(Sources = lambda * args : None), "playlists" : types.SimpleNamespace(Playlists = lambda * args : None) } with patch.dict(sys.modules, modules) : runpy.run_path(str(Path(__file__).resolve().parents[1] / "kodi/service.isolde.bridge/service.py")) self.assertEqual(events, ["pump", "pause", "pump", "closed"])
 
-class PlaybackTests(unittest.TestCase):
-    def test_service_pumps_callbacks_and_accepts_normalized_remote_sender(self):
-        events = []
-        monitors = []
-        class Monitor:
-            def __init__(self): monitors.append(self)
-            def abortRequested(self): return False
-            def waitForAbort(self, timeout):
-                events.append("pump")
-                return events.count("pump") == 2
-        class Player:
-            managed = True
-            movie = None
-            def __init__(self, *args, **kwargs): pass
-            def control(self, action): events.append(action)
-        class Bridge:
-            def __init__(self, *args): pass
-            def start(self): pass
-            def poll(self):
-                if "pump" not in events: monitors[0].onNotification("isolde", "Other.pause", "")
-            def close(self): events.append("closed")
-        fake = types.SimpleNamespace(Monitor=Monitor, executeJSONRPC=lambda _: None,
-            executebuiltin=lambda _: None, log=lambda *args: None, LOGINFO=1, LOGWARNING=2, LOGERROR=3)
-        modules = {"xbmc": fake, "xbmcvfs": types.SimpleNamespace(translatePath=lambda p: p),
-                   "bridge": types.SimpleNamespace(LocalBridge=Bridge), "playback": types.SimpleNamespace(Playback=Player),
-                   "artwork": types.SimpleNamespace(Artwork=lambda *args: None),
-                   "playlists": types.SimpleNamespace(Playlists=lambda *args: None)}
-        with patch.dict(sys.modules, modules):
-            runpy.run_path(str(Path(__file__).resolve().parents[1] / "kodi/service.isolde.bridge/service.py"))
-        self.assertEqual(events, ["pump", "pause", "pump", "closed"])
-
-    def setUp(self):
-        self.temp = tempfile.TemporaryDirectory()
-        self.addCleanup(self.temp.cleanup)
-        self.path = Path(self.temp.name) / "movie.ogv"
-        self.path.write_bytes(b"fixture")
-        self.active = False
-        self.item = 7
-        self.stream_file = ""
-        self.kind = "movie"
-        self.channel_locked = False
-        self.omit_pvr_uniqueid = False
-        self.speed = 1
-        self.duration = 7200
-        self.position = 0
-        self.seekable = True
-        self.pausable = True
-        self.pause_info = None
-        self.pause_info_error = False
-        self.subtitle_tracks = [
-            {"index": 0, "name": "English", "language": "en", "isexternal": False},
-            {"index": 2, "name": "French", "language": "fr", "isexternal": True},
-        ]
-        self.subtitle_id = 0
-        self.subtitle_enabled = True
-        self.now = 0
-        self.calls, self.builtins = [], []
-        self.player = module.Playback(self.execute, self.builtins.append, True, lambda: self.now)
-        probe = patch.object(self.player, "probe_stream", return_value=None)
-        probe.start(); self.addCleanup(probe.stop)
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        def setUp(self) : self.temp = tempfile.TemporaryDirectory() self.addCleanup(self.temp.cleanup) self.path = Path(self.temp.name) / "movie.ogv" self.path.write_bytes(b "fixture") self.active = False self.item = 7 self.stream_file = "" self.kind = "movie" self.channel_locked = False self.omit_pvr_uniqueid = False self.speed = 1 self.duration = 7200 self.position = 0 self.seekable = True self.pausable = True self.pause_info = None self.pause_info_error = False self.subtitle_tracks =[{"index" : 0, "name" : "English", "language" : "en", "isexternal" : False }, {"index" : 2, "name" : "French", "language" : "fr", "isexternal" : True }, ] self.subtitle_id = 0 self.subtitle_enabled = True self.audio_id = 0 self.view = "normal" self.now = 0 self.calls, self.builtins =[], [] self.player = module.Playback(self.execute, self.builtins.append, True, lambda : self.now) probe = patch.object(self.player, "probe_stream", return_value = None) probe.start(); self.addCleanup(probe.stop)
 
     def execute(self, raw):
         request = json.loads(raw)
         method, params = request["method"], request["params"]
         self.calls.append((method, params))
         result = "OK"
-        if method == "Player.GetActivePlayers": result = [{"playerid": 1, "type": "audio" if self.kind == "song" else "video"}] if self.active else []
+        if method == "Player.GetActivePlayers": result = [{
+    "playerid" : 1, "type" : "audio" if self.kind == "song" else "video"}] if self.active else []
         elif method == "VideoLibrary.GetMovieDetails": result = {"moviedetails": {"file": str(self.path),"runtime":self.duration}}
         elif method == "VideoLibrary.GetEpisodeDetails": result = {"episodedetails": {"file": str(self.path),"runtime":self.duration}}
         elif method == "VideoLibrary.GetMusicVideoDetails": result = {"musicvideodetails": {"file": str(self.path),"runtime":self.duration}}
@@ -89,22 +22,41 @@ class PlaybackTests(unittest.TestCase):
             for key,value in (("clientid",9),("uniqueid",101)):
                 if key in params["properties"] and not (key=="uniqueid" and self.omit_pvr_uniqueid):details[key]=value
             result={"channeldetails":details}
-        elif method == "Player.GetItem": result = {"item": {"type": self.kind, "id": self.item, **({"file":self.stream_file} if "file" in params.get("properties",[]) else {})}}
+        elif method == "Player.GetItem": result = {"item": {"type": self.kind, "id": self.item, **({
+    "file" : self.stream_file} if "file" in params.get("properties",[]) else {})}}
         elif method == "Player.GetProperties":
             values={"speed":self.speed,"canseek":self.seekable,"canchangespeed":True,"live":self.kind=="channel",
                     "time":{"hours":self.position//3600,"minutes":self.position//60%60,"seconds":self.position%60}}
-            values.update({"subtitles":self.subtitle_tracks, "subtitle":next((track for track in self.subtitle_tracks if track["index"]==self.subtitle_id), {}),
-                           "subtitleenabled":self.subtitle_enabled})
+            values.update({"subtitles":self.subtitle_tracks, "currentsubtitle":next((track for track in self.subtitle_tracks if track["index"]==self.subtitle_id), {}),
+                           "subtitleenabled":self.subtitle_enabled,"audiostreams":[{"index":0,"name":"Stereo","language":"en"},{"index":1,"name":"Commentary","language":"en"}],"currentaudiostream":{
+        "index" : self.audio_id
+    }})
             if set(params["properties"])-set(values):return json.dumps({"error":{"code":-32602,"message":"Invalid Player property"}})
             result={key:values[key] for key in params["properties"]}
         elif method == "XBMC.GetInfoBooleans":
             self.assertEqual(params,{"booleans":["Player.PauseEnabled"]})
             if self.pause_info_error:return json.dumps({"error":{"code":-32602,"message":"Capability unavailable"}})
             result={"Player.PauseEnabled":self.pausable} if self.pause_info is None else self.pause_info
-        elif method == "Player.PlayPause": self.speed = 0 if self.speed else 1
+        elif method == "Player.PlayPause":
+            self.assertIs(type(params["play"]), bool)
+            self.speed = int(params["play"])
+        elif method == "Player.Seek":
+#Kodi 21 rejects the legacy string value.Enforce the real schema
+#at this boundary so a permissive fake cannot hide broken seeks.
+            self.assertEqual(set(params),{"playerid","value"})
+            self.assertIsInstance(params["value"],dict)
+            self.assertEqual(set(params["value"]),{"step"})
+            self.assertIn(params["value"]["step"],("smallforward","smallbackward"))
+        elif method == "Player.GetViewMode":
+            self.assertEqual(params,{});
+result = {"viewmode" : self.view} elif method == "Player.SetViewMode" : self.assertEqual(set(params), {"viewmode"});
+self.view =
+    params["viewmode"] elif method == "Player.SetAudioStream" : self.assertEqual(set(params), {"playerid", "stream"});self.audio_id=params["stream"]
         elif method == "Player.SetSubtitle":
-            self.subtitle_enabled = params["subtitle"] != "off"
-            if self.subtitle_enabled: self.subtitle_id = params["subtitle"]
+            self.assertEqual(set(params),{"playerid","subtitle","enable"})
+            self.assertIs(type(params["enable"]),bool)
+            self.subtitle_enabled = params["subtitle"] != "off" and params["enable"]
+            if type(params["subtitle"]) is int: self.subtitle_id = params["subtitle"]
         elif method == "Player.Stop": self.active = False
         return json.dumps({"result": result})
 
@@ -146,14 +98,14 @@ class PlaybackTests(unittest.TestCase):
         for code, expected in ((401,"authentication-required"),(403,"authentication-required"),(404,"unavailable"),(503,"connection-failed"),(405,None),(302,None)):
             class Opener:
                 def open(inner, request, timeout):
-                    self.assertEqual(request.get_method(),"HEAD");self.assertEqual(timeout,2)
-                    raise module.HTTPError(request.full_url,code,"fixture",{},None)
-            with patch.object(module,"build_opener",return_value=Opener()):
-                result=module.Playback.probe_stream(self.player,"https://example.test/live")
-            self.assertEqual(result.get("sourceState") if result else None,expected)
+                    self.assertEqual(request.get_method(),"HEAD");
+self.assertEqual(timeout, 2) raise module.HTTPError(request.full_url, code, "fixture", {}, None) with patch.object(
+    module, "build_opener", return_value = Opener())
+    : result = module.Playback.probe_stream(self.player, "https://example.test/live") self
+                   .assertEqual(result.get("sourceState") if result else None, expected)
 
-    def test_live_tv_uses_configured_channel_identity_and_refuses_locks(self):
-        self.kind="channel";self.channel_locked=True
+                       def test_live_tv_uses_configured_channel_identity_and_refuses_locks(self)
+    : self.kind = "channel";self.channel_locked=True
         with self.assertRaises(ValueError): self.player.handle("Isolde.PlayChannel",{"channelid":7,"resume":False})
         self.assertFalse(any(method=="Player.Open" for method,_ in self.calls))
         self.channel_locked=False
@@ -185,10 +137,12 @@ class PlaybackTests(unittest.TestCase):
             with self.subTest(info=info,error=error):
                 self.pause_info,self.pause_info_error=info,error
                 self.player=module.Playback(self.execute,self.builtins.append,True,lambda:self.now)
-                self.active=False;self.calls=[]
-                self.player.handle("Isolde.PlayMovie",{"movieid":7,"resume":False});self.active=True
-                state=self.player.status();self.assertEqual(state["state"],"playing");self.assertIs(state["canPause"],False)
-                result=self.player.control("pause");self.assertEqual(result["state"],"playing");self.assertTrue(result["controlError"])
+                self.active=False;
+self.calls = [] self.player.handle("Isolde.PlayMovie", {"movieid" : 7, "resume" : False});
+self.active = True state = self.player.status();
+self.assertEqual(state["state"], "playing");
+self.assertIs(state["canPause"], False) result = self.player.control("pause");
+self.assertEqual(result["state"], "playing");self.assertTrue(result["controlError"])
                 self.assertFalse(any(method in {"Player.PlayPause","Player.Stop"} for method,_ in self.calls))
                 self.assertTrue(self.active)
 
@@ -225,44 +179,55 @@ class PlaybackTests(unittest.TestCase):
         self.player.handle("Isolde.PlayScheduled",{"mediaType":"movie","mediaId":7,"offsetSeconds":800})
         self.active=True;self.seekable=False
         for instant in (0,19.99):
-            self.now=instant;self.assertEqual(self.player.status()["state"],"starting");self.assertTrue(self.active)
+            self.now=instant;
+self.assertEqual(self.player.status()["state"], "starting");self.assertTrue(self.active)
         self.assertFalse(any(method=="Player.Stop" for method,_ in self.calls))
         self.now=20
         result=self.player.status()
-        self.assertEqual(result["state"],"failed");self.assertIn("broadcast position",result["reason"])
-        self.assertFalse(self.active)
-        self.assertNotIn("ActivateWindow(fullscreenvideo)",self.builtins)
+        self.assertEqual(result["state"],"failed");
+self.assertIn("broadcast position", result["reason"]) self.assertFalse(self.active) self
+    .assertNotIn("ActivateWindow(fullscreenvideo)", self.builtins)
 
-    def test_scheduled_startup_waits_for_seek_capability_and_position(self):
-        self.kind="episode";self.seekable=False
-        self.player.handle("Isolde.PlayScheduled",{"mediaType":"episode","mediaId":7,"offsetSeconds":800});self.active=True
-        self.assertEqual(self.player.status()["state"],"starting");self.now=1
-        self.assertEqual(self.player.status()["state"],"starting");self.assertTrue(self.active)
-        self.assertNotIn("ActivateWindow(fullscreenvideo)",self.builtins)
-        self.seekable=True;self.assertEqual(self.player.status()["state"],"starting") # Capability alone is not successful seek.
-        self.position=801;self.assertEqual(self.player.status()["state"],"playing")
+        def test_scheduled_startup_waits_for_seek_capability_and_position(self)
+    : self.kind = "episode";
+self.seekable =
+    False self.player.handle("Isolde.PlayScheduled", {"mediaType" : "episode", "mediaId" : 7, "offsetSeconds" : 800});
+self.active = True self.assertEqual(self.player.status()["state"], "starting");
+self.now = 1 self.assertEqual(self.player.status()["state"], "starting");
+self.assertTrue(self.active) self.assertNotIn("ActivateWindow(fullscreenvideo)", self.builtins) self.seekable = True;
+self.assertEqual(self.player.status()["state"], "starting") #Capability alone is
+    not successful seek.self.position = 801;self.assertEqual(self.player.status()["state"],"playing")
         self.assertIn("ActivateWindow(fullscreenvideo)",self.builtins)
         self.assertFalse(any(method=="Player.Stop" for method,_ in self.calls))
 
     def test_scheduled_position_must_follow_live_clock_not_eventually_reach_initial_offset(self):
-        self.player.handle("Isolde.PlayScheduled",{"mediaType":"movie","mediaId":7,"offsetSeconds":5});self.active=True
-        self.now=5;self.position=5;self.assertEqual(self.player.status()["state"],"starting")
-        self.now=6;self.position=11;self.assertEqual(self.player.status()["state"],"playing")
+        self.player.handle("Isolde.PlayScheduled",{"mediaType":"movie","mediaId":7,"offsetSeconds":5});
+self.active = True self.now = 5;
+self.position = 5;
+self.assertEqual(self.player.status()["state"], "starting") self.now = 6;
+self.position = 11;
+self.assertEqual(self.player.status()["state"], "playing")
 
-    def test_restart_at_zero_never_catches_up_to_a_moving_broadcast_position(self):
-        self.player.handle("Isolde.PlayScheduled",{"mediaType":"movie","mediaId":7,"offsetSeconds":5});self.active=True
+    def test_restart_at_zero_never_catches_up_to_a_moving_broadcast_position(self)
+    : self.player.handle("Isolde.PlayScheduled", {"mediaType" : "movie", "mediaId" : 7, "offsetSeconds" : 5});self.active=True
         for instant in (0,1,5,10,19):
-            self.now=instant;self.position=instant;self.assertEqual(self.player.status()["state"],"starting");self.assertTrue(self.active)
-        self.assertNotIn("ActivateWindow(fullscreenvideo)",self.builtins)
-        self.now=self.position=20;self.assertEqual(self.player.status()["state"],"failed");self.assertFalse(self.active)
+            self.now=instant;
+self.position = instant;
+self.assertEqual(self.player.status()["state"], "starting");
+self.assertTrue(self.active) self.assertNotIn("ActivateWindow(fullscreenvideo)",
+                                              self.builtins) self.now = self.position = 20;
+self.assertEqual(self.player.status()["state"], "failed");
+self.assertFalse(self.active)
 
-    def test_scheduled_startup_home_and_replacement_preserve_ownership(self):
-        self.seekable=False
-        self.player.handle("Isolde.PlayScheduled",{"mediaType":"movie","mediaId":7,"offsetSeconds":800})
-        self.player.control("home");self.active=True;self.player.status()
-        self.assertFalse(self.active);self.assertTrue(self.player.status()["home"])
-        self.player.handle("Isolde.PlayScheduled",{"mediaType":"movie","mediaId":7,"offsetSeconds":800})
-        self.active=True;self.item=9;self.now=21
+    def test_scheduled_startup_home_and_replacement_preserve_ownership(self)
+    : self.seekable =
+    False self.player.handle("Isolde.PlayScheduled",
+                             {"mediaType" : "movie", "mediaId" : 7, "offsetSeconds" : 800}) self.player.control("home");
+self.active = True;
+self.player.status() self.assertFalse(self.active);
+self.assertTrue(self.player.status()["home"]) self.player
+    .handle("Isolde.PlayScheduled", {"mediaType" : "movie", "mediaId" : 7, "offsetSeconds" : 800}) self.active = True;
+self.item = 9;self.now=21
         self.calls=[]
         self.assertEqual(self.player.status()["state"],"replaced")
         self.assertNotIn("Player.Stop",[m for m,_ in self.calls])
@@ -314,6 +279,7 @@ class PlaybackTests(unittest.TestCase):
         self.assertIn("ActivateWindow(visualisation)", self.builtins)
         self.assertNotIn("ActivateWindow(fullscreenvideo)", self.builtins)
         self.assertEqual(self.player.control("pause")["state"], "paused")
+        self.assertEqual(self.player.control("pause")["state"], "playing")
         self.item = 99
         self.assertEqual(self.player.status()["state"], "replaced")
         self.assertFalse(any(method == "Player.Stop" for method, _ in self.calls))
@@ -328,7 +294,9 @@ class PlaybackTests(unittest.TestCase):
         self.assertIn(("Player.Open", {"item": {"movieid": 7}, "options": {"resume": True}}), self.calls)
         self.assertEqual(self.player.control("pause")["state"], "paused")
         self.player.control("forward")
-        self.assertIn(("Player.Seek", {"playerid": 1, "value": "smallforward"}), self.calls)
+        self.assertIn(("Player.Seek", {"playerid": 1, "value": {"step": "smallforward"}}), self.calls)
+        self.player.control("backward")
+        self.assertIn(("Player.Seek", {"playerid": 1, "value": {"step": "smallbackward"}}), self.calls)
         result = self.player.control("home")
         self.assertEqual(result, {"state": "ended", "home": True, "canPause": False, "canSeek": False, "naturalEnd": False})
         self.assertEqual(self.builtins, ["ActivateWindow(fullscreenvideo)", "Minimize"])
@@ -363,9 +331,11 @@ class PlaybackTests(unittest.TestCase):
         self.assertEqual([track["id"] for track in tracks["tracks"]], [0, 2])
         self.assertTrue(tracks["tracks"][0]["selected"])
         self.assertTrue(tracks["tracks"][1]["external"])
+        self.subtitle_enabled=False
         selected = self.player.handle("Isolde.SetSubtitleTrack", {"subtitleId": 2})
+        self.assertTrue(selected["enabled"])
         self.assertEqual(selected["selectedId"], 2)
-        self.assertIn(("Player.SetSubtitle", {"playerid": 1, "subtitle": 2}), self.calls)
+        self.assertIn(("Player.SetSubtitle", {"playerid": 1, "subtitle": 2, "enable": True}), self.calls)
         disabled = self.player.handle("Isolde.SetSubtitleTrack", {"subtitleId": "off"})
         self.assertFalse(disabled["enabled"])
         self.item = 8
@@ -375,6 +345,37 @@ class PlaybackTests(unittest.TestCase):
             self.player.handle("Isolde.SetSubtitleTrack", {"subtitleId": 99})
         with self.assertRaises(ValueError):
             self.player.handle("Isolde.SetSubtitleTrack", {"subtitleId": True})
+
+    def test_native_menu_and_options_remain_owned_and_do_not_stop_playback(self):
+        self.start()
+        first=self.player.control("options")["optionsRequest"]
+        self.assertEqual(self.player.status()["optionsRequest"],first)
+        self.assertEqual(self.player.control("options")["optionsRequest"],first+1)
+        options=self.player.handle("Isolde.GetPlaybackOptions",{})
+        self.assertEqual([row["id"] for row in options["audio"]],[0,1])
+        self.player.handle("Isolde.SetPlaybackOption",{"kind":"audio","value":1})
+        self.assertEqual(self.audio_id,1)
+        self.subtitle_enabled=False
+        options=self.player.handle("Isolde.SetPlaybackOption",{"kind":"subtitle","value":2})
+        self.assertTrue(options["subtitles"][1]["selected"])
+        options=self.player.handle("Isolde.SetPlaybackOption",{"kind":"view","value":"zoom"})
+        self.assertEqual(options["view"],"zoom")
+        for kind,value in (("audio",True),("subtitle",99),("view","execute"),("volume",100)):
+            with self.assertRaises(ValueError):self.player.handle("Isolde.SetPlaybackOption",dict(kind=kind,value=value))
+        self.assertTrue(self.active)
+        writes=sum(method.startswith("Player.Set") for method,_ in self.calls)
+        self.item=8
+        with self.assertRaises(ValueError):self.player.handle("Isolde.SetPlaybackOption",dict(kind="view",value="normal"))
+        self.assertEqual(sum(method.startswith("Player.Set") for method,_ in self.calls),writes)
+        with self.assertRaises(ValueError):self.player.control("options")
+
+    def test_song_menu_exposes_common_controls_without_video_settings(self):
+        self.kind="song"
+        self.player.handle("Isolde.PlaySong",{"songid":7,"resume":False});self.active=True
+        self.assertEqual(self.player.control("options")["state"],"playing")
+        self.assertEqual(self.player.handle("Isolde.GetPlaybackOptions",{})["views"],[])
+        with self.assertRaises(ValueError):self.player.handle("Isolde.SetPlaybackOption",dict(kind="view",value="zoom"))
+        self.assertEqual(self.player.control("pause")["state"],"paused")
 
     def test_episode_resume_restart_and_type_scoped_ownership(self):
         self.kind = "episode"
@@ -420,16 +421,20 @@ class PlaybackTests(unittest.TestCase):
             self.assertFalse(self.player.natural_end)
         self.assertEqual(self.player.status()["state"],"playing") # bounded callback grace
         self.stopped({"end":True,"item":{"id":7,"type":"movie"}})
-        result=self.player.status();self.assertEqual(result["state"],"ended");self.assertTrue(result["naturalEnd"])
+        result=self.player.status();
+self.assertEqual(result["state"], "ended");
+self.assertTrue(result["naturalEnd"])
 
-    def test_scheduled_missing_callback_and_explicit_stop_never_continue(self):
-        self.player.handle("Isolde.PlayScheduled", {"mediaType":"movie", "mediaId":7, "offsetSeconds":0})
-        self.active=True;self.player.status();self.active=False
-        self.assertEqual(self.player.status()["state"],"playing")
-        self.now=0.6
-        result=self.player.status();self.assertEqual(result["state"],"ended");self.assertFalse(result["naturalEnd"])
-        self.player.handle("Isolde.PlayScheduled", {"mediaType":"movie", "mediaId":7, "offsetSeconds":0})
-        self.active=True;self.player.status();self.player.control("stop")
+    def test_scheduled_missing_callback_and_explicit_stop_never_continue(self)
+    : self.player.handle("Isolde.PlayScheduled",
+                         {"mediaType" : "movie", "mediaId" : 7, "offsetSeconds" : 0}) self.active = True;
+self.player.status();
+self.active = False self.assertEqual(self.player.status()["state"], "playing") self.now = 0.6 result =
+    self.player.status();
+self.assertEqual(result["state"], "ended");
+self.assertFalse(result["naturalEnd"]) self.player
+    .handle("Isolde.PlayScheduled", {"mediaType" : "movie", "mediaId" : 7, "offsetSeconds" : 0}) self.active = True;
+self.player.status();self.player.control("stop")
         self.stopped({"end":True,"item":{"id":7,"type":"movie"}})
         self.assertFalse(self.player.status()["naturalEnd"])
 

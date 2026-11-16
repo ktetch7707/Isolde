@@ -17,18 +17,17 @@
 namespace {
 constexpr qsizetype MaxSubtitleBytes = 8 * 1024 * 1024;
 constexpr qsizetype MaxApiBytes = 2 * 1024 * 1024;
-}
+} // namespace
 
-OnlineSubtitleRepository::OnlineSubtitleRepository(SearchSettings *settings, QObject *parent,
-                                                   const QUrl &apiBase, const QString &apiKey,
-                                                   const QString &bearerToken)
-    : QObject(parent), m_settings(settings), m_network(new QNetworkAccessManager(this)),
-      m_apiBase(apiBase), m_apiKey(apiKey.trimmed())
-{
+OnlineSubtitleRepository::OnlineSubtitleRepository(
+    SearchSettings* settings, QObject* parent, const QUrl& apiBase, const QString& apiKey, const QString& bearerToken)
+    : QObject(parent), m_settings(settings), m_network(new QNetworkAccessManager(this)), m_apiBase(apiBase),
+      m_apiKey(apiKey.trimmed()) {
     m_bearerToken = bearerToken.trimmed();
     if (m_apiKey.contains(QLatin1Char('\r')) || m_apiKey.contains(QLatin1Char('\n')) || m_apiKey.size() > 8192)
         m_apiKey.clear();
-    if (m_bearerToken.contains(QLatin1Char('\r')) || m_bearerToken.contains(QLatin1Char('\n')) || m_bearerToken.size() > 8192)
+    if (m_bearerToken.contains(QLatin1Char('\r')) || m_bearerToken.contains(QLatin1Char('\n')) ||
+        m_bearerToken.size() > 8192)
         m_bearerToken.clear();
     if (m_settings) {
         connect(m_settings, &SearchSettings::changed, this, &OnlineSubtitleRepository::settingsChanged);
@@ -36,18 +35,15 @@ OnlineSubtitleRepository::OnlineSubtitleRepository(SearchSettings *settings, QOb
     }
 }
 
-OnlineSubtitleRepository::~OnlineSubtitleRepository()
-{
+OnlineSubtitleRepository::~OnlineSubtitleRepository() {
     cancel();
 }
 
-bool OnlineSubtitleRepository::enabled() const
-{
+bool OnlineSubtitleRepository::enabled() const {
     return m_settings && m_settings->webEnabled();
 }
 
-void OnlineSubtitleRepository::settingsChanged()
-{
+void OnlineSubtitleRepository::settingsChanged() {
     if (!enabled()) {
         cancel();
         m_results.clear();
@@ -55,16 +51,17 @@ void OnlineSubtitleRepository::settingsChanged()
     } else if (!configured()) {
         m_status = QStringLiteral("OpenSubtitles API key is not configured. Local subtitle tools remain available.");
     } else if (!m_busy) {
-        m_status = QStringLiteral("OpenSubtitles is ready for an explicit title/language search. No media file is uploaded.");
+        m_status =
+            QStringLiteral("OpenSubtitles is ready for an explicit title/language search. No media file is uploaded.");
     }
     emit changed();
 }
 
-QUrl OnlineSubtitleRepository::endpoint(const QString &path, const QMap<QString, QString> &query) const
-{
+QUrl OnlineSubtitleRepository::endpoint(const QString& path, const QMap<QString, QString>& query) const {
     QUrl url = m_apiBase;
     QString joined = url.path();
-    if (!joined.endsWith('/')) joined += '/';
+    if (!joined.endsWith('/'))
+        joined += '/';
     joined += path;
     url.setPath(joined);
     QUrlQuery parameters;
@@ -74,34 +71,37 @@ QUrl OnlineSubtitleRepository::endpoint(const QString &path, const QMap<QString,
     return url;
 }
 
-QNetworkReply *OnlineSubtitleRepository::request(const QUrl &url, const QByteArray &method,
-                                                 const QByteArray &body, bool sendApiKey, bool sendBearerToken)
-{
+QNetworkReply* OnlineSubtitleRepository::request(
+    const QUrl& url, const QByteArray& method, const QByteArray& body, bool sendApiKey, bool sendBearerToken) {
     QNetworkRequest request(url);
     request.setRawHeader("Accept", "application/json");
     request.setRawHeader("User-Agent", "Isolde v1.0");
-    if (sendApiKey) request.setRawHeader("Api-Key", m_apiKey.toUtf8());
+    if (sendApiKey)
+        request.setRawHeader("Api-Key", m_apiKey.toUtf8());
     if (sendBearerToken && !m_bearerToken.isEmpty())
         request.setRawHeader("Authorization", QByteArrayLiteral("Bearer ") + m_bearerToken.toUtf8());
-    if (method == "POST") request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
+    if (method == "POST")
+        request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
     request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::ManualRedirectPolicy);
-    auto *reply = method == "POST" ? m_network->post(request, body) : m_network->get(request);
+    auto* reply = method == "POST" ? m_network->post(request, body) : m_network->get(request);
     m_replies.append(reply);
     const auto host = url.host().toLower();
-    const auto responseLimit = host == QStringLiteral("dl.opensubtitles.com") ||
-                               host == QStringLiteral("dl.opensubtitles.org")
-        ? MaxSubtitleBytes : MaxApiBytes;
+    const auto responseLimit =
+        host == QStringLiteral("dl.opensubtitles.com") || host == QStringLiteral("dl.opensubtitles.org")
+            ? MaxSubtitleBytes
+            : MaxApiBytes;
     connect(reply, &QIODevice::readyRead, reply, [reply, responseLimit] {
-        if (reply->bytesAvailable() > responseLimit) reply->abort();
+        if (reply->bytesAvailable() > responseLimit)
+            reply->abort();
     });
     QTimer::singleShot(20000, reply, [reply] {
-        if (reply->isRunning()) reply->abort();
+        if (reply->isRunning())
+            reply->abort();
     });
     return reply;
 }
 
-void OnlineSubtitleRepository::search(const QString &query, const QString &language, const QString &type)
-{
+void OnlineSubtitleRepository::search(const QString& query, const QString& language, const QString& type) {
     if (!enabled()) {
         cancel();
         m_results.clear();
@@ -117,10 +117,10 @@ void OnlineSubtitleRepository::search(const QString &query, const QString &langu
     static const QRegularExpression languagePattern(QStringLiteral("^[a-z]{2,3}$"));
     const auto term = query.trimmed();
     const auto code = language.trimmed().toLower();
-    if (term.size() < 2 || term.size() > 200 ||
-        !languagePattern.match(code).hasMatch() ||
+    if (term.size() < 2 || term.size() > 200 || !languagePattern.match(code).hasMatch() ||
         (type != QStringLiteral("movie") && type != QStringLiteral("episode"))) {
-        m_status = QStringLiteral("Enter a title of 2–200 characters, a two- or three-letter language code, and movie or episode.");
+        m_status = QStringLiteral(
+            "Enter a title of 2–200 characters, a two- or three-letter language code, and movie or episode.");
         emit changed();
         return;
     }
@@ -130,13 +130,12 @@ void OnlineSubtitleRepository::search(const QString &query, const QString &langu
     m_pendingTitle = term;
     m_status = QStringLiteral("Searching OpenSubtitles for %1 (%2)…").arg(term, code);
     const auto generation = m_generation;
-    const auto url = endpoint(QStringLiteral("subtitles"), {
-        {QStringLiteral("query"), term},
-        {QStringLiteral("languages"), code},
-        {QStringLiteral("type"), type},
-        {QStringLiteral("limit"), QStringLiteral("20")}
-    });
-    auto *reply = request(url, QByteArrayLiteral("GET"));
+    const auto url = endpoint(QStringLiteral("subtitles"),
+                              {{QStringLiteral("query"), term},
+                               {QStringLiteral("languages"), code},
+                               {QStringLiteral("type"), type},
+                               {QStringLiteral("limit"), QStringLiteral("20")}});
+    auto* reply = request(url, QByteArrayLiteral("GET"));
     connect(reply, &QNetworkReply::finished, this, [this, reply, generation] {
         parseSearchReply(reply, generation);
         m_replies.removeAll(reply);
@@ -145,15 +144,17 @@ void OnlineSubtitleRepository::search(const QString &query, const QString &langu
     emit changed();
 }
 
-void OnlineSubtitleRepository::parseSearchReply(QNetworkReply *reply, quint64 generation)
-{
-    if (generation != m_generation || !enabled()) return;
+void OnlineSubtitleRepository::parseSearchReply(QNetworkReply* reply, quint64 generation) {
+    if (generation != m_generation || !enabled())
+        return;
     m_busy = false;
     if (reply->error() != QNetworkReply::NoError) {
         m_results.clear();
         const auto statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-        setError(statusCode ? QStringLiteral("OpenSubtitles search failed (HTTP %1): %2").arg(statusCode).arg(reply->errorString())
-                            : QStringLiteral("OpenSubtitles search failed: %1").arg(reply->errorString()));
+        setError(
+            statusCode
+                ? QStringLiteral("OpenSubtitles search failed (HTTP %1): %2").arg(statusCode).arg(reply->errorString())
+                : QStringLiteral("OpenSubtitles search failed: %1").arg(reply->errorString()));
         return;
     }
     QJsonParseError parseError;
@@ -166,19 +167,24 @@ void OnlineSubtitleRepository::parseSearchReply(QNetworkReply *reply, quint64 ge
     }
     QVariantList results;
     const auto entries = document.object().value(QStringLiteral("data")).toArray();
-    for (const auto &value : entries) {
-        if (!value.isObject() || results.size() >= 20) continue;
+    for (const auto& value : entries) {
+        if (!value.isObject() || results.size() >= 20)
+            continue;
         const auto attributes = value.toObject().value(QStringLiteral("attributes")).toObject();
         const auto files = attributes.value(QStringLiteral("files")).toArray();
-        if (files.isEmpty() || !files.first().isObject()) continue;
+        if (files.isEmpty() || !files.first().isObject())
+            continue;
         const auto file = files.first().toObject();
         const auto fileId = file.value(QStringLiteral("file_id")).toInt(-1);
         const auto fileName = file.value(QStringLiteral("file_name")).toString().trimmed();
-        if (fileId <= 0 || !fileName.endsWith(QStringLiteral(".srt"), Qt::CaseInsensitive)) continue;
+        if (fileId <= 0 || !fileName.endsWith(QStringLiteral(".srt"), Qt::CaseInsensitive))
+            continue;
         const auto feature = attributes.value(QStringLiteral("feature_details")).toObject();
         auto title = feature.value(QStringLiteral("title")).toString().trimmed();
-        if (title.isEmpty()) title = feature.value(QStringLiteral("movie_name")).toString().trimmed();
-        if (title.isEmpty()) title = m_pendingTitle;
+        if (title.isEmpty())
+            title = feature.value(QStringLiteral("movie_name")).toString().trimmed();
+        if (title.isEmpty())
+            title = m_pendingTitle;
         results.append(QVariantMap{
             {QStringLiteral("fileId"), fileId},
             {QStringLiteral("fileName"), fileName.left(240)},
@@ -187,25 +193,25 @@ void OnlineSubtitleRepository::parseSearchReply(QNetworkReply *reply, quint64 ge
             {QStringLiteral("release"), attributes.value(QStringLiteral("release")).toString().left(240)},
             {QStringLiteral("downloads"), attributes.value(QStringLiteral("download_count")).toInt()},
             {QStringLiteral("hearingImpaired"), attributes.value(QStringLiteral("hearing_impaired")).toBool()},
-            {QStringLiteral("attribution"), QStringLiteral("Subtitle file hosted by OpenSubtitles.com; review before use")},
-            {QStringLiteral("checkedAt"), QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)}
-        });
+            {QStringLiteral("attribution"),
+             QStringLiteral("Subtitle file hosted by OpenSubtitles.com; review before use")},
+            {QStringLiteral("checkedAt"), QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)}});
     }
     m_results = results;
     m_status = results.isEmpty()
-        ? QStringLiteral("No matching OpenSubtitles SRT files found. Try another title or language.")
-        : QStringLiteral("%1 OpenSubtitles SRT result(s). Downloads are explicit; no media is uploaded.").arg(results.size());
+                   ? QStringLiteral("No matching OpenSubtitles SRT files found. Try another title or language.")
+                   : QStringLiteral("%1 OpenSubtitles SRT result(s). Downloads are explicit; no media is uploaded.")
+                         .arg(results.size());
     emit changed();
 }
 
-void OnlineSubtitleRepository::download(int fileId)
-{
+void OnlineSubtitleRepository::download(int fileId) {
     if (!enabled() || !configured()) {
         setError(QStringLiteral("OpenSubtitles download requires Web ON and a configured API key."));
         return;
     }
     QVariantMap selected;
-    for (const auto &value : m_results) {
+    for (const auto& value : m_results) {
         const auto result = value.toMap();
         if (result.value(QStringLiteral("fileId")).toInt() == fileId) {
             selected = result;
@@ -224,7 +230,8 @@ void OnlineSubtitleRepository::download(int fileId)
     m_status = QStringLiteral("Requesting a fresh download link for the selected subtitle…");
     const auto generation = m_generation;
     const QJsonObject body{{QStringLiteral("file_id"), fileId}};
-    auto *reply = request(endpoint(QStringLiteral("download")), QByteArrayLiteral("POST"),
+    auto* reply = request(endpoint(QStringLiteral("download")),
+                          QByteArrayLiteral("POST"),
                           QJsonDocument(body).toJson(QJsonDocument::Compact));
     connect(reply, &QNetworkReply::finished, this, [this, reply, generation, fileId] {
         parseDownloadLink(reply, generation, fileId);
@@ -234,9 +241,9 @@ void OnlineSubtitleRepository::download(int fileId)
     emit changed();
 }
 
-void OnlineSubtitleRepository::parseDownloadLink(QNetworkReply *reply, quint64 generation, int fileId)
-{
-    if (generation != m_generation || !enabled()) return;
+void OnlineSubtitleRepository::parseDownloadLink(QNetworkReply* reply, quint64 generation, int fileId) {
+    if (generation != m_generation || !enabled())
+        return;
     if (reply->error() != QNetworkReply::NoError) {
         m_busy = false;
         setError(QStringLiteral("OpenSubtitles could not create a download link: %1").arg(reply->errorString()));
@@ -251,31 +258,29 @@ void OnlineSubtitleRepository::parseDownloadLink(QNetworkReply *reply, quint64 g
     }
     const auto responseObject = document.object();
     const auto returnedFileName = responseObject.value(QStringLiteral("file_name")).toString().trimmed();
-    if (!returnedFileName.isEmpty() &&
-        !returnedFileName.endsWith(QStringLiteral(".srt"), Qt::CaseInsensitive)) {
+    if (!returnedFileName.isEmpty() && !returnedFileName.endsWith(QStringLiteral(".srt"), Qt::CaseInsensitive)) {
         m_busy = false;
         setError(QStringLiteral("OpenSubtitles returned a non-SRT file; it was not downloaded."));
         return;
     }
-    if (!returnedFileName.isEmpty()) m_pendingFileName = returnedFileName.left(240);
+    if (!returnedFileName.isEmpty())
+        m_pendingFileName = returnedFileName.left(240);
     const auto url = QUrl(responseObject.value(QStringLiteral("link")).toString());
-    const bool localFixture = m_apiBase.scheme() == QStringLiteral("http") &&
-        QHostAddress(m_apiBase.host()).isLoopback();
+    const bool localFixture =
+        m_apiBase.scheme() == QStringLiteral("http") && QHostAddress(m_apiBase.host()).isLoopback();
     const auto expectedScheme = localFixture ? QStringLiteral("http") : QStringLiteral("https");
     const auto urlHost = url.host().toLower();
-    const bool allowedDownloadHost = localFixture
-        ? urlHost == m_apiBase.host().toLower()
-        : urlHost == QStringLiteral("dl.opensubtitles.com") ||
-          urlHost == QStringLiteral("dl.opensubtitles.org");
-    if (!url.isValid() || url.scheme() != expectedScheme ||
-        !allowedDownloadHost ||
-        !url.userInfo().isEmpty() || (!localFixture && url.port(-1) != -1) ||
-        (localFixture && url.port(-1) != m_apiBase.port(-1)) || !url.fragment().isEmpty()) {
+    const bool allowedDownloadHost = localFixture ? urlHost == m_apiBase.host().toLower()
+                                                  : urlHost == QStringLiteral("dl.opensubtitles.com") ||
+                                                        urlHost == QStringLiteral("dl.opensubtitles.org");
+    if (!url.isValid() || url.scheme() != expectedScheme || !allowedDownloadHost || !url.userInfo().isEmpty() ||
+        (!localFixture && url.port(-1) != -1) || (localFixture && url.port(-1) != m_apiBase.port(-1)) ||
+        !url.fragment().isEmpty()) {
         m_busy = false;
         setError(QStringLiteral("OpenSubtitles returned an unsupported download host; the file was not fetched."));
         return;
     }
-    auto *downloadReply = request(url, QByteArrayLiteral("GET"), {}, false, false);
+    auto* downloadReply = request(url, QByteArrayLiteral("GET"), {}, false, false);
     const auto generationForFile = generation;
     connect(downloadReply, &QNetworkReply::finished, this, [this, downloadReply, generationForFile, fileId] {
         parseSubtitleReply(downloadReply, generationForFile, fileId);
@@ -284,9 +289,9 @@ void OnlineSubtitleRepository::parseDownloadLink(QNetworkReply *reply, quint64 g
     });
 }
 
-void OnlineSubtitleRepository::parseSubtitleReply(QNetworkReply *reply, quint64 generation, int fileId)
-{
-    if (generation != m_generation || !enabled()) return;
+void OnlineSubtitleRepository::parseSubtitleReply(QNetworkReply* reply, quint64 generation, int fileId) {
+    if (generation != m_generation || !enabled())
+        return;
     m_busy = false;
     if (reply->error() != QNetworkReply::NoError || reply->bytesAvailable() > MaxSubtitleBytes) {
         setError(QStringLiteral("OpenSubtitles subtitle download failed or exceeded the 8 MiB limit."));
@@ -298,30 +303,29 @@ void OnlineSubtitleRepository::parseSubtitleReply(QNetworkReply *reply, quint64 
         return;
     }
     const auto text = QString::fromUtf8(bytes);
-    if (bytes.isEmpty() || text.toUtf8() != bytes ||
-        bytes.startsWith("PK") || bytes.startsWith("\x1f\x8b")) {
-        setError(QStringLiteral("OpenSubtitles did not return a bounded plain UTF-8 SRT; archives and binary files are refused."));
+    if (bytes.isEmpty() || text.toUtf8() != bytes || bytes.startsWith("PK") || bytes.startsWith("\x1f\x8b")) {
+        setError(QStringLiteral(
+            "OpenSubtitles did not return a bounded plain UTF-8 SRT; archives and binary files are refused."));
         return;
     }
-    m_status = QStringLiteral("Subtitle downloaded from OpenSubtitles. It will be stored locally for review; no media was uploaded.");
-    emit subtitleDownloaded(m_pendingTitle, m_pendingLanguage, text,
-                            QStringLiteral("OpenSubtitles.com"), fileId);
+    m_status = QStringLiteral(
+        "Subtitle downloaded from OpenSubtitles. It will be stored locally for review; no media was uploaded.");
+    emit subtitleDownloaded(m_pendingTitle, m_pendingLanguage, text, QStringLiteral("OpenSubtitles.com"), fileId);
     emit changed();
 }
 
-void OnlineSubtitleRepository::setError(const QString &message)
-{
+void OnlineSubtitleRepository::setError(const QString& message) {
     m_busy = false;
     m_status = message;
     emit changed();
 }
 
-void OnlineSubtitleRepository::cancel()
-{
+void OnlineSubtitleRepository::cancel() {
     ++m_generation;
     const auto pending = m_replies;
     m_replies.clear();
-    for (const auto &reply : pending)
-        if (reply) reply->abort();
+    for (const auto& reply : pending)
+        if (reply)
+            reply->abort();
     m_busy = false;
 }

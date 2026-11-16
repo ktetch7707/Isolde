@@ -1,4 +1,17 @@
 {
+  "playlistShelfChoices":[{"name":"Movies · Kodi playlist","kind":"movies"},{"name":"Shows · Kodi playlist","kind":"shows"}],
+  "settingsNavigation":{"schemaVersion":1,"categories":[
+    {"id":"network","name":"Network & Internet","description":"Wi-Fi, connections and VPN","rows":[{"name":"Network connection","description":"Connection status, Wi-Fi and saved networks","route":"network"},{"name":"VPN","description":"Provider setup, locations and connection controls","route":"vpn"}]},
+    {"id":"picture","name":"Picture & Sound","description":"Display, accessibility and audio","rows":[{"name":"Display & accessibility","description":"Safe area, interface scale, contrast and motion","route":"display"},{"name":"Sound","description":"Audio output, volume and startup preferences","route":"audio"},{"name":"Interface sounds","description":"Kodi sound themes, navigation feedback and sound level","route":"interface-sounds"}]},
+    {"id":"display-skins","name":"Display & Skins","description":"Interface appearance and saved skins","rows":[{"name":"Skins","description":"Apply, edit, duplicate or delete saved skins for this profile","route":"skins"}]},
+    {"id":"home","name":"Home & Appearance","description":"Pages, themes and ambient mode","rows":[{"name":"Edit Home & pages","description":"Layouts, components, artwork and themes in Studio","route":"studio"},{"name":"Ambient mode","description":"Idle timing, screensaver pages and preview","route":"ambient"}]},
+    {"id":"apps","name":"Apps","description":"App Store, installed apps and store preferences","rows":[{"name":"App Store","description":"Browse, install and manage apps; set up Android support","route":"store"},{"name":"Store preferences","description":"Online catalog search and refresh","route":"store-preferences"}]},
+    {"id":"inputs","name":"Inputs & Sources","description":"HDMI inputs, drives and detected media","rows":[{"name":"HDMI inputs","description":"Capture device, input names, switching and preview","route":"capture"},{"name":"Detected sources","description":"Discs, drives, folders and source notices","route":"sources"}]},
+    {"id":"remotes","name":"Remotes & Controllers","description":"Pairing, button tests and mappings","route":"remotes"},
+    {"id":"profiles","name":"Profiles","description":"People, personal layouts and permissions","route":"profiles"},
+    {"id":"media","name":"Media & Playback","description":"Kodi library, import and playback preferences","route":"media"},
+    {"id":"system","name":"System & Support","description":"Setup guide, diagnostics and version information","route":"system"}
+  ]},
   "headerLabels":{"sources":"Sources"},"headerActions":{"sources":{"schemaVersion":1,"type":"settings","section":2}},
   "sourcePolicyFields":[
     {"key":"discoveryEnabled","label":"Local discovery","choices":[{"name":"On","value":true},{"name":"Off","value":false}]},
@@ -15,7 +28,14 @@
   ],
   "sourcePolicyDefaults": {"schemaVersion":1,"discoveryEnabled":true,"mode":"compact","pages":["home"],"slots":[],"events":["movie-disc","game-disc","media-folder","file-source"],"types":["movie-disc","game-disc","media-folder","file-source"],"duration":8,"reconnect":true,"suppressPlayback":true,"suppressSetup":true,"suppressEditing":true},
   "responsiveDefaults": {"schemaVersion": 1, "policy": "wrap", "minimumWidth": 80, "minimumHeight": 48, "aspect": 1.7777777777777777},
+  "simpleStudio": {"themeGroups":[{"id":"background","label":"Background","roles":[{"key":"backgroundStart","label":"Page background"},{"key":"backgroundEnd","label":"Gradient end"}]},{"id":"cards","label":"Cards","roles":[{"key":"surfaceColor","label":"Cards and panels"},{"key":"selectedColor","label":"Selected cards"}]},{"id":"text","label":"Text","roles":[{"key":"textColor","label":"Default text"},{"key":"headingColor","label":"Page and section titles"},{"key":"labelColor","label":"Labels"},{"key":"bodyColor","label":"Body text"},{"key":"mutedColor","label":"Supporting text"}]},{"id":"highlight","label":"Highlight","roles":[{"key":"focusColor","label":"Focus ring"},{"key":"borderColor","label":"Borders"}]},{"id":"accent","label":"Accent","roles":[{"key":"accentColor","label":"Buttons and details"},{"key":"iconColor","label":"Icons"}]}],"schemes":[{"name":"Midnight","colors":{"background":"#19191e","cards":"#202126","text":"#f5f1f3","highlight":"#c994a5","accent":"#c994a5"}},{"name":"Soft rose","colors":{"background":"#e8ced8","cards":"#f8eaf0","text":"#352b3a","highlight":"#71475f","accent":"#80526e"}},{"name":"Ocean","colors":{"background":"#101e2c","cards":"#20384a","text":"#f0f7ff","highlight":"#89d6ff","accent":"#76bddd"}}],"primaryLabels":{"button":"App shortcut","app-bar":"App row","library":"Media shelf","text":"Text","image":"Image","clock":"Clock"},"actionIntents":[{"name":"Open an app","categoryName":"Apps"},{"name":"Go to a page","categoryName":"Pages"},{"name":"Open media","categoryName":"Media"},{"name":"More actions","categoryName":"All links"},{"name":"No action","noAction":true}],"basicFamilies":["button","app-bar","library","text","image","clock"],"basicPageLayout":["verticalScrolling","grid","pageNavigation","editableMenu","margin","gap"],"basicFields":["bodySize","bodyColor","apps","libraryKind","libraryView","bodyText","visibleLabel","customLogo","action","historyApps","addChild","guideFilter"],"basicAppearance":["surfaceColor","labelColor","bodyColor","bodySize","radius","artFit","crop","typography","shape","iconColor","logoMode","appIconStyle","iconFocus"],"basicHeader":["headerMode","identity","showTitle","customLogo","showClock","showDate","headerControls"],"stylePresets":[{"name":"Use page style","presentation":{}},{"name":"Soft corners","presentation":{"radius":16,"surfaceOpacity":1}},{"name":"Square","presentation":{"radius":0,"surfaceOpacity":1}},{"name":"Transparent","presentation":{"surfaceOpacity":0}}]},
   "schemaVersion": 1,
+  "appIconStyles": {
+    "signature":{"variant":"orb","diameter":96,"labelSize":20,"labelPill":false,"artFit":"contain","iconFocus":"glow","iconGlow":8,"iconGlowOpacity":0.65,"focusWidth":2,"iconPadding":0},
+    "tiles":{"variant":"orb","iconSize":48,"labelSize":20,"artFit":"contain","radius":18,"padding":12,"cardGap":12,"iconFocus":"glow","iconGlow":7,"iconGlowOpacity":0.65,"focusWidth":2},
+    "rail":{"variant":"orb","shape":"pill","iconSize":36,"labelSize":18,"artFit":"contain","radius":32,"padding":10,"cardGap":10,"iconFocus":"glow","iconGlow":6,"iconGlowOpacity":0.65,"focusWidth":2}
+  },
+  "artworkCleanup":{"previewSurfaces":[{"name":"Light","colour":"#f5f1f3"},{"name":"Dark","colour":"#202126"},{"name":"Pastel","colour":"#e8ced8"}]},
   "referenceViewport": {"width": 1280, "height": 720},
   "rootPageName": "Home",
   "stressTitle": "A very long sample title to inspect wrapping, clipping and focus at the current viewport with the production renderer",
@@ -115,6 +135,7 @@
     "tileRoundness": 0.25
   },
   "menuWidth": 280,
+  "trialDurations": [{"label":"30 seconds","seconds":30},{"label":"1 minute","seconds":60},{"label":"5 minutes","seconds":300}],
   "defaultGrid": {
     "columns": 8,
     "rows": 5,
@@ -339,7 +360,7 @@
       "name": "Scrolling sections"
     }
   ],
-  "componentVariants": {"button":[{"id":"standard","name":"Standard button","description":"A compact editable shortcut.","span":{"width":2,"height":1},"presentation":{"variant":"source","labelPosition":"inside"}},{"id":"round","name":"Round icon","description":"A circular icon with an independent label.","span":{"width":2,"height":2},"presentation":{"variant":"orb","diameter":110,"labelPosition":"below","labelPill":false}},{"id":"wide","name":"Wide tile","description":"A wide editable shortcut.","span":{"width":4,"height":1},"presentation":{"variant":"source","labelPosition":"inside"}},{"id":"poster","name":"Poster button","description":"A portrait shortcut. Choose artwork in Edit component.","span":{"width":2,"height":3},"presentation":{"variant":"image","labelPosition":"below","artFit":"cover"}}],"image":[{"id":"landscape","name":"Landscape image","description":"A wide image with optional links and labels.","span":{"width":3,"height":2},"presentation":{"variant":"image","labelPosition":"hidden","artFit":"cover"}},{"id":"poster","name":"Poster image","description":"A portrait image with an independent label.","span":{"width":2,"height":3},"presentation":{"variant":"image","labelPosition":"below","artFit":"cover"}},{"id":"contained","name":"Fit full artwork","description":"Keep the whole image visible inside its bounds.","span":{"width":4,"height":3},"presentation":{"variant":"image","labelPosition":"hidden","artFit":"contain"}}],"text":[{"id":"body","name":"Text","description":"An editable block of plain text.","span":{"width":3,"height":1},"presentation":{"bodySize":20,"bodyBold":false,"bodyAlign":"left","bodyWrap":true}},{"id":"heading","name":"Heading","description":"Large plain text for an independent heading.","span":{"width":4,"height":1},"presentation":{"bodySize":32,"bodyBold":true,"bodyAlign":"left","bodyWrap":true}}]},
+  "componentVariants": {"button":[{"id":"standard","name":"Standard button","description":"A compact editable shortcut.","span":{"width":1,"height":1},"presentation":{"variant":"source","labelPosition":"inside"}},{"id":"round","name":"Round icon","description":"A circular icon with an independent label.","span":{"width":1,"height":1},"presentation":{"variant":"orb","diameter":110,"labelPosition":"below","labelPill":false}},{"id":"wide","name":"Wide tile","description":"A wide editable shortcut.","span":{"width":4,"height":1},"presentation":{"variant":"source","labelPosition":"inside"}},{"id":"poster","name":"Poster button","description":"A portrait shortcut. Choose artwork in Edit component.","span":{"width":2,"height":3},"presentation":{"variant":"image","labelPosition":"below","artFit":"cover"}}],"image":[{"id":"landscape","name":"Landscape image","description":"A wide image with optional links and labels.","span":{"width":3,"height":2},"presentation":{"variant":"image","labelPosition":"hidden","artFit":"cover"}},{"id":"poster","name":"Poster image","description":"A portrait image with an independent label.","span":{"width":2,"height":3},"presentation":{"variant":"image","labelPosition":"below","artFit":"cover"}},{"id":"contained","name":"Fit full artwork","description":"Keep the whole image visible inside its bounds.","span":{"width":4,"height":3},"presentation":{"variant":"image","labelPosition":"hidden","artFit":"contain"}}],"text":[{"id":"body","name":"Text","description":"An editable block of plain text.","span":{"width":3,"height":1},"presentation":{"bodySize":20,"bodyBold":false,"bodyAlign":"left","bodyWrap":true}},{"id":"heading","name":"Heading","description":"Large plain text for an independent heading.","span":{"width":4,"height":1},"presentation":{"bodySize":32,"bodyBold":true,"bodyAlign":"left","bodyWrap":true}}]},
   "componentPresets": {
     "source-notice":{"id":"source-notice","name":"Source notice slot","kind":"widget","widgetType":"container","componentType":"container","family":"source-notice","placement":{"x":0,"y":0,"width":3,"height":1},"presentation":{"sourceVariant":"compact","sourceMaximum":1,"sourceBadge":true,"sourceDetails":false,"variant":"source","labelPosition":"inside","labelSize":18,"radius":12,"surfaceOpacity":1,"focusWidth":3,"layout":{"schemaVersion":1,"mode":"row","columns":1,"rows":1,"visibleColumns":1,"padding":0,"gap":8}}},
     "detected-sources":{"id":"detected-sources","name":"Detected sources","kind":"widget","widgetType":"container","componentType":"container","family":"detected-sources","placement":{"x":0,"y":0,"width":6,"height":2},"presentation":{"sourceVariant":"cards","sourceMaximum":4,"sourceBadge":true,"sourceDetails":true,"variant":"source","labelPosition":"inside","labelSize":18,"radius":12,"surfaceOpacity":1,"focusWidth":3,"moreLabel":"View all","galleryTitle":"Detected sources","layout":{"schemaVersion":1,"mode":"row","columns":6,"rows":1,"visibleColumns":4,"padding":8,"gap":8}}},
@@ -365,7 +386,7 @@
       "placement": {
         "x": 0,
         "y": 0,
-        "width": 2,
+        "width": 1,
         "height": 1
       },
       "presentation": {
@@ -454,9 +475,10 @@
         "height": 2
       },
       "presentation": {
+        "appIconStyle":"signature",
         "showHeading": true,
         "icon": "grid",
-        "surfaceOpacity": 0.35,
+        "surfaceOpacity": 1,
         "radius": 18,
         "layout": {
           "schemaVersion": 1,
@@ -612,7 +634,13 @@
       {"tab":"Content","scope":"component","key":"apps","label":"Choose installed apps","type":"apps","families":["app-bar"],"excludeTypes":["section","navigation"]},
       {"tab":"Content","scope":"appCollection","key":"section","label":"App group","type":"appGroup","families":["app-bar"],"fallback":"All app groups"},
       {"tab":"Content","scope":"appCollection","key":"showStore","label":"App Store in More apps","type":"toggle","families":["app-bar"],"fallback":true},
-      {"tab":"Appearance","scope":"presentation","key":"logoMode","label":"App logo treatment","type":"choice","choices":["cutout","original","tile"],"families":["app-bar"],"fallback":"cutout"},
+      {"tab":"Appearance","scope":"presentation","key":"logoMode","label":"App logo treatment","type":"choice","choices":["cutout","original","tile","monochrome"],"families":["app-bar"],"fallback":"cutout"},
+      {"tab":"Appearance","scope":"presentation","key":"appIconStyle","label":"App icon style","type":"choice","choices":[{"name":"Signature","value":"signature"},{"name":"Quiet tiles","value":"tiles"},{"name":"Compact rail","value":"rail"}],"families":["app-bar"],"fallback":"signature"},
+      {"tab":"Appearance","scope":"presentation","key":"iconFocus","label":"Icon selection","type":"choice","choices":[{"name":"Icon-shaped glow","value":"glow"},{"name":"Frame","value":"frame"}],"families":["app-bar"],"fallback":"glow"},
+      {"tab":"Appearance","scope":"presentation","key":"iconBacking","label":"Logo backing","type":"choice","choices":[{"name":"Automatic contrast","value":"auto"},{"name":"None","value":"none"},{"name":"Page surface","value":"surface"}],"advanced":true,"families":["app-bar"],"fallback":"auto"},
+      {"tab":"Appearance","scope":"presentation","key":"iconGlow","label":"Glow spread","type":"number","control":"slider","min":0,"max":32,"step":1,"fallback":8,"advanced":true,"families":["app-bar"]},
+      {"tab":"Appearance","scope":"presentation","key":"iconGlowOpacity","label":"Glow intensity","type":"number","control":"slider","min":0,"max":1,"step":0.05,"fallback":0.65,"advanced":true,"families":["app-bar"]},
+      {"tab":"Appearance","scope":"presentation","key":"iconPadding","label":"Logo padding","type":"number","control":"slider","min":0,"max":40,"step":1,"fallback":0,"advanced":true,"families":["app-bar"]},
       {"tab":"Content","scope":"component","key":"addChild","label":"Add a child component","type":"children","excludeFamilies":["app-bar","page-menu","source-notice","detected-sources"],"types":["container"],"excludeTypes":["section","navigation"]},
       {"tab":"Appearance","scope":"presentation","key":"variant","label":"Card style","type":"choice","choices":["source","summary","banner","orb","media","recent","text","image"],"excludeTypes":["library","container","section"]},
       {"tab":"Appearance","scope":"presentation","key":"surfaceColor","label":"Surface","type":"color","advanced":false},
@@ -624,8 +652,8 @@
       {"tab":"Appearance","scope":"presentation","key":"surfaceOpacity","label":"Surface opacity","type":"number","control":"slider","displayScale":100,"displayUnit":"%","min":0,"max":1,"step":0.05,"fallback":1,"advanced":false},
       {"tab":"Appearance","scope":"presentation","key":"radius","label":"Corners","type":"number","control":"slider","presets":[{"name":"Square","value":0},{"name":"Soft","value":22},{"name":"Rounded","value":100}],"min":0,"max":400,"step":2,"fallback":22,"advanced":false},
       {"tab":"Appearance","scope":"presentation","key":"labelSize","label":"Label size","type":"number","control":"slider","min":0,"max":400,"step":1,"fallback":19,"advanced":false,"excludeTypes":["container"]},
-      {"tab":"Appearance","scope":"presentation","key":"iconSize","label":"Icon size","type":"number","control":"slider","min":0,"max":400,"step":2,"fallback":48,"advanced":true,"excludeTypes":["container"]},
-      {"tab":"Appearance","scope":"presentation","key":"diameter","label":"Circle diameter","type":"number","control":"slider","min":0,"max":400,"step":2,"fallback":110,"advanced":true,"excludeTypes":["container"]},
+      {"tab":"Appearance","scope":"presentation","key":"iconSize","label":"Icon size","includeFamilies":["app-bar"],"type":"number","control":"slider","min":0,"max":400,"step":2,"fallback":48,"advanced":true,"excludeTypes":["container"]},
+      {"tab":"Appearance","scope":"presentation","key":"diameter","label":"Circle diameter","includeFamilies":["app-bar"],"type":"number","control":"slider","min":0,"max":400,"step":2,"fallback":110,"advanced":true,"excludeTypes":["container"]},
       {"tab":"Appearance","scope":"presentation","key":"focusWidth","label":"Focus ring width","type":"number","control":"slider","min":0,"max":12,"step":1,"fallback":3,"advanced":true},
       {"tab":"Appearance","scope":"presentation","key":"borderWidth","label":"Border width","type":"number","control":"slider","min":0,"max":12,"step":1,"fallback":0,"advanced":true},
       {"tab":"Appearance","scope":"presentation","key":"labelLines","label":"Label lines","type":"number","min":1,"max":4,"step":1,"fallback":2,"advanced":true,"excludeTypes":["container"]},
@@ -744,9 +772,10 @@
     ],
     "studioFields": [{"tab":"Colors","scope":"studioAppearance","key":"surfaceColor","label":"Surface","type":"color"},{"tab":"Colors","scope":"studioAppearance","key":"selectedColor","label":"Selected surface","type":"color"},{"tab":"Colors","scope":"studioAppearance","key":"textColor","label":"Text","type":"color"},{"tab":"Colors","scope":"studioAppearance","key":"mutedColor","label":"Supporting text","type":"color"},{"tab":"Colors","scope":"studioAppearance","key":"focusColor","label":"Focus","type":"color"},{"tab":"Colors","scope":"studioAppearance","key":"reset","label":"Reset Studio colors","type":"editorColorsReset"}],
     "pageFields": [
+      {"key":"responsive","label":"Responsive section rules","type":"responsive","scope":"composition","tab":"Layout","advanced":true},
       {"tab":"Header","scope":"theme","key":"sourcePolicy","label":"Source display policy","type":"sourcePolicy"},
       {"tab":"Shell","scope":"surfaceTheme","key":"surface","label":"Surface","type":"choice","choices":[{"name":"Search","value":"search"},{"name":"All Apps / app surfaces","value":"apps"},{"name":"Settings \u00b7 Home source only","value":"settings"},{"name":"Isolde media browser","value":"kodi"}]},
-      {"tab":"Shell","scope":"surfaceTheme","key":"mode","label":"Theme source","type":"choice","choices":[{"name":"Use Home theme","value":"home"},{"name":"Use opening page theme","value":"origin"},{"name":"Custom override","value":"custom"}]},
+      {"tab":"Shell","scope":"surfaceTheme","key":"mode","label":"Theme source","type":"choice","choices":[{"name":"Use Home theme","value":"home"},{"name":"Use opening page theme","value":"origin"},{"name":"Custom colors","value":"custom"}]},
       {"tab":"Shell","scope":"surfaceTheme","key":"surfaceColor","label":"Surface","type":"color"},
       {"tab":"Shell","scope":"surfaceTheme","key":"selectedColor","label":"Selected surface","type":"color"},
       {"tab":"Shell","scope":"surfaceTheme","key":"textColor","label":"Text","type":"color"},

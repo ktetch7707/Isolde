@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/ usr / bin / env python3
 """Non-destructive Ubuntu bootstrap and per-user release installation.
 
 No disk formatting, autologin changes, sudoers rules or security-policy changes.
@@ -27,8 +27,8 @@ DEPENDENCIES = [
 ]
 
 
-def run(*args, **kwargs):
-    subprocess.run(args, check=True, **kwargs)
+def run(*args, check=True, **kwargs):
+    return subprocess.run(args, check=check, **kwargs)
 
 
 def ubuntu_supported():
@@ -50,7 +50,7 @@ def atomic_text(path, text, mode=0o600):
 
 
 def set_link(path, target):
-    # Unique temp name; never unlink an existing user's current/previous directory.
+#Unique temp name; never unlink an existing user's current/previous directory.
     with tempfile.TemporaryDirectory(dir=path.parent, prefix=".link-") as scratch:
         temporary = Path(scratch) / "link"
         temporary.symlink_to(target)
@@ -69,24 +69,52 @@ def checked_release(prefix, name):
     return resolved
 
 
-def install_payload(payload, prefix):
-    for relative in ("bin/isolde", "bin/isolde-native-host", "bin/config/native-session-bus.conf"):
+def payload_digest(payload):
+    digest = hashlib.sha256()
+    for path in sorted(payload.rglob("*")):
+        if path.is_file():
+            digest.update(str(path.relative_to(payload)).encode() + b"\0")
+            digest.update(path.read_bytes())
+    return digest.hexdigest()
+
+
+def verify_payload_signature(payload, signature_path, public_key):
+    signature_path = Path(signature_path).absolute()
+    if signature_path.is_symlink() or not signature_path.is_file() or signature_path.stat().st_size != 64:
+        raise RuntimeError("Payload lacks a trusted signature")
+    public_key = Path(public_key).absolute()
+    if public_key.is_symlink() or not public_key.is_file():
+        raise RuntimeError("Trusted signing key is missing")
+    descriptor, name = tempfile.mkstemp(prefix=".isolde-digest-", dir=payload.parent)
+    os.close(descriptor)
+    digest_file = Path(name)
+    try:
+        digest_file.write_text(payload_digest(payload))
+        result = run("openssl", "pkeyutl", "-verify", "-pubin", "-inkey", str(public_key),
+            "-rawin", "-in", str(digest_file), "-sigfile", str(signature_path),
+            capture_output=True, text=True, timeout=30, check=False)
+        if result.returncode:
+            raise RuntimeError("Payload signature does not match trusted signing key")
+    finally:
+        digest_file.unlink(missing_ok=True)
+
+
+def install_payload(payload, prefix, signature=None, public_key=None):
+    for relative in ("bin/isolde", "bin/isolde-native-host", "bin/isolde-recovery", "bin/config/native-session-bus.conf"):
         if not (payload / relative).is_file():
             raise RuntimeError(f"Incomplete build: missing {relative}")
     files = sorted(payload.rglob("*"))
     if any(path.is_symlink() for path in files):
         raise RuntimeError("Release payload must not contain symlinks")
-    digest = hashlib.sha256()
-    for path in files:
-        if path.is_file():
-            digest.update(str(path.relative_to(payload)).encode() + b"\0")
-            digest.update(path.read_bytes())
+    if signature is not None:
+        verify_payload_signature(payload, signature, public_key or Path(__file__).with_name("isolde-signing-key.pub"))
     prefix.mkdir(parents=True, exist_ok=True)
     current = checked_release(prefix, "current")
     checked_release(prefix, "previous")
     releases = prefix / "releases"
     releases.mkdir(exist_ok=True)
-    release = releases / digest.hexdigest()[:24]
+    digest = payload_digest(payload)
+    release = releases / digest[:24]
     if not release.exists():
         with tempfile.TemporaryDirectory(dir=releases, prefix=".staging-") as scratch:
             staged = Path(scratch) / "payload"
@@ -120,7 +148,7 @@ def install_startup(prefix, config):
     release = checked_release(prefix, "current")
     if release is None or not (release / "bin/isolde-recovery").is_file():
         raise RuntimeError("Install a release with the recovery executable before enabling startup")
-    # systemd specifier expansion must not reinterpret user path characters.
+#systemd specifier expansion must not reinterpret user path characters.
     executable = str(prefix / "current/bin/isolde").replace("%", "%%").replace("\\", "\\\\").replace('"', '\\"')
     display_waiter = str(prefix / "support/wait-for-display.py").replace("%", "%%").replace("\\", "\\\\").replace('"', '\\"')
     unit = f'''[Unit]
@@ -147,21 +175,26 @@ WantedBy=graphical-session.target
         atomic_text(support / filename, Path(__file__).with_name(filename).read_text())
     def unit_quote(path):
         return '"' + str(path).replace("%", "%%").replace("\\", "\\\\").replace('"', '\\"') + '"'
-    # Pin recovery to the installed release, not 'current': rollback must not
-    # remove the recovery executable when the previous release predates it.
+#Pin recovery to the installed release, not 'current' : rollback must not
+#remove the recovery executable when the previous release predates it.
     recovery_unit = f'''[Unit]
 Description=Isolde on-screen recovery
 PartOf=graphical-session.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/python3 {unit_quote(support / 'recovery-controller.py')} --prefix {unit_quote(prefix)} --ui {unit_quote(release / 'bin/isolde-recovery')}
+ExecStart=/usr/bin/python3 {
+            unit_quote(support / 'recovery-controller.py')
+        }
+--prefix {
+    unit_quote(prefix)
+} --ui {unit_quote(release / 'bin/isolde-recovery')}
 Restart=no
 TimeoutStopSec=5
 KillMode=control-group
 '''
     atomic_text(config / "systemd/user/isolde-recovery.service", recovery_unit)
-    # Import the real graphical session, never hard-code a display or uid.
+#Import the real graphical session, never hard - code a display or uid.
     launcher = prefix / "start-session.sh"
     atomic_text(launcher, '''#!/bin/sh
 set -eu
@@ -179,14 +212,14 @@ Terminal=false
 X-GNOME-Autostart-enabled=true
 '''
     atomic_text(config / "autostart/isolde.desktop", desktop_entry)
-    # A stable desktop identity is required by the compositor's global-shortcut
-    # permission portal. This is an Isolde launcher, not an OS shortcut change.
+#A stable desktop identity is required by the compositor's global-shortcut
+#permission portal.This is an Isolde launcher, not an OS shortcut change.
     install_desktop_identity(prefix)
 
 
 def enable_startup():
-    # Enable for future graphical logins without interrupting a running app.
-    # Keep the desktop launcher as an environment-import fallback as well.
+#Enable for future graphical logins without interrupting a running app.
+#Keep the desktop launcher as an environment - import fallback as well.
     run("systemctl", "--user", "daemon-reload")
     run("systemctl", "--user", "enable", "isolde.service")
     run("systemctl", "--user", "is-enabled", "--quiet", "isolde.service")
@@ -202,6 +235,8 @@ def main():
     parser.add_argument("--without-default-apps", action="store_true", help="Explicitly omit native default-app downloads and first-install activation")
     parser.add_argument("--android", action="store_true", help="Provision the Android runtime and verified SmartTube package during dependencies setup")
     parser.add_argument("--android-software-rendering", action="store_true", help="Use the Android software renderer for a VM; requires --android")
+    parser.add_argument("--signature", type=Path, help="Trusted payload signature file (64-byte raw signature)")
+    parser.add_argument("--public-key", type=Path, help="Trusted signing public key (defaults to packaged isolde-signing-key.pub)")
     args = parser.parse_args()
     if args.android_software_rendering and not args.android:
         parser.error("--android-software-rendering requires --android")
@@ -254,7 +289,7 @@ def main():
     with tempfile.TemporaryDirectory(prefix="isolde-install-") as directory:
         payload = Path(directory)
         run("cmake", "--install", str(build), "--prefix", str(payload))
-        release = install_payload(payload, prefix)
+        release = install_payload(payload, prefix, signature=args.signature, public_key=args.public_key)
     if args.startup:
         config = Path(os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config")))
         install_startup(prefix, config)

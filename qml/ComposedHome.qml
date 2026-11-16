@@ -43,7 +43,7 @@ Item {
         else if (event.key === Qt.Key_Minus) { zoom = Math.max(0.5, zoom - 0.1); event.accepted = true }
         else if (event.key === Qt.Key_0) { zoom = 1.0; event.accepted = true }
     }
-    readonly property var headerControls: config.headerControls || (config.headerMode === "identity" ? ["search", "settings"] : ["settings", "edit"])
+    readonly property var headerControls: host.visibleHeaderControls(config.headerControls || (config.headerMode === "identity" ? ["search", "settings"] : ["settings", "edit"]))
     readonly property bool identityHeader: config.headerMode === "identity"
     readonly property var headerStyle:Object.assign({},(host.headerDefaults || {})[identityHeader?"identity":"navigation"] || {},config.header || {})
     readonly property var headerOrder:headerStyle.order || ["title","controls","clock"]
@@ -86,10 +86,12 @@ Item {
     }
     readonly property int firstVisibleGridRow:scrollingPage?Math.max(0,Math.floor(content.contentY/(placementCell.cellH+placementCell.gap))):0
     readonly property real pageContentHeight:scrollingPage?Math.max(content.height,2*placementCell.margin+contentRows*(placementCell.cellH+placementCell.gap)-placementCell.gap):content.height
-    readonly property var viewportItems:scrollingPage?placedItems.filter(entry=>{
-        const top=placementCell.margin+entry.placement.y*(placementCell.cellH+placementCell.gap)
-        const bottom=top+entry.placement.height*(placementCell.cellH+placementCell.gap)-placementCell.gap
-        return bottom>=content.contentY-content.height && top<=content.contentY+2*content.height
+    readonly property int visibleGridRows:Math.max(1,Math.ceil(content.height/(placementCell.cellH+placementCell.gap)))
+    // Buffer grid rows, not whole screens or every subpixel scroll update.
+    // Hidden page previews retain their data/focus without constructing cards.
+    readonly property var viewportItems:!root.visible?[]:scrollingPage?placedItems.filter(entry=>{
+        return entry.placement.y+entry.placement.height>=firstVisibleGridRow-2
+            && entry.placement.y<=firstVisibleGridRow+visibleGridRows+2
     }):placedItems
     Connections {
         target:host
@@ -329,12 +331,12 @@ Item {
             if (command === inputManager.navigateLeft) focusedTab = Math.max(0, focusedTab - 1)
             else if (command === inputManager.navigateRight) focusedTab = Math.min(tabs.length - 1, focusedTab + 1)
             else if (command === inputManager.confirm) activateTab(focusedTab)
-            else if (command === inputManager.navigateUp) host.recoveryFocused = true
+            else if (command === inputManager.navigateUp) host.focusRecoveryHeader()
             else if (command === inputManager.navigateDown) { const first = focusEntries()[0]; if (first) { focusEntry(first); navigationFocused = false } }
             return
         }
         const entries = focusEntries(), current = entries.find(e => sectionActionId ? e.id === sectionActionId : !e.sectionAction && host.itemIndex(e.id) === host.focusedIndex) || entries[0]
-        if (!current) { host.recoveryFocused = true; return }
+        if (!current) { host.focusRecoveryHeader(); return }
         const focusedItem=(host.items || []).find(i=>i.id===current.id)
         const pageMenu=focusedItem && focusedItem.family==="page-menu"
         if((current.widget || focusedItem && (focusedItem.componentType==="library" || focusedItem.appCollection || ["page-menu","carousel","detected-sources","source-notice"].indexOf(focusedItem.family)>=0)) && widgets[current.id]
@@ -355,7 +357,7 @@ Item {
                 return
             }
             if (host.unavailableReason(item)) host.settingsRequested(1)
-            else if (item.action) host.actionActivated(item.action, item.id)
+            else if (item.actions && item.actions.length>0) host.actionActivated({actions:item.actions}, item.id)
             return
         }
         let candidates = [], next
@@ -365,7 +367,7 @@ Item {
         } else if (command === inputManager.navigateUp || command === inputManager.navigateDown) {
             const direction = command === inputManager.navigateUp ? -1 : 1
             const rows = entries.filter(e => (e.row-current.row)*direction > 0).map(e => e.row)
-            if (!rows.length && direction < 0) { navigationFocused = tabs.length > 0; host.recoveryFocused = !tabs.length; return }
+            if (!rows.length && direction < 0) { navigationFocused = tabs.length > 0; if(!tabs.length)host.focusRecoveryHeader(); return }
             const row = direction < 0 ? Math.max(...rows) : Math.min(...rows)
             candidates = entries.filter(e => e.row === row).sort((a,b) => Math.abs(a.x-current.x)-Math.abs(b.x-current.x))
         }
@@ -389,7 +391,7 @@ Item {
                     width:implicitWidth;x:root.headerStyle.titleAlignment==="right"?parent.width-width:root.headerStyle.titleAlignment==="center"?(parent.width-width)/2:0
                     LineIcon { visible:!root.headerLogo;name:"sparkle"; width:38*root.unit; height:width; anchors.verticalCenter:parent.verticalCenter }
                     ArtworkImage {visible:!!root.headerLogo;source:root.headerLogo;width:(root.headerStyle.titleSize || 48)*root.unit*2;height:parent.height;fit:"contain"}
-                    Text { visible:!root.headerLogo;anchors.verticalCenter:parent.verticalCenter;width:Math.min(implicitWidth,Math.max(0,navigationStrip.width-48*root.unit));elide:Text.ElideRight;text:root.config.identity===undefined?"Isolde":root.config.identity; color:root.headerInk; font.family:host.appearance.fontFamily || "DejaVu Sans"; font.pixelSize:(root.headerStyle.titleSize || 48)*root.unit; font.weight:Font.Light }
+                    Text { visible:!root.headerLogo;anchors.verticalCenter:parent.verticalCenter;width:Math.min(implicitWidth,Math.max(0,navigationStrip.width-48*root.unit));elide:Text.ElideRight;text:root.config.identity===undefined?"Isolde":root.config.identity; color:root.headerStyle.textColor || host.appearance.headingColor || root.headerInk; font.family:host.appearance.fontFamily || "DejaVu Sans"; font.pixelSize:(root.headerStyle.titleSize || 48)*root.unit; font.weight:Font.Light }
                 }
                 Row {
                     id: navigationRow; visible:!root.identityHeader; height:parent.height; spacing:26*root.unit
@@ -451,7 +453,7 @@ Item {
             ScrollBar.vertical:ScrollBar {
                 visible:root.scrollingPage && content.contentHeight>content.height
                 policy:ScrollBar.AsNeeded
-                contentItem:Rectangle {implicitWidth:5*root.unit;radius:width/2;color:host.appearance.focusColor}
+                contentItem:Rectangle {implicitWidth:5*root.unit;radius:width/2;color:host.appearance.focusColor || root.headerInk}
                 background:Rectangle {color:"transparent"}
             }
             GridLayout {
@@ -490,9 +492,9 @@ Item {
                             Item {
                                 id:heading; visible:sectionView.style.showHeading !== false; width:parent.width
                                 height:visible ? (sectionView.style.headingSize || 27)*root.unit+6*root.unit : 0
-                                LineIcon { visible:!!sectionView.style.icon; name:sectionView.style.icon || "clock"; ink:sectionView.style.iconColor || sectionView.style.headingColor || host.appearance.textColor || "#EEEAF0"; width:20*root.unit; height:width; anchors.verticalCenter:parent.verticalCenter }
+                                LineIcon { visible:!!sectionView.style.icon; name:sectionView.style.icon || "clock"; ink:sectionView.style.iconColor || host.appearance.iconColor || sectionView.style.headingColor || host.appearance.headingColor || host.appearance.textColor || "#EEEAF0"; width:20*root.unit; height:width; anchors.verticalCenter:parent.verticalCenter }
                                 Text { x:sectionView.style.icon ? 30*root.unit : 0; anchors.verticalCenter:parent.verticalCenter; width:parent.width-x-trailing.width
-                                    text:sectionView.modelData.name; color:sectionView.style.headingColor || host.appearance.textColor || "#EEEAF0"; elide:Text.ElideRight
+                                    text:sectionView.modelData.name; color:sectionView.style.headingColor || host.appearance.headingColor || host.appearance.textColor || "#EEEAF0"; elide:Text.ElideRight
                                     font.family:host.appearance.fontFamily || "DejaVu Sans"; font.pixelSize:(sectionView.style.headingSize || 27)*root.unit*host.textScale
                                     font.weight:sectionView.style.headingBold === false ? Font.Normal : Font.DemiBold }
                                 Rectangle {
@@ -559,7 +561,7 @@ Item {
                             Text {
                                 visible:sectionView.style.variant==="library" && !host.libraryProvider
                                 width:parent.width;wrapMode:Text.Wrap;text:"Library preview unavailable · choose or configure its source in Content."
-                                color:host.appearance.mutedColor;font.pixelSize:18*root.unit
+                                color:host.appearance.mutedColor || root.headerInk;font.pixelSize:18*root.unit
                             }
                             Loader {
                                 width:parent.width; height:Math.max(80,parent.height-heading.height-subtitle.height-2*sectionBody.spacing)

@@ -224,9 +224,10 @@
                 "height": 1
               },
               "presentation": {
+                "appIconStyle": "signature",
                 "showHeading": true,
                 "icon": "grid",
-                "surfaceOpacity": 0.35,
+                "surfaceOpacity": 1,
                 "radius": 18,
                 "layout": {
                   "schemaVersion": 1,
@@ -483,9 +484,10 @@
                 "height": 1
               },
               "presentation": {
+                "appIconStyle": "signature",
                 "showHeading": true,
                 "icon": "grid",
-                "surfaceOpacity": 0.35,
+                "surfaceOpacity": 1,
                 "radius": 18,
                 "layout": {
                   "schemaVersion": 1,
@@ -742,9 +744,10 @@
                 "height": 1
               },
               "presentation": {
+                "appIconStyle": "signature",
                 "showHeading": true,
                 "icon": "grid",
-                "surfaceOpacity": 0.35,
+                "surfaceOpacity": 1,
                 "radius": 18,
                 "layout": {
                   "schemaVersion": 1,

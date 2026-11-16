@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "actions": [
+    {"command": 1, "category": "Navigation", "name": "Up", "defaultLabel": "Up arrow"},
+    {"command": 2, "category": "Navigation", "name": "Down", "defaultLabel": "Down arrow"},
+    {"command": 3, "category": "Navigation", "name": "Left", "defaultLabel": "Left arrow"},
+    {"command": 4, "category": "Navigation", "name": "Right", "defaultLabel": "Right arrow"},
+    {"command": 5, "category": "Navigation", "name": "Select / OK", "defaultLabel": "Enter / Space"},
+    {"command": 6, "category": "Navigation", "name": "Back", "defaultLabel": "Escape / Back"},
+    {"command": 7, "category": "Shortcuts", "name": "Home", "defaultLabel": "Home / H"},
+    {"command": 13, "category": "Shortcuts", "name": "Menu", "defaultLabel": "Menu"},
+    {"command": 14, "category": "Shortcuts", "name": "Search", "defaultLabel": "Search"},
+    {"command": 12, "category": "Playback", "name": "Play / Pause", "defaultLabel": "Media Play / Pause"},
+    {"command": 8, "category": "Volume and power", "name": "Volume up", "defaultLabel": "Volume up / +"},
+    {"command": 9, "category": "Volume and power", "name": "Volume down", "defaultLabel": "Volume down / -"},
+    {"command": 10, "category": "Volume and power", "name": "Mute", "defaultLabel": "Mute / M"},
+    {"command": 11, "category": "Volume and power", "name": "Power", "defaultLabel": "Power / Suspend"}
+  ]
+}

@@ -5,36 +5,70 @@
 #include <QObject>
 #include <QVariantMap>
 
-class AppSession : public QObject {
-    Q_OBJECT
+enum class AppSessionLifecycleState {
+    Created,
+    Running,
+    Suspended,
+    Exited
+};
 
-public:
-    enum class State { Created, Running, Suspended, Exited };
-    Q_ENUM(State)
+struct AppSessionInfo {
+    AppDefinition definition;
+    AppSessionLifecycleState state = AppSessionLifecycleState::Created;
+};
 
-    explicit AppSession(AppDefinition definition, QObject *parent = nullptr);
-    ~AppSession() override = default;
-
-    [[nodiscard]] const AppDefinition &definition() const;
-    [[nodiscard]] State state() const;
-    [[nodiscard]] QString errorString() const { return m_error; }
+class AppSessionControl {
+  public:
+    virtual ~AppSessionControl() = default;
 
     virtual void launch() = 0;
     virtual void suspend() = 0;
     virtual void resume() = 0;
     virtual void exit() = 0;
 
-signals:
-    void stateChanged(AppSession::State state);
-    void steamProviderStateChanged(const QVariantMap &state);
-    void gamepadSessionStatusChanged(const QVariantMap &state);
+  protected:
+    [[nodiscard]] QString errorString() const {
+        return m_error;
+    }
+    void setError(const QString& error) {
+        m_error = error;
+    }
 
-protected:
-    void setError(const QString &error) { m_error = error; }
-    void setState(State state);
-
-private:
-    AppDefinition m_definition;
+  private:
     QString m_error;
-    State m_state = State::Created;
+};
+
+class AppSession : public QObject, public AppSessionControl {
+    Q_OBJECT
+  public:
+    using State = AppSessionLifecycleState;
+
+    explicit AppSession(AppDefinition definition, QObject* parent = nullptr);
+    ~AppSession() override = default;
+
+    [[nodiscard]] const AppDefinition& definition() const {
+        return m_info.definition;
+    }
+    [[nodiscard]] AppSessionLifecycleState state() const {
+        return m_info.state;
+    }
+    [[nodiscard]] QString errorString() const {
+        return AppSessionControl::errorString();
+    }
+
+  signals:
+    void stateChanged(AppSessionLifecycleState state);
+    void steamProviderStateChanged(const QVariantMap& state);
+    void gamepadSessionStatusChanged(const QVariantMap& state);
+
+  protected:
+    void setState(AppSessionLifecycleState state) {
+        if (m_info.state == state)
+            return;
+        m_info.state = state;
+        emit stateChanged(state);
+    }
+
+  private:
+    AppSessionInfo m_info;
 };

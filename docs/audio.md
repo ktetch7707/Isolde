@@ -1,5 +1,12 @@
 # Audio and volume strategy
 
+Current Settings routes: **Picture & Sound → Sound** contains system output and
+volume controls; **Picture & Sound → Interface sounds** contains profile-local
+navigation feedback and Kodi-compatible sound themes. The new sound slice is
+[implemented but runtime-unverified](interface-sounds-2026-11-11.md); historical
+System → Audio routes below predate the Settings reorganization. Interface
+effects never change the system/playback volume and always respect master mute.
+
 Isolde should be able to own day-to-day living-room volume while the TV stays at a stable middle level. The recommended household setup is:
 
 1. Set the TV or soundbar to a comfortable mid-level reference volume.

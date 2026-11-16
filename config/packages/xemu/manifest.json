@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "packageId": "xemu",
+  "version": "1.0.0",
+  "minIsoldeVersion": "0.0.1.2",
+  "name": "xemu · Original Xbox",
+  "description": "Select an XISO image. Ordinary PC ISO files are not Xbox disc images. SDL Xbox controllers use the standard upstream Xbox mappings.",
+  "category": "Games",
+  "publisher": "xemu",
+  "provenance": "Official upstream artifact pinned by SHA-256; no games, accounts or firmware",
+  "capabilities": [
+    "desktop.external",
+    "input.gamepad",
+    "audio.output"
+  ],
+  "app": {
+    "id": "xemu",
+    "type": "desktop",
+    "presentationMode": "game-hub",
+    "networkRequirement": "none",
+    "desktopId": "isolde-xemu",
+    "emulatorRuntime": "xemu",
+    "windowClass": "xemu",
+    "containment": "fullscreen",
+    "section": "Games",
+    "accent": "#397DB8",
+    "symbol": "Original Xbox",
+    "handledActions": [
+      "open-file"
+    ],
+    "actionHandlers": {
+      "open-file": {
+        "appendTarget": true
+      }
+    },
+    "gameFormats": [
+      "iso"
+    ]
+  }
+}

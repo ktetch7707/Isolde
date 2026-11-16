@@ -6,6 +6,14 @@ Item {
     property bool active: false
     property int slideIndex: 0
     property date now: new Date()
+    property var layoutModel: homeLayout
+    SurfacePalette { id: pagePalette; appearance: root.layoutModel.homeAppearance }
+    readonly property var selectedPages: {
+        const available = layoutModel.pages
+        return (root.settings.pageIds || []).filter(id => available.some(page => page.id === id))
+    }
+    readonly property var currentPage: root.settings.mode === "pages" && selectedPages.length
+        ? layoutModel.pageModel(selectedPages[slideIndex % selectedPages.length]) : null
     readonly property int photoCount: root.settings.photoUrls.length
     readonly property int effectiveSlideCount: Math.max(1, photoCount > 0 ? photoCount : slides.length)
     readonly property var slides: [
@@ -26,12 +34,12 @@ Item {
     z: 90
 
     Timer {
-        running: root.active && root.settings.mode === "slideshow"
+        running: root.active && (root.settings.mode === "slideshow" || root.settings.mode === "pages")
         repeat: true
         interval: root.settings.slideshowSeconds * 1000
         onTriggered: root.slideIndex = root.settings.shuffle
-            ? Math.floor(Math.random() * root.effectiveSlideCount)
-            : (root.slideIndex + 1) % root.effectiveSlideCount
+            ? Math.floor(Math.random() * (root.settings.mode === "pages" ? Math.max(1,root.selectedPages.length) : root.effectiveSlideCount))
+            : (root.slideIndex + 1) % (root.settings.mode === "pages" ? Math.max(1,root.selectedPages.length) : root.effectiveSlideCount)
     }
 
     Timer {
@@ -96,7 +104,25 @@ Item {
         }
     }
 
+    Screensaver {
+        anchors.fill: parent
+        visible: root.settings.mode === "pages" && !!root.currentPage
+        pageModel: root.currentPage
+        reducedMotion: typeof displaySettings !== "undefined" && displaySettings.reduceMotion
+    }
+    Text {
+        anchors.centerIn: parent
+        visible: root.settings.mode === "pages" && !root.currentPage
+        width: parent.width * 0.8
+        wrapMode: Text.WordWrap
+        horizontalAlignment: Text.AlignHCenter
+        color: pagePalette.text
+        font.pixelSize: 28 * pagePalette.textScale
+        font.family: pagePalette.fontFamily
+        text: "Choose existing Studio pages in Ambient Mode → Screensaver Pages. Any key returns."
+    }
     Column {
+        visible: root.settings.mode !== "pages"
         anchors.left: parent.left
         anchors.bottom: parent.bottom
         anchors.leftMargin: 64

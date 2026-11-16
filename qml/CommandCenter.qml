@@ -9,6 +9,38 @@ Item {
     property var showSearchClient: null
     property var episodeSearchClient: null
     property var onlineDiscovery: null
+    property var playbackPreferences: null
+    property var selectedDiscoveryTitle: null
+    property var pendingDiscoverySelection: null
+
+    // Provider identity is required: title text alone can match another edition.
+    function localDiscoveryMatch(title) {
+        if (!title) return null
+        const client=title.mediaType==="movie"?movieSearchClient:title.mediaType==="tv"?showSearchClient:null
+        if (!client || client.busy || !client.connected) return null
+        const matches=(client.items || []).filter(entry => entry.uniqueid
+            && String(entry.uniqueid.tmdb || "")===String(title.providerId)
+            && Number(title.providerId)>0)
+        if(matches.length!==1)return null
+        const entry=matches[0],kind=title.mediaType==="movie"?"movie":"show",id=kind==="movie"?entry.movieid:entry.tvshowid
+        return id>0?{mediaType:kind,mediaId:id,pageStart:client.pageStart || 0}:null
+    }
+    function resolveDiscoverySelection(title) {
+        if (!open || !webSearchEnabled || !onlineDiscovery) { pendingDiscoverySelection=null; return }
+        const client=title.mediaType==="movie"?movieSearchClient:title.mediaType==="tv"?showSearchClient:null
+        if ((!playbackPreferences || playbackPreferences.alwaysPlayLocally) && client && client.busy) {
+            pendingDiscoverySelection=title
+            return
+        }
+        pendingDiscoverySelection=null
+        const local=localDiscoveryMatch(title)
+        if(local && (!playbackPreferences || playbackPreferences.alwaysPlayLocally)) {
+            closeRequested()
+            mediaRequested(local.mediaType,local.mediaId,query.trim(),"",local.pageStart)
+        } else onlineDiscovery.loadAvailability(title.mediaType,title.providerId,title.title)
+    }
+    Connections {target:root.movieSearchClient;function onChanged(){if(root.pendingDiscoverySelection && root.webSearchEnabled)root.resolveDiscoverySelection(root.pendingDiscoverySelection)}}
+    Connections {target:root.showSearchClient;function onChanged(){if(root.pendingDiscoverySelection && root.webSearchEnabled)root.resolveDiscoverySelection(root.pendingDiscoverySelection)}}
     property var mediaCollections: []
     property string pageId: ""
     property var pageSources: []
@@ -28,6 +60,7 @@ Item {
     property bool regionKeyboardOpen: false
     property string query: ""
     property int selectedIndex: 0
+    property var mediaReturnState: null
     property string focusArea:"query"
     property string lastHeader:"query"
     readonly property var discoveryRegions:["US","CA","GB","AU","NZ","IN","JP","KR","FR","DE","ES","BR"]
@@ -84,14 +117,14 @@ Item {
             if (onlineDiscovery) onlineDiscovery.clearResults()
             return
         }
-        if (!webSearchEnabled) {
-            // T28.4: Network denial when web search is switched OFF —
-            // cancel any provider-mediated search and remain on local results only.
-            invalidateMediaSearch()
+        if (webSearchEnabled) {
+            if (onlineDiscovery) onlineDiscovery.search(text)
+        } else {
+            pendingDiscoverySelection=null
+            selectedDiscoveryTitle=null
+            // Web search OFF: local Kodi library search remains available; only the web provider is cancelled.
             if (onlineDiscovery) onlineDiscovery.clearResults()
-            return
         }
-        if (onlineDiscovery) onlineDiscovery.search(text)
         if (!movieSearchClient || !showSearchClient || !episodeSearchClient) return
         movieSearchClient.openView("movies", "search", text)
         showSearchClient.openView("shows", "search", text)
@@ -193,6 +226,8 @@ Item {
             }
         }
         if (webSearchEnabled && onlineDiscovery) {
+            const local=localDiscoveryMatch(selectedDiscoveryTitle)
+            if(local)result.push({kind:"discoveryLocal",id:"discovery-local",name:"Play local Kodi copy",description:"Resume and watched state are managed by Kodi",action:"Play",accent:shell.accent,symbol:"▶",local:local})
             const onlineItems = onlineDiscovery.results || []
             for (let o = 0; o < onlineItems.length; ++o) {
                 const title = onlineItems[o]
@@ -202,7 +237,8 @@ Item {
                     description: "TMDB metadata · " + title.region + " · checked " + title.checkedAt + " · not endorsed by TMDB · availability is not entitlement",
                     action: "Check listings", accent: shell.accent, symbol: title.symbol })
             }
-            const providers = onlineDiscovery.availability || []
+            const providers = !pendingDiscoverySelection && selectedDiscoveryTitle
+                ? (onlineDiscovery.availability || []).filter(listing=>listing.title===selectedDiscoveryTitle.title) : []
             for (let p = 0; p < providers.length; ++p) {
                 const listing = providers[p]
                 result.push({ kind: "onlineProvider", id: "provider-" + listing.providerId,
@@ -220,26 +256,34 @@ Item {
 
     onOpenChanged: {
         if (open) {
-            selectedIndex = 0
-            focusArea="query";lastHeader="query"
+            const returning=mediaReturnState
+            mediaReturnState=null
+            selectedIndex = returning ? returning.index : 0
+            focusArea=returning ? returning.area : "query";lastHeader=returning ? returning.header : "query"
             keyboardOpen = false
             searchKeyboard.value = query
             searchKeyboard.selectedIndex = 0
-            mediaSearchTimer.restart()
+            if (!returning) mediaSearchTimer.restart()
         } else {
             keyboardOpen = false
             regionKeyboardOpen = false
+            pendingDiscoverySelection=null
+            selectedDiscoveryTitle=null
             mediaSearchTimer.stop()
-            invalidateMediaSearch()
+            if (!mediaReturnState) invalidateMediaSearch()
             if (onlineDiscovery) onlineDiscovery.clearResults()
         }
     }
     onQueryChanged: {
+        pendingDiscoverySelection=null
+        selectedDiscoveryTitle=null
         if (!open) return
         if (query.trim().length < 2 && onlineDiscovery) onlineDiscovery.clearResults()
         mediaSearchTimer.restart()
     }
     onWebSearchEnabledChanged: {
+        pendingDiscoverySelection=null
+        selectedDiscoveryTitle=null
         if (!webSearchEnabled && onlineDiscovery) onlineDiscovery.clearResults()
         else if (open) mediaSearchTimer.restart()
     }
@@ -262,13 +306,7 @@ Item {
             return
         }
         if(focusArea!=="results"){
-            if(focusArea==="region" && (command===inputManager.navigateRight || command===inputManager.navigateLeft) && searchSettings){
-                const current=discoveryRegions.indexOf(searchSettings.discoveryRegion)
-                const offset=command===inputManager.navigateRight?1:-1
-                const next=Math.max(0,Math.min(discoveryRegions.length-1,(current<0?0:current)+offset))
-                searchSettings.discoveryRegion=discoveryRegions[next];lastHeader="region";updateMediaSearch()
-            }
-            else if(command===inputManager.navigateRight && focusArea==="query"){focusArea="linguist";lastHeader="linguist"}
+            if(command===inputManager.navigateRight && focusArea==="query"){focusArea="linguist";lastHeader="linguist"}
             else if(command===inputManager.navigateRight && focusArea==="linguist" && searchSettings){focusArea="region";lastHeader="region"}
             else if(command===inputManager.navigateRight && focusArea==="region" && searchSettings){focusArea="web";lastHeader="web"}
             else if(command===inputManager.navigateLeft && focusArea==="web"){focusArea="region";lastHeader="region"}
@@ -311,6 +349,7 @@ Item {
             closeRequested()
             shellActionRequested(item.targetAction)
         } else if (item.kind === "media") {
+            if(item.mediaType==="movie" || item.mediaType==="episode")mediaReturnState={index:selectedIndex,area:focusArea,header:lastHeader}
             closeRequested()
             mediaRequested(item.mediaType, item.mediaId, query.trim(), "", item.pageStart)
         } else if (item.kind === "mediaCollection") {
@@ -324,7 +363,11 @@ Item {
             if (item.action === "Next") client.nextPage()
             else client.previousPage()
         } else if (item.kind === "onlineTitle" && onlineDiscovery) {
-            onlineDiscovery.loadAvailability(item.mediaType, item.providerId, item.title)
+            selectedDiscoveryTitle=item
+            resolveDiscoverySelection(item)
+        } else if (item.kind === "discoveryLocal") {
+            const local=localDiscoveryMatch(selectedDiscoveryTitle)
+            if(local){closeRequested();mediaRequested(local.mediaType,local.mediaId,query.trim(),"",local.pageStart)}
         } else if (item.kind === "onlineProvider" && onlineDiscovery) {
             onlineDiscovery.launchProvider(item.providerId)
         }
@@ -371,7 +414,7 @@ Item {
                     id:webSwitch;objectName:"searchWebToggle";anchors.right:parent.right;anchors.verticalCenter:parent.verticalCenter
                     visible:!!root.searchSettings;checked:root.webSearchEnabled
                     text:"Web search · "+(checked?"On":"Off")
-                    Accessible.name:"Web search";Accessible.description:checked?"On. No web provider configured; local results only.":"Off. Local results only."
+                    Accessible.name:"Web search";Accessible.description:checked?(root.onlineDiscovery?root.onlineDiscovery.status:"On. No web provider configured; local results only."):"Off. Local results only."
                     onClicked:{root.focusArea="web";root.lastHeader="web";root.searchSettings.toggleWebEnabled();checked=Qt.binding(()=>root.webSearchEnabled)}
                     contentItem:Text {font.family:shell.fontFamily;text:webSwitch.text;color:root.ink;font.pixelSize:18*(root.appearance.typographyScale || 1);verticalAlignment:Text.AlignVCenter;rightPadding:webSwitch.indicator.width+12}
                     indicator:Rectangle {x:webSwitch.width-width;y:(webSwitch.height-height)/2;width:54;height:30;radius:height/2;color:webSwitch.checked?root.searchFocusInk:root.muted
@@ -379,18 +422,15 @@ Item {
                     }
                     background:Rectangle {color:"transparent";radius:8;border.width:root.focusArea==="web"?2:0;border.color:root.searchFocusInk}
                 }
-                ComboBox {
+                Button {
                     id:regionChoice;objectName:"searchDiscoveryRegion"
                     anchors.right:webSwitch.left;anchors.rightMargin:8;anchors.verticalCenter:parent.verticalCenter
-                    width:112;height:42;editable:true
-                    model:root.discoveryRegions
-                    currentIndex:find(root.searchSettings?root.searchSettings.discoveryRegion:"US")
-                    onAccepted:if(root.searchSettings){root.searchSettings.discoveryRegion=editText.toUpperCase();root.updateMediaSearch()}
-                    onActivated:index=>{if(root.searchSettings){root.searchSettings.discoveryRegion=currentText;root.updateMediaSearch()}}
+                    width:112;height:42
+                    text:root.searchSettings?root.searchSettings.discoveryRegion:"US"
+                    contentItem:Text {font.family:shell.fontFamily;text:regionChoice.text;color:root.ink;font.pixelSize:18*shell.textScale;horizontalAlignment:Text.AlignHCenter;verticalAlignment:Text.AlignVCenter}
+                    onClicked:{root.focusArea="region";root.lastHeader="region";root.handleCommand(inputManager.confirm)}
                     Accessible.name:"Discovery region, ISO 3166-1 alpha-2"
                     background:Rectangle {color:"transparent";radius:8;border.width:root.focusArea==="region"?2:0;border.color:root.searchFocusInk}
-                    Component.onCompleted:if(root.searchSettings)editText=root.searchSettings.discoveryRegion
-                    Connections {target:root.searchSettings;function onChanged(){if(root.searchSettings && regionChoice.editText!==root.searchSettings.discoveryRegion)regionChoice.editText=root.searchSettings.discoveryRegion}}
                 }
             }
 
@@ -425,22 +465,28 @@ Item {
 
             Flickable {
                 id: resultScroller
+                objectName: "searchResultScroller"
                 width: parent.width
                 height:Math.max(60,parent.height-searchHeader.height-queryControl.height-resultCount.height-searchStatus.height-searchFooter.height-5*parent.spacing)
                 contentHeight: resultColumn.height
                 clip: true
                 boundsBehavior: Flickable.StopAtBounds
-                contentY: Math.max(0, Math.min(Math.max(0, contentHeight - height), root.selectedIndex * 82 - 110))
+                contentY: {
+                    const item=resultRepeater.itemAt(root.selectedIndex)
+                    return item ? Math.max(0,Math.min(Math.max(0,contentHeight-height),item.y+item.height/2-height/2)) : 0
+                }
 
                 Column {
                     id: resultColumn
                     width: parent.width
                     spacing: 10
                     Repeater {
+                        id: resultRepeater
                         model: root.results
                         delegate: Rectangle {
                             required property int index
                             required property var modelData
+                            objectName: "searchResultRow-"+index
                             width: resultColumn.width
                             height: 76
                             radius: 12

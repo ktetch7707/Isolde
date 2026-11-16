@@ -6,6 +6,7 @@ Item {
     property bool open: false
     property var entries: []
     property var appearance: ({})
+    property var iconStyle:typeof homeLayout!=="undefined"?(homeLayout.studioOptions.appIconStyles || {}).tiles || {}:({})
     property var galleryPresentation: ({layout:"grid",columns:5,density:"standard",sort:"name",showArtwork:true,showLabels:true,filterEnabled:true,favoritesEnabled:true,title:"All Apps"})
     property bool internetAvailable: false
     property bool localNetworkAvailable: false
@@ -329,35 +330,65 @@ Item {
             height: parent.height - 120
             clip: true
             cellWidth: root.layoutMode === "list" ? width : width / root.columns
-            cellHeight: root.layoutMode === "list" ? 82 : Math.min(
-                height,
-                210 * (root.galleryPresentation.density === "compact" ? 0.82 : root.galleryPresentation.density === "spacious" ? 1.15 : 1))
+            cellHeight: Math.min(height, (root.layoutMode === "list" ? 82 : 210)
+                * (root.galleryPresentation.density === "compact" ? 0.82 : root.galleryPresentation.density === "spacious" ? 1.15 : 1))
             model: root.visibleEntries
             currentIndex: root.selectedIndex
             highlightMoveDuration: 0
-            delegate: HomeCard {
+            delegate: Loader {
+                id: entry
                 required property var modelData
                 width: appGrid.cellWidth - 12
                 height: appGrid.cellHeight - 12
-                item: ({
-                    name: modelData.name,
-                    showTitle: root.galleryPresentation.showLabels !== false,
-                    unavailableReason: "",
-                    logoSource: root.galleryPresentation.showArtwork ? modelData.logoSource || "" : "",
-                    appSymbol: modelData.symbol || modelData.name.slice(0, 1),
-                    presentation: ({
-                        variant: root.galleryPresentation.showLabels === false ? "source" : "summary",
-                        subtitle: root.galleryPresentation.showLabels ? root.stateLabel(modelData) : "",
-                        showLogo: root.layoutMode !== "list"
-                    })
-                })
-                appearance: root.appearance
-                unit: 1
-                selected: root.open && root.focusArea === "grid" && root.selectedId === modelData.id
-                onActivated: {
+                sourceComponent: root.layoutMode === "list" ? listCard : gridCard
+                function activateEntry() {
                     root.focusArea = "grid"
                     root.selectedId = modelData.id
                     root.launchRequested(modelData.id)
+                }
+                Component {
+                    id: gridCard
+                    AppTile {
+                        style:root.iconStyle
+                        objectName: "allAppsTile"
+                        Accessible.role: Accessible.Button
+                        Accessible.name: entry.modelData.name
+                        Accessible.description: root.stateLabel(entry.modelData)
+                        app: Object.assign({}, entry.modelData, {
+                            showTitle: root.galleryPresentation.showLabels !== false,
+                            showType: root.galleryPresentation.showLabels !== false,
+                            showLogo: root.galleryPresentation.showArtwork !== false,
+                            logoFill: false,
+                            section: root.stateLabel(entry.modelData)
+                        })
+                        roundness: root.appearance.tileRoundness === undefined ? 0.2 : root.appearance.tileRoundness
+                        appearance: root.appearance
+                        selected: root.open && root.focusArea === "grid" && root.selectedId === entry.modelData.id
+                        onActivated: entry.activateEntry()
+                    }
+                }
+                Component {
+                    id: listCard
+                    HomeCard {
+                        objectName: "allAppsListCard"
+                        item: ({
+                            name: entry.modelData.name,
+                            showTitle: root.galleryPresentation.showLabels !== false,
+                            unavailableReason: "",
+                            action: ({type: "launch-app", appId: entry.modelData.id}),
+                            logoSource: entry.modelData.logoSource || "",
+                            showLogo: root.galleryPresentation.showArtwork !== false,
+                            appSymbol: entry.modelData.symbol || entry.modelData.name.slice(0, 1),
+                            presentation: ({
+                                variant: root.galleryPresentation.showLabels === false ? "source" : "summary",
+                                subtitle: root.galleryPresentation.showLabels ? root.stateLabel(entry.modelData) : ""
+                            })
+                        })
+                        appearance: root.appearance
+                        unit: 1
+                        selected: root.open && root.focusArea === "grid" && root.selectedId === entry.modelData.id
+                        onActivated: entry.activateEntry()
+                    }
                 }
             }
         }

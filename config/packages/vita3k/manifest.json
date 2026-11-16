@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "packageId": "vita3k",
+  "version": "1.0.0",
+  "minIsoldeVersion": "0.0.1.2",
+  "name": "Vita3K · PS Vita",
+  "description": "Select an unencrypted VPK. It is validated, installed privately and launched without the emulator desktop. Xbox pad uses SDL standard buttons. Touch-only, rear-touch and motion-only titles are outside the pad-only matrix.",
+  "category": "Games",
+  "publisher": "vita3k",
+  "provenance": "Official upstream artifact pinned by SHA-256; no games, accounts or firmware",
+  "capabilities": [
+    "desktop.external",
+    "input.gamepad",
+    "audio.output"
+  ],
+  "app": {
+    "id": "vita3k",
+    "type": "desktop",
+    "presentationMode": "game-hub",
+    "networkRequirement": "none",
+    "desktopId": "isolde-vita3k",
+    "emulatorRuntime": "vita3k",
+    "windowClass": "Vita3K",
+    "containment": "fullscreen",
+    "section": "Games",
+    "accent": "#397DB8",
+    "symbol": "PS Vita",
+    "handledActions": [
+      "open-file"
+    ],
+    "actionHandlers": {
+      "open-file": {
+        "appendTarget": true
+      }
+    },
+    "gameFormats": [
+      "vpk"
+    ]
+  }
+}

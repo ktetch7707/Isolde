@@ -1,15 +1,20 @@
-$ErrorActionPreference='Stop'
-. "$PSScriptRoot/guide-input-plan.ps1"
-$folder=Join-Path $PSScriptRoot ('../build/guide-plan-contract-'+[guid]::NewGuid().ToString('N'))
-New-Item -ItemType Directory -Path $folder -Force | Out-Null
-$path=Join-Path $folder 'plan.json'
-function Check-Plan($document,$valid) {
-    $document | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $path
-    $accepted=$false
-    try { $null=Import-GuideInputPlan -Path $path -Case guide-lifecycle; $accepted=$true } catch { if($valid){throw} }
-    if($accepted -ne $valid){throw 'Input-plan boundary regression'}
+$ErrorActionPreference = 'Stop'."$PSScriptRoot/guide-input-plan.ps1" $folder =
+    Join - Path $PSScriptRoot('../build/guide-plan-contract-' + [guid] ::NewGuid().ToString('N')) New - Item -
+        ItemType Directory - Path $folder - Force |
+    Out - Null $path = Join - Path $folder 'plan.json' function Check - Plan($document, $valid) {
+    $document | ConvertTo - Json - Depth 5 | Set - Content - LiteralPath $path $accepted = $false try {
+        $null = Import - GuideInputPlan - Path $path - Case guide - lifecycle;
+        $accepted = $true
+    } catch {
+        if ($valid) {
+            throw
+        }
+    }
+    if ($accepted - ne $valid) {
+        throw 'Input-plan boundary regression'
+    }
 }
-Check-Plan @{schemaVersion=1;case='guide-lifecycle';phases=@{guidestartup=@('Left','Return');guidevideo=@()}} $true
+Check - Plan @{schemaVersion = 1;case='guide-lifecycle';phases=@{guidestartup=@('Left','Return');guidevideo=@()}} $true
 Check-Plan @{schemaVersion=1;case='guide-lifecycle';phases=@{guidevideo=@('Home')}} $false
 Check-Plan @{schemaVersion=1;case='guide-lifecycle';phases=@{guidevideo='Return'}} $false
 Check-Plan @{schemaVersion=1;case='guide-lifecycle';phases=@{guidevideo=@('Return')};text='unsafe'} $false

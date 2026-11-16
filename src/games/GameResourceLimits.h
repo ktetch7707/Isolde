@@ -10,4 +10,4 @@ inline constexpr int ProvenanceRecords = CatalogEntries * EditionsPerGame;
 inline constexpr long long CatalogArchiveBytes = 32LL * 1024 * 1024;
 inline constexpr long long ArtworkRestoreBytes = 128LL * 1024 * 1024;
 inline constexpr long long ArtworkStoreBytes = 512LL * 1024 * 1024;
-}
+} // namespace GamesResourceLimits

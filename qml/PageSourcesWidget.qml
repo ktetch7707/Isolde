@@ -30,9 +30,10 @@ Item {
         return carousel.handleCommand(command)
     }
     HomeCard {
+        objectName:"sourceSummaryCard"
         anchors.fill:parent;visible:root.compact || !root.entries.length;appearance:root.appearance;unit:root.unit
         selected:root.highlighted || root.engaged
-        item:({name:(root.style.visibleLabel || "Sources")+(root.style.sourceBadge!==false && root.entries.length?" · "+root.entries.length:""),logoSource:root.artworkSource,presentation:Object.assign({},root.style,{subtitle:root.entries.length?root.entries[0].name:"No new sources"})})
+        item:({name:(root.style.visibleLabel || "Sources")+(root.style.sourceBadge!==false && root.entries.length?" · "+root.entries.length:""),logoSource:root.artworkSource,presentation:Object.assign({},root.style,{subtitle:root.entries.length?(root.style.sourceDetails?root.entries[0].name:""):"No new sources"})})
         onActivated:root.openSources("")
     }
     PageAppCarousel {

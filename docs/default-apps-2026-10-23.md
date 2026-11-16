@@ -16,6 +16,22 @@ Desktop portal identity now uses `org.isolde.Isolde`, a public desktop entry and
 
 ## Evidence and open gates
 
+### T12 supported launch and session matrix
+
+| App | Installed route | VM software acceptance boundary |
+| --- | --- | --- |
+| Kodi | Managed native backend and local media | Real local browsing and playback, offline, with exact Isolde return. T04 supplies installed evidence. |
+| FreeTube | Native client with a private app profile | Account-free content and playback when the provider responds. Exercise offline failure, retry, and native return. |
+| Spotify | Native client with a private app profile | Sign-in surface, isolated data, session failure and native return. Subscription playback needs a provider-boundary fixture or an available session. |
+| CBC Gem | Isolated Chrome app profile | Origin, sign-in and region-gate behavior, VPN route selection, containment and return. Exercise the CA/US/error cases through the provider boundary. |
+| Prime Video, Disney+, Paramount+, Netflix | Separate Chrome app profile per service | Per-service origin, sign-in, entitlement or DRM response, containment, and return. Exercise unavailable responses through provider-boundary fixtures. |
+| Crunchyroll, Peacock | Separate Chrome app profile per service | Per-service origin, region/account or entitlement response, containment and return. Use account-free viewing wherever available. |
+| Steam | Native Big Picture with private profile data | Owned launch and return, offline/online error handling and bounded shutdown. T30 owns gameplay and titles. |
+
+Use two VM profiles for credential and data isolation. A provider page opening
+establishes navigation. Playback requires actual output or an explicit VM
+production-boundary substitute for the unavailable entitlement.
+
 - `default-apps-20261023-full-a` and `-full-b`: all 28 native registrations pass. Both deployed; B release is `0d2797c6ed406b0e18602164`.
 - Provision A stops at its disk guard. Provision B removes only verified obsolete guest build/payload paths, retaining source, logs, evidence, active cache and recent builds; free space reaches 8.28 GiB. Its native phase then stops at interactive sudo authentication. No native downloads are claimed from either attempt.
 - `default-apps-auth-20261023-a` confirms existing narrow apt-get/dpkg delegation. The next snapshot uses that exact policy rather than sudo Python.

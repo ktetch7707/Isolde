@@ -1,0 +1,66 @@
+{
+  "version": 1,
+  "generated": "2026-11-16",
+  "checker": "isolde-code-quality",
+  "limits": {
+    "clang_tidy": {
+      "cognitive_complexity_threshold": 15,
+      "function_size_line_threshold": 60,
+      "function_size_statement_threshold": 30,
+      "function_size_branch_threshold": 10,
+      "function_size_nesting_threshold": 3,
+      "function_size_parameter_threshold": 5,
+      "function_size_variable_threshold": 8,
+      "warnings_as_errors": [
+        "readability-function-cognitive-complexity",
+        "readability-function-size"
+      ]
+    },
+    "lizard": {
+      "cyclomatic_complexity_max": 10,
+      "function_length_max": 60,
+      "parameters_max": 5
+    },
+    "class_size": {
+      "max_class_lines": 300,
+      "max_methods": 20,
+      "max_data_members": 10,
+      "max_public_methods": 5
+    }
+  },
+  "baseline": {
+    "lizard_warnings_total": 339,
+    "lizard_warnings_by_category": {
+      "cyclomatic_complexity_over_10": "see baseline_lizard.csv",
+      "function_length_over_60": "see baseline_lizard.csv",
+      "parameter_count_over_5": "see baseline_lizard.csv"
+    },
+    "class_size_violations": [],
+    "class_size_violation_count": 0,
+    "class_size_fixed": [
+      "src/app/AppCatalog.h: class 'Entry' split into EntryCore/EntryMetadata/EntrySetup nested structs (13 -> 5/4/4 members)",
+      "src/app/LocalCatalogProvider.h: providerId/providerName/isOnline moved to protected (9 -> 4 public methods)",
+      "src/app/StoreProvider.h: split into StoreIdentityProvider (3), StoreSearchProvider (5), StoreUpdateProvider (5), StoreArtifactProvider (3) interfaces",
+      "src/games/OpticalDiscAdapter.h: split into OpticalDiscParse (3), OpticalDiscIdentify (5), OpticalDiscClassify (4), OpticalDiscHash (4), OpticalDiscProbe (4) classes",
+      "src/media/AudioCaptureAdapter.h: split into AudioCaptureDevices (2), AudioCaptureControl (3), AudioCaptureAdapter (3 signals) classes",
+      "src/media/VideoCaptureAdapter.h: split into VideoCaptureDevices (2), VideoCaptureControl (4), VideoCaptureAudio (1), VideoCaptureAdapter (3 signals) classes",
+      "src/sessions/AppSession.h: split into AppSessionInfo (data), AppSessionControl (4 methods), AppSession (4 methods + 3 signals)"
+    ],
+    "lizard_fixed": [
+      "CompatibilityRuntime::discover: extracted isWineBinaryValid/isPathSecure (CCN 16 -> ~4)",
+      "GameEmulators::valid: extracted per-field validators (CCN 12 -> ~1)",
+      "GameEmulators::prunePsxFirmware: extracted shouldRetirePsxFirmware (CCN 14 -> ~5)",
+      "GameEmulators::pruneFirmware: extracted shouldRetireFirmware (CCN 17 -> ~5)",
+      "AppArtwork::cutout: extracted isUniformBackdrop (CCN 11 -> ~7)"
+    ],
+    "clang_tidy": "not run locally - CMake/Qt6 not available on this host; baseline will be established on first CI run"
+  },
+  "notes": [
+    "This baseline documents pre-existing violations.",
+    "CI must fail on any violation NOT in this baseline.",
+    "Files modified by a pull request are checked fully - baseline does not hide violations in changed files.",
+    "Limits are NOT weakened to make existing code pass.",
+    "All class-size violations have been resolved (0 remaining).",
+    "339 lizard warnings remain in large functions (e.g., AppCatalog::load CCN 142, AppArtwork::cleanBackground CCN 74, ProfileRuntime::ProfileRuntime CCN 98) - these require significant refactoring and are tracked as technical debt."
+  ]
+}

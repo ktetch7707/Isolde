@@ -1,12 +1,12 @@
 #pragma once
+#include <QLockFile>
 #include <QObject>
 #include <QProcess>
-#include <QTimer>
 #include <QTemporaryDir>
-#include <QLockFile>
+#include <QTimer>
+#include <QUrl>
 #include <memory>
 #include "KodiMedia.h"
-#include <QUrl>
 
 class KodiService final : public QObject {
     Q_OBJECT
@@ -20,54 +20,77 @@ class KodiService final : public QObject {
     Q_PROPERTY(QString browsePath READ browsePath NOTIFY changed)
     Q_PROPERTY(QStringList folderChoices READ folderChoices NOTIFY changed)
     Q_PROPERTY(bool alwaysPlayLocally READ alwaysPlayLocally WRITE setAlwaysPlayLocally NOTIFY alwaysPlayLocallyChanged)
-public:
-    bool alwaysPlayLocally() const { return m_alAlwaysPlayLocally; }
+    Q_PROPERTY(QVariantList capabilityInventory READ capabilityInventory CONSTANT)
+    Q_PROPERTY(QVariantList libraryViews READ libraryViews CONSTANT)
+  public:
+    QVariantList capabilityInventory() const;
+    QVariantList libraryViews() const;
+    bool alwaysPlayLocally() const {
+        return m_alAlwaysPlayLocally;
+    }
     Q_INVOKABLE void setAlwaysPlayLocally(bool value);
     Q_INVOKABLE void resetAlwaysPlayLocally();
-    void setAlwaysPlayLocallyNoNotify(bool value) { m_alAlwaysPlayLocally = value; }
-    void markReady();
-signals:
-    void changed();
-    void probeRequested();
-    void ready();
-    void unavailable(const QString &reason);
-    void alwaysPlayLocallyChanged();
-private:
-    explicit KodiService(const QString &profile, QObject *parent = nullptr);
+    void setAlwaysPlayLocallyNoNotify(bool value) {
+        m_alAlwaysPlayLocally = value;
+    }
+    explicit KodiService(const QString& profile, QObject* parent = nullptr);
     ~KodiService() override;
-    bool enabled() const { return m_enabled; }
-    QString status() const { return m_status; }
-    QString frontend() const { return m_frontend; }
-    bool switching() const { return !m_pendingFrontend.isEmpty(); }
-    bool canOpenApplication() const { return !switching() && m_process.state() == QProcess::NotRunning; }
-    bool canEditFolders() const { return m_frontend == "kodi" && !m_suspended && canOpenApplication(); }
+    bool enabled() const {
+        return m_enabled;
+    }
+    QString status() const {
+        return m_status;
+    }
+    QString frontend() const {
+        return m_frontend;
+    }
+    bool switching() const {
+        return !m_pendingFrontend.isEmpty();
+    }
+    bool canOpenApplication() const {
+        return !switching() && !m_folderEditing && m_process.state() == QProcess::NotRunning;
+    }
+    bool canEditFolders() const {
+        return !m_suspended && !switching() && m_process.state() == QProcess::NotRunning;
+    }
+    Q_INVOKABLE bool beginFolderEditing();
+    Q_INVOKABLE void endFolderEditing();
     QStringList libraryFolders() const;
-    QString folderStatus() const { return m_folderStatus; }
-    QString browsePath() const { return m_browsePath; }
-    QStringList folderChoices() const { return m_folderChoices; }
-    Q_INVOKABLE void browseLibraryFolder(const QString &path);
+    QString folderStatus() const {
+        return m_folderStatus;
+    }
+    QString browsePath() const {
+        return m_browsePath;
+    }
+    QStringList folderChoices() const {
+        return m_folderChoices;
+    }
+    Q_INVOKABLE void browseLibraryFolder(const QString& path);
     Q_INVOKABLE void browseLibraryParent();
     Q_INVOKABLE void allowBrowsedFolder();
-    Q_INVOKABLE void addLibraryFolder(const QUrl &folder);
-    Q_INVOKABLE void removeLibraryFolder(const QString &folder);
-    Q_INVOKABLE void setFrontend(const QString &frontend);
+    Q_INVOKABLE void addLibraryFolder(const QUrl& folder);
+    Q_INVOKABLE void removeLibraryFolder(const QString& folder);
+    Q_INVOKABLE void setFrontend(const QString& frontend);
     Q_INVOKABLE void setEnabled(bool enabled);
     Q_INVOKABLE void retry();
     void start();
     void stop();
     void suspend(bool suspended);
     void markReady();
-signals:
+  signals:
+    void alwaysPlayLocallyChanged();
     void changed();
     void probeRequested();
     void ready();
-    void unavailable(const QString &reason);
-private:
-    void fail(const QString &reason);
-    void commitFrontend(const QString &frontend);
+    void unavailable(const QString& reason);
+
+  private:
+    void fail(const QString& reason);
+    void commitFrontend(const QString& frontend);
     QString m_profile, m_status = "Not started";
     bool m_enabled = true, m_stopping = false, m_suspended = false, m_ready = false;
     bool m_alAlwaysPlayLocally = true;
+    bool m_folderEditing = false, m_resumeAfterFolders = false, m_cancelFolderPreparing = false;
     QProcess m_process;
     QTimer m_probe;
     int m_checks = 0;

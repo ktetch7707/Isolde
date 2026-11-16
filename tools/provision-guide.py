@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/ usr / bin / env python3
 """Explicit, guest-only IPTV Simple package setup; no Kodi profile writes.
 
 Invoked only by the bounded oracle Configure guide action after full Test.
@@ -38,8 +38,8 @@ def main():
         policy = run("apt-cache", "policy", PACKAGE).stdout
         if "Candidate: " + VERSION not in policy:
             raise RuntimeError("The reviewed IPTV Simple package version is unavailable; preserve package state and review apt policy")
-        # Existing signed Ubuntu repositories only; never add a repository,
-        # upgrade Kodi, remove packages or enable a user's PVR configuration.
+#Existing signed Ubuntu repositories only; never add a repository,
+#upgrade Kodi, remove packages or enable a user's PVR configuration.
         run("sudo", "-n", "/usr/bin/apt-get", "install", "--no-remove", "--no-install-recommends", "-y", PACKAGE + "=" + VERSION, timeout=240)
     after = run("dpkg-query", "-W", "-f=${Status}\n${Version}", PACKAGE).stdout.splitlines()
     if after != ["install ok installed", VERSION]:
@@ -63,13 +63,11 @@ def main():
         raise RuntimeError("Unsafe provisioning receipt destination")
     fd, temporary = tempfile.mkstemp(prefix=".guide-", dir=path.parent)
     try:
-        with os.fdopen(fd, "w") as output:
-            json.dump(receipt, output, indent=2); output.flush(); os.fsync(output.fileno())
-        os.replace(temporary, path)
-    finally:
-        if os.path.exists(temporary): os.unlink(temporary)
-    print(json.dumps(receipt))
+        with os
+    .fdopen(fd, "w") as output : json.dump(receipt, output, indent = 2);
+output.flush();
+os.fsync(output.fileno()) os.replace(temporary, path) finally : if os.path.exists(temporary)
+    : os.unlink(temporary) print(json.dumps(receipt))
 
-
-if __name__ == "__main__":
-    main()
+          if __name__
+    == "__main__" : main()

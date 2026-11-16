@@ -8,6 +8,7 @@ Item {
     property bool open: false
     property int selectedItem: 0
     property int editField: 0
+    property bool actionEditorOpen: false
     property string statusMessage: ""
 
     readonly property var items: layoutModel ? layoutModel.items : []
@@ -17,7 +18,7 @@ Item {
     readonly property real unit: 24
 
     readonly property var fields: [
-        "Position (row,col)", "Size (rows,cols)", "Action", "Presentation", "Done"
+        "Position (row,col)", "Size (rows,cols)", "Edit Actions", "Presentation", "Done"
     ]
 
     function placementFor(id) {
@@ -43,6 +44,10 @@ Item {
     }
 
     function handleCommand(command) {
+        if (root.actionEditorOpen) {
+            if (command === inputManager.back) { root.actionEditorOpen = false; root.editField = 3; return }
+            return
+        }
         if (command === inputManager.back) { root.open = false; return }
         if (items.length === 0) return
 
@@ -64,17 +69,8 @@ Item {
             else if (command === inputManager.navigateDown)  { p.height = (p.height || 1) + 1; setPlacement(id, p) }
             else if (command === inputManager.confirm) { editField = 2 }
         } else if (editField === 2) {
-            if (command === inputManager.navigateLeft || command === inputManager.navigateRight) {
-                const item = items.find(it => it.id === id)
-                const actions = ["", "open", "play", "settings"]
-                let idx = actions.indexOf(item ? (item.action || "") : "")
-                idx = (idx + (command === inputManager.navigateRight ? 1 : -1) + actions.length) % actions.length
-                if (layoutModel.setItemAction) {
-                    layoutModel.setItemAction(id, { type: actions[idx] === "" ? undefined : actions[idx] })
-                    root.statusMessage = "Action set to " + (actions[idx] || "none")
-                }
-            } else if (command === inputManager.confirm) {
-                editField = 3
+            if (command === inputManager.confirm) {
+                root.actionEditorOpen = true
             }
         } else if (editField === 3) {
             if (command === inputManager.navigateLeft || command === inputManager.navigateRight) {
@@ -113,7 +109,7 @@ Item {
             }
 
             Text {
-                text: "↑↓←→ move · Enter next field · Back exit"
+                text: "↑↓←→ move · Enter next field · Back exit · A opens action editor"
                 color: "#AAA4B2"
                 font.pixelSize: 16
             }
@@ -260,6 +256,16 @@ Item {
                 font.pixelSize: 15
                 visible: root.statusMessage !== ""
             }
+        }
+
+        ActionSequenceEditor {
+            id: actionEditor
+            anchors.fill: parent
+            layoutModel: root.layoutModel
+            item: root.items[root.selectedItem] || {}
+            open: root.actionEditorOpen
+            visible: root.actionEditorOpen
+            enabled: root.actionEditorOpen
         }
     }
 }

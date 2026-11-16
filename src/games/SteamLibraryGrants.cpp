@@ -7,44 +7,43 @@
 #include <QUuid>
 
 namespace {
-bool within(const QString &path, const QString &root)
-{
+bool within(const QString& path, const QString& root) {
     return path == root || path.startsWith(root + '/');
 }
 
-bool allowedMountPath(const QString &path)
-{
+bool allowedMountPath(const QString& path) {
     const auto parts = path.split('/', Qt::SkipEmptyParts);
     if (parts.size() < 3 || (parts.at(0) != "media" && parts.at(0) != "mnt"))
         return false;
-    for (const auto &part : parts)
-        if (part.startsWith('.')) return false;
+    for (const auto& part : parts)
+        if (part.startsWith('.'))
+            return false;
     return true;
 }
-}
+} // namespace
 
-QStringList SteamLibraryGrants::folders(const QString &profile)
-{
+QStringList SteamLibraryGrants::folders(const QString& profile) {
     return QSettings(QSettings::defaultFormat(), QSettings::UserScope, "Isolde", "MediaAccess")
-        .value("profiles/" + profile + "/steam/libraries").toStringList();
+        .value("profiles/" + profile + "/steam/libraries")
+        .toStringList();
 }
 
-QString SteamLibraryGrants::validate(const QString &path, bool requirePresent)
-{
+QString SteamLibraryGrants::validate(const QString& path, bool requirePresent) {
     if (path.size() > 4096 || !QDir::isAbsolutePath(path) || QDir::cleanPath(path) != path || !allowedMountPath(path))
         return "Choose a specific Steam library folder under /media or /mnt.";
 
     const auto home = QDir::homePath();
     const auto config = QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
     const auto data = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
-    if (within(path, home) || within(home, path) || within(path, config) || within(config, path)
-        || within(path, data) || within(data, path))
+    if (within(path, home) || within(home, path) || within(path, config) || within(config, path) ||
+        within(path, data) || within(data, path))
         return "Steam libraries inside the active account or Isolde profile cannot be added as external grants.";
 
     QFileInfo info(path);
     if (!info.exists()) {
         while (!info.exists()) {
-            if (info.isSymLink()) return "The selected Steam library path contains a symbolic link.";
+            if (info.isSymLink())
+                return "The selected Steam library path contains a symbolic link.";
             info = QFileInfo(info.absolutePath());
         }
         if (info.canonicalFilePath() != info.absoluteFilePath())
@@ -61,15 +60,17 @@ QString SteamLibraryGrants::validate(const QString &path, bool requirePresent)
     return {};
 }
 
-QString SteamLibraryGrants::validateList(const QStringList &paths, bool requirePresent)
-{
-    if (paths.size() > 8) return "Up to eight external Steam libraries can be approved per profile.";
+QString SteamLibraryGrants::validateList(const QStringList& paths, bool requirePresent) {
+    if (paths.size() > 8)
+        return "Up to eight external Steam libraries can be approved per profile.";
     QStringList checked;
-    for (const auto &path : paths) {
+    for (const auto& path : paths) {
         const auto error = validate(path, requirePresent);
-        if (!error.isEmpty()) return error;
-        if (checked.contains(path)) return "The same Steam library was approved more than once.";
-        for (const auto &existing : checked)
+        if (!error.isEmpty())
+            return error;
+        if (checked.contains(path))
+            return "The same Steam library was approved more than once.";
+        for (const auto& existing : checked)
             if (within(path, existing) || within(existing, path))
                 return "Nested external Steam library grants are not supported.";
         checked.append(path);
@@ -77,13 +78,14 @@ QString SteamLibraryGrants::validateList(const QStringList &paths, bool requireP
     return {};
 }
 
-QString SteamLibraryGrants::save(const QString &profile, const QStringList &paths)
-{
-    if ((profile != "default" && (QUuid(profile).isNull()
-         || QUuid(profile).toString(QUuid::WithoutBraces) != profile)) || paths.size() > 8)
+QString SteamLibraryGrants::save(const QString& profile, const QStringList& paths) {
+    if ((profile != "default" &&
+         (QUuid(profile).isNull() || QUuid(profile).toString(QUuid::WithoutBraces) != profile)) ||
+        paths.size() > 8)
         return "Invalid profile or too many external Steam libraries.";
-    const auto validation=validateList(paths,false);
-    if(!validation.isEmpty())return validation;
+    const auto validation = validateList(paths, false);
+    if (!validation.isEmpty())
+        return validation;
     QSettings settings(QSettings::defaultFormat(), QSettings::UserScope, "Isolde", "MediaAccess");
     settings.setValue("profiles/" + profile + "/steam/libraries", paths);
     settings.sync();

@@ -7,11 +7,12 @@ Rectangle {
     required property var appearance
     property real viewportScale: 1
     property string pageId: ""
-    property string view: "menu"
+    property string view: "designs"
     property int selected: 0
     property string scope: "page"
     property string pending: ""
     property string selectedDesign: ""
+    property int designOrigin:0
     property string inputPath: ""
     property string message: ""
     property var summary: ({})
@@ -31,12 +32,12 @@ Rectangle {
     readonly property real spacing:(appearance.spacing || 16)*viewportScale
     color: appearance.surfaceColor
     border.color: appearance.focusColor; border.width: 2
-    function begin() { view="menu";selected=0;scope="page";message="";summary=({});appRemap=({}) }
+    function begin() { view="designs";selected=0;scope="page";message="";summary=({});appRemap=({}) }
     function labels() {
         if(view==="menu")return ["Choose a starting or saved design", "Import portable design", "Export draft design", "Reference image", "Manage saved copies", "Back to editing"]
-        if(view==="designs")return designs.map(d=>d.name).concat(["Back"])
+        if(view==="designs")return designs.map(d=>(d.builtIn?"Starting design · ":"My design · ")+d.name).concat(["Manage designs…","Back to editing"])
         if(view==="scope")return ["Current page · keep other pages", "Whole interface · review all changed pages", "Cancel"]
-        if(view==="preview")return ["Use this draft", "Cancel preview"].concat((summary.missingApps || []).length?["Remap missing apps…"]:[])
+        if(view==="preview")return [scope==="page"?"Use on this page":"Use across the interface", "Cancel preview","Use across the interface…"].concat((summary.missingApps || []).length?["Remap missing apps…"]:[])
         if(view==="missingApps")return (summary.missingApps || []).concat(["Keep placeholders"])
         if(view==="appChoices")return appChoices.map(a=>a.name).concat(["Cancel"])
         if(view==="browser")return ["Parent folder", "Enter a folder path…"].concat((listing.entries || []).map(e=>(e.folder?"▸ ":"")+e.name)).concat((listing.pages || 1)>1?["Previous entries", "Next entries"]:[]).concat(["Cancel"])
@@ -56,7 +57,7 @@ Rectangle {
         message="Changed pages: "+(summary.changes || []).map(p=>p.name+" ("+p.change+")").join(", ")
         if(!(summary.changes || []).length)message="No page content changes."
         if((summary.missingApps || []).length)message+=" · Missing apps remain editable: "+summary.missingApps.join(", ")
-        message+=". This is a private preview. Use this draft is one undoable change; Review & Apply saves it."
+        message+=". This is a private preview. Use this draft is one undoable change; Save changes saves it."
     }
     function activate() {
         if(view==="menu") {
@@ -67,8 +68,9 @@ Rectangle {
             else if(selected===4)manageRequested()
             else closed()
         } else if(view==="designs") {
-            if(selected>=designs.length){view="menu";selected=0;return}
-            selectedDesign=designs[selected].id;chooseScope("design")
+            if(selected===designs.length){view="menu";selected=1;return}
+            if(selected>designs.length){closed();return}
+            designOrigin=selected;selectedDesign=designs[selected].id;pending="design";scope="page";preview()
         } else if(view==="scope") {
             if(selected===2){view="menu";selected=0;return}
             scope=selected===0?"page":"interface"
@@ -76,8 +78,9 @@ Rectangle {
             else preview()
         } else if(view==="preview") {
             if(selected===0){if(session.acceptPreview())accepted(scope);else message=session.errorString}
-            else if(selected===2){view="missingApps";selected=0}
-            else {session.cancelPreview();view="scope";selected=0;message=""}
+            else if(selected===2){scope="interface";preview()}
+            else if(selected===3){view="missingApps";selected=0}
+            else {session.cancelPreview();view=pending==="import"?"scope":"designs";selected=pending==="import"?0:designOrigin;message=""}
         } else if(view==="missingApps") {
             if(selected<(summary.missingApps || []).length){remappingApp=summary.missingApps[selected];view="appChoices";selected=0}
             else {view="preview";selected=1}
@@ -102,7 +105,7 @@ Rectangle {
     }
     function handleCommand(command) {
         if(view==="folderPath" || view==="exportPath"){keyboard.handleCommand(command);return}
-        if(command===inputManager.back){if(view==="preview")session.cancelPreview();if(view==="menu")closed();else{view="menu";selected=0;message=""};return}
+        if(command===inputManager.back){if(view==="preview")session.cancelPreview();if(view==="designs")closed();else{view="designs";selected=designOrigin;message=""};return}
         if(command===inputManager.confirm){activate();return}
         if(view==="reference" && selected===1 && (command===inputManager.navigateLeft || command===inputManager.navigateRight)){referenceOpacity=Math.max(.05,Math.min(.8,Math.round((referenceOpacity+(command===inputManager.navigateLeft?-.05:.05))*20)/20));return}
         if(command===inputManager.navigateUp)selected=Math.max(0,selected-1)
@@ -110,17 +113,29 @@ Rectangle {
     }
     Column {
         anchors.fill: parent;anchors.margins:root.spacing;spacing:root.spacing*.75
-        Text {text:root.view==="preview"?"Design preview":root.view==="reference"?"Private reference":"Designs & portability";color:root.appearance.textColor;font.pixelSize:24*root.textScale}
-        Text {width:parent.width;text:root.message || (root.view==="scope"?"Choose what this operation affects. Other pages are preserved by default.":root.view==="browser"?root.listing.directory:"Choose an operation. Back returns without applying.");color:root.appearance.mutedColor;wrapMode:Text.WordWrap;font.pixelSize:18*root.textScale}
+        Text {text:root.view==="preview"?"Design preview":root.view==="reference"?"Private reference":"Design library";color:root.appearance.textColor;font.pixelSize:24*root.textScale}
+        Text {textFormat:Text.PlainText;width:parent.width;text:root.message || (root.view==="scope"?"Choose what this operation affects. Other pages are preserved by default.":root.view==="browser"?root.listing.directory:"Choose an operation. Back returns without applying.");color:root.appearance.mutedColor;wrapMode:Text.WordWrap;font.pixelSize:18*root.textScale}
         ListView {
             width:parent.width;height:Math.max(80,root.height-y-24);clip:true;spacing:6
             model:root.labels();currentIndex:root.selected;highlightRangeMode:ListView.ApplyRange
             delegate:Rectangle {
                 required property int index;required property string modelData
-                width:ListView.view.width;height:60*root.textScale;color:index===root.selected?root.appearance.selectedColor:"transparent"
+                width:ListView.view.width;height:(root.view==="designs" && index<root.designs.length?100:60)*root.textScale;color:index===root.selected?root.appearance.selectedColor:"transparent"
                 border.width:index===root.selected?2:0;border.color:root.appearance.focusColor
                 Accessible.role:Accessible.Button;Accessible.name:modelData
-                Text {anchors.fill:parent;anchors.margins:8;verticalAlignment:Text.AlignVCenter;text:modelData;wrapMode:Text.WordWrap;color:root.appearance.textColor;font.pixelSize:18*root.textScale}
+                Rectangle {
+                    id:thumbnail;visible:root.view==="designs" && index<root.designs.length
+                    readonly property var preview:visible?root.designs[index].preview || {}:({})
+                    width:132*root.textScale;height:76*root.textScale;anchors.left:parent.left;anchors.leftMargin:10*root.textScale;anchors.verticalCenter:parent.verticalCenter
+                    color:preview.background || root.appearance.surfaceColor;clip:true
+                    Repeater {model:thumbnail.preview.blocks || [];delegate:Rectangle {
+                        required property var modelData
+                        x:modelData.x/Math.max(1,thumbnail.preview.columns)*thumbnail.width+2;y:modelData.y/Math.max(1,thumbnail.preview.rows)*thumbnail.height+2
+                        width:modelData.width/Math.max(1,thumbnail.preview.columns)*thumbnail.width-4;height:modelData.height/Math.max(1,thumbnail.preview.rows)*thumbnail.height-4
+                        color:thumbnail.preview.surface || root.appearance.surfaceColor;border.width:1;border.color:thumbnail.preview.focus || root.appearance.focusColor
+                    }}
+                }
+                Text {anchors.fill:parent;anchors.margins:8;textFormat:Text.PlainText;anchors.leftMargin:thumbnail.visible?thumbnail.width+20*root.textScale:8;verticalAlignment:Text.AlignVCenter;text:modelData;wrapMode:Text.WordWrap;color:root.appearance.textColor;font.pixelSize:18*root.textScale}
                 MouseArea {anchors.fill:parent;onClicked:{root.selected=index;root.activate()}}
             }
         }

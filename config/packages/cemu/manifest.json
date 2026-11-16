@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "packageId": "cemu",
+  "version": "1.0.0",
+  "minIsoldeVersion": "0.0.1.2",
+  "name": "Cemu · Wii U",
+  "description": "Select a decrypted WUA or an RPX in its authorized game folder. Encrypted WUD/WUX and online accounts are not included. Connect an SDL Xbox pad before Play. It maps to a Wii U GamePad. Xbox View/Back toggles GamePad view and sends Minus. Touch/gyro-only actions are outside this pad-only matrix.",
+  "category": "Games",
+  "publisher": "cemu",
+  "provenance": "Official upstream artifact pinned by SHA-256; no games, accounts or firmware",
+  "capabilities": [
+    "desktop.external",
+    "input.gamepad",
+    "audio.output"
+  ],
+  "app": {
+    "id": "cemu",
+    "type": "desktop",
+    "presentationMode": "game-hub",
+    "networkRequirement": "none",
+    "desktopId": "isolde-cemu",
+    "emulatorRuntime": "cemu",
+    "windowClass": "Cemu",
+    "containment": "fullscreen",
+    "section": "Games",
+    "accent": "#397DB8",
+    "symbol": "Wii U",
+    "handledActions": [
+      "open-file"
+    ],
+    "actionHandlers": {
+      "open-file": {
+        "appendTarget": true
+      }
+    },
+    "gameFormats": [
+      "wua",
+      "rpx"
+    ]
+  }
+}

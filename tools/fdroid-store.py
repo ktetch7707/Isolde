@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/ usr / bin / env python3
 """Opt-in F-Droid browsing. Verify the pinned signed index before exposing APKs.
 
 Uses Python's standard library and the appliance's OpenSSL executable. Never
@@ -7,6 +7,7 @@ fetches icons. The caller owns consent, cancellation, and the profile cache.
 """
 import argparse
 import base64
+import gzip
 import hashlib
 import html
 import io
@@ -21,10 +22,11 @@ import tempfile
 import time
 import urllib.request
 import zipfile
+import zlib
 import xml.etree.ElementTree as ET
 
 REPOSITORY = "https://f-droid.org/repo/"
-# https://f-droid.org/docs/Release_Channels_and_Signing_Keys/
+#https: // f-droid.org/docs/Release_Channels_and_Signing_Keys/
 SIGNER = "43238d512c1e5eb2d6569f4a3afbf5523418b82e0a3ed1552770abb9a9c9ccab"
 MAX_ARCHIVE = 1024**2
 MAX_INDEX = 128 * 1024**2
@@ -90,8 +92,8 @@ def verified_entry(archive, signer=SIGNER, openssl=None):
             root = Path(scratch)
             (root/"signature.der").write_bytes(read(signature, 65536))
             (root/"signature.sf").write_bytes(sf)
-            # -noverify disables CA trust only. Actual signers emitted by OpenSSL
-            # must match the pinned certificate, not an unrelated cert in the bag.
+#- noverify disables CA trust only.Actual signers emitted by OpenSSL
+#must match the pinned certificate, not an unrelated cert in the bag.
             completed = subprocess.run([executable, "smime", "-verify", "-binary", "-inform", "DER",
                 "-in", str(root/"signature.der"), "-content", str(root/"signature.sf"),
                 "-noverify", "-signer", str(root/"signer.pem"), "-out", str(root/"verified.sf")],
@@ -135,7 +137,7 @@ def verified_index(entry, data):
     packages = document.get("packages")
     if not isinstance(packages, dict) or len(packages) > 20000:
         raise ValueError("Unsupported F-Droid catalog size or format")
-    # Normalize the signed v2 records for the bounded search/version selector.
+#Normalize the signed v2 records for the bounded search / version selector.
     apps, versions = [], {}
     for identity, record in packages.items():
         metadata = record.get("metadata", {})
@@ -152,7 +154,7 @@ def verified_index(entry, data):
         preferred = metadata.get("preferredSigner")
         for version in values.values():
             manifest, file = version.get("manifest", {}), version.get("file", {})
-            # Do not offer known vulnerable/disabled builds or alpha/beta tracks.
+#Do not offer known vulnerable / disabled builds or alpha / beta tracks.
             if (version.get("releaseChannels") or version.get("obbMainFile") or version.get("obbPatchFile")
                     or any(key in version.get("antiFeatures", {})
                     for key in ("KnownVuln", "DisabledAlgorithm", "NoSourceSince"))
@@ -168,30 +170,45 @@ def verified_index(entry, data):
                 "maxSdkVersion": manifest.get("maxSdkVersion", 10000),
                 "features": [f["name"] for f in manifest.get("features", []) if f.get("required", True)],
                 "uses-permission": [p.get("name", "") for p in permissions]})
-    return {"apps": apps, "packages": versions}
+    return {
+    "apps" : apps, "packages" : versions
+}
 
+class RepositoryRedirect(urllib.request.HTTPRedirectHandler)
+    : def redirect_request(self, request, fp, code, msg, headers, newurl)
+    : if not newurl
+          .startswith(REPOSITORY)
+    : raise ValueError("F-Droid redirected outside the trusted repository") return super()
+          .redirect_request(request, fp, code, msg, headers, newurl)
 
-class RepositoryRedirect(urllib.request.HTTPRedirectHandler):
-    def redirect_request(self, request, fp, code, msg, headers, newurl):
-        if not newurl.startswith(REPOSITORY):
-            raise ValueError("F-Droid redirected outside the trusted repository")
-        return super().redirect_request(request, fp, code, msg, headers, newurl)
-
-
-def download(name, maximum):
-    opener = urllib.request.build_opener(RepositoryRedirect())
-    request = urllib.request.Request(REPOSITORY+name, headers={"User-Agent": "Isolde Store"})
-    with opener.open(request, timeout=20) as response:
-        if response.status != 200 or int(response.headers.get("Content-Length", "0")) > maximum:
-            raise ValueError("F-Droid returned an invalid index download")
-        chunks, total, deadline = [], 0, time.monotonic()+120
-        while True:
-            block = response.read(65536)
-            if not block:
-                break
-            chunks.append(block); total += len(block)
-            if total > maximum or time.monotonic() > deadline:
-                raise ValueError("F-Droid index download exceeded its size or time limit")
+              def download(name, maximum)
+    : opener = urllib.request.build_opener(RepositoryRedirect()) request =
+    urllib.request
+        .Request(REPOSITORY + name,
+                 headers = {"User-Agent" : "Isolde Store",
+                            "Accept-Encoding" : "gzip"}) with opener.open(request, timeout = 20) as response : length =
+        int(response.headers.get("Content-Length", "0")) if response.status != 200 or not 0 <= length <= maximum
+    : raise ValueError("F-Droid returned an invalid index download") encoding =
+            response.headers.get("Content-Encoding", "identity")
+                .strip()
+                .lower() if encoding not in{"identity", "gzip"}
+    : raise ValueError("F-Droid returned an unsupported transfer encoding") chunks,
+      total, deadline = [], 0,
+      time.monotonic() + 120 class BoundedResponse : transferred = 0 def read(self, size = -1)
+    : block = response.read(min(65536, size if size >= 0 else 65536, maximum - self.transferred + 1)) self.transferred
+      += len(block) if self.transferred
+         > maximum : raise ValueError("F-Droid transfer exceeded its size limit") if time.monotonic() > deadline
+    : raise ValueError("F-Droid download exceeded 120 seconds after %d bytes; search again to retry" %
+                       self.transferred) return block wire = BoundedResponse() stream =
+             gzip.GzipFile(fileobj = wire, mode = "rb") if encoding == "gzip" else wire try:
+    while
+        True : block = stream.read(min(65536, maximum - total + 1)) if not block : break chunks.append(block);total+=len(block)
+                if total>maximum:raise ValueError("F-Droid expanded index exceeded its size limit")
+                if time.monotonic()>deadline:raise ValueError("F-Droid metadata expansion exceeded its time limit")
+        except (gzip.BadGzipFile,EOFError,zlib.error) as error:
+            raise ValueError("F-Droid returned invalid compressed metadata") from error
+        finally:
+            if encoding=="gzip":stream.close()
         return b"".join(chunks)
 
 
@@ -199,12 +216,13 @@ def plain(value, limit):
     return re.sub(r"[\x00-\x1f<>]", " ", html.unescape(re.sub(r"<[^>]*>", " ", str(value))))[:limit].strip()
 
 
-def runtime_target():
-    """Read the initialized image; absence never starts/takes over an Android session."""
+def read_runtime_target(root=Path('/var/lib/waydroid/rootfs'), vendor=None):
+    """Read image metadata without starting an Android session."""
+    vendor=vendor if vendor is not None else root/'vendor'
     properties = {}
-    for name in ("system/build.prop", "vendor/build.prop"):
-        path = Path("/var/lib/waydroid/rootfs")/name
+    for path in (root/'build.prop',root/'system/build.prop',root/'system/system/build.prop',vendor/'build.prop'):
         try:
+    if not path.resolve().is_relative_to(root.resolve()) and not path.resolve().is_relative_to(vendor.resolve()):continue
             if path.stat().st_size > 1024**2:
                 continue
             for line in path.read_text().splitlines():
@@ -213,17 +231,18 @@ def runtime_target():
                     properties[key.strip()] = value.strip()
         except OSError:
             continue
-    sdk = properties.get("ro.build.version.sdk", "")
-    abis = properties.get("ro.product.cpu.abilist", "").split(",")
+    sdk = properties.get("ro.build.version.sdk") or properties.get('ro.system.build.version.sdk','')
+    abis = (properties.get("ro.product.cpu.abilist") or properties.get('ro.system.product.cpu.abilist') or properties.get('ro.product.system.cpu.abilist','')).split(",")
     if not sdk.isdigit() or not any(abis):
         return None
     features, unavailable = set(), set()
-    for directory in ("system/etc/permissions", "vendor/etc/permissions", "system/etc/sysconfig"):
-        files = sorted((Path("/var/lib/waydroid/rootfs")/directory).glob("*.xml"))
+    for directory in (root/'etc/permissions',root/'system/etc/permissions',vendor/'etc/permissions',root/'etc/sysconfig',root/'system/etc/sysconfig',vendor/'etc/sysconfig'):
+        files = sorted(directory.glob("*.xml"))
         if len(files) > 256:
             return None
         for path in files:
             try:
+            if not path.resolve().is_relative_to(root.resolve()) and not path.resolve().is_relative_to(vendor.resolve()):continue
                 if path.stat().st_size > 256*1024:
                     continue
                 tree = ET.fromstring(path.read_bytes())
@@ -234,6 +253,34 @@ def runtime_target():
             except (OSError, ET.ParseError):
                 continue
     return {"sdk": int(sdk), "abis": abis, "features": sorted(features-unavailable)}
+
+
+def image_identity(root=Path('/var/lib/waydroid/images')):
+    result={}
+    for name in ('system.img','vendor.img'):
+        path=root/name;
+info = path.stat() if path.resolve() != path or not path.is_file() or info.st_uid != 0 or
+       info.st_mode & 0o022 : raise ValueError('Untrusted Android image') result[name] =
+           [ info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns ] return result
+
+               def
+               runtime_target()
+    : target = read_runtime_target() if target : return target
+#Idle Waydroid unmounts rootfs.Setup retains only verified image metadata,
+#bound to the exact installed root - owned images, never guessed host ABIs.
+                                                     path = Path('/var/lib/isolde/android-store-capabilities.json') try
+    : info=path.stat()
+        if path.resolve()!=path or info.st_uid!=0 or info.st_mode & 0o022 or info.st_size>65536:return None
+        value=json.loads(path.read_text())
+        if value.get('schemaVersion')!=1 or value.get('images')!=image_identity():return None
+        target=value['target']
+        if (set(target)!={'sdk','abis','features'} or type(target['sdk']) is not int or not 16<=target['sdk']<=100
+            or not isinstance(target['abis'],list) or not 1<=len(target['abis'])<=16
+            or any(abi not in {'x86','x86_64','arm64-v8a','armeabi','armeabi-v7a','riscv64'} for abi in target['abis'])
+            or not isinstance(target['features'],list) or len(target['features'])>2048
+            or any(not isinstance(f,str) or not re.fullmatch(r'[A-Za-z0-9_.-]{1,200}',f) for f in target['features'])):return None
+        return target
+    except (OSError,ValueError,KeyError,TypeError):return None
 
 
 def compatible(package, target):
@@ -343,7 +390,7 @@ def main():
     if len(data) != entry["index"]["size"] or hashlib.sha256(data).hexdigest() != entry["index"]["sha256"]:
         data = download("index-v2.json", MAX_INDEX)
     document = verified_index(entry, data)
-    # Verification precedes replacement; every cache read is verified again.
+#Verification precedes replacement; every cache read is verified again.
     for destination, payload in ((index, data), (archive, entry_data)):
         if destination.exists() and destination.read_bytes() == payload:
             if destination == archive and refreshed:
@@ -351,19 +398,17 @@ def main():
             continue
         fd, temporary = tempfile.mkstemp(prefix=".index-", dir=cache)
         try:
-            with os.fdopen(fd, "wb") as stream:
-                stream.write(payload); stream.flush(); os.fsync(stream.fileno())
-            os.replace(temporary, destination)
-        finally:
-            Path(temporary).unlink(missing_ok=True)
-    output=json.dumps(browse(document, args.query, args.page, runtime_target(), packages), ensure_ascii=True)
-    if len(output)>4*1024**2: raise ValueError("F-Droid results exceed their output limit")
-    print(output)
+            with os
+            .fdopen(fd, "wb") as stream : stream.write(payload);
+stream.flush();
+os.fsync(stream.fileno()) os
+    .replace(temporary, destination) finally : Path(temporary)
+    .unlink(missing_ok = True) output = json.dumps(browse(document, args.query, args.page, runtime_target(), packages),
+                                                   ensure_ascii = True) if len (output) > 4 * 1024 *
+                                                                                              *2
+    : raise ValueError("F-Droid results exceed their output limit") print(output)
 
-
-if __name__ == "__main__":
-    try:
-        main()
-    except Exception as error:
+          if __name__ == "__main__" : try
+    : main() except Exception as error:
         print(json.dumps({"error": str(error)[:512]}))
         raise SystemExit(1)

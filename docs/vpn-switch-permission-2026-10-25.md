@@ -15,3 +15,15 @@ Approved installer extension:
 - Package and verify the exact helper/action/rule together through the existing repeatable installer. No permission is added at startup or by status checks.
 
 This extension changes only the guest. No host policy or network setting is involved. The switch action also supports explicit disconnection of one saved, profile-owned location; it refuses unrelated active VPNs and cannot change physical network profiles.
+
+On a failed switch or capture handoff, recovery disconnects only the new
+location, attempts to reactivate the exact previous connection, and checks
+NetworkManager's active-connection state. If another VPN appears, disconnection
+or reactivation fails, or the final state cannot be confirmed, the operation
+reports incomplete recovery instead of the original error alone. A native
+provider's NetworkManager profile may be incomplete, so reactivation can fail;
+the user must refresh status and reconnect through the provider in that case.
+An active connection alone does not establish restored routing or leak protection.
+After a failed capture, only the newly saved inactive connection is deleted;
+an active connection is not deleted, and deletion must be confirmed. Incomplete
+recovery or cleanup is reported explicitly even if the requester disappeared.

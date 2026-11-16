@@ -7,19 +7,20 @@ Item {
     property var appearance: ({})
     property int selectedIndex: 0
     property int activePage: -1
+    property int captureReturnPage: -1
     readonly property var rows: [
-        { name: "Display", detail: "Safe area and interface scale", status: "TV controls" },
-        { name: "Audio", detail: "Volume, mute, startup volume, and remote volume step", status: audioSettings.muted ? "Muted" : audioSettings.volume + "%" },
-        { name: "Ambient Mode", detail: "Idle timeout, slideshow, clock/date widgets, and screen saver preview", status: ambientSettings.enabled ? ambientSettings.timeoutMinutes + " min" : "Off" },
-        { name: "Power", detail: "Appliance power and OS restart controls are not available yet", status: "Unavailable" },
-        { name: "About Isolde", detail: "Current development version", status: "Isolde " + isoldeVersion },
-        { name: "Setup guide", detail: "Repeat network, TV, audio, remote, and profile setup without resetting your data", status: "Open guide" },
-        { name: "Media Library", detail: "Kodi frontend, scan for new movies, and startup", status: kodiService.frontend === "kodi" ? "Kodi app" : "Isolde" },
-        { name: "Components", detail: "Local Kodi and GStreamer versions and capture readiness", status: "Inspect" },
-        { name: "HDMI Inputs", detail: "Capture card, RS-232 switch, input names, and live preview", status: captureController.state === "receiving-frames" ? "Frames arriving" : "Set up" }
+        { page: 5, name: "Setup guide", detail: "Repeat network, display, sound, remote and profile setup", status: "Open guide" },
+        { page: 7, name: "Diagnostics", detail: "Installed media components and capture readiness", status: "Inspect" },
+        { page: 4, name: "About Isolde", detail: "Version and acknowledgements", status: "Isolde " + isoldeVersion },
+        { page: 3, name: "Power", detail: "Suspend, restart or shut down with confirmation", status: "Review actions" }
     ]
 
     function handleCommand(command) {
+        if(activePage===3){
+            if(command===inputManager.back){if(!powerPage.back())activePage=-1}
+            else powerPage.handleCommand(command)
+            return
+        }
         if (activePage === 7) {
             if (command === inputManager.back) activePage = -1
             else componentPage.handleCommand(command)
@@ -27,8 +28,8 @@ Item {
         }
         if (activePage === 8) {
             if (command === inputManager.back) {
-                if (capturePage.draftDirty || capturePage.keyboardMode || capturePage.artworkEditing) capturePage.handleCommand(command)
-                else { capturePage.handleCommand(command); activePage = -1 }
+                if (capturePage.draftDirty || capturePage.keyboardMode || capturePage.artworkEditing || capturePage.detailsFocused) capturePage.handleCommand(command)
+                else { capturePage.handleCommand(command); activePage = captureReturnPage }
             }
             else capturePage.handleCommand(command)
             return
@@ -62,6 +63,10 @@ Item {
         }
         if (activePage === 2) {
             if (command === inputManager.back) {
+                if (ambientPage.pagePickerOpen || ambientPage.pathKeyboardOpen || ambientPage.sourcePanelOpen) {
+                    ambientPage.handleCommand(command)
+                    return
+                }
                 activePage = -1
                 return
             }
@@ -72,15 +77,11 @@ Item {
             selectedIndex = Math.max(0, selectedIndex - 1)
         else if (command === inputManager.navigateDown)
             selectedIndex = Math.min(rows.length - 1, selectedIndex + 1)
-        else if (command === inputManager.confirm && (selectedIndex === 0 || selectedIndex === 1 || selectedIndex === 2))
-            activePage = selectedIndex
-        else if (command === inputManager.confirm && selectedIndex === 5) {
-            if (setupState.restart()) sessionManager.goHome()
+        else if (command === inputManager.confirm && rows[selectedIndex]) {
+            const page = rows[selectedIndex].page
+            if (page === 5) { if (setupState.restart()) sessionManager.goHome() }
+            else activePage = page
         }
-        else if (command === inputManager.confirm && selectedIndex === 6) activePage = 6
-        else if (command === inputManager.confirm && selectedIndex === 7) activePage = 7
-        else if (command === inputManager.confirm && selectedIndex === 8) activePage = 8
-        else if (command === inputManager.confirm && selectedIndex === 4) activePage = 4
     }
 
     DisplaySettingsView { appearance: root.appearance;
@@ -106,9 +107,10 @@ Item {
     KodiSettingsView { id: kodiPage; anchors.fill: parent; visible: root.activePage === 6; appearance: root.appearance }
     ComponentSettingsView { appearance: root.appearance;
         id: componentPage; anchors.fill: parent; visible: root.activePage === 7
-        onCaptureSetupRequested: root.activePage = 8
+        onCaptureSetupRequested: { root.captureReturnPage=7; root.activePage = 8 }
     }
     CaptureSettingsView { appearance: root.appearance; id: capturePage; anchors.fill: parent; visible: root.activePage === 8 }
+    PowerSettingsView { appearance:root.appearance;id:powerPage;anchors.fill:parent;visible:root.activePage===3 }
     TMDBAttributionView {
         id: tmdbAttribution
         anchors.fill: parent
@@ -117,10 +119,17 @@ Item {
         onBackRequested: root.activePage = -1
     }
 
-    onSelectedIndexChanged: {
+    function revealSelection() {
         const row = rowsRepeater.itemAt(selectedIndex)
-        if (row) scroll.contentY = Math.max(0, Math.min(scroll.contentHeight - scroll.height, row.y - 20))
+        if (!row) return
+        const top=row.y, bottom=top+row.height
+        if(top<scroll.contentY)scroll.contentY=top
+        else if(bottom>scroll.contentY+scroll.height)scroll.contentY=Math.max(top,bottom-scroll.height)
+        scroll.contentY=Math.max(0,Math.min(Math.max(0,scroll.contentHeight-scroll.height),scroll.contentY))
     }
+    onSelectedIndexChanged:Qt.callLater(revealSelection)
+    onHeightChanged:Qt.callLater(revealSelection)
+    onWidthChanged:Qt.callLater(revealSelection)
     Flickable {
         id: scroll
         anchors.fill: parent
@@ -134,7 +143,7 @@ Item {
         spacing: 18 * shell.gapScale
 
         Text { font.family: shell.fontFamily;
-            text: "SYSTEM"
+            text: "System & Support"
             color: shell.text
             font.pixelSize: 30 * shell.textScale
             font.weight: Font.DemiBold
@@ -143,7 +152,7 @@ Item {
 
         Text { font.family: shell.fontFamily;
             width: parent.width
-            text: "Core TV controls should live here so normal users never need the Ubuntu desktop."
+            text: "Setup, diagnostics and information about this device."
             color: shell.muted
             font.pixelSize: 18 * shell.textScale
             wrapMode: Text.WordWrap
@@ -153,16 +162,18 @@ Item {
             id: rowsRepeater
             model: root.rows
             delegate: Rectangle {
+                objectName:"systemSettingsRow-"+index
                 required property int index
                 required property var modelData
                 width: parent.width
-                height: 84
+                height: Math.max(84*shell.textScale,rowLabels.implicitHeight+32,statusText.implicitHeight+32)
                 radius: shell.radius
                 color: root.selectedIndex === index ? shell.selected : shell.surface
                 border.width: root.selectedIndex === index ? 3 : 1
                 border.color: root.selectedIndex === index ? shell.selectedFocus : shell.outline
 
                 Column {
+                    id:rowLabels
                     anchors.left: parent.left
                     anchors.right: statusText.left
                     anchors.verticalCenter: parent.verticalCenter
@@ -170,6 +181,8 @@ Item {
                     anchors.rightMargin: 16
                     spacing: 5 * shell.gapScale
                     Text { font.family: shell.fontFamily;
+                        width:parent.width
+                        wrapMode:Text.Wrap
                         text: modelData.name
                         color: (root.selectedIndex === index) ? shell.selectedText : shell.text
                         font.pixelSize: 21 * shell.textScale
@@ -180,7 +193,7 @@ Item {
                         text: modelData.detail
                         color: (root.selectedIndex === index) ? shell.selectedText : shell.muted
                         font.pixelSize: 14 * shell.textScale
-                        elide: Text.ElideRight
+                        wrapMode: Text.WordWrap
                     }
                 }
 
@@ -189,10 +202,10 @@ Item {
                     anchors.right: parent.right
                     anchors.rightMargin: 18
                     anchors.verticalCenter: parent.verticalCenter
-                    width: 190
+                    width: Math.min(190,parent.width*.3)
                     horizontalAlignment: Text.AlignRight
                     text: modelData.status
-                    color: index === 1 ? shell.text : index === 3 ? shell.warning : shell.muted
+                    color: root.selectedIndex === index ? shell.selectedText : index === 3 ? shell.warning : shell.muted
                     font.pixelSize: 14 * shell.textScale
                     wrapMode: Text.WordWrap
                 }
@@ -201,14 +214,15 @@ Item {
 
         Rectangle {
             width: parent.width
-            height: 88
+            height:footerText.implicitHeight+36
             radius: shell.radius
             color: shell.elevated
             border.color: shell.outline
             Text { font.family: shell.fontFamily;
-                anchors.fill: parent
-                anchors.margins: 18
-                text: "Volume uses the available audio backend. Application crash recovery is installed with appliance startup. OS power/update controls remain unavailable; existing settings and profiles are preserved."
+                id:footerText
+                width:parent.width-36
+                x:18;y:18
+                text: "The setup guide keeps your existing settings and profiles. Power actions show this system’s capabilities and require confirmation."
                 color: shell.elevatedText
                 font.pixelSize: 16 * shell.textScale
                 wrapMode: Text.WordWrap

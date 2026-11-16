@@ -1,5 +1,9 @@
 # T30 emulator integration contract — 2026-11-09
 
+November 10 source continuation: [six expanded runtime implementations](expanded-runtimes-2026-11-10.md)
+extend the declared matrix to sixteen routes. Their tests, actual provisioning
+and installed/runtime evidence are explicitly deferred. This is not acceptance.
+
 This implementation checkpoint narrows emulator integration to the declared Linux appliance matrix. A runtime being installable or launchable is **not** a game-compatibility, controller, performance, or gameplay acceptance claim.
 
 ## Bounded platform matrix
@@ -18,8 +22,14 @@ The version-2 `config/game-runtimes.json` manifest is the source of truth for th
 | RetroArch / Beetle PSX | PlayStation | CHD only | RetroArch + Beetle PSX |
 | RetroArch / DeSmuME | Nintendo DS (not DSi) | NDS | RetroArch + DeSmuME |
 | RetroArch / Beetle VB | Virtual Boy | VB, VBOY | RetroArch + Beetle VB |
+| RPCS3 | PlayStation 3 | ELF, SELF, BIN; unencrypted homebrew PKG | `isolde-rpcs3` |
+| shadPS4 SDL | PlayStation 4 | Decrypted BIN, ELF | `isolde-shadps4` |
+| Vita3K SDL | PS Vita | Unencrypted VPK | `isolde-vita3k` |
+| xemu | Original Xbox | XISO | `isolde-xemu` |
+| Xenia Canary native Linux | Xbox 360 | ISO, XEX | `isolde-xenia` |
+| Cemu | Wii U | Decrypted WUA, RPX | `isolde-cemu` |
 
-The managed provisioning target is Ubuntu 26.04 amd64 only. PS3/4/5, Vita, N64, DSi/3DS, Wii U, Switch generations, Original Xbox, Xbox 360 and Xbox One/Series are explicitly not integrated; no generic frontend or candidate emulator is presented as support for them. Extending the matrix requires a separately pinned runtime/core and formats, bounded remote setup, safe firmware/input/session contracts, and focused tests.
+The managed provisioning target is Ubuntu 26.04 amd64 only. PS5, N64, DSi/3DS, Switch generations and Xbox One/Series remain explicitly not integrated. The six new rows have source implementation only; neither this declaration nor a generic frontend establishes title compatibility or a verification pass. See the November 10 record for exact artifact pins, setup/input/storage boundaries and pending checks.
 
 ## PlayStation CHD route
 

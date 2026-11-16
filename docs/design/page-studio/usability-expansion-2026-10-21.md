@@ -1,4 +1,4 @@
-# Page Studio: approved usability expansion
+# Skin Studio: approved usability expansion
 
 User decision, 2026-10-21: accept ideas 1–10, 15–16 and 18–20 from the proposed feature list. Ideas 11–14 and 17 are not requested by this expansion. Existing independent safety/accessibility requirements remain in force; this decision adds no contrast assistant, focus-route editor, remote test mode, destination previews or artwork-library feature.
 

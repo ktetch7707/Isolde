@@ -1,11 +1,11 @@
 #pragma once
 
 #include <QObject>
-#include <QString>
 #include <QProcess>
+#include <QString>
+#include <QTemporaryFile>
 #include <QTimer>
 #include <QVariantList>
-#include <QTemporaryFile>
 #include <memory>
 
 class AudioSettings final : public QObject {
@@ -26,15 +26,25 @@ class AudioSettings final : public QObject {
     Q_PROPERTY(bool testPlaying READ testPlaying NOTIFY changed)
     Q_PROPERTY(QString testStatus READ testStatus NOTIFY changed)
 
-public:
-    explicit AudioSettings(QObject *parent = nullptr, const QString &mixerExecutable = {}, const QString &playerExecutable = {});
+  public:
+    explicit AudioSettings(QObject* parent = nullptr,
+                           const QString& mixerExecutable = {},
+                           const QString& playerExecutable = {});
     ~AudioSettings() override;
     void initialize();
-    QVariantList outputs() const { return m_outputs; }
-    QString outputStatus() const { return m_outputStatus; }
-    Q_INVOKABLE bool selectOutput(const QString &id);
-    bool testPlaying() const { return m_testPlaying; }
-    QString testStatus() const { return m_testStatus; }
+    QVariantList outputs() const {
+        return m_outputs;
+    }
+    QString outputStatus() const {
+        return m_outputStatus;
+    }
+    Q_INVOKABLE bool selectOutput(const QString& id);
+    bool testPlaying() const {
+        return m_testPlaying;
+    }
+    QString testStatus() const {
+        return m_testStatus;
+    }
     Q_INVOKABLE void playTestSound();
     Q_INVOKABLE void stopTestSound();
 
@@ -64,19 +74,19 @@ public:
 
     void setMixerEnabledForTests(bool enabled);
 
-signals:
+  signals:
     void changed();
 
-private:
+  private:
     void load();
     void save();
     static int clamp(int value, int minimum, int maximum);
-    static QString cleanStartupPolicy(const QString &policy);
-    static QString cleanVolumeMode(const QString &mode);
+    static QString cleanStartupPolicy(const QString& policy);
+    static QString cleanVolumeMode(const QString& mode);
     void submit(int volume, bool muted);
     void runNext();
     void completeCommand(int exitCode, QProcess::ExitStatus status);
-    void mixerFailed(const QString &reason);
+    void mixerFailed(const QString& reason);
     void enqueueRead();
     QProcess m_process;
     QTimer m_deadline, m_poll;

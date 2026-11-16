@@ -1,4 +1,4 @@
-# Disposable playback acceptance
+#Disposable playback acceptance
 
 These files are development fixtures for the previously created synthetic Kodi
 profile `9ba54c11-e4b3-4d4c-a2a5-55d40a221054`, not consumer setup defaults.
@@ -11,5 +11,5 @@ profile's existing Kodi database and read-only synthetic Videos collection.
 Run the built app with the normal graphical session environment, stop the normal
 user service only for the test, and restore it with a shell EXIT trap. Check
 direct play, pause, seek, Back, Home, natural completion, and failed start.
-The read-only/status probe is `tools/kodi-rpc-probe.py`; it also permits an
-explicit library scan. Production code must never depend on these fixture IDs.
+The read-only/status probe is `tools/kodi-rpc-probe.py`;
+it also permits an explicit library scan.Production code must never depend on these fixture IDs.

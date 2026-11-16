@@ -1,43 +1,37 @@
-#!/usr/bin/env python3
-"""Build the pinned upstream PSP runtime into a reusable offline Debian payload.
+#!/ usr / bin / env python3
+""
+    "Build the pinned upstream PSP runtime into a reusable offline Debian payload.
 
-Run only during explicit appliance/guest provisioning, never on the host. The
-runtime build is separate from Isolde's incremental CMake tree. No ROM/BIOS.
-"""
-import argparse
-import hashlib
-import json
-import os
-from pathlib import Path
-import shutil
-import signal
-import subprocess
-import tempfile
-import time
+    Run only during explicit appliance /
+    guest provisioning,
+    never on the host.The runtime build is separate from Isolde's incremental CMake tree. No ROM/BIOS. ""
+                                                                                                       "
+    import argparse import hashlib import json import os from pathlib import Path import shutil import signal import
+        subprocess import tempfile import time
 
-COMMIT = "fa50bb1976065c4f8b1b47af227d367fe9771555"
-VERSION = "1.20.4-1"
-DEPENDENCIES = ["libsdl2-dev", "libgl-dev", "libglu1-mesa-dev", "libvulkan-dev", "libpng-dev", "zlib1g-dev", "libxt-dev"]
-_cancel_check = None
+            COMMIT = "fa50bb1976065c4f8b1b47af227d367fe9771555" VERSION = "1.20.4-1" DEPENDENCIES =
+        [
+            "libsdl2-dev",
+            "libgl-dev",
+            "libglu1-mesa-dev",
+            "libvulkan-dev",
+            "libpng-dev",
+            "zlib1g-dev",
+            "libxt-dev"
+        ] _cancel_check = None
 
-
-def run(*arguments, **options):
-    timeout = options.pop("timeout", 120)
-    transaction = options.pop("transaction", False)
-    capture = options.pop("capture_output", False)
-    if capture:
-        options.update(stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    process = subprocess.Popen(arguments, start_new_session=True, **options)
-    deadline = time.monotonic() + timeout
-    while True:
-        try:
-            stdout, stderr = process.communicate(timeout=min(1, max(.01, deadline-time.monotonic())))
-            break
-        except subprocess.TimeoutExpired as expired:
-            cancelled = None
-            if _cancel_check:
-                try: _cancel_check()
-                except RuntimeError as error: cancelled = error
+            def run(*arguments, **options)
+    : timeout = options.pop("timeout", 120) transaction = options.pop("transaction", False) capture =
+          options.pop("capture_output", False) if capture
+    : options.update(stdout = subprocess.PIPE, stderr = subprocess.PIPE) process =
+              subprocess.Popen(arguments, start_new_session = True, **options) deadline =
+                  time.monotonic() + timeout while True : try : stdout,
+            stderr
+    = process.communicate(
+                 timeout =
+                     min(1, max(.01, deadline - time.monotonic()))) break except subprocess.TimeoutExpired as expired
+        : cancelled =
+        None if _cancel_check : try : _cancel_check() except RuntimeError as error: cancelled = error
             timed_out = time.monotonic() >= deadline
             if cancelled and not transaction:
                 _stop_group(process)
@@ -57,21 +51,19 @@ def run(*arguments, **options):
 
 
 def _stop_group(process):
-    try: os.killpg(process.pid, signal.SIGTERM)
-    except ProcessLookupError: return
-    try: process.communicate(timeout=5)
-    except subprocess.TimeoutExpired:
-        try: os.killpg(process.pid, signal.SIGKILL)
-        except ProcessLookupError: pass
-        process.communicate()
+    try: os
+            .killpg(process.pid, signal.SIGTERM) except ProcessLookupError : return try : process
+                .communicate(timeout = 5) except subprocess.TimeoutExpired : try : os
+                    .killpg(process.pid, signal.SIGKILL) except ProcessLookupError : pass process
+                                                                                         .communicate()
 
-
-def build(cache, provisioner=None):
-    # Reuse exactly the platform and redirect guards of the games provisioner.
-    if provisioner is None:
-        import importlib.util
-        spec=importlib.util.spec_from_file_location("games",Path(__file__).with_name("provision-games.py"))
-        games=importlib.util.module_from_spec(spec);spec.loader.exec_module(games)
+                                                                                             def
+                                                                                     build(cache, provisioner = None)
+                        :
+#Reuse exactly the platform and redirect guards of the games provisioner.
+                          if provisioner is None : import importlib.util spec = importlib.util.spec_from_file_location(
+                        "games", Path(__file__).with_name("provision-games.py")) games =
+                        importlib.util.module_from_spec(spec);spec.loader.exec_module(games)
     else:games=provisioner
     global _cancel_check
     _cancel_check=getattr(games,"check_cancelled",None)
@@ -100,9 +92,9 @@ def build(cache, provisioner=None):
     run("git","-C",str(source),"checkout","--detach",COMMIT)
     head=run("git","-C",str(source),"rev-parse","HEAD",capture_output=True,text=True).stdout.strip()
     if head!=COMMIT:raise ValueError("Unexpected PSP source identity")
-    # The desktop SDL build does not consume macOS/iOS bundles, the libretro
-    # frontend or PSP autotests. Keep preparation bounded to its dependency tree
-    # and preserve completed fetches when a named network deadline is reached.
+#The desktop SDL build does not consume macOS / iOS bundles, the libretro
+#frontend or PSP autotests.Keep preparation bounded to its dependency tree
+#and preserve completed fetches when a named network deadline is reached.
     paths=["ext","ffmpeg","assets/debugger"]
     run("git","-C",str(source),"submodule","update","--init","--recursive","--depth","1","--",*paths,timeout=600)
     submodules=run("git","-C",str(source),"submodule","status","--recursive","--",*paths,capture_output=True,text=True).stdout
@@ -112,7 +104,7 @@ def build(cache, provisioner=None):
         "-DCMAKE_INSTALL_PREFIX=/usr","-DUSING_QT_UI=OFF","-DUSE_SYSTEM_FFMPEG=OFF",
         "-DUSE_WAYLAND_WSI=OFF","-DUNITTEST=OFF","-DHEADLESS=OFF","-DOpenGL_GL_PREFERENCE=GLVND",timeout=120)
     run("cmake","--build",str(output),"--target","PPSSPPSDL","--parallel","2",timeout=1200)
-    # Build only our package tree. It is never a host install or a root build.
+#Build only our package tree.It is never a host install or a root build.
     with tempfile.TemporaryDirectory(prefix="package-",dir=cache) as temporary:
         tree=Path(temporary)
         (tree/"usr/bin").mkdir(parents=True)
@@ -127,8 +119,8 @@ def build(cache, provisioner=None):
     with package.open("rb") as stream:actual=hashlib.file_digest(stream,"sha256").hexdigest()
     games.atomic_receipt(receipt,{"schemaVersion":1,"sourceCommit":COMMIT,"submodules":submodules,"version":VERSION,"sha256":actual})
     if shutil.disk_usage(cache).free<2*1024**3:
-        # Once the verified reusable payload exists, only generated compiler
-        # output is expendable. Keep source, notices and package/receipt evidence.
+#Once the verified reusable payload exists, only generated compiler
+#output is expendable.Keep source, notices and package / receipt evidence.
         mounts=[Path(line.split()[4].replace("\\040"," ")) for line in Path("/proc/self/mountinfo").read_text().splitlines()]
         if output.resolve()!=output or output.parent!=cache or any(p==output or p.is_relative_to(output) for p in mounts):
             raise ValueError("Unsafe generated PSP build cleanup target")
@@ -138,5 +130,5 @@ def build(cache, provisioner=None):
 
 
 if __name__=="__main__":
-    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument("--cache",type=Path,required=True)
-    print(build(parser.parse_args().cache))
+    parser=argparse.ArgumentParser(description=__doc__);
+parser.add_argument("--cache", type = Path, required = True) print(build(parser.parse_args().cache))

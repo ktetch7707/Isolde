@@ -20,20 +20,26 @@ class SearchSettings final : public QObject {
     Q_PROPERTY(QString discoveryRegion READ discoveryRegion WRITE setDiscoveryRegion NOTIFY changed)
     Q_PROPERTY(QString errorString READ errorString NOTIFY changed)
 
-public:
-    explicit SearchSettings(QObject *parent = nullptr, const QString &settingsPath = {}, const QString &profile = {});
+  public:
+    explicit SearchSettings(QObject* parent = nullptr, const QString& settingsPath = {}, const QString& profile = {});
 
-    [[nodiscard]] bool webEnabled() const { return m_webEnabled; }
-    [[nodiscard]] QString discoveryRegion() const { return m_discoveryRegion; }
-    QString errorString() const { return m_error; }
+    [[nodiscard]] bool webEnabled() const {
+        return m_webEnabled;
+    }
+    [[nodiscard]] QString discoveryRegion() const {
+        return m_discoveryRegion;
+    }
+    QString errorString() const {
+        return m_error;
+    }
     void setWebEnabled(bool enabled);
-    Q_INVOKABLE void setDiscoveryRegion(const QString &region);
+    Q_INVOKABLE void setDiscoveryRegion(const QString& region);
     Q_INVOKABLE void toggleWebEnabled();
 
-signals:
+  signals:
     void changed();
 
-private:
+  private:
     bool m_webEnabled = false;
     QString m_discoveryRegion = QStringLiteral("US");
     QString m_settingsPath, m_group, m_error;

@@ -4,6 +4,12 @@ Latest acceptance scope: [vm-software-completion.md](vm-software-completion.md).
 
 Testing frequency, readiness, evidence reuse and failure diagnosis follow [the execution contract](backlog-execution.md); current work resumes from [the queue](execution-queue.md). Focused tests follow complete batches, full Test is an integration gate, and harness-only corrections reuse a matching passing staged application through the supported runner. The `test-all.ps1` report does not remove existing timed review/input checkpoints: classify a case as attended until the helper actually supports unattended execution. All screenshot/semantic review and installed/offline gates below remain required.
 
+For a failed graphical checkpoint, use the shortest supported case against the
+verified payload. Confirm the intended window and product state before sending
+input. Save the failed phase and the relevant log excerpt. When multiple cases
+need verification on the same release, pass them in one `-Cases` invocation.
+The execution contract defines when a complete journey needs to be replayed.
+
 ## Standing machine-boundary permission (user, 2026-10-21)
 
 Isolde-Test is a disposable Isolde test machine. Agents may perform necessary **guest-only** cleanup and testing/setup autonomously; do not repeatedly ask permission for obsolete guest build artifacts or ordinary test setup. User revision, November7: normal `Test` now automatically cleans verified obsolete guest artifacts below 3 GiB, after runner self-tests and under the existing guest lock. It uses the same checked maintenance implementation as explicit Configure. Prefer this single invocation over separate Status/Configure calls. A cleanup receipt records reclaimed bytes and whether the 3 GiB target and 2 GiB test minimum were met. Unsafe paths/checksums still fail; a missed 3 GiB target alone does not block testing above 2 GiB.
@@ -14,18 +20,39 @@ The VM is the existing **Isolde-Test** developer machine. Preserve Household, Ko
 
 ## Verified artifact maintenance
 
-Normal `Test` needs no preparatory cleanup call. On low space, its existing connection also measures free bytes, automatically verifies up to 1,024 saved workspace archive hashes and sends one bounded receipt. No host archive is deleted. The guest retains the newest runs/three staged payloads, reuse and stopped-profile pins, logs/screenshots/manifests, installed releases, normal profiles and the incremental cache. It prunes verified older payloads, reproducible source copies, guest package/fixture caches and obsolete archives with exact host backups. Healthy disks skip hashing and cleanup. Extremely full disks that cannot receive/extract a source snapshot, or disks with no safely reclaimable artifacts, still fail with evidence. CTest now uses `--stop-on-failure` so one named failure does not consume the rest of the suite budget.
+Installed-release and candidate retention is now bounded automatically before
+Test/Deploy; see [the storage policy](vm-storage-policy.md). That policy
+supersedes the older indefinite installed-release retention described below.
+
+Normal `Test` needs no preparatory cleanup call. On low space, its existing connection also measures free bytes, automatically verifies up to 1,024 saved workspace archive hashes and sends one bounded receipt. No host archive is deleted. The guest retains the newest runs/three staged payloads, reuse and stopped-profile pins, logs/screenshots/manifests, installed releases, normal profiles and the incremental cache. It prunes verified older payloads, reproducible source copies, guest package/fixture caches and obsolete archives with exact host backups. Healthy disks skip hashing and cleanup. Extremely full disks that cannot receive/extract a source snapshot, or disks with no safely reclaimable artifacts, still fail with evidence. CTest collects independent registration failures in one bounded run. Failed CTest still prevents staging and deployment.
+
+`Visual -Installed -Cases music-transport` isolates playback input from the
+full movie-art journey. It compares the owned controls window and private
+bridge responses on a disposable real Kodi song. Its receipt is diagnostic.
 
 After reviewing `Status -Storage`, use `./tools/vm-test.ps1 Configure -ConfigureTarget artifacts -RunId <unique-id>` to recover guest space without a passing application payload. This runs the matching, hash-verified runner self-tests before cleanup. It retains the current/newest runs, three newest actual staged payloads, payloads pinned by stopped-profile receipts, archives/manifests, evidence, installed releases, profiles and the incremental build cache. Older generated payloads are removed only after verifying their passing full-test payload manifest; unknown/modified bytes stop maintenance. Obsolete extracted source copies are removed only after archive/member/source checksum and link/mount checks. The receipts record checked guest paths. This action requires the native Isolde-Test oracle directory, aims for 3 GiB free, and never performs host cleanup or deployment. Failure to reach the maintenance target is reported honestly; a later Test still enforces its own 2 GiB minimum.
 
 Optional bounded archive recovery: `Configure -ConfigureTarget artifacts -RestoreSourceRunIds <up to 32 IDs>` restores saved workspace `build/vm-oracle/<id>/snapshot/source.tar.gz` files only after original archive SHA256 verification. Guest source cleanup then retains the exact originals and verifies extracted bytes before removal. `-BackedUpSourceRunIds <up to 128 IDs>` verifies those workspace originals and sends a hash receipt; guest pruning removes only matching obsolete archives with no source/payload/stopped-profile receipt, preserving logs/manifests. Recover such an archive through the first option when needed. No host archive is removed. Native `/tmp` fixture-cache maintenance preserves data/config/results, recent and active fixtures, and refuses links/shared mounts; this may recover only tmpfs rather than root-disk space. `Status -Storage` reports both usage and recovery candidates.
 ## Commands
 
+Round-two sound verification extends `Visual -Installed -Cases themecontrols`
+with actual Qt preview and disabled-output PCM recordings under dark, pastel
+and enlarged custom palettes. It uses a temporary guest null sink, restores
+the exact previous guest default output before restarting the ordinary service,
+and archives sample hashes/levels plus the restoration receipt. Only streams
+owned by the disposable Isolde process may be rerouted. Mock cue requests do
+not satisfy this output check. Missing `pactl`/`parec` can be provisioned through
+`Configure -ConfigureTarget audio-test-tools -RunId <deployed-full-id>`: this
+installs only guest `pulseaudio-utils` through existing delegated apt permission,
+without changing repositories, the host or application dependencies.
+
 ### One-action suite and results
 
-Run `pwsh -NoProfile -File tools/test-all.ps1` from the repository root. It runs **all registered CTests**, then Studio and both reference fixture journeys against that same frozen build, and opens `build/vm-oracle/<id>/index.html`. The report includes individual test results/output, diagnostic links and every collected screenshot. It stops on the first failure, writes the report even on failure, and returns failure to the caller. No deployment or retry is performed.
+Run `pwsh -NoProfile -File tools/test-all.ps1` from the repository root. It runs **all registered CTests**, then Studio and both reference fixture journeys against that same frozen build, and opens `build/vm-oracle/<id>/index.html`. The report includes individual test results/output, diagnostic links and every collected screenshot. It collects independent failures, writes the report even on failure, and returns failure to the caller. Visual continues after a case failure only when the guest runner verifies service, release and layout restoration; `-StopOnVisualFailure` opts out. No deployment or retry is performed.
 
 Use `-NativeOnly` for all CTests without graphical acceptance, `-NoOpen` for agent/terminal execution, or `-RunId <id> -ReportOnly` to reopen existing evidence without running anything. Agents should make one invocation with `-NoOpen`, poll only that tool session until completion, then read the report and the named failure log once; no separate Status loop is needed during a healthy invocation.
+
+For an explicitly requested broad bug-finding campaign, diagnose each named failure first, then use `Test -RunId <new-id> -ResumeRunId <failed-id>` (or the same options on `test-all.ps1 -NativeOnly -NoOpen`) to attempt only unattempted registrations. The runner verifies unchanged application/test bytes and the original incremental source, runs its current self-tests, retains every prior failed/skipped result in `campaign-progress.json`, and reports all remaining independent failures. This does not rebuild, produce a passing full-suite receipt or earn acceptance. Resume-only calls retain the 2 GiB test minimum; below it, the same verified automatic guest cleanup runs with the original candidate pinned. Above it they avoid cleanup and unnecessary backup hashing. An exhausted campaign may stage `diagnostic-payload.json`, explicitly `passed:false`, `fullSuite:false`, `acceptance:false`; `Visual -Diagnostic` can inspect that exact hashed payload only in staged disposable-profile cases. It cannot deploy it, use `-Installed`, or satisfy installed/software acceptance. Ordinary passing-payload and deployment gates remain unchanged.
 
 Additional graphical journeys can be selected with `-Cases studio,desktop,lounge,pastel,pages,guide,guide-surfaces,guide-lifecycle,guide-features,movieart,repairs,apps,clients,vpn,shell,playlists,android,androidapps,store,games,emulators` from PowerShell. These require their existing runtime/account prerequisites; the list is explicit so unavailable provider journeys are never quietly skipped. The twelve-hour `guide-soak` still requires its existing same-run preparation and elapsed-time gate. Automated completion does not replace screenshot review, offline cold boot, physical qualification or full-product acceptance.
 
@@ -65,6 +92,11 @@ From the repository root:
 ./tools/vm-test.ps1 Test -Suite home_component_navigation -ReuseFullRun <full-run-id> -RunId <new-id>
 # Other choices: home_component_navigation, kodi_media_client. Default: all.
 
+# Bounded Music toolbar/source-message follow-up after a full media pass.
+# Only packaged library-view data, its read-only getter and the two named
+# library/source QML files may differ; lifecycle changes are refused.
+./tools/vm-test.ps1 Test -Suite media_controls -ReuseFullRun <full-run-id> -RunId <new-id>
+
 # Use the exact RUN_ID printed by the passing full Test.
 ./tools/vm-test.ps1 Visual -RunId <id>
 # Default: Studio, lounge and pastel sequentially, using the staged tested build.
@@ -87,7 +119,9 @@ From the repository root:
 ./tools/vm-test.ps1 Recover -RunId <id>
 ```
 
-`-ReuseFullRun` has four explicit boundaries: `guide_remote_ui` permits existing `GuideWidget.qml` / `GuideView.qml`; `home_component_navigation` permits existing `ComposedHome.qml` / `PlacedComponents.qml` and runs both Home and Studio navigation registrations; `studio_selection` permits only existing `StudioInspector.qml` / `StudioAppPicker.qml` / `PageLibraryWidget.qml`, with actual-input selection and empty-update/frozen-renderer regressions. `studio_artwork` permits only existing `StudioImageFraming.qml` / `StudioArtworkPicker.qml` / `StudioInspector.qml` / `PageStudioView.qml` and the existing tests/studio/tst_colors.qml regression; it runs artwork, Studio selection, Studio quick and Studio colors regressions together; this covers actual component geometry in the framing preview. Each permits only its named regression/runner files and existing documentation alongside those QML changes. C++/configuration/build/unknown runtime changes, new/deleted files, another focused suite, a focused-only base or a modified base payload are refused. The runner verifies both manifests and the original full payload, runs current focused tests, builds/stages the current application, and records `fullSuite: false` with an explicit coverage-reuse proof. Visual rechecks that proof and both payload identities. This implements reuse for a bounded visual correction; T31 still requires one exact final-candidate full run.
+Deployment now holds the installation lock through registration and startup verification. On failure it restores both prior release links and the prior service state, retaining `deploy-failure.json`; a failed registration is never an installation success. Android setup authentication remains a real guest administration boundary, not something the runner bypasses. Reference journeys retain both full-desktop frames and bounded readbacks of the owned X11 application surface; label the latter as renderer evidence when guest desktop dialogs obscure the former.
+
+`-ReuseFullRun` has four explicit boundaries: `guide_remote_ui` permits existing `GuideWidget.qml` / `GuideView.qml`; `home_component_navigation` permits existing `ComposedHome.qml` / `PlacedComponents.qml` / `AppGallery.qml` and runs both Home and Studio navigation registrations, including actual app-art/name geometry and gallery layout switching; `studio_selection` permits only existing `StudioInspector.qml` / `StudioAppPicker.qml` / `PageLibraryWidget.qml`, with actual-input selection and empty-update/frozen-renderer regressions. `studio_artwork` permits only existing `StudioImageFraming.qml` / `StudioArtworkPicker.qml` / `StudioInspector.qml` / `PageStudioView.qml` and the existing tests/studio/tst_colors.qml regression; it runs artwork, Studio selection, Studio quick and Studio colors regressions together; this covers actual component geometry in the framing preview. Each permits only its named regression/runner files and existing documentation alongside those QML changes. C++/configuration/build/unknown runtime changes, new/deleted files, another focused suite, a focused-only base or a modified base payload are refused. The runner verifies both manifests and the original full payload, runs current focused tests, builds/stages the current application, and records `fullSuite: false` with an explicit coverage-reuse proof. Visual rechecks that proof and both payload identities. This implements reuse for a bounded visual correction; T31 still requires one exact final-candidate full run.
 
 The `pages` case is opt-in (`-Cases pages`): it exercises real Kodi in a fresh UUID native profile and synthetic media under `~/Videos/Isolde-Acceptance/`. It is not preservation testing of an existing Kodi installation. Do not point it at Household or `~/.kodi`.
 
@@ -99,7 +133,7 @@ Studio and desktop graphical cases upload the current SHA-addressed `home-compon
 
 1. Finish a meaningful edit batch before Test. Do not cancel a healthy build to add optional polish. If a tool returns a running session, poll **that session**; do not launch another SSH build.
 2. Track required new source/test files before Test. Packaging includes tracked **working-tree bytes**, including uncommitted edits, and excludes unrelated untracked files. No reset/stash/clean is part of testing.
-3. Treat the first `FAIL` as a stop. Read the named stage log and `host-failure.json`/`report/status.json`, fix that cause, then run once. No blind retries, new run-number loops, package installation, VM resets or lock deletion.
+3. After a failed batch, read each named stage log and `host-failure.json`/`report/status.json`, batch the fixes, then verify the affected cases. No blind retries, new run-number loops, package installation, VM resets or lock deletion.
 4. Targeted Test is quick feedback, not completion: it cannot stage, deploy or run visual acceptance. Full Test discovers the actual CTest count and refuses failed/skipped/zero-test reports.
 5. Visual uses the exact run's staged executable by default, so it cannot accidentally test an older installed release. `-Installed` requires that run's explicit successful Deploy and verifies its selected release.
 6. View **every** captured screenshot and compare both recreation/reset pairs with the fixture references. `captures.json` deliberately says `visualReview: pending`. Automated pixel/blank checks and capture acknowledgements are not design acceptance. T24 still owns genuine user usability/cutover.
@@ -150,3 +184,64 @@ Low-level scripts are implementation details. `run-visual-acceptance.ps1` requir
 ### Bounded Studio visual corrections
 
 `Test -Suite studio_visuals -ReuseFullRun <original-full-run>` permits only existing `PageStudioView.qml` and `CommandCenter.qml`, their artwork/shell regressions and named harness/docs files. It runs Studio quick/artwork/shell plus Home and Studio navigation registrations. The full-origin manifest and payload must match; C++/configuration/other QML changes are refused. This covers the observed composite-heading annotation and Search fallback-symbol overflow without repeating an applicable full suite. `Visual -Cases studio-search -Installed` uses a fresh private profile, the frozen socket-denial fixture, actual remote keyboard query, Search/recovery captures and a strict input/network receipt. It does not replay template/style/export/version workflows that are unchanged by a Search icon correction.
+
+Low-space fallback: if verified artifact/runner-cache cleanup still leaves less than2GiB, routine Test may unlink obsolete generated ELF test executables declared by the native incremental build's CMake target list. It preserves the requested suite's executable targets, active processes, all compiled objects, application payloads, profiles and evidence. Redirected/mounted/unknown targets fail safely. Ninja relinks missing test programs when a future suite needs them. `guest-linked-tests-cleanup.json` records the removed guest paths; no host cleanup is performed.
+
+When verifying an older tested or installed Lounge/Pastel candidate while the working folder has newer menu/helper changes, use `Visual -RunId <id> -Installed -Cases lounge,pastel -FrozenReferenceHelpers`. This selects the source-verified helpers frozen with that candidate instead of current working-folder overlays. It is restricted to those reference cases; the existing payload/source/hash checks still apply. Keep failed mismatched-helper attempts as evidence.
+
+Low-space fallback now consolidates identical synthetic clips and immutable
+verified payload artifacts through hardlinks. It preserves every path and byte,
+retains the three newest synthetic fixtures, checks hashes/modes/ownership and
+same-filesystem boundaries, and refuses redirected/mounted/changed candidates.
+Receipts are guest-fixture-media-dedup.json and guest-payload-dedup.json. Logical
+dedup byte totals are not physical reclaimed-space claims; use freeBefore/After.
+All runner self-tests must pass before maintenance. The2GiB Test floor remains.
+Storage inventory reports newest candidates first, plus the named synthetic
+media/runtime-bundle and Kodi cache roots; it does not traverse entire profiles.
+
+Visual desktop preflight (November11): each Visual case cancels outstanding
+Secret Service unlock prompts on the native Isolde-Test guest and disables
+GNOME desktop banners so they cannot obscure screenshots. If Dismiss is limited
+to its original caller, restart only the guest user keyring service to cancel
+pending operations, preserving credential files. Never supply passwords, unlock
+secrets or modify host settings. A remaining prompt aborts before product input.
+Configure -ConfigureTarget desktop-prompts uses matching runner self-tests and
+records the guest-only preparation. This does not waive storage checks or confer
+visual acceptance; review actual frames. BUG-096's obstructed attempts are excluded.
+Critical disk notifications can survive Do Not Disturb. The guest preflight also
+locates the low-disk notification's Ignore button through bounded AT-SPI traversal.
+When GNOME exposes no click action, it confirms accessibility focus on that exact
+button before the host runner sends only Space make/hold/break; disappearance is
+required. No coordinate guesses or generic confirmation keys are used. Failed
+preparation stops before expensive graphical workflows. Preflight-s and clean
+installed Search captures verify this path; the ineffective tray shortcut is not
+retained. Actual storage floors and unsafe-path/checksum checks stay mandatory.
+
+Focused Sources acceptance: `Visual -Installed -Cases sources` reuses an already
+passing full payload. A disposable XDG Videos directory exercises the production
+probe (eight local folders), packaged reserved header, policy cancel/atomic Save,
+hide/restore, Keep/handler cancellation and confirmed persistence, disconnect/retry, and both registered
+source families under dark/pastel. It never invokes the test-only probe setter.
+Eighteen ordered screenshots require agent review; helper pass is not semantic
+acceptance. Invalid saved capability bindings must fall back without rewriting
+files; default Home images cannot be accepted as source-component evidence.
+
+Low-space preflight also checks exact workspace backups of old guest report
+transport bundles. Only terminal unpinned/noncurrent duplicates with matching
+SHA256 may be removed, retaining newest three bundles and all raw guest evidence.
+Host files, installed releases, source and compiled-object caches stay untouched.
+Checksums, redirected paths and mount failures remain hard errors. This is used
+only after the existing safer cache/source cleanup cannot meet the2GiB floor.
+
+Browser automation setup: `Configure -ConfigureTarget browser-test-tools`
+installs guest-only xvfb through existing apt delegation. The real external
+Chrome remote regression uses its own X display, production NativeSandbox and
+native-host private pipe bridge, a controlled loopback page and physical X keys;
+no logged-in browser data or debugger listener is used. Bounded Store reuse now
+also names `src/input/web-remote.js`, `src/sessions/ChromiumRemotePipe.h` and
+`src/sessions/NativeAppHost.cpp`; both real browser engines and owned root-Back
+exit must pass, retaining strict original full payload/source checks. Other
+C++/build changes are still refused. `Configure -ConfigureTarget audio-test-recover`
+is guest-only recovery for a diagnosed PipeWire timeout: it holds the VM lock,
+stops the shell, restarts the three guest audio user services, verifies them and
+restores the previous shell-active state. No audio settings or host changes.

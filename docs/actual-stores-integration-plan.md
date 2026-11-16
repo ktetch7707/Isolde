@@ -148,7 +148,7 @@ Credential handling: if a provider needs user credentials (Google Account), they
 3. **Guest networking:** Does the Isolde-Test VM have unrestricted outbound HTTPS to play.google.com / chromewebstore.google.com / repo.f-droid.com?
 4. **ARM vs x86:** The guest is x86_64; ARM APKs cannot run. Filter results by ABI.
 5. **GMS-dependent apps:** Many Play Store apps require Google Play Services; Waydroid VANILLA lacks them. These must be flagged unsupported, not silently failed.
-6. **Backlog placement:** This work is outside the current T15-T24 Page Studio priority. A new task ID (or tasks) would need to be added to `docs/agent-backlog.md` with `%` accounting before implementation begins.
+6. **Backlog placement:** This work is outside the current T15-T24 Skin Studio priority. A new task ID (or tasks) would need to be added to `docs/agent-backlog.md` with `%` accounting before implementation begins.
 
 ## 11. Done criteria (evidence required before 100%)
 

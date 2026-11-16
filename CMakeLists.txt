@@ -5,6 +5,7 @@ project(Isolde VERSION 0.0.1.2 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 find_package(Qt6 6.4 REQUIRED COMPONENTS Core Gui Network DBus Qml Quick Test WebEngineQuick WebChannel Multimedia SerialPort Sql)
 qt_standard_project_setup(REQUIRES 6.4)
@@ -21,10 +22,14 @@ add_library(isolde_core STATIC
     src/media/GuideRules.cpp
     src/media/GuideRules.h
     src/games/GameLibrary.cpp
+    src/games/GameLibrary_importer.cpp
+    src/games/GameLibrary_collections.cpp
     src/games/CompatibilityRuntime.cpp
     src/games/CompatibilityRuntime.h
     src/games/SteamLibraryGrants.cpp
-    src/games/OpticalDiscAdapter.cpp
+    src/games/OpticalDiscIdentity.cpp
+    src/games/OpticalDiscMount.cpp
+    src/games/OpticalDiscSession.cpp
     src/games/OpticalDiscGrants.cpp
     src/games/ManagedGamePaths.cpp
     src/games/OpticalDiscGrants.h
@@ -45,6 +50,9 @@ add_library(isolde_core STATIC
     src/settings/ComponentHealth.cpp
     src/settings/ComponentHealth.h
     src/media/KodiMedia.cpp
+    src/media/KodiMedia_collections.cpp
+    src/media/KodiMedia_sources.cpp
+    src/media/KodiMedia_execute.cpp
     src/media/KodiMedia.h
     src/media/OnlineDiscovery.cpp
     src/media/OnlineSubtitleRepository.cpp
@@ -84,7 +92,11 @@ add_library(isolde_core STATIC
     src/app/AppRegistry.cpp
     src/app/AppRegistry.h
     src/home/HomeLayout.cpp
+    src/home/HomeLayout_studio.cpp
     src/home/StudioSession.cpp
+    src/home/StudioSession_artwork.cpp
+    src/home/StudioSession_components.cpp
+    src/home/StudioSession_execute.cpp
     src/home/StudioSafety.cpp
     src/home/DesignSystem.cpp
     src/home/DesignSystem.h
@@ -109,8 +121,12 @@ add_library(isolde_core STATIC
     src/settings/AppVpn.h
     src/settings/DisplaySettings.cpp
     src/settings/DisplaySettings.h
+    src/settings/PowerSettings.cpp
+    src/settings/PowerSettings.h
     src/settings/AudioSettings.cpp
     src/settings/AudioSettings.h
+    src/settings/InterfaceSounds.cpp
+    src/settings/InterfaceSounds.h
     src/settings/RemoteSettings.cpp
     src/settings/RemoteSettings.h
     src/settings/AmbientSettings.cpp
@@ -140,6 +156,27 @@ add_library(isolde_core STATIC
 target_include_directories(isolde_core PUBLIC src)
 target_compile_definitions(isolde_core PRIVATE ISOLDE_GAME_RUNTIME_SOURCE="${CMAKE_CURRENT_SOURCE_DIR}/config/game-runtimes.json")
 target_link_libraries(isolde_core PUBLIC Qt6::Core Qt6::Gui Qt6::Network Qt6::DBus Qt6::Multimedia Qt6::SerialPort Qt6::Sql)
+
+if(MSVC)
+    target_compile_options(isolde_core PRIVATE /W4 /WX /permissive-)
+else()
+    target_compile_options(isolde_core PRIVATE
+        -Wall
+        -Wextra
+        -Wpedantic
+        -Wconversion
+        -Wsign-conversion
+        -Wshadow
+        -Wnon-virtual-dtor
+        -Wold-style-cast
+        -Woverloaded-virtual
+        -Wnull-dereference
+        -Wdouble-promotion
+        -Wformat=2
+        -Werror)
+endif()
+qt_add_resources(isolde_core "remote_buttons" PREFIX "/" FILES config/remote-buttons.json)
+qt_add_resources(isolde_core "kodi_capabilities" PREFIX "/" FILES config/kodi-capabilities.json)
 
 qt_add_executable(isolde src/main.cpp)
 qt_add_executable(isolde-recovery src/recovery/main.cpp)
@@ -171,6 +208,8 @@ qt_add_qml_module(isolde
         qml/GuideWidget.qml
         qml/LibraryBrowseControls.qml
         qml/KodiSettingsView.qml
+        qml/PlaybackOptionsWindow.qml
+        qml/KodiSourcesView.qml
         qml/KodiImportView.qml
         qml/MediaFoldersView.qml
         qml/SetupWizard.qml
@@ -185,7 +224,9 @@ qt_add_qml_module(isolde
         qml/AmbientScreen.qml
         qml/AmbientOverlay.qml
         qml/AmbientSettingsView.qml
+        qml/Screensaver.qml
         qml/AudioSettingsView.qml
+        qml/InterfaceSoundSettingsView.qml
         qml/ClockWidget.qml
         qml/CommandCenter.qml
         qml/SubtitleQueue.qml
@@ -231,20 +272,24 @@ qt_add_qml_module(isolde
         qml/IsoldeWebProfile.qml
         qml/SourceSettingsView.qml
         qml/SystemSettingsView.qml
+        qml/PowerSettingsView.qml
         qml/WebKioskView.qml
 )
 
+file(GLOB_RECURSE ISOLDE_APP_ICONS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/config/app-icons/*.svg")
+list(APPEND ISOLDE_APP_ICONS "${CMAKE_CURRENT_SOURCE_DIR}/config/app-icons/roles.json")
+qt_add_resources(isolde "isolde_app_icons" PREFIX "/" BASE "${CMAKE_CURRENT_SOURCE_DIR}" FILES ${ISOLDE_APP_ICONS})
 qt_add_resources(isolde "isolde_config"
     PREFIX "/"
     FILES
         config/apps.json
         config/app-gallery.json
-        config/app-icons/youtube.svg
         config/art-packs.json
         config/catalog.json
         config/default-apps.json
         config/default-home-layout.json
         config/studio-defaults.json
+        config/interface-sounds.json
         config/skins/lounge.json
         config/skins/pastel.json
         config/skins/templates.json
@@ -270,6 +315,12 @@ qt_add_resources(isolde "isolde_config"
         config/packages/retroarch-psx/manifest.json
         config/packages/retroarch-ds/manifest.json
         config/packages/retroarch-vb/manifest.json
+        config/packages/rpcs3/manifest.json
+        config/packages/shadps4/manifest.json
+        config/packages/vita3k/manifest.json
+        config/packages/xemu/manifest.json
+        config/packages/xenia/manifest.json
+        config/packages/cemu/manifest.json
         config/packages/supertux/manifest.json
         config/packages/spotify/manifest.json
         config/packages/steam/manifest.json
@@ -310,6 +361,12 @@ set(ISOLDE_PACKAGE_MANIFESTS
     config/packages/retroarch-psx/manifest.json
     config/packages/retroarch-ds/manifest.json
     config/packages/retroarch-vb/manifest.json
+    config/packages/rpcs3/manifest.json
+    config/packages/shadps4/manifest.json
+    config/packages/vita3k/manifest.json
+    config/packages/xemu/manifest.json
+    config/packages/xenia/manifest.json
+    config/packages/cemu/manifest.json
     config/packages/supertux/manifest.json
     config/packages/ambient-weather/manifest.json
     config/packages/living-room-radio/manifest.json
@@ -344,7 +401,7 @@ install(FILES tools/optical-exec.py DESTINATION share/isolde)
 configure_file(tools/steam-games.py ${CMAKE_CURRENT_BINARY_DIR}/share/isolde/steam-games.py COPYONLY)
 configure_file(tools/portable-game-installer.py ${CMAKE_CURRENT_BINARY_DIR}/share/isolde/portable-game-installer.py COPYONLY)
 configure_file(tools/optical-exec.py ${CMAKE_CURRENT_BINARY_DIR}/share/isolde/optical-exec.py COPYONLY)
-install(FILES tools/provision-games.py tools/build-ppsspp.py DESTINATION share/isolde)
+install(FILES tools/provision-games.py tools/build-ppsspp.py tools/build-emulator-payloads.py tools/expanded-emulators.py DESTINATION share/isolde)
 set(ISOLDE_GAME_RUNTIME_BUNDLE "" CACHE PATH "Optional prepared Ubuntu 26.04 amd64 emulator bundle root")
 set(ISOLDE_GAME_RUNTIME_BUNDLE_PUBLIC_KEY "" CACHE FILEPATH "Trusted Ed25519 public key for the prepared emulator bundle")
 if(ISOLDE_GAME_RUNTIME_BUNDLE)
@@ -374,6 +431,10 @@ elseif(ISOLDE_GAME_RUNTIME_BUNDLE_PUBLIC_KEY)
 endif()
 install(FILES tools/fetch-game-fixtures.py DESTINATION share/isolde)
 install(FILES config/game-runtimes.json DESTINATION share/isolde)
+install(FILES config/game-runtime-artifacts.json DESTINATION share/isolde)
+configure_file(config/game-runtime-artifacts.json ${CMAKE_CURRENT_BINARY_DIR}/share/isolde/game-runtime-artifacts.json COPYONLY)
+configure_file(tools/build-emulator-payloads.py ${CMAKE_CURRENT_BINARY_DIR}/share/isolde/build-emulator-payloads.py COPYONLY)
+configure_file(tools/expanded-emulators.py ${CMAKE_CURRENT_BINARY_DIR}/share/isolde/expanded-emulators.py COPYONLY)
 configure_file(tools/emulator-session.py ${CMAKE_CURRENT_BINARY_DIR}/share/isolde/emulator-session.py COPYONLY)
 configure_file(tools/provision-games.py ${CMAKE_CURRENT_BINARY_DIR}/share/isolde/provision-games.py COPYONLY)
 configure_file(tools/build-ppsspp.py ${CMAKE_CURRENT_BINARY_DIR}/share/isolde/build-ppsspp.py COPYONLY)
@@ -382,6 +443,8 @@ configure_file(config/game-runtimes.json ${CMAKE_CURRENT_BINARY_DIR}/share/isold
 install(FILES tools/provision-default-apps.py DESTINATION share/isolde)
 install(FILES tools/provision-android.py DESTINATION share/isolde)
 install(FILES tools/android-session.py DESTINATION share/isolde)
+install(FILES tools/kodi-import.py DESTINATION share/isolde)
+configure_file(tools/kodi-import.py ${CMAKE_CURRENT_BINARY_DIR}/share/isolde/kodi-import.py COPYONLY)
 install(FILES tools/android-store-transaction.py tools/android-setup.py DESTINATION share/isolde)
 configure_file(tools/android-store-transaction.py ${CMAKE_CURRENT_BINARY_DIR}/share/isolde/android-store-transaction.py COPYONLY)
 configure_file(tools/android-setup.py ${CMAKE_CURRENT_BINARY_DIR}/share/isolde/android-setup.py COPYONLY)
@@ -412,7 +475,7 @@ install(FILES config/studio-defaults.json DESTINATION bin/config)
 install(DIRECTORY config/packages DESTINATION bin/config)
 install(DIRECTORY config/skins DESTINATION bin/config)
 install(DIRECTORY kodi/service.isolde.bridge DESTINATION share/isolde/kodi PATTERN "__pycache__" EXCLUDE)
-foreach(bridge_file addon.xml bridge.py service.py playback.py artwork.py playlists.py)
+foreach(bridge_file addon.xml bridge.py service.py playback.py artwork.py playlists.py sources.py)
     configure_file(kodi/service.isolde.bridge/${bridge_file} ${CMAKE_CURRENT_BINARY_DIR}/share/isolde/kodi/service.isolde.bridge/${bridge_file} COPYONLY)
 endforeach()
 
@@ -420,6 +483,7 @@ include(CTest)
 if(BUILD_TESTING)
     find_package(Qt6 6.4 REQUIRED COMPONENTS QuickTest)
     qt_add_executable(isolde_studio_quick_tests tests/studio/quicktest.cpp)
+    qt_add_resources(isolde_studio_quick_tests "studio_app_icons" PREFIX "/" BASE "${CMAKE_CURRENT_SOURCE_DIR}" FILES ${ISOLDE_APP_ICONS})
     target_link_libraries(isolde_studio_quick_tests PRIVATE isolde_core Qt6::QuickTest Qt6::Quick)
     target_compile_definitions(isolde_studio_quick_tests PRIVATE
         QUICK_TEST_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/studio"
@@ -483,6 +547,11 @@ if(BUILD_TESTING)
         tests/tst_isolde.cpp
     )
     target_link_libraries(isolde_tests PRIVATE isolde_core Qt6::Test)
+    qt_add_executable(isolde_remote_binding_tests tests/remote_bindings.cpp)
+    target_link_libraries(isolde_remote_binding_tests PRIVATE isolde_core Qt6::Test Qt6::Qml Qt6::Quick)
+    target_compile_definitions(isolde_remote_binding_tests PRIVATE REMOTE_TEST_QML="${CMAKE_CURRENT_SOURCE_DIR}/tests/RemoteBindingTest.qml")
+    add_test(NAME remote_bindings COMMAND isolde_remote_binding_tests)
+    set_tests_properties(remote_bindings PROPERTIES TIMEOUT 45 ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
     qt_add_executable(isolde_t14_tests tests/tst_t14.cpp)
     target_link_libraries(isolde_t14_tests PRIVATE isolde_core Qt6::Test Qt6::Network Qt6::Qml Qt6::Quick)
     target_compile_definitions(isolde_t14_tests PRIVATE
@@ -510,7 +579,11 @@ if(BUILD_TESTING)
     qt_add_executable(isolde_serial_writer_tests tests/tst_serial_command_writer.cpp)
     target_link_libraries(isolde_serial_writer_tests PRIVATE isolde_core Qt6::Test)
     add_test(NAME capture_serial_writer COMMAND isolde_serial_writer_tests)
-    qt_add_executable(isolde_component_tests tests/tst_components.cpp)
+    qt_add_executable(isolde_component_tests tests/tst_component_contracts.cpp)
+    qt_add_executable(isolde_layout_persistence_tests tests/tst_layout_persistence.cpp)
+    qt_add_executable(isolde_studio_session_tests tests/tst_studio_session.cpp)
+    qt_add_executable(isolde_game_library_tests tests/tst_game_library.cpp)
+    qt_add_executable(isolde_settings_power_tests tests/tst_settings_power.cpp)
     qt_add_executable(isolde_guide_tests tests/tst_guide.cpp)
     target_link_libraries(isolde_guide_tests PRIVATE isolde_core Qt6::Test)
     qt_add_resources(isolde_guide_tests "guide_test_defaults" PREFIX "/" FILES config/studio-defaults.json)
@@ -528,6 +601,14 @@ if(BUILD_TESTING)
     set_tests_properties(games_remote_ui PROPERTIES TIMEOUT 30 ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
     target_link_libraries(isolde_component_tests PRIVATE isolde_core Qt6::Test)
     add_test(NAME component_contracts COMMAND isolde_component_tests)
+    target_link_libraries(isolde_layout_persistence_tests PRIVATE isolde_core Qt6::Test)
+    add_test(NAME layout_persistence_contracts COMMAND isolde_layout_persistence_tests)
+    target_link_libraries(isolde_studio_session_tests PRIVATE isolde_core Qt6::Test)
+    add_test(NAME studio_session_contracts COMMAND isolde_studio_session_tests)
+    target_link_libraries(isolde_game_library_tests PRIVATE isolde_core Qt6::Test)
+    add_test(NAME game_library_contracts COMMAND isolde_game_library_tests)
+    target_link_libraries(isolde_settings_power_tests PRIVATE isolde_core Qt6::Test)
+    add_test(NAME settings_power_contracts COMMAND isolde_settings_power_tests)
     qt_add_executable(isolde_surface_appearance_tests tests/tst_surface_appearance.cpp)
     target_link_libraries(isolde_surface_appearance_tests PRIVATE isolde_core Qt6::Test)
     add_test(NAME surface_appearance_contracts COMMAND isolde_surface_appearance_tests)
@@ -547,6 +628,7 @@ if(BUILD_TESTING)
         studioPastelPresetUsesEditableButtons studioStartingStylesAreValidatedDraftData)
     set_tests_properties(studio_unit PROPERTIES TIMEOUT 30 LABELS "studio;quick;unit")
     qt_add_executable(isolde_home_navigation_tests tests/tst_home_navigation.cpp)
+    qt_add_resources(isolde_home_navigation_tests "test_app_icons" PREFIX "/" BASE "${CMAKE_CURRENT_SOURCE_DIR}" FILES ${ISOLDE_APP_ICONS})
     target_link_libraries(isolde_home_navigation_tests PRIVATE isolde_core Qt6::Test Qt6::Qml Qt6::Quick)
     target_compile_definitions(isolde_home_navigation_tests PRIVATE HOME_QML="${CMAKE_CURRENT_SOURCE_DIR}/qml/HomeScreen.qml")
     target_compile_definitions(isolde_home_navigation_tests PRIVATE CUSTOMIZE_QML="${CMAKE_CURRENT_SOURCE_DIR}/qml/CustomizeHomeView.qml")
@@ -589,11 +671,17 @@ if(BUILD_TESTING)
         target_compile_definitions(isolde_audio_tests PRIVATE AUDIO_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fake-mixer.py")
         target_compile_definitions(isolde_audio_tests PRIVATE AUDIO_PLAYER_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fake-audio-player.py")
         add_test(NAME audio_backend COMMAND isolde_audio_tests)
+        qt_add_executable(isolde_interface_sound_tests tests/tst_interface_sounds.cpp)
+        target_link_libraries(isolde_interface_sound_tests PRIVATE isolde_core Qt6::Test)
+        target_compile_definitions(isolde_interface_sound_tests PRIVATE INTERFACE_SOUND_DEFAULTS="${CMAKE_CURRENT_SOURCE_DIR}/config/interface-sounds.json")
+        add_test(NAME interface_sounds COMMAND isolde_interface_sound_tests)
+        set_tests_properties(interface_sounds PROPERTIES TIMEOUT 30)
         add_test(NAME appliance_installation COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_appliance_install.py)
         add_test(NAME default_app_provisioning COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_default_apps.py)
         add_test(NAME android_provisioning COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_android_provisioning.py)
         add_test(NAME fdroid_store COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_fdroid_store.py)
         add_test(NAME store_lifecycle COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_store_lifecycle.py)
+        add_test(NAME kodi_import_contracts COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_kodi_import.py)
         add_test(NAME games_provisioning COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_games_provisioning.py)
         add_test(NAME steam_games COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_steam_games.py)
         add_test(NAME portable_game_installer COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_portable_game_installer.py)

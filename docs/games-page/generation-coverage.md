@@ -1,5 +1,13 @@
 # Games generation coverage — user expansion, 2026-10-26
 
+November 10 update: [RPCS3, shadPS4, Vita3K, xemu, Xenia and Cemu now have source implementations](expanded-runtimes-2026-11-10.md)
+for bounded pad-oriented routes, with explicit firmware/input/storage and
+artifact contracts. All reruns are deferred. The candidate/gap descriptions
+below retain the original assessment; those six implementation blockers are
+superseded by the new record, while verification and broader title/input
+limitations remain open. Other generations are unchanged. No gameplay or
+software acceptance is awarded by declaring these routes.
+
 The user's completion target is games from **Sony, Microsoft and Nintendo across generations**. The original four emulator tracks are a first implementation batch, not the complete requirement. This ledger remains part of T30.1/T30.6/T30.9. A process launch, installed runtime, catalog entry, compatibility-list entry or captured console picture is not accepted gameplay.
 
 Every delivered route must support TV-remote selection/setup/launch, Xbox-controller gameplay without a mouse, profile-private configuration/saves, safe stop and exact return. Record a real legal playable fixture, tested runtime/source identity, compatibility limits and evidence for each declared platform. A physical console route additionally needs a verified controller bridge; HDMI capture alone does not deliver Xbox-controller input.

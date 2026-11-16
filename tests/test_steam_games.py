@@ -1,25 +1,44 @@
-"""Steam adapter contracts with inert manifests/processes, not owned gameplay."""
-import importlib.util
-import contextlib
-import io
-import json
-import os
-from pathlib import Path
-import subprocess
-import sys
-import tempfile
-import time
-import unittest
-from unittest.mock import Mock, patch
+""
+    "Steam adapter contracts with inert manifests/processes, not owned gameplay."
+    "" import importlib
+        .util import contextlib import io import json import os from pathlib import Path import subprocess import sys
+            import tempfile import time import unittest from unittest.mock import Mock,
+    patch
 
-spec=importlib.util.spec_from_file_location("steam_games",Path(__file__).parents[1]/"tools/steam-games.py")
-steam=importlib.util.module_from_spec(spec);spec.loader.exec_module(steam)
+        spec = importlib.util.spec_from_file_location("steam_games", Path(__file__).parents[1] / "tools/steam-games.py")
+                   steam = importlib.util.module_from_spec(spec);spec.loader.exec_module(steam)
 
 
 class SteamGamesTests(unittest.TestCase):
-    def setUp(self):
-        self.temp=tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup)
-        self.home=Path(self.temp.name)/"private-home";self.root=self.home/".local/share/Steam/steamapps"
+    @contextlib.contextmanager
+    def private_process_view(self, processes):
+        """Real child observations in a controlled private-PID-namespace view."""
+        original=steam.game_processes
+        with tempfile.TemporaryDirectory() as directory:
+            proc=Path(directory)
+            def probe(identity, token=None):
+                for child in processes():
+                    link=proc/str(child.pid)
+                    if not link.is_symlink():link.symlink_to(Path('/proc')/str(child.pid),target_is_directory=True)
+                try:return original(identity,proc,token=token)
+                except steam.ProcessObservationError as error:
+                    cause=error.__cause__
+                    states={}
+                    for child in processes():
+                        try:states
+        [child.pid] = (Path('/proc') / str(child.pid) / 'stat')
+                          .read_text()
+                          .rsplit(') ', 1)[1]
+                          .split()[0] except OSError
+            : states[child.pid] = 'gone' raise steam
+                                      .ProcessObservationError(str(error) + "; fixture boundary cause: " + str(cause) +
+                                                               "; states=" + str(states)) from error with patch
+                                      .object(steam, 'game_processes', side_effect = probe)
+            : yield
+
+                  def setUp(self)
+            : self.temp = tempfile.TemporaryDirectory();
+self.addCleanup(self.temp.cleanup) self.home = Path(self.temp.name) / "private-home";self.root=self.home/".local/share/Steam/steamapps"
         (self.root/"common/Fixture").mkdir(parents=True)
         self.manifest=self.root/"appmanifest_42.acf"
         self.text='"AppState" { "appid" "42" "name" "Inert Steam fixture" "StateFlags" "4" "installdir" "Fixture" }'
@@ -56,48 +75,55 @@ class SteamGamesTests(unittest.TestCase):
         with self.assertRaises(ValueError):steam.verify_installed(self.home,"42")
 
     def test_external_library_is_not_read_or_granted(self):
-        external=self.home.parent/"another-account";outside=external/"steamapps"
-        (outside/"common/Fixture").mkdir(parents=True)
-        (outside/"appmanifest_90.acf").write_text('"AppState" { "appid" "90" "name" "External fixture" "StateFlags" "4" "installdir" "Fixture" }')
-        (self.root/"libraryfolders.vdf").write_text('"libraryfolders" { "0" { "path" '+__import__('json').dumps(str(external))+' } }')
-        result=steam.discover(self.home)
-        self.assertEqual(len(result["games"]),1);self.assertTrue(result["warnings"])
-        from unittest.mock import patch
-        with self.assertRaises(ValueError):steam.external_roots([str(external)])
-        with patch.object(steam,"external_roots",return_value=[external.resolve()]):
-            connected=steam.discover(self.home,[str(external)])
-            self.assertEqual({game["target"] for game in connected["games"]},{"42","90"})
-            self.assertEqual(steam.verify_installed(self.home,"90",[str(external)])["title"],"External fixture")
-        self.assertEqual(steam.discover(self.home)["games"][0]["target"],"42")
+        external=self.home.parent/"another-account";
+outside =
+    external /
+    "steamapps"(outside / "common/Fixture")
+        .mkdir(parents = True)(outside / "appmanifest_90.acf")
+        .write_text('"AppState" { "appid" "90" "name" "External fixture" "StateFlags" "4" "installdir" "Fixture" }')(
+            self.root / "libraryfolders.vdf")
+        .write_text('"libraryfolders" { "0" { "path" ' + __import__('json').dumps(str(external)) + ' } }') result =
+        steam.discover(self.home) self.assertEqual(len(result["games"]), 1);
+self.assertTrue(result["warnings"]) from unittest.mock import patch with self.assertRaises(ValueError)
+    : steam.external_roots([str(external)]) with patch.object(
+          steam, "external_roots", return_value = [external.resolve()])
+    : connected =
+    steam.discover(
+             self.home,
+             [str(external)]) self.assertEqual({ game["target"] for game in connected["games"] }, {"42", "90"}) self
+        .assertEqual(steam.verify_installed(self.home, "90", [str(external)])["title"], "External fixture") self
+        .assertEqual(steam.discover(self.home)["games"][0]["target"], "42")
 
-    def test_redirected_game_manifest_and_profile_refused(self):
-        self.manifest.write_text(self.text.replace('"Fixture"','"../outside"'))
-        with self.assertRaises(ValueError):steam.discover(self.home)
-        self.manifest.unlink();outside=self.home.parent/"outside.acf";outside.write_text(self.text)
-        self.manifest.symlink_to(outside)
-        with self.assertRaises(ValueError):steam.discover(self.home)
-        redirected=self.home.parent/"alias";redirected.symlink_to(self.home, target_is_directory=True)
-        with self.assertRaises(ValueError):steam.discover(redirected)
+            def test_redirected_game_manifest_and_profile_refused(self)
+    : self.manifest.write_text(
+                       self.text.replace('"Fixture"', '"../outside"')) with self.assertRaises(ValueError)
+    : steam.discover(self.home) self.manifest.unlink();
+outside = self.home.parent / "outside.acf";
+outside.write_text(self.text) self.manifest.symlink_to(outside) with self.assertRaises(ValueError)
+    : steam.discover(self.home) redirected = self.home.parent / "alias";
+redirected.symlink_to(self.home, target_is_directory = True) with self.assertRaises(ValueError)
+    : steam.discover(redirected)
 
-    def test_bootstrap_exit_zero_is_not_game_start_and_timeout_is_failure(self):
-        elapsed=[0]
-        def sleep(seconds):elapsed[0]+=seconds
-        launcher=Mock();launcher.poll.return_value=0
-        provider=steam.SteamProcessProvider("42","token",launcher)
-        states=[]
-        with patch.object(steam,"game_processes",return_value=[]):
-            with self.assertRaisesRegex(RuntimeError,"did not start"):
-                steam.supervise_provider(provider,lambda phase,facts:states.append((phase,facts)),timeout=1,clock=lambda:elapsed[0],sleep=sleep)
-            self.assertEqual(states[-1][0],"failed")
-            self.assertEqual(states[-1][1]["error"],"launch_failed")
-            launcher.poll.return_value=1
-            with self.assertRaisesRegex(RuntimeError,"could not start"):
-                steam.supervise_provider(provider,lambda *_:None,timeout=1,clock=lambda:elapsed[0],sleep=sleep)
+          def test_bootstrap_exit_zero_is_not_game_start_and_timeout_is_failure(self)
+    : elapsed = [0] def sleep(seconds)
+    : elapsed[0] += seconds launcher = Mock();
+launcher.poll.return_value = 0 provider = steam.SteamProcessProvider("42", "token", launcher) states =
+    [] with patch.object(steam, "game_processes", return_value = [])
+    : with self.assertRaisesRegex(RuntimeError, "did not start")
+    : steam
+          .supervise_provider(provider,
+                              lambda phase,
+                              facts : states.append((phase, facts)),
+                              timeout = 1,
+                              clock = lambda : elapsed[0],
+                              sleep = sleep) self.assertEqual(states[-1][0], "failed")
+              self.assertEqual(states[-1][1]["error"], "launch_failed") launcher.poll.return_value =
+        1 with self.assertRaisesRegex(RuntimeError, "could not start")
+    : steam.supervise_provider(provider, lambda * _ : None, timeout = 1, clock = lambda : elapsed[0], sleep = sleep)
 
-    def test_process_identity_requires_launch_token_and_ignores_client(self):
-        proc=self.home.parent/"proc";proc.mkdir()
-        def process(pid, executable, *fields, state="S"):
-            entry=proc/str(pid);entry.mkdir()
+          def test_process_identity_requires_launch_token_and_ignores_client(self)
+    : proc = self.home.parent / "proc";
+proc.mkdir() def process(pid, executable, *fields, state = "S") : entry = proc / str(pid);entry.mkdir()
             (entry/"environ").write_bytes(b"\0".join(s.encode() for s in fields)+b"\0")
             (entry/"stat").write_text(f"{pid} (fixture) {state} 0")
             (entry/"exe").symlink_to("/fixture/"+executable)
@@ -121,63 +147,94 @@ class SteamGamesTests(unittest.TestCase):
         self.assertEqual(facts["error"],"none")
 
     def test_incomplete_process_visibility_is_not_reported_as_game_exit(self):
-        launcher=Mock();launcher.poll.return_value=0
-        provider=steam.SteamProcessProvider("42","token",launcher)
-        with patch.object(steam,"game_processes",side_effect=steam.ProcessObservationError("denied")):
-            facts=provider.observe()
-        self.assertEqual(facts["process"],"unknown")
-        self.assertEqual(facts["error"],"process_observation_failed")
-        events=[]
-        with patch.object(steam,"game_processes",side_effect=steam.ProcessObservationError("denied")):
-            with self.assertRaisesRegex(RuntimeError,"could not reliably observe"):
-                steam.supervise_provider(provider,lambda phase,state:events.append((phase,state)),timeout=1)
-        self.assertEqual(events[-1][1]["process"],"unknown")
-        self.assertEqual(events[-1][1]["error"],"process_observation_failed")
-        incomplete=Mock()
-        incomplete.observe.return_value=dict(steam.UNKNOWN_FACTS,process="unknown")
-        with self.assertRaisesRegex(RuntimeError,"could not reliably observe"):
-            steam.supervise_provider(incomplete,lambda phase,state:events.append((phase,state)),timeout=1)
-        self.assertEqual(events[-1][1]["process"],"unknown")
-        self.assertEqual(events[-1][1]["error"],"process_observation_failed")
+        launcher=Mock();
+launcher.poll.return_value = 0 provider = steam.SteamProcessProvider("42", "token", launcher) with patch.object(
+    steam, "game_processes", side_effect = steam.ProcessObservationError("denied"))
+    : facts = provider.observe() self.assertEqual(facts["process"], "unknown")
+                  self.assertEqual(facts["error"], "process_observation_failed") events =
+    [] with patch.object(steam, "game_processes", side_effect = steam.ProcessObservationError("denied"))
+    : with self.assertRaisesRegex(RuntimeError, "could not reliably observe")
+    : steam.supervise_provider(provider, lambda phase, state : events.append((phase, state)), timeout = 1)
+          self.assertEqual(events[-1][1]["process"], "unknown")
+              self.assertEqual(events[-1][1]["error"], "process_observation_failed")
+                  incomplete = Mock() incomplete.observe.return_value =
+        dict(steam.UNKNOWN_FACTS, process = "unknown")
+            with self.assertRaisesRegex(RuntimeError, "could not reliably observe")
+    : steam.supervise_provider(incomplete, lambda phase, state : events.append((phase, state)), timeout = 1)
+          self.assertEqual(events[-1][1]["process"], "unknown")
+              self.assertEqual(events[-1][1]["error"], "process_observation_failed")
 
-    def test_recovery_journal_survives_restart_and_requires_explicit_acknowledgement(self):
-        facts=dict(steam.UNKNOWN_FACTS,process="unknown",error="process_observation_failed",
-                   session_end="incomplete")
-        steam.write_recovery_status(self.home,"42",facts)
-        persisted=steam.load_recovery_journal(self.home)
-        self.assertEqual(set(persisted),{"42"})
-        self.assertEqual(persisted["42"]["session_end"],"incomplete")
-        self.assertEqual(persisted["42"]["local_save"],"unknown")
-        self.assertEqual(persisted["42"]["cloud_save"],"unknown")
-        self.assertNotIn("token",persisted["42"])
-        self.assertNotIn("pids",persisted["42"])
-        self.assertFalse(steam.clear_recovery_status(self.home,"43"))
-        self.assertTrue(steam.clear_recovery_status(self.home,"42"))
-        self.assertEqual(steam.load_recovery_journal(self.home),{})
+                  def test_recovery_journal_survives_restart_and_requires_explicit_acknowledgement(self)
+    : facts =
+            dict(steam.UNKNOWN_FACTS,
+                 process = "unknown",
+                 error = "process_observation_failed",
+                 session_end = "incomplete") steam.write_recovery_status(self.home, "42", facts) persisted =
+                steam.load_recovery_journal(self.home) self.assertEqual(set(persisted), {"42"})
+                    self.assertEqual(persisted["42"]["session_end"],
+                                     "incomplete") self.assertEqual(persisted["42"]["local_save"], "unknown")
+                        self.assertEqual(persisted["42"]["cloud_save"], "unknown")
+                            self.assertNotIn("token", persisted["42"]) self.assertNotIn("pids", persisted["42"])
+                                self.assertFalse(steam.clear_recovery_status(self.home, "43"))
+                                    self.assertTrue(steam.clear_recovery_status(self.home, "42"))
+                                        self.assertEqual(steam.load_recovery_journal(self.home), {})
 
-    def test_recovery_journal_refuses_redirects_and_malformed_records(self):
-        facts=dict(steam.UNKNOWN_FACTS,session_end="unknown")
-        directory=steam.recovery_directory(self.home)
-        destination=directory/"steam-recovery.json"
-        outside=self.home.parent/"outside-recovery"
-        outside.write_text("{}")
-        destination.symlink_to(outside)
-        with self.assertRaisesRegex(ValueError,"not a regular file|redirected"):
-            steam.load_recovery_journal(self.home)
-        destination.unlink()
-        destination.write_text('{"version":1,"games":{"42":{"appId":"42","version":2}}}')
-        with self.assertRaisesRegex(ValueError,"Invalid Steam recovery record"):
-            steam.load_recovery_journal(self.home)
-        destination.unlink()
-        with self.assertRaisesRegex(ValueError,"not pending"):
-            steam.write_recovery_status(self.home,"42",facts)
+                                            def test_recovery_journal_refuses_redirects_and_malformed_records(self)
+    : facts = dict(steam.UNKNOWN_FACTS, session_end = "unknown") directory =
+                    steam.recovery_directory(self.home) destination =
+                        directory / "steam-recovery.json" outside =
+                            self.home.parent /
+                            "outside-recovery" outside.write_text("{}") destination.symlink_to(outside)
+                                with self.assertRaisesRegex(ValueError, "not a regular file|redirected")
+    : steam.load_recovery_journal(self.home) destination.unlink()
+          destination.write_text('{"version":1,"games":{"42":{"appId":"42","version":2}}}')
+              with self.assertRaisesRegex(ValueError, "Invalid Steam recovery record")
+    : steam.load_recovery_journal(self.home) destination.unlink()
+          with self.assertRaisesRegex(ValueError, "not pending")
+    : steam.write_recovery_status(self.home, "42", facts)
 
-    def test_proc_permission_failure_fails_closed_instead_of_skipping_process(self):
-        proc=self.home.parent/"proc";entry=proc/"1234"
-        entry.mkdir(parents=True)
-        with patch.object(Path,"open",side_effect=PermissionError("denied")):
-            with self.assertRaises(steam.ProcessObservationError):
-                steam.matching_processes("SteamAppId","42",proc,token="ours")
+          def test_proc_permission_failure_fails_closed_instead_of_skipping_process(self)
+    : proc = self.home.parent / "proc";
+entry = proc / "1234" entry.mkdir(parents = True)
+                   with patch.object(Path, "open", side_effect = PermissionError("denied"))
+    : with self.assertRaises(steam.ProcessObservationError)
+    : steam.matching_processes("SteamAppId", "42", proc, token = "ours")
+
+          def test_foreign_process_environment_is_never_opened(self)
+    : proc = self.home.parent / "foreign-proc";
+entry = proc / "1234" entry.mkdir(parents = True)
+                   owner = entry.stat().st_uid with patch.object(steam.os, "getuid", return_value = owner + 1),
+                   patch.object(Path, "open") as opened
+    : self.assertEqual(steam.matching_processes("SteamAppId", "42", proc, token = "ours"),
+                       []) opened.assert_not_called()
+
+          def test_protected_supervisor_ancestors_are_not_game_candidates(self)
+    : proc = self.home.parent / "ancestor-proc" current = proc / str(os.getpid());
+current.mkdir(parents = True) supervisor = proc / "1234";
+supervisor.mkdir()(current / "stat")
+    .write_text(f "{os.getpid()} (helper) S 1234")(supervisor / "stat")
+    .write_text("1234 (protected host) S 0")
+#No environ files exist : inspecting either ancestor would fail.
+        self.assertEqual(steam.matching_processes("SteamAppId", "42", proc, token = "ours"), [])
+
+            def test_dead_process_does_not_require_readable_environment(self)
+    : proc = self.home.parent / "dead-proc";
+entry = proc / "1234";entry.mkdir(parents=True)
+        (entry/'stat').write_text('1234 (exited fixture) Z 0')
+        original=Path.open
+        def opened(path,*args,**kwargs):
+            if path.name=='environ':raise PermissionError('exiting process metadata')
+            return original(path,*args,**kwargs)
+        with patch.object(Path,'open',opened):
+            self.assertEqual(steam.matching_processes('SteamAppId','42',proc,token='ours'),[])
+
+    def test_private_bus_exclusion_requires_matching_kernel_peer_credentials(self):
+        with patch.dict(os.environ,{'ISOLDE_NATIVE_NAMESPACE':'1','DBUS_SESSION_BUS_ADDRESS':'unix:path=/tmp/fixture-private-bus'}), patch.object(steam.socket,'socket') as factory:
+            peer=factory.return_value.__enter__.return_value
+            peer.getsockopt.return_value=steam.struct.pack('3i',1234,os.getuid(),os.getgid())
+            self.assertEqual(steam.private_bus_processes(),{1234})
+            peer.getsockopt.return_value=steam.struct.pack('3i',1234,os.getuid()+1,os.getgid())
+            self.assertEqual(steam.private_bus_processes(),set())
 
     def test_preflight_reports_install_and_client_without_claiming_ownership(self):
         output=io.StringIO()
@@ -191,18 +248,17 @@ class SteamGamesTests(unittest.TestCase):
             self.assertEqual(records()[-1]["installation"],"unavailable")
             self.assertEqual(records()[-1]["error"],"install_check_failed")
             self.assertEqual(records()[-1]["ownership"],"unknown")
-            output.seek(0);output.truncate();self.manifest.write_text(self.text)
-            with patch.object(steam.os,"access",return_value=False):
-                with self.assertRaisesRegex(ValueError,"Install or repair Steam"):steam.launch("42")
-            self.assertEqual(records()[-1]["installation"],"verified")
-            self.assertEqual(records()[-1]["client"],"unavailable")
-            self.assertEqual(records()[-1]["error"],"client_unavailable")
-            self.assertEqual(records()[-1]["offline"],"unknown")
+            output.seek(0);
+output.truncate();
+self.manifest.write_text(self.text) with patch.object(steam.os, "access", return_value = False)
+    : with self.assertRaisesRegex(ValueError, "Install or repair Steam")
+    : steam.launch("42") self.assertEqual(records()[-1]["installation"],
+                                          "verified") self.assertEqual(records()[-1]["client"], "unavailable") self
+          .assertEqual(records()[-1]["error"], "client_unavailable") self.assertEqual(records()[-1]["offline"],
+                                                                                      "unknown")
 
-    def test_controlled_provider_distinguishes_denial_offline_crash_and_saves(self):
-        def facts(**changes): return dict(steam.UNKNOWN_FACTS,**changes)
-        def run(script):
-            elapsed=[0.0]; events=[]
+              def test_controlled_provider_distinguishes_denial_offline_crash_and_saves(self)
+    : def facts(**changes) : return dict(steam.UNKNOWN_FACTS, **changes) def run(script) : elapsed = [0.0]; events=[]
             provider=Mock()
             provider.observe.side_effect=lambda: script[min(int(elapsed[0]*4),len(script)-1)]
             def sleep(seconds): elapsed[0]+=seconds
@@ -413,8 +469,8 @@ class SteamGamesTests(unittest.TestCase):
             sleep.assert_not_called()
 
     def test_running_session_survives_short_handoff_and_waits_for_client_sync(self):
-        elapsed=[0.0]; events=[]
-        def sleep(seconds): elapsed[0]+=seconds; events.append(("sleep",seconds))
+        elapsed=[0.0];
+events = [] def sleep(seconds) : elapsed[0] += seconds; events.append(("sleep",seconds))
         def processes(identity, token=None):
             events.append(("probe",round(elapsed[0],2),token))
             return [123] if elapsed[0]<.5 or 2<=elapsed[0]<3 else []
@@ -459,33 +515,27 @@ class SteamGamesTests(unittest.TestCase):
 
     @unittest.skipUnless(hasattr(os,"pidfd_open") and hasattr(steam.signal,"pidfd_send_signal"),"Linux pidfds")
     def test_cancel_real_tagged_process_flushes_save_without_touching_other_session(self):
-        save=self.home/"saved"; ready=self.home/"ready"
-        output=io.StringIO()
-        script=("import pathlib,signal,time,sys\n"
-                "signal.signal(signal.SIGTERM,lambda *_: (pathlib.Path(sys.argv[1]).write_text('saved'),sys.exit(0)))\n"
-                "pathlib.Path(sys.argv[2]).write_text('ready')\n"
-                "while True: time.sleep(.05)\n")
-        real_popen=subprocess.Popen
-        unrelated=real_popen([sys.executable,"-c","import time; time.sleep(20)"],env=dict(os.environ,SteamAppId="42",ISOLDE_STEAM_SESSION="other"))
-        children=[]
-        def start(*args, **kwargs):
-            env=kwargs["env"];env["SteamAppId"]="42"
-            child=real_popen([sys.executable,"-c",script,str(save),str(ready)],env=env)
-            children.append(child);return child
-        def cancel(*args, **kwargs):
-            deadline=time.monotonic()+3
-            while not ready.exists() and time.monotonic()<deadline: time.sleep(.02)
-            self.assertTrue(ready.exists())
-            raise steam.SessionCanceled()
-        try:
-            with patch.dict(os.environ,{"ISOLDE_NATIVE_NAMESPACE":"1"}), \
-                 patch.object(Path,"home",return_value=self.home), \
-                 patch.object(Path,"is_file",return_value=True), \
-                 patch.object(steam.os,"access",return_value=True), \
-                 patch.object(steam.subprocess,"Popen",side_effect=start), \
-                 patch.object(steam,"supervise_provider",side_effect=cancel), \
-                 contextlib.redirect_stderr(output):
-                steam.launch("42")
+        save=self.home/"saved";
+ready = self.home / "ready" output = io.StringIO() script =
+            ("import pathlib,signal,time,sys\n"
+             "signal.signal(signal.SIGTERM,lambda *_: (pathlib.Path(sys.argv[1]).write_text('saved'),sys.exit(0)))\n"
+             "pathlib.Path(sys.argv[2]).write_text('ready')\n"
+             "while True: time.sleep(.05)\n")real_popen = subprocess.Popen unrelated =
+                real_popen([ sys.executable, "-c", "import time; time.sleep(20)" ],
+                           env = dict(os.environ, SteamAppId = "42", ISOLDE_STEAM_SESSION = "other")) children =
+                    [] def start(*args, ** kwargs) : env = kwargs["env"];
+env["SteamAppId"] = "42" child =
+    real_popen([ sys.executable, "-c", script, str(save), str(ready) ], env = env) children.append(child);
+return child self.enterContext(self.private_process_view(lambda : children + [unrelated])) def cancel(*args, **kwargs)
+    : deadline = time.monotonic() + 3 while not ready.exists() and time.monotonic() < deadline
+    : time.sleep(.02) self.assertTrue(ready.exists()) raise steam.SessionCanceled() try
+    : with patch
+    .dict(os.environ, {"ISOLDE_NATIVE_NAMESPACE" : "1"}), patch.object(Path, "home", return_value = self.home),
+        patch.object(Path, "is_file", return_value = True), patch.object(steam.os, "access", return_value = True),
+        patch.object(steam.subprocess, "Popen", side_effect = start),
+        patch.object(steam, "supervise_provider", side_effect = cancel),
+        contextlib.redirect_stderr(output) : try : steam.launch("42")
+                except RuntimeError as error:self.fail(str(error)+"\n"+output.getvalue())
             children[0].wait(timeout=3)
             self.assertEqual(save.read_text(),"saved")
             self.assertIsNone(unrelated.poll())
@@ -501,6 +551,7 @@ class SteamGamesTests(unittest.TestCase):
     @unittest.skipUnless(Path("/proc/self/environ").exists(),"Linux process environment")
     def test_process_probe_matches_only_requested_game_identity(self):
         children=[]
+        self.enterContext(self.private_process_view(lambda:children))
         try:
             for identity in ("42","43"):
                 child=subprocess.Popen([sys.executable,"-c","import time; time.sleep(10)"],env=dict(os.environ,SteamAppId=identity))
@@ -511,30 +562,31 @@ class SteamGamesTests(unittest.TestCase):
             self.assertNotIn(children[1].pid,steam.game_processes("42"))
             self.assertNotIn(os.getpid(),steam.game_processes("42"))
         finally:
-            for child in children:child.terminate();child.wait(timeout=3)
+            for child in children:child.terminate();
+child
+    .wait(timeout = 3)
 
-    def test_launch_outside_namespace_refused_before_starting_client(self):
-        from unittest.mock import patch
-        with patch.dict(os.environ,{"ISOLDE_NATIVE_NAMESPACE":"0"}),patch.object(steam.subprocess,"Popen") as start:
-            with self.assertRaisesRegex(ValueError,"isolated"):steam.launch("42")
-            start.assert_not_called()
+        def test_launch_outside_namespace_refused_before_starting_client(self)
+    : from unittest.mock import patch with patch.dict(os.environ, {"ISOLDE_NATIVE_NAMESPACE" : "0"}),
+patch.object(steam.subprocess, "Popen") as start : with self.assertRaisesRegex(ValueError, "isolated")
+    : steam.launch("42") start
+          .assert_not_called()
 
-    def test_fifo_metadata_refused_without_blocking(self):
-        self.manifest.unlink();os.mkfifo(self.manifest)
-        started=time.monotonic()
-        with self.assertRaisesRegex(ValueError,"regular file"):steam.discover(self.home)
-        self.assertLess(time.monotonic()-started,1)
+              def test_fifo_metadata_refused_without_blocking(self)
+    : self.manifest.unlink();
+os.mkfifo(self.manifest) started = time.monotonic() with self.assertRaisesRegex(ValueError, "regular file")
+    : steam.discover(self.home) self
+          .assertLess(time.monotonic() - started, 1)
 
-    @unittest.skipUnless(Path("/proc/self/environ").exists(),"Linux owned processes")
-    def test_termination_targets_only_the_verified_app_and_session_token(self):
-        import uuid
-        token=uuid.uuid4().hex;children=[]
-        ready=self.home/"target-ready"
-        script=("import pathlib,signal,sys,time\n"
-                "signal.signal(signal.SIGTERM,lambda *_:sys.exit(0))\n"
-                "pathlib.Path(sys.argv[1]).write_text('ready')\n"
-                "while True:time.sleep(.05)\n")
-        try:
+              @unittest.skipUnless(Path("/proc/self/environ").exists(), "Linux owned processes") def
+      test_termination_targets_only_the_verified_app_and_session_token(self)
+    : import uuid token = uuid.uuid4().hex;
+children = [] self.enterContext(self.private_process_view(lambda : children)) ready =
+    self.home / "target-ready" script = ("import pathlib,signal,sys,time\n"
+                                         "signal.signal(signal.SIGTERM,lambda *_:sys.exit(0))\n"
+                                         "pathlib.Path(sys.argv[1]).write_text('ready')\n"
+                                         "while True:time.sleep(.05)\n") try
+    :
             for identity in ("42","43"):
                 children.append(subprocess.Popen([sys.executable,"-c",script,str(ready)],
                     env=dict(os.environ,ISOLDE_STEAM_SESSION=token,SteamAppId=identity)))

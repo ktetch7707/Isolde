@@ -10,6 +10,7 @@ Item {
     property var recentColors: []
     property var selectionRect: null
     property string roleName: "Color"
+    property string resetLabel:"Reset to theme"
     property bool mixedOriginal: false
     property color original: "white"
     property color sample: original
@@ -186,7 +187,7 @@ Item {
             Row {
                 spacing:8*root.unit
                 Repeater {
-                    model:["Reset to theme","Use color","Cancel"]
+                    model:[root.resetLabel,"Done","Cancel"]
                     delegate:Button {
                         required property string modelData;required property int index
                         objectName:"studioColorAction-"+index;width:(body.width-16*root.unit)/3;height:42*root.unit;text:modelData

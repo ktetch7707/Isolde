@@ -12,7 +12,11 @@ Rectangle {
     property string selectedId: ""
     property string categoryId: ""
     property var selectedPresentation: ({})
-    property string view: "menu"
+    property string view: "overview"
+    property bool fromInspector:false
+    property var operationOrigin:({view:"overview",selected:0})
+    property bool responsiveReview:false
+    onSessionChanged:{copiedId="";copiedPage="";operationOrigin={view:"overview",selected:0}}
     property int selected: 0
     property string message: ""
     property string pending: ""
@@ -34,8 +38,14 @@ Rectangle {
     color: appearance.surfaceColor || systemPalette.window
     border.width: 2
     border.color: appearance.focusColor || systemPalette.highlight
-    onVisibleChanged: if(visible){view="menu";selected=0;message=""}
+    onVisibleChanged: if(visible){view="overview";selected=0;message=""}
     function labels() {
+        if(view==="overview")return ["Saved styles","My components","Copy appearance","Paste appearance","Back"]
+        if(view==="styleMenu")return ["Use a saved style","Save this style","Manage styles","Back"]
+        if(view==="componentMenu")return ["Insert a saved component","Save this component","Keep copies connected…","Manage connected copies","Back"]
+        if(view==="manageStyles")return ["Update shared style…","Use theme colors and defaults","Make this style independent","Back"]
+        if(view==="manageComponents")return ["Update all connected copies…","Make this copy independent","Back"]
+
         if(view==="menu")return ["Save appearance as shared style", "Choose shared style", "Edit shared style for all instances", "Reset component overrides", "Detach shared style", "Copy appearance", "Paste copied appearance", "Save to My components", "Insert independent copy", "Insert linked instance", "Edit all linked instances", "Detach this instance", "Responsive section rules", "Back"]
         if(view==="styles" || view==="components")return entries.map(e=>e.name).concat(["Back"])
         if(view==="review")return ["Accept one draft change", "Cancel"].concat((summary.changes || []).map(e=>(e.page || "Home")+" · "+(e.name || e.id || "Definition")+" · "+e.change))
@@ -43,20 +53,32 @@ Rectangle {
         return []
     }
     function propose(operation, arguments) {
+        responsiveReview=operation==="responsive"
+        if(view==="responsive")operationOrigin={view:"responsive",selected:7}
         summary=session.previewReuse(operation,arguments,pageId)
         if(!summary.valid){message=session.errorString;return}
         message="Review "+(summary.changes || []).length+" affected definitions/instances below. Appearance changes preserve content, sources, layout and placement."
         view="review";selected=1
     }
     function choose(kind, operation){pending=operation;view=kind;selected=0;message=entries.length?"Choose a named definition.":"Save a definition first. Back keeps your draft."}
+    function restoreOperation(){view=operationOrigin.view;selected=operationOrigin.selected}
+    function activateLegacy(index){operationOrigin={view:view,selected:selected};view="menu";selected=index;activate();if(view==="menu")restoreOperation()}
     function activate() {
+        if(view==="overview"){
+            if(selected===0){view="styleMenu";selected=0}else if(selected===1){view="componentMenu";selected=0}else if(selected===2)activateLegacy(5);else if(selected===3)activateLegacy(6);else closed();return
+        }
+        if(view==="styleMenu"){if(selected===2){view="manageStyles";selected=0}else if(selected===3){view="overview";selected=0}else activateLegacy([1,0][selected]);return}
+        if(view==="componentMenu"){if(selected===3){view="manageComponents";selected=0}else if(selected===4){view="overview";selected=1}else activateLegacy([8,7,9][selected]);return}
+        if(view==="manageStyles"){if(selected===3){view="styleMenu";selected=2}else activateLegacy([2,3,4][selected]);return}
+        if(view==="manageComponents"){if(selected===2){view="componentMenu";selected=3}else activateLegacy([10,11][selected]);return}
+
         if(view==="review") {
-            if(selected===0){if(session.acceptPreview()){view="menu";selected=0;message="Draft updated. Undo restores this complete change; Apply saves it.";accepted()}else message=session.errorString}
-            else if(selected===1){session.cancelPreview();view="menu";selected=0}
+            if(selected===0){if(session.acceptPreview()){restoreOperation();message="Draft updated. Undo restores this complete change; Save changes saves it.";accepted();if(fromInspector && responsiveReview){viewportRequested(0);closed()}}else message=session.errorString}
+            else if(selected===1){session.cancelPreview();restoreOperation()}
             return
         }
         if(view==="styles" || view==="components") {
-            if(selected>=entries.length){view="menu";selected=0;return}
+            if(selected>=entries.length){restoreOperation();return}
             libraryId=entries[selected].id
             if(pending==="editStyle")propose(pending,{id:selectedId,libraryId:libraryId,presentation:selectedPresentation})
             else propose(pending==="independent" || pending==="linked"?"insert":pending,{id:selectedId,libraryId:libraryId,linked:pending==="linked"})
@@ -69,7 +91,7 @@ Rectangle {
             else if(selected===3)aspectIndex=(aspectIndex+1)%aspects.length
             else if(selected>=4 && selected<=6)viewportRequested([16/9,1,3/4][selected-4])
             else if(selected===7)propose("responsive",{categoryId:categoryId,rule:{schemaVersion:1,policy:policies[policy],minimumWidth:minimumWidth,minimumHeight:minimumHeight,aspect:aspects[aspectIndex]}})
-            else {view="menu";selected=12;viewportRequested(0)}
+            else {viewportRequested(0);if(fromInspector)closed();else restoreOperation()}
             return
         }
         if(selected===0 || selected===7){pending=selected===0?"saveStyle":"saveComponent";view="name";keyboard.value="";keyboard.selectedIndex=0;return}
@@ -87,14 +109,23 @@ Rectangle {
     }
     function handleCommand(command) {
         if(view==="name"){keyboard.handleCommand(command);return}
-        if(command===inputManager.back){if(view==="review")session.cancelPreview();if(view==="menu"){viewportRequested(0);closed()}else {view="menu";selected=0;viewportRequested(0)};return}
+        if(command===inputManager.back){
+            viewportRequested(0)
+            if(view==="overview")closed()
+            else if(view==="styleMenu"){view="overview";selected=0}
+            else if(view==="componentMenu"){view="overview";selected=1}
+            else if(view==="manageStyles"){view="styleMenu";selected=2}
+            else if(view==="manageComponents"){view="componentMenu";selected=3}
+            else if(view==="responsive" && fromInspector)closed()
+            else{if(view==="review")session.cancelPreview();restoreOperation()}return
+        }
         if(command===inputManager.navigateUp)selected=Math.max(0,selected-1)
         else if(command===inputManager.navigateDown)selected=Math.min(labels().length-1,selected+1)
         else if(command===inputManager.confirm)activate()
     }
     Column {
         anchors.fill:parent;anchors.margins:18;spacing:12
-        Text {width:parent.width;text:"Shared styles & My components";color:root.appearance.textColor || systemPalette.windowText;font.pixelSize:24*root.textScale;wrapMode:Text.Wrap}
+        Text {width:parent.width;text:view==="styleMenu" || view==="manageStyles"?"Saved styles":view==="componentMenu" || view==="manageComponents"?"My components":"Design tools";color:root.appearance.textColor || systemPalette.windowText;font.pixelSize:24*root.textScale;wrapMode:Text.Wrap}
         Text {id:explanation;width:parent.width;text:root.message;textFormat:Text.PlainText;color:root.appearance.mutedColor || systemPalette.mid;font.pixelSize:16*root.textScale;wrapMode:Text.Wrap}
         ListView {
             width:parent.width;height:Math.max(48,root.height-explanation.height-110);clip:true
@@ -111,7 +142,7 @@ Rectangle {
     }
     OnScreenKeyboard {
         id:keyboard;width:root.width/root.viewportScale;height:root.height/root.viewportScale;scale:root.viewportScale;transformOrigin:Item.TopLeft;visible:root.view==="name";appearance:root.appearance;hint:"Name this saved definition"
-        onCanceled:{root.view="menu";root.selected=0}
+        onCanceled:root.restoreOperation()
         onAccepted:text=>root.propose(root.pending,{id:root.selectedId,name:text})
     }
 }

@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "feature": "isolde-sources-v1",
+  "release": "21.2-Omega",
+  "commit": "d1a1d48c3cb3722d39264ffdd8132f755ffecd27",
+  "sourceUrl": "https://codeload.github.com/xbmc/xbmc/tar.gz/d1a1d48c3cb3722d39264ffdd8132f755ffecd27",
+  "sourceSha256": "64cec358372cfd9ce5f82dd9ba901d3dce7870f60670b5e07f192c0c9866b603",
+  "distributionBuild": "APT-authenticated source for the installed Kodi 21 Omega package; exact installed version and source descriptor hash recorded in the build manifest",
+  "license": "GPL-2.0-or-later"
+}

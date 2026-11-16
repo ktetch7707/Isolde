@@ -15,55 +15,72 @@ class GuideController;
 class ActionDispatcher final : public QObject {
     Q_OBJECT
     Q_PROPERTY(bool guideTransitionPending READ guideTransitionPending NOTIFY guidePlaybackChanged)
-public:
-    ActionDispatcher(AppRegistry *apps, SessionManager *sessions, KodiMedia *media,
-        KodiService *service, AppCatalog *catalog = nullptr, CaptureController *capture = nullptr, QObject *parent = nullptr);
-    Q_INVOKABLE bool dispatch(const QVariantMap &action, const QString &originId = {});
-    Q_INVOKABLE bool dispatchEditorAction(const QVariantMap &action);
-    void setAudioSettings(AudioSettings *audio) { m_audio = audio; }
-    void setLayout(HomeLayout *layout) { m_layout=layout; }
-    void setGames(GameLibrary *games) { m_games=games; }
-    void setGuide(GuideController *guide);
-    bool guideTransitionPending() const { return m_guideTransition; }
+  public:
+    ActionDispatcher(AppRegistry* apps,
+                     SessionManager* sessions,
+                     KodiMedia* media,
+                     KodiService* service,
+                     AppCatalog* catalog = nullptr,
+                     CaptureController* capture = nullptr,
+                     QObject* parent = nullptr);
+    Q_INVOKABLE bool dispatch(const QVariantMap& action, const QString& originId = {});
+    Q_INVOKABLE bool dispatchEditorAction(const QVariantMap& action);
+    Q_INVOKABLE QString currentOrigin() const {
+        return m_origin;
+    }
+    void setAudioSettings(AudioSettings* audio) {
+        m_audio = audio;
+    }
+    void setLayout(HomeLayout* layout) {
+        m_layout = layout;
+    }
+    void setGames(GameLibrary* games) {
+        m_games = games;
+    }
+    void setGuide(GuideController* guide);
+    bool guideTransitionPending() const {
+        return m_guideTransition;
+    }
     Q_INVOKABLE void cancelGuidePlayback();
     Q_INVOKABLE bool surfGuide(int direction);
-signals:
+  signals:
     void guidePlaybackChanged();
-    void allAppsRequested(const QString &originId);
-    void searchRequested(const QString &originId);
+    void allAppsRequested(const QString& originId);
+    void searchRequested(const QString& originId);
     // Kept for older in-process observers; the shell routes this to All Apps.
     void drawerRequested();
-    void guideRequested(const QString &originId,const QVariantMap &presentation,const QString &focusChannelId);
-    void pageRequested(const QString &id, const QString &originId);
-    void rejected(const QString &reason);
+    void guideRequested(const QString& originId, const QVariantMap& presentation, const QString& focusChannelId);
+    void pageRequested(const QString& id, const QString& originId);
+    void rejected(const QString& reason);
     void libraryRequested(bool returnHomeAfterPlayback);
     void settingsRequested(int section);
-    void restoreFocusRequested(const QString &originId);
-    void captureSessionRequested(int input, const QString &originId);
-    void desktopRequested(const QString &originId);
-private:
-    bool launchApp(const QString &id);
+    void restoreFocusRequested(const QString& originId);
+    void captureSessionRequested(int input, const QString& originId);
+    void desktopRequested(const QString& originId);
+
+  private:
+    bool launchApp(const QString& id);
     void clearGuidePlayback();
-    AppRegistry *m_apps;
-    SessionManager *m_sessions;
-    KodiMedia *m_media;
-    KodiService *m_service;
-    AppCatalog *m_catalog;
-    CaptureController *m_capture;
-    AudioSettings *m_audio = nullptr;
-    HomeLayout *m_layout = nullptr;
-    GameLibrary *m_games = nullptr;
-    GuideController *m_guide = nullptr;
+    AppRegistry* m_apps;
+    SessionManager* m_sessions;
+    KodiMedia* m_media;
+    KodiService* m_service;
+    AppCatalog* m_catalog;
+    CaptureController* m_capture;
+    AudioSettings* m_audio = nullptr;
+    HomeLayout* m_layout = nullptr;
+    GameLibrary* m_games = nullptr;
+    GuideController* m_guide = nullptr;
     QString m_origin;
     QString m_pendingGameId;
     QString m_pendingGameProfile;
     QString m_pendingSteamIdentity;
     bool m_pendingSteamGame = false;
     bool m_pendingSteamObserved = false;
-    QString m_guideChannel,m_guideSlot;
+    QString m_guideChannel, m_guideSlot;
     QString m_surfChannel;
-    qint64 m_guideEnd=0;
-    quint64 m_guideGeneration=0;
-    bool m_guideTransition=false;
+    qint64 m_guideEnd = 0;
+    quint64 m_guideGeneration = 0;
+    bool m_guideTransition = false;
     bool m_dispatching = false;
 };

@@ -3,21 +3,24 @@
 #include "sessions/AppSession.h"
 #include "sessions/SteamSessionOutput.h"
 
-#include <QProcess>
 #include <QLockFile>
+#include <QProcess>
 #include <memory>
 
 class DesktopSession final : public AppSession {
     Q_OBJECT
-public:
+  public:
     using AppSession::AppSession;
     ~DesktopSession() override;
-    QString diagnostics() const { return QString::fromUtf8(m_diagnostics); }
+    QString diagnostics() const {
+        return QString::fromUtf8(m_diagnostics);
+    }
     void launch() override;
     void suspend() override;
     void resume() override;
     void exit() override;
-private:
+
+  private:
     bool applyContainment();
     void stopProcess();
     void readDiagnostics();

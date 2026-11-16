@@ -1,0 +1,90 @@
+{
+  "schemaVersion": 1,
+  "target": "ubuntu-26.04-amd64",
+  "runtimes": {
+    "rpcs3": {
+      "package": "isolde-rpcs3",
+      "version": "0.0.43.20581+isolde1",
+      "url": "https://github.com/RPCS3/rpcs3-binaries-linux/releases/download/build-fd027c99b8824e9a9b6f5b2d5ae33f9202e29da3/rpcs3-v0.0.43-20581-fd027c99_linux64.AppImage",
+      "size": 83116763,
+      "sha256": "82433a3bf4a0ac2236a0884989db3901cb6e7981d7cfdf071b195047ac1ec157",
+      "release": "https://github.com/RPCS3/rpcs3-binaries-linux/releases/tag/build-fd027c99b8824e9a9b6f5b2d5ae33f9202e29da3",
+      "source": "https://github.com/RPCS3/rpcs3/tree/fd027c99b8824e9a9b6f5b2d5ae33f9202e29da3",
+      "license": "GPL-2.0-only",
+      "licenseUrl": "https://raw.githubusercontent.com/RPCS3/rpcs3/fd027c99b8824e9a9b6f5b2d5ae33f9202e29da3/LICENSE",
+      "licenseSha256": "39db8f9acf036595a2566ea3fe560bc7bd65d8749f088e0f4a4ef2f8a6cb4b34",
+      "format": "appimage",
+      "member": "AppRun"
+    },
+    "shadps4": {
+      "package": "isolde-shadps4",
+      "version": "0.21.0+isolde1",
+      "url": "https://github.com/shadps4-emu/shadPS4/releases/download/v.0.21.0/shadps4-linux-sdl-0.21.0.zip",
+      "size": 33362189,
+      "sha256": "7c41c58254461d742b5edf564e23795697b63e9e46de11d0e1ed67bd2cbaae68",
+      "release": "https://github.com/shadps4-emu/shadPS4/releases/tag/v.0.21.0",
+      "source": "https://github.com/shadps4-emu/shadPS4/tree/v.0.21.0",
+      "license": "GPL-2.0-only",
+      "licenseUrl": "https://raw.githubusercontent.com/shadps4-emu/shadPS4/v.0.21.0/LICENSE",
+      "licenseSha256": "8177f97513213526df2cf6184d8ff986c675afb514d4e68a404010521b880643",
+      "format": "zip-appimage",
+      "member": "Shadps4-sdl.AppImage"
+    },
+    "vita3k": {
+      "package": "isolde-vita3k",
+      "version": "0.2.0.4296+isolde1",
+      "url": "https://github.com/Vita3K/Vita3K/releases/download/continuous/Vita3K-x86_64.AppImage",
+      "size": 89482330,
+      "sha256": "78f89a0d9674dd79d81a7140facbbb1ae50b26759533f36bec35b2d1769c4c6a",
+      "release": "https://github.com/Vita3K/Vita3K/releases/tag/continuous",
+      "source": "https://github.com/Vita3K/Vita3K/tree/011f20b049a9c4779ce7f6c77e7161e74d634564",
+      "license": "GPL-2.0-only",
+      "licenseUrl": "https://raw.githubusercontent.com/Vita3K/Vita3K/011f20b049a9c4779ce7f6c77e7161e74d634564/COPYING.txt",
+      "licenseSha256": "8177f97513213526df2cf6184d8ff986c675afb514d4e68a404010521b880643",
+      "format": "appimage",
+      "member": "AppRun"
+    },
+    "xemu": {
+      "package": "isolde-xemu",
+      "version": "0.8.139+isolde1",
+      "url": "https://github.com/xemu-project/xemu/releases/download/v0.8.139/xemu-0.8.139-x86_64.AppImage",
+      "size": 17971704,
+      "sha256": "220282aacf09b30b35c55ba900a774fb6940c70deca1408bc70a4c9cc67c322f",
+      "release": "https://github.com/xemu-project/xemu/releases/tag/v0.8.139",
+      "source": "https://github.com/xemu-project/xemu/tree/v0.8.139",
+      "license": "GPL-2.0-or-later",
+      "licenseUrl": "https://raw.githubusercontent.com/xemu-project/xemu/v0.8.139/COPYING",
+      "licenseSha256": "dd3ce02338c3a48abb6ba59b48809f7108a8bd242cb0cc8be90daafa30707c28",
+      "format": "appimage",
+      "member": "AppRun"
+    },
+    "xenia": {
+      "package": "isolde-xenia",
+      "version": "0.0.0.02d2cb5+isolde1",
+      "url": "https://github.com/xenia-canary/xenia-canary-releases/releases/download/02d2cb5/xenia_canary_linux.tar_.xz",
+      "size": 3462192,
+      "sha256": "5ac3bcd35430dc406cc79cb403dc326341514a5e3c19e118a37386dc46f4e6c1",
+      "release": "https://github.com/xenia-canary/xenia-canary-releases/releases/tag/02d2cb5",
+      "source": "https://github.com/xenia-canary/xenia-canary/tree/cf206a3bdc4ffdfb22dbcfda99f777ab8d286f1d",
+      "license": "BSD-3-Clause",
+      "licenseUrl": "https://raw.githubusercontent.com/xenia-canary/xenia-canary/cf206a3bdc4ffdfb22dbcfda99f777ab8d286f1d/LICENSE",
+      "licenseSha256": "369ea6b0f7ba57544067e9d470ca82a927da787fb0a749b11cb55f1fd0ba47ae",
+      "format": "tar-xz",
+      "member": "build/bin/Linux/Release/xenia_canary"
+    },
+    "cemu": {
+      "package": "isolde-cemu",
+      "version": "2.6+isolde1",
+      "url": "https://github.com/cemu-project/Cemu/releases/download/v2.6/Cemu-2.6-x86_64.AppImage",
+      "size": 61423960,
+      "sha256": "0c20c4aeb800bb13d9bab9474ef45a6f8fcde6402cad9b32ac2a1bbd03186313",
+      "release": "https://github.com/cemu-project/Cemu/releases/tag/v2.6",
+      "source": "https://github.com/cemu-project/Cemu/tree/v2.6",
+      "license": "MPL-2.0",
+      "licenseUrl": "https://raw.githubusercontent.com/cemu-project/Cemu/v2.6/LICENSE.txt",
+      "licenseSha256": "1f256ecad192880510e84ad60474eab7589218784b9a50bc7ceee34c2b91f1d5",
+      "format": "appimage",
+      "member": "AppRun"
+    }
+  }
+}

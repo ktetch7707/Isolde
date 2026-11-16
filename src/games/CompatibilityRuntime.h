@@ -2,7 +2,7 @@
 #include <QVariantMap>
 
 class CompatibilityRuntime {
-public:
+  public:
     static QVariantMap discover();
     static QVariantMap classify(bool present, bool trusted);
 };

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/ usr / bin / env python3
 """Prepare and audit T24 evidence locally; never starts or contacts the VM.
 
 Initialize before freezing the acceptance candidate. Fill the resulting records
@@ -14,8 +14,7 @@ import re
 import struct
 from pathlib import Path
 
-
-# Each record is a named installed task, not credit for source presence.
+#Each record is a named installed task, not credit for source presence.
 TASKS = {
     "blank": ("T24.1", "Blank page: add Clock/apps, move, size, preview, Apply, cold reopen"),
     "existing": ("T24.1", "Existing and multiple pages: edit, switch, cancel and preserve routes"),
@@ -62,8 +61,8 @@ def source_manifest(root):
     """Hash the complete production payload, including newly added source files."""
     cmake = root / "CMakeLists.txt"
     paths = {cmake}
-    # Production helper scripts are part of the shipped payload too. Harness
-    # and report edits alone do not invalidate an application candidate.
+#Production helper scripts are part of the shipped payload too.Harness
+#and report edits alone do not invalidate an application candidate.
     for name in re.findall(r"tools/[A-Za-z0-9_.-]+\.(?:py|sh|json)", cmake.read_text(encoding="utf-8")):
         paths.add(root / name)
     for name in ("src", "qml", "config", "resources", "packaging"):
@@ -248,21 +247,17 @@ def main():
     parser.add_argument("--source-root", required=True, type=Path)
     args = parser.parse_args()
     try:
-        if args.operation == "init":
-            args.report.parent.mkdir(parents=True, exist_ok=True)
-            with args.report.open("x", encoding="utf-8") as output:
-                json.dump(template(args.source_root.resolve(strict=True)), output, indent=2)
-                output.write("\n")
-            print(f"Prepared {len(TASKS)} pending tasks; no application checks run: {args.report}")
-            return 0
-        report = json.loads(args.report.read_text(encoding="utf-8"))
-        errors = audit(report, args.source_root.resolve(strict=True), args.report.parent)
-        print(json.dumps({"evidenceComplete": not errors, "errors": errors}, indent=2))
-        return 1 if errors else 0
-    except (OSError, ValueError, TypeError, AttributeError) as error:
-        print(json.dumps({"evidenceComplete": False, "errors": [str(error)]}))
-        return 1
+    if args
+.operation == "init"
+    : args.report.parent.mkdir(parents = True,
+                               exist_ok = True) with args.report.open("x", encoding = "utf-8") as output
+    : json.dump(template(args.source_root.resolve(strict = True)), output, indent = 2) output.write("\n")
+          print(f "Prepared {len(TASKS)} pending tasks; no application checks run: {args.report}") return 0 report =
+    json.loads(args.report.read_text(encoding = "utf-8")) errors =
+        audit(report, args.source_root.resolve(strict = True), args.report.parent)
+            print(json.dumps({"evidenceComplete" : not errors, "errors" : errors}, indent = 2)) return 1 if errors
+        else 0 except(OSError, ValueError, TypeError, AttributeError) as error
+    : print(json.dumps({"evidenceComplete" : False, "errors" : [str(error)]})) return 1
 
-
-if __name__ == "__main__":
-    raise SystemExit(main())
+      if __name__
+      == "__main__" : raise SystemExit(main())

@@ -71,7 +71,7 @@ Rectangle {
     function value(field) {
         let source = scope === 0 ? config : scope === 4 ? config.appGallery || ({}) : scope === 3 ? current : scope === 2 ? Object.assign({},inheritedStyle,style) : style
         if (field.key === "sectionName" || field.key === "cardName") return current.name
-        if(scope === 2 && field.key.startsWith("action.")) return (current.action || {})[field.key.split(".")[1]] || field.fallback || ""
+        if(scope === 2 && field.key.startsWith("action.")) return (current.actions && current.actions.length>0 ? current.actions[0] : {})[field.key.split(".")[1]] || field.fallback || ""
         const path = field.key.split(".")
         let value = source[path[0]]
         if (path.length > 1) value = (value || {})[path[1]]
@@ -82,7 +82,13 @@ Rectangle {
         if (field.key === "cardName") { if(!layoutModel.setItemName(current.id,value)) message=layoutModel.errorString; return }
         if (field.key === "sectionName") { if (!layoutModel.renameCategory(current.id,value)) message = layoutModel.errorString; return }
         let source = Object.assign({}, scope === 0 ? config : scope === 4 ? config.appGallery || ({}) : scope === 3 ? current : style)
-        if(scope === 2 && field.key.startsWith("action.")) source.action=Object.assign({},current.action || {})
+        if((scope === 2 || scope === 3) && field.key.startsWith("action.")) { if(current.actions && current.actions.length>0) source.actions=current.actions.map(a=>Object.assign({},a)); else source.actions=[] }
+        if((scope === 2 || scope === 3) && field.key.startsWith("action.")) {
+            const subKey = field.key.split(".")[1]
+            if(subKey === "type" && value === "none") source.actions = []
+            else { if(!source.actions.length) source.actions=[{type:"open-page"}]; source.actions[0][subKey] = value }
+            message=layoutModel.setItemAction(current.id, source.actions)?"Saved":layoutModel.errorString;return
+        }
         const path = field.key.split(".")
         if (path.length > 1) {
             let nested = Object.assign({},source[path[0]] || (path[0] === "imageCrop" ? {x:0,y:0,width:100,height:100} : {}))
@@ -105,7 +111,6 @@ Rectangle {
             else source[field.key] = value.split(",").map(s => s.trim()).filter(s => s.length)
         } else if (field.text && value === "") delete source[field.key]
         else source[field.key] = value
-        if(scope === 2 && field.key.startsWith("action.")){message=layoutModel.setItemAction(current.id,source.action)?"Saved":layoutModel.errorString;return}
         let ok
         if (scope === 0) { source.schemaVersion = 1; ok = layoutModel.setComposition(source) }
         else if (scope === 4) { let next = Object.assign({},config); next.appGallery = source; ok = layoutModel.setComposition(next) }

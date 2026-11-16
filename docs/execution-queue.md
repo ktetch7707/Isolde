@@ -1,5 +1,408 @@
 # Executable backlog queue
 
+## Current checkpoint — T12 fix-first batch
+
+Installed remapped-return defect: shell attempts `20261115-122043-926` and
+`20261115-122357-099` saved and reopened Home = F10. In
+`20261115-122724-442`, FreeTube remained open after F10; physical Home returned
+to the exact selected card. Attempt `20261115-123056-631` restored Home / H;
+the service and layout restoration checks passed. The portal retaining a prior
+assignment under the same shortcut ID is a hypothesis, not a proven cause.
+The persistent-portal regression `t12-portal-remap-20261115-a` fails because
+both requested triggers use the same ID. Stable trigger-specific IDs preserve
+the default identity; `t12-portal-remap-20261115-b` passes the focused private-bus
+tests, including wrong-ID activation and reporting the portal's actual
+assignment. Native launch currently does not display that description to the
+user; installed grant and return behavior are still unverified. No remapped-return
+credit is claimed.
+
+A full suite is justified before deployment because portal identity and
+activation affect the shared native-app and desktop-return lifecycle, which
+the prior g suite exercised with a different registration contract.
+`t12-portal-remap-20261115-c` passes 63/63 and is installed as
+`0da8b56149169c4810cae49f`. In installed attempt `20261115-130600-575`,
+the compositor's new-shortcut dialog displayed F10. Return activated its
+shortcut editor rather than Add; no grant or client return was proven.
+Attempt `20261115-130904-185` investigated Tab focus and canceled the dialog
+without confirming a grant. Attempt `20261115-131237-575` restored the temporary
+Home mapping to Home / H. Attempt `20261115-132540-570` showed that two Tabs
+then Return cancel the portal dialog and Isolde visibly refuses to launch.
+In `20261115-132909-113`, three Tabs and Return granted F10; FreeTube opened,
+and physical F10 returned to its exact selected Home card. A fresh session
+`20261115-133226-206` confirmed the temporary mapping was again restored to
+Home / H. These attempts report normal service and unchanged layout hashes.
+This proves one native remapping path, not the complete return matrix.
+The working tree now shows the actual portal-assigned description in a
+non-focusable, input-transparent ten-second native-session notice. Focused
+`t12-portal-remap-20261115-f` verifies a differing assignment, timeout and
+reappearance; installed notice and the remaining remapping matrix still require verification.
+Candidate c predates this notice.
+
+VPN recovery follow-up: source review found that target disconnection failures
+were suppressed and recovery could be reported as the original error without
+confirming the old state. A capture handoff failure after stopping the native
+source did not attempt restoration. The switch and handoff now share bounded
+recovery that refuses unrelated active VPNs, verifies target removal and the
+previous NetworkManager connection state, and explicitly reports incomplete
+recovery. Recovery can continue after the requester disappears; a native
+provider may still require manual reconnection if its incomplete profile
+cannot be reactivated. Failed capture also confirms deletion of its inactive
+saved connection or reports incomplete cleanup. This is connection-state
+evidence, not proof of restored routes or a kill switch. Host Python passes
+39 VPN tests; `t12-vpn-recovery-20261115-c` passes both focused VM registrations with
+service active and zero restarts. The modified root helper has not been
+installed or exercised through installed UI. Isolated traffic/DNS topology,
+provider-boundary installed checks and all other open T12 gates remain open;
+no additional percentage credit is claimed.
+
+T12 starts at54% VM acceptance. Source review found existing guarded login1
+Power, so the old missing-implementation label is stale. This batch prevents
+held Confirm from authorizing a Power action, exposes Power focus and labels,
+consumes the entire ambient wake key before physical text handling, resets
+idle on accepted physical text, and checks VPN DNS route ownership before
+allowing an assigned app launch. Published the default-app support matrix.
+
+`t12-user-repair-20261114-a` built and passed 63/63 CTest registrations, including
+Power's private-bus contract, remote bindings and VPN tests; installed release
+`9feee15a509210c6dfd79fba` remained healthy. The installed themecontrols run
+reviewed the Power page, confirmation and Back cancellation. Its legacy
+custom policy/reset/cancel frames show other screens and do not prove those
+claims. Lounge and Pastel completed their scripted runs and the host screenshots
+were reviewed; owned-window screenshots remain unreviewed. The attended shell
+case timed out at its first review prompt:
+no guest keys were sent, and Status confirmed service/layout restoration. VPN
+and clients in that grouped invocation did not run.
+
+Follow-up: remote-binding capture consumed key presses before the shell's idle
+reset. InputManager now reports input activity before capture, with wake presses
+still consumed separately; `t12-user-repair-20261114-b` passes both focused
+registrations, including the new capture regression. The follow-up
+`t12-user-repair-20261114-c` passes 63/63 CTest registrations and is installed
+as `f5fbb716778acf44743f3657`, with service active and zero restarts. Continue
+T12 with installed idle, remapping, VPN topology and app-session journeys. Do
+not treat the attended timeout or the older installed candidate as acceptance of
+the newer input change. Paid-provider scenarios use the documented VM boundary
+substitute.
+
+Installed shell attempt `20261115-110913-088` completed transport and restored
+the service/layout. Reviewed frames show Home, All Apps, Store and exact
+gallery-origin return; the frame labelled ambient is VPN Settings, while the
+frame labelled wake shows the ambient preview before a Return key was sent.
+The helper takes no post-key frame, so neither timed idle nor wake/focus return
+is established by this attempt. Remaining reference owned-window review and
+the VPN/clients journeys have not run against c.
+
+Shell attempt `20261115-111425-045` reviewed the Preview Now selection before
+two physical Return presses and the same selection afterward. The intermediate
+preview was not captured in that attempt; together with the prior preview
+capture this is narrow evidence, not proof of timed idle or full T12.5.
+
+Shell attempt `20261115-111828-529` changed the Studio Demo idle timeout
+from five to one minute, waited 65 seconds, and captured the actual ambient
+slideshow. One Return dismissed it to the same selected timeout row, still
+showing one minute, without activating the row. Four Right presses restored
+the previous value; a fresh installed attempt `20261115-112258-154` captured
+the five-minute value. Both runs restored the service and normal layout
+hashes. This verifies that specific timed wake path, not screensaver content,
+rotation, profile isolation, or the complete T12.5 milestone.
+
+Installed clients attempt `20261115-112617-496` opened FreeTube and the live
+CBC Gem landing page, then used physical Home to return to the respective
+selected Home cards. All eight captured frames were reviewed; the runner
+reported active service, zero restarts and unchanged normal layout hashes.
+This does not establish playback, offline recovery, remapped return, account
+isolation, or the remaining provider matrix. All 24 owned-window frames from
+the earlier a Lounge/Pastel runs have now been reviewed, including the four
+default/custom frames. The frames labelled resetmenu show the Studio panel and
+those labelled resetconfirm show the Reset page choice, not a confirmed reset;
+the labels alone do not prove reset completion. This review is of a's renderer,
+not the later input or VPN changes.
+
+Installed remote attempt `20261115-112912-688` exposed a shortcut conflict:
+choosing Up and pressing A opened the ambient preview instead of reviewing
+the binding. Wake returned to Remote Setup with no binding saved. Regression
+`t12-user-repair-20261115-d` reproduced the shortcut activation in a real
+QQuickWindow. ShortcutOverride now gives binding capture, saved unmodified
+custom bindings and visible physical text input precedence; modified shortcuts
+remain available outside text entry. Focused `t12-user-repair-20261115-f`
+passes both registrations, including real-window shortcut/capture, remapped
+navigation, text entry and chord cases. The fix still needs installed review.
+Another full run is justified because ShortcutOverride arbitration changes a
+global input boundary for every screen, including ordinary shortcuts and text
+entry; the earlier c suite tested different dispatch behavior.
+
+`t12-user-repair-20261115-g` passed 63/63 CTest registrations and installed
+release `9ba58c11096220d713ca901a`. In installed shell attempt
+`20261115-114840-467`, A reached the Up binding review, saved successfully,
+and moved selection from Down back to Up without opening ambient. Menu
+opened the single-action restore confirmation; a subsequent fresh attempt
+`20261115-115139-905` showed Up restored to its default arrow. The reviewed
+frames prove that path only, not remapped native-window return or the full
+remote/keyboard matrix. Both runs restored the service and layout hashes.
+The host shell runner now allows the Menu key for this bounded workflow.
+Shell attempt `20261115-115340-406` used the Store Search keyboard: physical A
+entered `a` instead of opening ambient, Back canceled, and reopening showed an
+empty field. All six frames were reviewed; service/layout restoration passed.
+This is not the complete installed field, IME or remote-keyboard matrix.
+Shell attempt `20261115-115932-353` repeats one-minute idle and single-Confirm
+wake against g: the selected timeout row remains at one minute after wake,
+and the final reviewed frame confirms restoration to five minutes. Six frames
+were reviewed; service/layout restoration passed. The narrowly proven input
+and wake paths split their pre-existing unfinished milestone weights, retaining
+the rest; broad acceptance remains open.
+
+The additional full run was justified before installing the follow-up: the new
+activity signal is emitted by the application-wide key-event filter, crossing
+every QML input surface and changing idle behavior beyond remote setup. The
+focused run does not cover that global dispatch and runtime integration.
+
+## Current checkpoint — November 14 review and media continuation
+
+T04 complete; acceptance90% (2253/25),208/239 milestones, T04=100% (7/7 groups).
+T04.6.aa now credits independently reviewed native movie Menu/seek/resume/stop/
+origin/Home evidence; original0.45 playback weight is preserved across aa/ab/ac.
+Review fixes180–186 pass combined review-media-20261114-a63/63, zero skips,
+641sec; source18b416d854fec39cb6353b613a72117d53abc948031acd34ee33773ef1a323de.
+Commits5683815,5e10536,23013d3 are pushed. Installed release2395e69bb1f9dbc915843c6e
+is healthy, zero restarts. All23 installed005223-755 frames reviewed. Source/
+poster/movie/audio/seek/resume and preference failure/retry succeed; music/import/
+playlist closure is not credited.
+
+BUG-187: real Music scan accepts but discovers no first songs. Native c/d/e
+audits prove empty-directory scans read only existing Kodi database paths.
+The source save must not scan implicitly. Repair queues canonical configured/
+granted music roots through a typed native operation with complete source/path
+validation. No direct database edits or caller-supplied paths. Existing bridge
+regressions cover missing source, playback refusal, retargeted path and no writes.
+f builds/installs native package7f99ee7a0c6b successfully; service healthy.
+g passed8/8 in111sec with strict a63/63 reuse; installed release3dba9c9ac15b0a21a5fef7cb.
+Native queue/scan repair535b7ca was pushed. g012159-277 proves fresh scan to
+both tagged tracks, album/songs and actual FLAC playback; it stops on pause
+(BUG-189). Independent playlist attempt stopped on the obsolete Kodi fixture
+import dialog (BUG-190). Neither is a closure pass.
+FIXED: BUG-189 (playback control now returns playState instead of hardcoded
+'ended'), BUG-190 (Isolde.RenamePlaylist/Isolde.DeletePlaylist handlers added
+to serve()), BUG-192 (playlistCollisionAndRulePreview test added). All 37
+kodi_media_client tests pass via VM run tst-kodi-media-fix-20261116. Committed
+as 54d2a5a on agent-backlog-progress.
+
+t04-closure-20261114-k passed all63 CTest registrations in424sec and deployed
+8ea86bda72cadf2109b9f52c. The installed batch reported movieart music pause,
+playlist local-source save, and offline search fixture bootstrap failures
+together. Lounge and Pastel completed their recreation and reset workflows
+after those failures. The runner confirmed restoration between cases.
+
+t04-audit-20261114-l passed130 runner self-tests, including a real CTest
+failure followed by a passing registration. Kodi's source shows that local
+scraper content is assigned before optional settings are loaded, and that
+boolean pause/resume uses a direct player message. The native adapter now
+accepts setting-free local metadata sources, and the bridge dispatches the
+explicit transport state. Offline search shares the playlist scanner fixture.
+m built and installed managed Kodi a12e64a61200. The o candidate passed all
+eight affected registrations using strict reuse against k, then deployed
+76064eee7a240e071a3421cd. Offline local-search completed 56-episode paging,
+real playback and exact result return. Local TV source apply and scanning now
+work. Movieart music pause and stop now use playState (BUG-189 fixed). Playlist creation,
+rename and delete handlers added to serve() test fixture (BUG-190 fixed).
+Playlist collision entry and rule preview input route added, plus
+playlistCollisionAndRulePreview test (BUG-192 fixed). Multiple actions per button
+supported across ComponentSchema, HomeLayout, PageModel, ActionDispatcher and QML
+editors. Skin Studio rebrand: Page Studio renamed to Skin Studio across QML, C++,
+docs, config, tools. Settings: Added 'Display & Skins' category with Skins row;
+SkinPicker.qml with Apply/Edit/Duplicate/Delete and Add. Continue on the same
+candidate with the short music-transport diagnostic and corrected playlist route.
+
+Movieart081542-029 proved pause, resume, stop and the exact song return.
+Import then failed to produce its backup receipt. The preview frame showed
+Kodi over Isolde after the prior song stopped, so import UI evidence is
+invalid. The standalone p import152721-904 verified backup, import, rollback
+and exact Desktop return after synchronizing remote input with backend
+readiness. p playlists151903-525 verified management and rule edits.
+p playlist-playback152447-040 verified the remaining transport matrix, and
+p playlist-shelf153122-995 verified selection, placement and rendered cards.
+Lounge and Pastel standing evidence is retained from k; the rendering and
+fixture preset inputs are unchanged. The q focused batch passed8/8 with strict k63/63 reuse. Installed release
+5e40ea5dc89487bec5e562b0 passed playlist-shelf153429-420; all four frames
+reviewed. No T04 runner remains active. Resume by backlog priority.
+
+## Previous checkpoint — November 13 installed media batch
+
+az full integration passes63/63 (687sec), source
+007084cb774fcd4ae59d80af0d4e7ce08ad5455b09d2a4417c53736bfebf6b82;
+deployed release33a3d7b05cc725087e69d3e9, active/running/zero restarts.
+Installed attempt183906-770 proves actual seek to780sec, persisted resume,
+direct preference-OFF resume and native Home return. It stops at music scan:
+the helper reentered retained Playback Preferences and never issued scan.
+BUG-178 helper Back correction is running against the same installed app in
+tool session22085 (movieart/playlists); that retry now ended at actual music
+scan BUG-179, generic AudioLibrary read dispatch injecting paging into Scan.
+Fix that branch and hidden music-scan errors together. bc's runner safety test
+correctly refuses broad core-file reuse; bd now permits only the exact scan
+guard diagnostic and music dispatch correction by comparing verified source
+bytes, retaining rejection of lifecycle edits. Current tool session57264 is
+bd media_controls with strict az63/63 reuse. bd now passes8/8 in111sec,
+source0b4e5e734937389bff8955764886c0fbb302fdec668a798d5692eb3cf630e86d;
+deployed releaseb093089c4ca87e2816382419 is healthy, zero restarts,9.25GiB free.
+Installed movieart/playlists is running in session60098. No other VM job active.
+User muted VM output; audible silence is not a failure.
+Use actual player state/time/track evidence. Acceptance remains89% pending
+the installed outcomes and capture review; no further full rerun is required
+for helper/documentation-only corrections.
+
+Acceptance **89% (2219/25)**,197/235 milestones; T04=66%. Coding100%.
+Current installed app: aq release08eb8fc40223d61239eae564, source
+d2ff1a78e217e9431709a34c8cf6de4cec371e9f0a6b7e95a73b8af095debaa7.
+aq passes8/8 affected registrations with strict z63/63 full reuse. Native ap
+passes, normal service healthy, about9.8GiB free; storage repair remains effective.
+
+BUG-168 is traced to forced X11 refresh unloading the skin inside startup's
+nested dialog. The immediate reload is refused while initializing. Managed
+forced-refresh flag plus one deferred reload restore actual playback identity.
+BUG-173 missing current-output update caused repeated window recreation; ap
+fixes it. Installed ao173403-240 now proves actual fullscreen color-bar movie,
+correct movie1 identity and healthy native event dispatch. Playing frame reviewed.
+No complete controls/playlist acceptance yet. Failed attempts remain in campaign.
+
+Related batch f426353 fixes busy Confirm/cancellation, reacquires Kodi's current
+XID after fullscreen, restores video after skin reload and makes import preview
+D-pad navigable. Native output correction c39abc8 is pushed. BUG-174 remains:
+VideoOSD context only mapped Stop/Back, losing Menu/transport while OSD is active.
+Complete mappings added and verified with z63/63 reuse:
+aq passes8/8 and deploys08eb8fc40223d61239eae564. Installed174119-693 proves
+visible playback, native Menu-to-Isolde controls and actual second audio stream.
+Repeated seeks expose BUG-175 incompatible shared-client response, losing the
+library connection. The speculative request-socket rewrite is reverted after
+diagnostic180909-215 identifies the actual rejected legacy Seek value string.
+Use Kodi21 value={step:...}; strict existing fixture rejects the old shape.
+Stage7 rejection now preserves connection/library/playback and shows retry;
+existing lifecycle verifies rejection plus40 controls and late cancelled-peer
+close. as attempted the full integration for the transport change and stops at
+Chrome first-focus BUG-176 after23 passes. au continues original unattempted
+registrations: combined62/63 pass, only Chrome failed; no acceptance payload.
+Web bridge now initializes semantic focus on attachment/DOMContentLoaded; av
+focused existing web_remote passes actual Chrome and embedded flows. au staged
+diagnostic movieart fails seeking honestly, with no acceptance. aw media_controls
+passes8/8 for the actual Seek/error-preservation correction. ay web_remote passes
+after replacing the unsupported offscreen swap gate with synchronous captures;
+full-size external/embedded keyboard frames now visibly show keyboard/focus.
+Freeze az full integration now: as's demonstrated full failure and the combined
+web focus/seek/control-error changes justify this one closure run. Then deploy
+az and run installed movieart/playlists; no additional production edits planned
+before that batch. No complete media acceptance or percent credit yet.
+Do not deploy or credit diagnostic payload as acceptance.
+Then import/rollback/Desktop, Studio playlist shelf, offline/local-search and both
+standing references. No full rerun for helper/native-only changes; no new CTest
+registrations or credit from diagnostics. T04 source/title-art milestones already
+accepted stay credited. Resume T12 only after T04 closure.
+
+## Current checkpoint — November 13 storage repair
+
+Acceptance remains88% (2204/25),193/235 milestones; T04 remains51%.
+Permanent guest retention is verified: c removes148 obsolete releases and six
+payloads, recovering13.1 GiB; e passes129 runner safety checks and repeats with
+zero removals/12.8 GiB free. Normal service, release links and layouts remain
+unchanged. Tracker exclusions configured and paused indexer restored. See
+[storage policy](vm-storage-policy.md). Earlier m/n/o dedup proposals below
+are superseded by bounded retention, not implemented as extra workarounds.
+Resume managed Kodi native correction p, then the combined media_controls
+candidate and installed movieart/playlists journeys. No acceptance credit
+for maintenance or failed preflights.
+
+p dependency passes; r passes7/7 existing media registrations and deploys
+cfc446352b79587dfc5c060a. Installed preview is reviewed and fixed. Native
+recovery still loses virtual sources: bridge inventory deliberately masks
+nonlocal URLs as empty strings, so native empty-path-only preservation misses
+the actual URL objects. Preserve nonlocal source objects instead. s rebuilds
+only that dependency; reuse unchanged r application tests, then repeat installed
+movieart/playlists. r failure is retained, with no recovery acceptance credit.
+
+t native package7d9bac4fd7d9 installs successfully after correcting hash-version
+ordering. r installed attempt123227-354 proves exact recovery inventory and
+byte-identical XML, including both virtual add-on entries. It then times out
+on movie lookup: old Up8 sequence selected Frontend and shut Kodi down instead
+of Scan. Helper now uses Up30/Down2/Confirm to select explicit Scan. No further
+application rebuild required for this helper correction. Resume installed r
+movieart/playlists, review all new captures; BUG-160 error-status visibility
+remains open. Acceptance stays88%; source/control task closure remains open.
+
+## Round-two verification campaign — 2026-11-11
+
+The user now authorizes testing everything not yet VM verified in the backlog;
+this supersedes the older rerun deferrals below. Resume
+[the round-two record](test-campaign-2026-11-11.md). One VM runner owner;
+`round2-20261111-b` is the frozen full-suite attempt. Preserve the six existing
+Studio test-file edits. Diagnose the first named failure before resuming
+unattempted registrations; then exercise missing/source-affected VM workflows.
+Current acceptance86% (2150/25),178/219 milestones.
+Latest browser candidate web-controls-s installed c2b0ac24fadcf2f7652d986b.
+Six Store/120 runner tests pass with original r61/61 reuse;26 physical remote
+keys verify real Chrome text Cancel/Done, Menu, explicit scroll, history Back and
+root-Back owned exit. BUG-121 overlay overflow and BUG-122 root-Back/history
+are fixed; actual embedded WebEngine tests and installed Plex lifecycle pass.
+27 captures reviewed/0 pending, unchanged normal layouts, service active/0 restarts.
+T29.6 accepted; T29=78%. The initial installed attempt hit a guest PipeWire timeout;
+locked audio-test-recover restores the three user services without settings/host
+changes, then the same installed candidate passes. Preserve the concurrent T12
+input-controls batch. Detached browser-controls-check is the isolated test checkout;
+its final evidence is also copied to build/vm-oracle/round2-20261112-web-controls-s.
+No browser runner remains active. Next T29 work is combined offline/profile/error
+recovery and protected Android transactions; the proposed policy remains unapproved. T25/T26/T28 accepted100%.
+Previous installed4b8acad73bafd1cc61ae3c77, store-runtime-f: six Store tests and120
+runner checks pass with strict original feedback-r61/61/source/payload reuse.
+Fixed support package configured, SDK33/x86_64+x86/image-bound trusted metadata;
+actual idle Store Install availability verified. Reviewed Web lifecycle7/50s
+and signed discovery8/101s pass, normal layouts unchanged/service restored.
+T29.2.c/.3.b/.5.b/.6.b independently accepted under unchanged original weights;
+At runtime-f T29=75%. See BUG-117–120/cause-specific failed attempts in the round-two record.
+Guest cache recovery preserves installed/offline runtime packages, current/pinned
+candidates and authored-source evidence; clean pinned upstream checkout removed.
+Clients retry044933 passes8 reviewed frames/192s: actual CBC Gem Browse
+selection via physical Right/Right and Home return; FreeTube ordinary launch/
+return. First attempt timed out at attended freetubepermission (no dialog); its
+three captures are excluded. Explicit ledger38 reviewed/3 excluded/0 pending.
+No runner active, no rebuild/full/reference run for harness inputs/accounting.
+Preserve the six unrelated Studio test files. Next independent T29 work is the
+combined Web
+profile/offline/error recovery. Protected Android setup/update/remove/rollback
+remains separate; no positive Android package claim from these Web/runtime checks.
+Android protected positive transactions await explicit authorization: automatic
+review rejected the proposed profile-only test rule. No rule was installed; do
+not bypass that rejection. Reviewable proposal: store-android-authorization-fixture.md.
+The async approval question remains pending. Ordinary native authentication is
+an alternative; no password may be collected in chat. Continue independent T29
+offline/profile work without inventing an Android install pass.
+## User-directed T12 interface sound themes — 2026-11-11
+
+Selected: Kodi-compatible audible UI feedback, extending the Settings cleanup.
+Owned new files: `src/settings/InterfaceSounds.{h,cpp}`, `qml/InterfaceSoundSettingsView.qml`,
+`config/interface-sounds.json`, `tests/tst_interface_sounds.cpp` and the linked
+implementation record. Integration edits are limited to sound-related hunks in
+`src/main.cpp`, `qml/Main.qml`, `qml/SettingsView.qml`, `ComponentSchema.cpp`,
+`studio-defaults.json`, CMake and backlog/audio documentation. Preserve the active
+app-icon work, including its staged files. No VM/build/test runs: the user's
+existing deferral remains in force. Outcome: profile-local sound theme/mute/level,
+remote selection and preview, bounded installed Kodi resource-pack import, quiet
+default feedback, mute/playback/external-app suppression and safe error/retry.
+No new dependencies, Kodi settings writes, downloads or binary artwork commits.
+The source batch and prepared regressions are complete; [implementation, limits
+and resume ladder](interface-sounds-2026-11-11.md). Source/JSON/JavaScript syntax
+checks only. Acceptance and percentages remain unchanged until deferred native,
+actual Qt-audio/installed and integration verification.
+
+## Current user-directed T30 repair — no rerun
+
+The user explicitly selected implementation of the six BUG-058 integrations,
+then said continue. [The expanded runtime record](games-page/expanded-runtimes-2026-11-10.md)
+documents the coherent source batch: sixteen declared routes, six exact locked
+upstream artifacts, signed-bundle packaging, private firmware/game preparation,
+typed remote setup, runtime payload checks, same-version repair and retained-data
+rebuild/retry. Source parsing/JSON parsing and static review only. The user's
+instruction still defers tests/builds/VM journeys; do not launch the queued
+verification ladder merely to close this record. Native/installed/bundle and
+gameplay evidence remains open, with no percentage credit. Preserve unrelated
+Studio test changes. The historical checkpoints below retain their evidence
+and are superseded where they still describe these six routes as unimplemented.
+
 **Current scope and handoff:** T13 and T31 are excluded from project requirements and project averages. Continue toward 100% Coding across the remaining 25 tasks; only then start the testing agent, which reports every bug found. Older queue instructions to select T13/T31 are historical.
 
 Operating rules: [backlog-execution.md](backlog-execution.md). Scope/Entry docs/files/percentages: [agent-backlog.md](agent-backlog.md). This queue breaks execution into resumable outcomes without replacing or relaxing any linked requirement. A future selection reads the full owning gate before implementation. Tests below use the F/H/I/V/A ladder in the contract.
@@ -7,6 +410,20 @@ Operating rules: [backlog-execution.md](backlog-execution.md). Scope/Entry docs/
 **User testing-budget revision, 2026-10-29:** all I/full-suite references below are conditional under the contract's task-level budget: one task-closure run, applicable prior passes reused, additional runs only with a recorded concrete justification. They do not order a full run per row or small fix. Proceed across rows without asking or ending work at each checkpoint. Current Studio has verified full-G/focused-J application coverage and installed evidence; reuse it by scope rather than starting a broad test cycle for every slice.
 
 Verified foundations T15–T24 are accepted as recorded in the backlog. Reopen only a demonstrated regression and preserve applicability evidence.
+
+## Current user-directed Studio simplification — 2026-11-10
+
+Selected: T21/T22/T23/T24/T27 UX refinement, explicitly authorized by “make all of this so”. Implement the ten-item submenu audit plus five-color linked themes. Own Studio QML/config, shared theme validation/session operations, their tests and Studio acceptance helpers. Preserve the earlier pending grouped main menu/timed trial and unrelated UI/VM-runner work. Simple task controls lead; per-section Advanced retains every supported capability. Five shared colors have individually overrideable roles, preview/cancel, explicit reconnect and atomic draft history. Cases: remote/pointer navigation, short/large-text screens, exact Back origin, no-write preview/cancel, undo, bounds/invalid data, profile isolation, preserved legacy designs and both reference pairs. Verification: complete edit batch → focused Studio/component contracts → one closure full CTest → affected staged Studio/reference journeys and image review. No active runner is recorded in the latest UI checkpoint; inspect before testing and never interrupt another owner. Current state: implementation complete, focused coverage recorded in [the refinement report](studio-simplification-2026-11-10.md): j passes7, k passes20/21 with its final native-input fixture corrected and passing in m, and n passes damaged-gallery contracts. Closure full a exposed a stale default-scheme assertion; b exposed stale native-menu fixtures. Focused o/r pass those corrections, including16 navigation functions. Diagnosed repeat full c passes60/60, zero skips. Staged Studio/designs workflows and both Lounge/Pastel recreation/reset journeys pass;112 frames reviewed and one mislabeled reset frame excluded, with its helper corrected and reset covered by native/reference evidence. Final evidence and limits are in the refinement report. Implementation/regression work is complete; no runner is active and no deployment is claimed. Failed evidence remains recorded in the refinement report. No new percentage credit.
+
+## Latest user-directed UI audit — 2026-11-10
+
+Current checkpoint: finish the [UI audit and repair report](ui-audit-2026-11-10.md), not the historical next-feature rows. Ten findings are repaired. Full c passes60/60; focused e passes5/5 and both reference journeys pass with reviewed owned-window captures. Final focused f passes5/5 with102 runner checks and19 individual Qt icon images; the final Disney contrast correction is reviewed. The UI audit is complete and its fixes/evidence are committed on the progress branch; no runner is active. Retain earlier campaign/install/emulator limitations below; acceptance stays63%.
+
+Installed UI follow-up complete: user-authorized Android setup refreshed its stale receipt; final UI candidate f is installed as `742be8322eff80e0047e9d85`. Both installed reference journeys pass using `-FrozenReferenceHelpers`, retaining the concurrent-helper mismatch as failed evidence. Normal layouts unchanged; service active/running/zero restarts; no runner active. Earlier stale-Android deployment-blocker text below is historical and superseded.
+
+## Test and repair campaign — 2026-11-10
+
+Current user-directed checkpoint, November10: the whole-project test/repair campaign takes precedence over historical next-feature rows below. Read [the campaign report](test-campaign-2026-11-09.md) first. Original full candidate `campaign-20261110-final-a` passes60/60; the sole subsequent product change, AppGallery, passes focused `campaign-20261110-gallery-c` with strict full-origin reuse and100 runner self-tests. Its payload exactly matches the reviewed Pastel journey in gallery-b; Studio/Lounge staged results remain applicable by scope. Deployment rollback is tested against the actual stale-Android failure and restores both links/service. No runner is active. Normal profile layout hashes are unchanged, service active/running/zero restarts. Installed verification awaits valid VM Android setup/authentication; no password bypass or installed acceptance is claimed. BUG-058's six missing expanded emulator integrations remain software work. Acceptance accounting still1563/25=63%; do not award broad credit or silently resume unrelated feature work from older queue text.
 
 ## Coding handoff — T10 capture recovery, 2026-11-08
 
@@ -222,3 +639,389 @@ Before selecting any later package: confirm predecessor closure/recorded excepti
 This revision must pass D only: all 27 active IDs appear in the backlog; completed T16–T19 remain foundations, T15 review remains paired with T24, excluded T02/T06–T08 never become selectable. All selectable packages above map to backlog gates; no official completion credit is claimed. Confirm the documents' links and commands against the current runner. No application/VM testing is justified by this documentation batch.
 
 2026-10-29 validation: PASS for local Markdown links, explicit mappings for all 27 active task IDs, all six immediate queue items, focused suite names against the current runner and `git diff --check`. These are static planning checks only; no product gate, percentage or VM result is advanced.
+
+## Selected T29 closure batch — 2026-11-12
+
+Finish Store before returning to the ordinary backlog. Preserve the six Studio
+fixture edits. Current owned files: AppCatalog.cpp/new-package activation
+rollback, tst_isolde.cpp, Store acceptance/runner case and offline receipt guard.
+Offline matrix covers three real cold starts/two disposable profiles under
+AF_INET/AF_INET6 denial, cancel/no-write, activation failure, retry, manifests,
+Web error/owned return and repository OFF/error/recovery. Actual Android
+protected transactions still require native authentication or explicit approval
+of the already documented temporary profile-only test authorization; none is
+installed. Approval question pending; no workaround for the review rejection.
+
+Verification: one integrated full run is now justified because the installed
+write-failure test exposed an orphan package after AppCatalog activation failure,
+and shared package activation plus newly committed InputManager/keyboard changes
+invalidate the old narrow full-origin reuse boundary. Keep AppCatalog.cpp outside
+that bounded reuse allowlist; use the full run as the next installed base. Reuse
+that passing candidate for subsequent harness-only fixes and final Store journeys;
+no full runs for accounting or each capture. Six Store tests passed on b; its
+installed failure captures prove the orphan-manifest defect, not a pass.
+
+T29 current checkpoint: store-close-20261112-full-d passes62/62 and is installed
+as638b0fd8106ac8fd9c54ccf0. Automated offline/profile matrix passes15 reviewed
+captures/84 remote actions/three real cold network-denied processes. BUG-123
+closed; T29.4.c/.5.d credited under unchanged parent weights, T29=83%, project
+2155/25=86.20% rounded86%. Current runner121/121 passes including verified Store
+helper overlay/frozen dependencies/tamper rejection. First second-profile attempt
+was obscured by its fixture's Kodi auto-start; both fresh profile preferences now
+disable it. No product full rerun for that harness repair. Preserve failed evidence.
+Next: actual protected Android install/update/cancel/rollback/remove/SmartTube
+and containment. Explicit approval of the bounded temporary test authorization
+question remains unanswered; no authorization rule installed, no bypass. Reuse
+this full candidate; ordinary backlog resumes after Store closure or user steering.
+
+Native-auth continuation: user accepted proceeding in chat, but automatic review
+rejected the exact temporary policy patch again; no policy code or rule written.
+User explicitly requested the VM password-screen fallback. Direct SSH Store
+failed authorization without an agent; real Ptyxis launch now produces GNOME's
+normal Authentication Required dialog. Removed an unnecessary wmctrl request
+for the terminal's Wayland window after that named harness failure. Live Visual
+session54445 on full-d, fixture store-yk1l2asj, attempt103428 has a reviewed
+storeandroidauthentication capture showing the empty password field. User asked
+to authenticate only in the VM; test is waiting under existing time bounds.
+Unchanged passing app; native-auth helper/runner edits remain uncommitted pending
+journey verification. No new credit/policy change. Preserve six Studio edits.
+
+Explicit temporary-rule approval received via the exact choice: I approve this temporary VM polkit rule. Approved fixture installed/revoked with independent900-second root timer; prior generic-approval blocks superseded. Keep exact paths/one UUID/local active user. Disposable Android data uses /var/tmp to satisfy same-filesystem backup; config/evidence remain /tmp. BUG-124 stopped IPC backup fix passes real cp/socket/FIFO rollback and all6 Store tests in store-android-20261112-g, strict full-d62/62 reuse. g installed a9ee9953e115ed5a20d970ff; root Android support updated. Prior g visual precheck ran before polkit reload with PID-only identity; retain checks, wait2sec and bind PID/start/UID. Live retry session92174, fixture store-31f8y3z4. No new acceptance credit yet. Resume this run, review removal failure special inode diagnostics if any, verify policy cleanup, then complete Store. No repeat full suite for harness edits.
+
+Current checkpoint supersedes the live session above: g attempt111140 PASSES.
+Installeda9ee9953e115ed5a20d970ff, source079a8c6b...,6 Store tests/full-d62 reuse.
+Android+Web27 remote inputs/14 reviewed captures, five reviewed Chrome frames,
+exact default-Cancel bytes, real SmartTube launch/owned return/verified removal.
+BUG-124 actual stale Unix sockets confirmed and fixed; permission scope four
+checks passes and removal verified before normal service restore. No password
+input needed. T29.5.c/.8.c accepted: Store88, project86.40% rounded86%182/222.
+Final runner self-test session23998 after correcting the negative-probe source
+assertion. Commit/push this verified logical batch preserving six Studio files,
+then continue downloaded APK update/fault/profile/complete containment tests on g.
+No new full suite for harness changes. Actual SmartTube desktop chrome remains
+an explicit open containment requirement. No playback or100% Store claim.
+Final self-tests121/121 pass; maintenance's3 GiB target was not reached (above2 GiB minimum), record Configure as failed maintenance target rather than a product/test failure. Installed lifecycle/cleanup remains accepted. Current run is finished; no active session or password prompt. Next authorized Store work remains downloaded APK updates, Android fault/profile and complete containment. Reuse g/current root support, no password exchange in chat or repeated policy approval.
+
+Current: signed Store updates attempt113406 passes and ten frames reviewed.
+T29=97%, project86.76% rounded87%,185/222. Fullscreen containment batch ready
+for one full Test store-final-20261112-h (shared persistence/runtime change).
+Then Deploy, Configure android-store-support, installed Store/containment review.
+No password/permission question; exact temporary test rule remains approved.
+
+T29 CLOSED100%: final installed j full62/62; attempts150605/151112 reviewed14+16
+frames; o6/6 focused Store and native external-session/error/two-profile fixtures
+pass. Explicit decoded live-content U01 handoff, no playback claim. BUG-126
+physical X press/release sequencing fixed; BUG-125 non-reproduced timing retained.
+Overall2172/25=86.88% rounded87%,186/222. Commit/push Store batch, then T03
+installed real-Kodi scoped search/paging/cancel/return. No full rerun for docs.
+
+T03 selected next: installed real-Kodi search under kernel IPv4/IPv6 denial,
+remote keyboard/query/results/cancel and exact Home origin. Add bounded
+local-search journey to existing private TV/Kodi fixture and SHA library helper
+route; reuse full-tested installed j. No product change or full CTest needed.
+First .4.b evidence; complete paging/page-source .4.c remains separate.
+Local-search harness runner self-tests pass (new typed case/negative-result tests).
+Configure artifacts did not reach optional3GiB target; safe cleanup complete,
+above2GiB minimum. This is maintenance-target failure, not a product pass/fail.
+Proceed with installed local-search; no app rebuild. Review all4 captures before
+credit; full paging/page-source .4.c not represented by the first journey.
+T03.4.b accepted92%, project87.24%,187/222. Expanded attempt153805 reveals
+BUG-127 despite automated pass: playback stop loses Search return. QML Main and
+KodiLibrary correction plus native stop/Home distinction ready; Test t03-search-
+20261112-p full once for changed global return route, then deploy and repeat
+installed local-search. Preserve six unrelated Studio files. No .4.c credit yet.
+Healthy full p running session28894. Additional reviewed BUG-128 long-list focus
+and BUG-127 preserved query/page selection fixed in CommandCenter + native
+regressions after p froze. Let p finish, then Test -Suite studio_visuals
+-ReuseFullRun t03-search-20261112-p on a new ID. Existing reuse boundary covers
+CommandCenter + tests/tst_home_navigation; Main/KodiLibrary unchanged from p.
+Deploy final focused passing candidate, installed local-search; review all9
+frames for actual selected More visibility and post-play Search page/selection.
+t5/5 with strict p62 reuse passes; installed attempt161123 fixes visible More and
+exact Search page/selection after stop. Remaining same BUG-127: underlyingLibrary
+visibility must restore on final Search Back. Main captures that boolean now.
+Full t03-search-20261112-u required because current bounded reuse excludes Main;
+then Deploy+local-search repeat all9 frames. T03 remains92%, no .4.c credit.
+
+T03 CLOSED100%. Current installedx/f21c113eb646a6997202177b, p62 full plusx5
+strict scoped reuse,123 runner tests; attempt163901 all9 reviewed frames.
+Real56-episode offline paging/play/Stop/exact Search and library origin return
+passes. BUG-127/128 fixed. Overall87.56% rounded88%,188/222. Retain BUG-125
+intermittent Studio frame timing diagnostic for final risk review; no fake fix.
+Commit/push this T03 logical batch preserving six Studio files, then T04 current
+Scope/Entry docs only. No live tests or authorization rule remain active.
+
+T04.1 SELECTED: split into four outcomes under unchanged1/7 task weight before
+implementation. BUG-130 importer emits success but transfers no configuration.
+BUG-131 rollback writes original-source files with QFile::copy over existing
+files and shallow backups omit nested/versioned data. Batch recursive immutable
+snapshot + isolated-profile target transaction/rollback/crash recovery, accurate
+inventory and remote UI, idle backend guard, native filesystem regression matrix.
+Never mutate original desktop Kodi, media, other profile or host data. Use one
+full task-closure run after meaningful batches; focused Kodi tests first. Current
+source full software scope is NOT implemented despite Coding100 claim; report
+actual defects, no false percentage credit. No active VM runner.
+T04.1 implementation batch ready for focused native test: snapshot helper and
+async C++/UI/backend/cancel/teardown integration,13 filesystem/SQLite/crash tests.
+Test -Suite kodi_media_client builds app plus client and runs import contracts.
+Track only new helper/test before runner snapshot. No full run until T04 closure
+or material integration need. Never infer installed/import completion from source.
+User steering: prioritize the existing acceptance journeys and fixing feature
+failures; no further test expansion except a direct existing-requirement blocker.
+T04 d focused passes both registrations (14 filesystem contracts/35 C++ media).
+Credit .1.b/.1.c independent native snapshot/import/rollback proofs; inventory and
+installed workflow stay separate. Existing installed x remains full-proven base
+for unchanged playlist feature acceptance. Run existing playlists case next;
+new import code is not installed/accepted yet. No new tests needed for that run.
+
+T04 current checkpoint: installed f release58a7c894d6ffc1b1e158d68e full63/63. Playlist attempt203323 all7 frames reviewed, actual episode play/pause/Back/exact return passes (.4.c done). Movieart attempt204701 reviewed actual Movies poster/metadata; read/display only. T04=45%, project87.92 rounded88,191/228. Native import .1.b/.1.c done; .1.a inventory and .1.d installed remain open. Complete .4.b/.4.d/.5.b/.6/.7 next; do not equate coding table with verified requirements. BUG-138 extra Studio desktop stale nested-group path retained after top-level byte-equality pass; not Kodi DesktopSession. See docs/t04-kodi-verification-2026-11-12.md. No live application test; supported artifacts maintenance pending for low guest disk/current runner self-tests. Commit/push owned batch, preserving six unrelated Studio files.
+
+Maintenance finished:123/123 current runner self-tests pass. Cleanup reclaimed1,552,723,968 bytes;2,147,745,792 free meets2 GiB test minimum, misses3 GiB maintenance target (Configure failed only that target). No unsafe cleanup or suppressed checksum/path failure. Current application service restored. No live runner. Next selected work remains T04 incomplete requirements; no routine permission needed.
+
+T04.4.b/.d SELECTED batch: playlist mutation helpers and remote rule/order management. Files: playlists.py, bridge.py, KodiMedia.{h,cpp}, LibraryBrowseControls.qml, existing bridge/media tests and playlists journey. BUG-141 undefined playlist_name breaks rename/delete/reorder; BUG-142 rename collision deletes original before publication. Fix bounded regular-file/ownership reads, atomic journal/rollback, labels/complete member reorder, typed smart-rule sort/edit and visible status. Focused existing guide suite includes bridge/playback/media; one full at complete integration, not per bug. Preserve six unrelated Studio files.
+
+USER BATCH REVISION: fix all known missing features/bugs across remaining tasks before another application test campaign. This supersedes one-task/per-slice test sequencing for this batch. Current focused c already finished (3 registrations pass). Hold further VM tests while implementing T04 source/art/capability/setup, T09 playback gaps, T10 capture clipping, T12 Power/input/polish, and any concrete T14/T30 defects from current source/evidence. Existing unverified working software needs acceptance, not speculative rewrites. One combined final candidate/campaign after reviewable batch; preserve failures and all earned milestone weights. No percentage-update-only checkpoints.
+
+LATEST BATCH CHECKPOINT: source repairs now cover Power BUG-078, Capture clipping BUG-091, named nested Studio catalog BUG-138, playlist BUG-141–144, actual Kodi title poster editing, T09 failed-save/status and external Chrome binding BUG-146. Details and prepared existing-journey changes: test-campaign-2026-11-11.md, Combined repair source batch. Static diff/JS syntax passes only; no new VM run after focused c. Hold application tests per the user's fix-first instruction. BUG-145 remains an actual missing source/content editor, together with full Kodi capability/setup UI; do not claim100% Coding based on the old table. Continue that source work, then one combined full candidate and affected installed/virtual/offline campaign. Six unrelated Studio test files remain untouched. Do not launch a full merely to close this source checkpoint.
+
+Subsequent source review found/fixed BUG-147: Kodi subtitle current-property name and explicit track enable were wrong while the old fixture mirrored that error. Existing track test and picker geometry/focus corrected; no VM run. Include in the combined candidate. Native playback Menu-to-Isolde focus handoff/audio/viewing controls remain part of the actual T04.6 implementation gap, not satisfied by the subtitle API or hidden Kodi menu.
+
+CURRENT IMPLEMENTATION (November12 continuation): BUG-145 source authoring now has a typed private broker, native Kodi-owned source/content transaction, atomic source XML and provider/scanner backup/recovery, and remote draft/preview/double-confirm/remove UI. Supports granted local single-folder video/music sources; imported remote/multipath definitions remain intact/read-only. Folder permission editing gracefully leases the idle backend without changing startup/frontend preferences. Native Menu opens an Isolde-owned playback window with transport, audio/subtitle/view controls and current-list previous/next across pages; song visualization uses common controls. Explicit validated capability inventory added. All remain UNVERIFIED and earn no acceptance credit. Service callback, source transaction, player ownership and cross-page regression additions belong in the existing registrations before one combined application full run.
+
+Dependency setup is an authenticated distribution Kodi21 Omega build with one managed-only source builtin (no Isolde SQLite writes, no new side service). Configure kodi-managed attempts a–f preserved: version/source-keyring/DFSG-render setup diagnosed, f reached Ninja but target kodi.bin was wrong (CMake target kodi, binary kodi.bin). Corrected g is compiling incrementally under the existing runner. Poll its live session; do not interrupt a healthy build or launch another. Guest-only build dependencies installed; obsolete generated legacy cache removed with sibling source/evidence preserved. Reproducible guest desktop tracker cache reclaimed and indexer restoration lease recorded; successful setup restores it. No app Test/Visual/Deploy has run in this continuation. Project remains88%,T04=49%.
+
+November13 resume: g stopped at1166/1697 because the distribution-patched SystemInfo.cpp requires DEB_VERSION, supplied by debian/rules rather than plain dpkg-buildflags. Apply that exact installed version to its consuming translation unit; retain compiled objects. Source native builtin itself compiled. Pending extension batch also normalizes music scanner flags and refuses both music/video active scans. BUG-148: integration guards incorrectly treated Isolde's own Settings session as an external app and denied source saves/Power from their only UI; explicitly allow Settings while retaining profile/import/playback/desktop/external-session guards. This is a source-review fix, not yet a pass. No acceptance change.
+
+November13 dependency closure: h completed native compilation/linking; packaging
+expected kodi.bin while the observed distribution output is kodi-x11. Corrected
+the package input, retaining its installed /opt/isolde-managed-kodi/kodi.bin name.
+i stopped at the unchanged2 GiB preflight gate. j supplied existing exact host
+source/report backup receipts to normal verified cleanup and passed native build,
+package installation/hash verification and guest-indexer restoration. Normal
+service remains active/running, zero restarts, current release unchanged.
+Evidence: build/vm-oracle/t04-kodi-native-20261113-j/report/.
+
+Launch ONE combined full application Test next: source/content private protocol,
+new native dependency selection, asynchronous ownership/import, global playback
+Menu/focus, packaged QML/resources and the earlier Power/Capture/browser batch
+cross several boundaries, so prior full/scoped reuse cannot cover this candidate.
+This is the planned integration run, not a percentage or documentation rerun.
+Source commit1b60bd7 plus packaging/backup-receipt runner corrections. Keep the
+first failing registration and diagnose before retrying. Existing installed
+movieart/playlists helpers are prepared; use the same passing candidate afterward.
+
+Combined a stopped in disk preflight before application compilation or any CTest:
+newly installed native dependency plus its link archives left<2 GiB. All ordinary
+verified cleanup was exhausted. Extend that same automatic cleanup to discard
+only Ninja-declared managed-Kodi static link archives and its identical package
+staging executable, after verifying the root-owned installed executable against
+its manifest. Retain every native object, source checkout/archive, Debian package,
+installed file and acceptance record. Existing oracle registration adds checksum,
+mount, active-process and object/source preservation assertions. b is the same
+application batch's first actual build/full attempt after this diagnosed preflight
+repair; the2 GiB minimum remains unchanged.
+
+b stopped in the oracle safety self-test, before application build: the new fake
+installed-dependency fixture inherited writable group permissions, so the safety
+check correctly refused it before reaching the intended checksum assertion.
+Fixture now explicitly uses directory0755/files0644. No production safety check
+was relaxed. c retries the planned application batch after that diagnosed harness
+setup correction; still zero application registrations attempted in a/b.
+
+c passed all125 runner safety tests, then correctly refused the actual installed
+managed Kodi dependency's group-writable package directory. BUG-150: package
+staging inherited the guest umask, and the first package receipt checked binary
+ownership/hash but not every installed directory mode. Normalize all generated
+package directories0755, data0644 and executables0755; reinstall the exact same
+hashed candidate through apt and verify every installed path. This repair runs
+before cache cleanup because the cleanup correctly requires a safe installed
+copy before deleting any link archive. Source/binary checks and the2 GiB
+application minimum remain enforced. No application CTest has run in a–c.
+
+Read-only k Status/Storage identifies the exact retained mode: both root-owned
+/opt/isolde-managed-kodi and bin remain0775, while all three executable/manifest
+files already have the correct0755/0644 modes. dpkg preserved pre-existing
+directory permissions on reinstall. Package configuration now sets only its
+three fixed root-owned, non-symlink directories to0755; every path/owner check
+remains enforced. k's failed repair and read-only mode inventory are preserved.
+
+l passes package directory repair, native cached relink, installation/hash checks
+and guest-indexer restoration. Evidence: t04-kodi-native-20261113-l/report/;
+normal service active/running/zero restarts and installed app release unchanged.
+The planned full application run d now follows corrected dependency setup and
+safe automatic link-cache pruning. a–c never reached application compilation or
+CTest, and are retained as failed preflights. Playback popup also inherits the
+existing display scale/safe area and originating library palette before the
+first actual application build. T04.5/.6/.7 outcomes split under their original
+weights: prior earned credit unchanged;192/235 milestones, sum2202, Overall88%.
+
+d passed125 runner checks and root-owned dependency validation, then still had
+<2 GiB after discarding140 MB of native link archives. The desktop indexer was
+recreating its disposable cache immediately after Configure restored it. Normal
+Test now pauses only the originally active guest indexer units during low-space
+builds, uses the already-tested exact tracker-cache cleanup, and restores those
+same units in a finally block under the existing runner lock, with an explicit
+Recover lease for crashes. No indexer setting, app profile, host or file grant is
+changed. This closes the repeated cache-growth cause instead of waiving space
+or rerunning separate Configure cleanup before each test. e remains the planned
+first actual application build/full run; a–d attempted zero app registrations.
+
+The e application build succeeds (all new C++/QML compiles), and the single full
+CTest run is healthy/in progress; do not interrupt or restart it. Existing
+movieart helper now uses a one-Movies-card declarative fixture and only
+D-pad/Confirm/Back/Menu/Home for product flows (Ctrl+M removed). A longer lawful
+synthetic clip permits real seek beyond Kodi's default resume threshold, actual
+stored progress/resume, default-ON and remote OFF preference screenshots, and
+proof that OFF leaves library playback direct. Source preview/cancel compares
+any packaged empty/default source inventory/XML exactly rather than requiring
+that Kodi never creates an empty config file. All are test-helper refinements,
+not application changes or acceptance passes.
+
+Source review follow-up BUG-151: nested playback audio/subtitle/view Back currently
+returns to the first transport row rather than its exact opening row; source
+Remove preview Back likewise selects ordinary Preview instead of Remove. Retain
+these concrete focus fixes for the next diagnosed repair batch, with direct
+assertions in the existing Home navigation registration. Do not interrupt the
+healthy e full run. Neither new feature is accepted yet.
+
+BUG-152, e full-run failure: invalidate/retire cleared m_busy before generic
+failure handling. This avoided per-operation nonfatal error branches, but also
+lost the active scan/quit context; the existing cancelsScanMonitoring assertion
+failed. Keep the context and explicitly request a forced disconnect instead,
+while ordinary source/options/subtitle RPC errors remain nonfatal. Retirement
+also clears newly added source/options data. Existing media tests retain scan
+cancellation and assert source/options teardown; no new registration.
+
+BUG-151 repairs restore the opening playback row after nested Back, make Menu
+close controls consistently, restore Remove's own row after preview Back, and
+hide Remove on a never-saved source. Existing Home navigation theme case now
+exercises these actual QML methods. GUI helper navigation resets to known list
+bounds rather than assuming the previous focus bug. The e run compiled the full
+app and passed59/60 attempted registrations; Native profile/browser isolation
+and Home layout were unattempted after its required stop at#60. Indexer finally
+restoration passes. No passing full receipt or deployment is claimed.
+
+f repeats full integration because e has a demonstrated full-suite failure and
+the fix touches shared media disconnection/lifecycle plus remote focus. This is
+the combined correction batch, not a rerun for a screenshot, commit or percent.
+Keep all failures; same candidate then goes through installed/offline/standing
+visual journeys. Current app changes remain unaccepted until that evidence.
+
+November13 f completes all63/63 existing CTests and stages a passing payload;
+indexer/service restoration passes. BUG-153 source errors survived Refresh and
+fixed Music provider selection falsely reported a missing scraper: clear stale
+messages and make that fixed row read-only. BUG-154 ordinary Music browsing had
+no default entry: validated packaged library-view data now exposes Music, with
+album/song labels and contextual help. Existing Home/media tests cover these.
+The next media_controls run reuses f's exact full payload and source identity,
+whitelisting only the read-only KodiService libraryViews getter, its packaged
+inventory and two browse/source QML files, plus named tests/harness. It refuses
+Main/KodiMedia lifecycle or any other production delta and runs seven existing
+registrations. No new full run for this bounded UI follow-up; installed movieart,
+playlists, offline search and reference review follow the same staged candidate.
+Acceptance remains88% pending proof; BUG-153/154 are implemented, not accepted.
+
+g stopped before application testing: a harness edit duplicated the suite-selection clause into receipt validation with wrong indentation. Removed that duplicate; g attempted no application registrations. h retries the corrected harness, preserving g's failure.
+
+h builds successfully and passes126 runner checks, but the first selected
+registration aborts with corrupted double-linked list inside televisionLibraryRemoteFlow
+(474 ms), then Qt's stack-trace helper hits the registration's60s timeout.
+No deployment. Added bounded phase diagnostics to that existing case so the
+next focused attempt locates the corruption rather than treating a timeout as
+flaky or rerunning full integration. Source/app delta remains the same narrow
+Music/source UI boundary. h's abort and full console are retained.
+
+BUG-155 root cause identified during i preflight: auto deduced QJsonValueRef
+from operator[] on a temporary QJsonObject in the new libraryViews getter.
+The proxy outlived the temporary and caused h's heap corruption. Use value()
+to retain an owning QJsonValue instead. Cancel i's redundant diagnostic run
+before further application tests; this is a diagnosed memory defect correction,
+not optional polish or interruption to restart a healthy full build. j will
+verify the corrected getter and all seven existing affected registrations.
+
+j passes all7/7 existing media_controls registrations in111s after owning the
+JSON value;126 runner checks pass. SourceDigest a777f87dffbc89f5fa6747f0676b192d2cbce4f1bc5b4c6f6d0b6b7b34447581.
+Strict reuse verifies f's63/63 full payload and the bounded changed-file set.
+Deployed releaseed516a6288baeffa1ffb5b12; normal service active/running/zero
+restarts. Installed movieart/playlists campaign now running on that exact
+candidate; review and acceptance pending. T04=51%,193/235, project88%.
+
+j installed Visual attempt084828 stops in guest desktop preparation, before
+launching a disposable app: the all-app accessibility walk exceeds its8s/2048
+node bound. BUG-156 runner scope: prune every application tree except verified
+/proc process owners gnome-shell and the guest housekeeping notification process.
+Keep identical time/node/action constraints and exact Ignore-only behavior;
+add process-identity refusal cases in the existing oracle safety test. No
+application changes or rebuild; verify harness through desktop-prompts Configure,
+then repeat installed Visual on the same passing j candidate.
+
+Desktop repair k passes126 safety tests and actual preparation. The repeated
+j Visual attempt085106 stops during fixture generation, before app launch:
+new function-local import struct shadowed the module import used earlier for
+poster PNG creation. Removed the redundant local import; retain global struct
+and local wave. Helper-only correction, same installed j, no application rebuild.
+
+Installed attempt085306 saves real Movie and Music sources through Isolde,
+passes preview/cancel no-write and native denied-write/journal recovery, and
+restores exact source XML. Its final inventory list equality fails. Native
+Load can reorder virtual add-on defaults relative to serialized local sources;
+compare complete source records as a multiset (retain every field/duplicate),
+print both raw inventories, and refresh the saved list index after reload. Any
+actual scanner/provider difference still fails with both inventories retained.
+BUG-157 visual review: source preview can scroll away its title/status before
+all review fields are read; first-row Up cannot reveal that context. Record
+for the next combined UI correction after the installed semantic campaign;
+no acceptance claim for that source-preview usability outcome yet. Initial
+capability/source/error frames reviewed, no desktop notification obscures them.
+
+Attempt085821 proves BUG-158: recovery actually drops both pathless Kodi
+virtual add-on sources; every local Movie/Music scanner/provider field survives.
+The full-record multiset assertion correctly remains failed. Native recovery
+now retains full pathless source objects and original positions across XML
+Load, for all five Kodi source categories, including retries after a denied
+publication; failed Load restores the previous vectors. No source is filtered
+from acceptance. BUG-157 preview becomes remote-focusable read-only review
+rows, with a separate final apply action and bounded paging inside over-height
+rows; first review row restores title/status. Existing Home case covers the
+review inventory and top scroll reset; helper now navigates to the actual final
+apply row. These are one correction batch. Rebuild only the managed Kodi native
+extension/package, then media_controls on f with the explicit native source
+recovery file included in its reviewed boundary; no Main/KodiMedia lifecycle
+changes allowed. Full native extension evidence is the repeated installed
+failure/recovery invariant, not a fictitious full-suite pass. Final T04 closure
+integration remains separate; current app full f63 and focused j7 remain honest.
+
+m stops before native compilation: verified guest artifacts recover only1.69
+GiB. Storage evidence identifies773 MB of owned synthetic fixture media, with
+new failed fixtures still protected by the old last-three dedup retention.
+Use the existing checksum/format/mount/active-path checked hardlink deduplicator
+also for recent *inactive* fixtures only below2 GiB, preserving every path and
+byte. Existing safety test now proves active-fixture exclusion with that mode.
+Do not remove source data, cached evidence, host files or passing candidates;
+keep the2 GiB minimum. n retries only after this specific safe-space correction.
+
+n preserves all synthetic media bytes and reclaims the recent duplicates but
+still stops below2 GiB; no native compilation attempted. Existing staged-payload
+dedup leaves every historical installed release as a separate copy. Extend that
+same verified dedup to old inactive installed releases, keeping current, previous
+and any live exe/cwd release untouched. Verify each entire release against its
+passing test manifest before sharing matching mode/owner/device/hash files and
+again afterward; mounts, redirects, unknown bytes and pending transactions still
+refuse. Paths/bytes are retained. Existing safety test proves current/previous
+inode preservation and inactive-release byte identity. This is guest artifact
+maintenance, not host cleanup, deletion of releases, or a lower disk threshold.
+
+User November13 redirects work to a permanent VM space fix. o also stops below
+2 GiB before compiling. Read-only topology proves a50 GiB disk with a fully
+allocated ext4 root (no unused partition capacity); host has~1.1 TiB free, but
+no VM disk/host files were changed. Expanded usage reveals10.8 GiB of historical
+installed releases and3.3 GiB of oracle runs. Installer never expires releases;
+all historical focused receipts also pin base payloads forever. Replace those
+unbounded lifetimes with3 newest releases/staged candidates plus current,
+previous, recovery-unit, active-process, stopped-profile and reachable current
+candidate dependency pins. Audit content-addressed release trees (allow only
+bounded generated Python caches), exact staged hashes, ownership, links and
+mounts; preserve every manifest/log/screenshot/profile/build cache. Refuse
+changed identities before applying. First run storage-capacity audit only,
+review the concrete plan, then apply through the same guarded runner. No more
+native rebuild retries until sustained free-space and retention checks pass.
