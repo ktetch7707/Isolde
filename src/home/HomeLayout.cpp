@@ -1244,19 +1244,15 @@ bool HomeLayout::addAppTile(const QString& appId) {
     const auto* definition = m_registry->find(appId);
     if (!definition)
         return false;
-    for (const auto& value : m_items)
-        if (value.toObject().contains("appCollection"))
-            return true;
+    if (hasAppCollection() || hasExistingAppTile(appId))
+        return true;
     if (!definition->launchConfiguration.value("emulatorRuntime").toString().isEmpty())
         return true;
-    for (const auto& value : m_items)
-        if (value.toObject().value("appId").toString() == appId)
-            return true;
     QString id = appId;
     int suffix = 2;
     const auto idExists = [this](const QString& candidate) {
         for (const auto& value : m_items)
-            if (value.toObject().value("id") == candidate)
+            if (value.toObject().value("id").toString() == candidate)
                 return true;
         return false;
     };
@@ -1274,6 +1270,29 @@ bool HomeLayout::addAppTile(const QString& appId) {
             tile.insert("categoryId", category.value("id"));
             break;
         }
+    }
+    m_items.append(tile);
+    if (!save()) {
+        m_items.removeLast();
+        return false;
+    }
+    emit layoutChanged();
+    return true;
+}
+
+bool HomeLayout::hasAppCollection() const {
+    for (const auto& value : m_items)
+        if (value.toObject().contains("appCollection"))
+            return true;
+    return false;
+}
+
+bool HomeLayout::hasExistingAppTile(const QString& appId) const {
+    for (const auto& value : m_items)
+        if (value.toObject().value("appId").toString() == appId)
+            return true;
+    return false;
+}
     }
     m_items.append(tile);
     if (!save()) {

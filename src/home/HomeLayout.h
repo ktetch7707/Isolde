@@ -272,6 +272,8 @@ class HomeLayout final : public QObject {
     bool isValidOpenWith(const QString& cleanOpenWith) const;
     bool categoryIdExists(const QString& categoryId) const;
     QString generateActionTileId(const QString& cleanName) const;
+    bool hasAppCollection() const;
+    bool hasExistingAppTile(const QString& appId) const;
     QJsonArray m_pages;
     QString m_homePageId;
     QJsonObject m_rootPage;
