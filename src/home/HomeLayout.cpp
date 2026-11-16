@@ -1044,20 +1044,27 @@ bool HomeLayout::validatePages(const QJsonObject& object, QJsonArray& pages, boo
     }
     QSet<QString> pageIds;
     for (const auto& entry : object["pages"].toArray()) {
-        const auto page = entry.toObject();
-        const auto id = page["id"].toString();
-        HomeLayout validator(m_registry);
-        validator.m_owner = this;
-        if (!ComponentSchema::safeId(id) || pageIds.contains(id) || page["name"].toString().trimmed().isEmpty() ||
-            page["name"].toString().size() > 80 || !page["layout"].isObject() ||
-            !validator.loadDocument(QJsonDocument(page["layout"].toObject()).toJson(), false)) {
-            setError(tr("Page %1 has an invalid identity, name or layout: %2")
-                         .arg(page["name"].toString(), validator.errorString()));
+        if (!isValidPageEntry(object["pages"].toArray(), entry, pageIds, pages))
             return false;
-        }
-        pageIds.insert(id);
-        pages.append(page);
     }
+    return true;
+}
+
+bool HomeLayout::isValidPageEntry(const QJsonArray& pages, const QJsonValue& entry,
+                                   QSet<QString>& pageIds, QJsonArray& pagesOut) const {
+    const auto page = entry.toObject();
+    const auto id = page["id"].toString();
+    HomeLayout validator(m_registry);
+    validator.m_owner = this;
+    if (!ComponentSchema::safeId(id) || pageIds.contains(id) || page["name"].toString().trimmed().isEmpty() ||
+        page["name"].toString().size() > 80 || !page["layout"].isObject() ||
+        !validator.loadDocument(QJsonDocument(page["layout"].toObject()).toJson(), false)) {
+        setError(tr("Page %1 has an invalid identity, name or layout: %2")
+                     .arg(page["name"].toString(), validator.errorString()));
+        return false;
+    }
+    pageIds.insert(id);
+    pagesOut.append(page);
     return true;
 }
 
@@ -1087,23 +1094,27 @@ bool HomeLayout::validateRootPage(const QJsonObject& object, const QJsonObject& 
         }
         return true;
     }
+    if (!isValidRootPage(object, rootPage, pages)) {
+        setError(tr("Root page metadata is invalid. Nothing changed."));
+        return false;
+    }
+    return true;
+}
+
+bool HomeLayout::isValidRootPage(const QJsonObject& object, const QJsonObject& rootPage, const QJsonArray& pages) const {
     bool valid = !m_owner && object["rootPage"].isObject();
     for (auto it = rootPage.begin(); it != rootPage.end(); ++it)
         if (!QStringList{"name", "visible", "position"}.contains(it.key()))
             valid = false;
     const auto position = rootPage.value("position");
-    if (!rootPage.value("name").isString() || rootPage.value("name").toString().trimmed().isEmpty() ||
-        rootPage.value("name").toString().size() > 80 || rootPage.value("name").toString().contains(QChar::Null) ||
+    const auto name = rootPage.value("name").toString();
+    if (!name.isString() || name.trimmed().isEmpty() || name.size() > 80 || name.contains(QChar::Null) ||
         !rootPage.value("visible").isBool() || !position.isDouble() || position.toDouble() != position.toInt() ||
         position.toInt() < 0 || position.toInt() > pages.size() ||
         (!rootPage.value("visible").toBool() && homePageFromObject(object).isEmpty()) ||
         pages.size() + (rootPage.value("visible").toBool() ? 1 : 0) > 64)
         valid = false;
-    if (!valid) {
-        setError(tr("Root page metadata is invalid. Nothing changed."));
-        return false;
-    }
-    return true;
+    return valid;
 }
 
 QVariant HomeLayout::homePageFromObject(const QJsonObject& object) {
@@ -1115,15 +1126,20 @@ bool HomeLayout::validateHomePageId(const QJsonObject& object, const QVariant& h
         return true;
     if (m_owner)
         return true;
-    if (!homePage.isString()) {
-        setError(tr("The designated Home page does not exist."));
-        return false;
-    }
-    if (!homePage.toString().isEmpty() && !pageIdsFromArray(pages).contains(homePage.toString())) {
+    if (!isValidHomePageIdValue(homePage, pages)) {
         setError(tr("The designated Home page does not exist."));
         return false;
     }
     return true;
+}
+
+bool HomeLayout::isValidHomePageIdValue(const QVariant& homePage, const QJsonArray& pages) {
+    if (!homePage.isString())
+        return false;
+    const auto pageId = homePage.toString();
+    if (pageId.isEmpty())
+        return true;
+    return pageIdsFromArray(pages).contains(pageId);
 }
 
 bool HomeLayout::validateComposition(const QJsonObject& object, QVariantMap& composition) {

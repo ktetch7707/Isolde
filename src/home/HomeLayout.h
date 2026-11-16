@@ -260,6 +260,8 @@ class HomeLayout final : public QObject {
     bool isValidComponentKind(const QString& kind);
     bool isValidComponentActionType(const QJsonObject& item, const QString& kind);
     bool isValidComponentOpacity(const QJsonObject& item);
+    bool isValidPageEntry(const QJsonArray& pages, const QJsonValue& entry,
+                           QSet<QString>& pageIds, QJsonArray& pagesOut) const;
     QJsonArray m_pages;
     QString m_homePageId;
     QJsonObject m_rootPage;
