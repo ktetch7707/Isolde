@@ -58,40 +58,59 @@ bool normalizeAppearance(QVariantMap& values) {
             continue;
         }
         if (key.endsWith("Color") || key == "backgroundStart" || key == "backgroundEnd") {
-            const QColor color(it.value().toString());
-            if (!color.isValid() || color.alpha() != 255)
+            if (!validateColorValue(it.value()))
                 return false;
-            it.value() = color.name();
+            it.value() = QColor(it.value().toString()).name();
         } else if (key == "fontFamily") {
-            if (it.value().metaType().id() != QMetaType::QString || it.value().toString().trimmed().isEmpty() ||
-                it.value().toString().size() > HomeLayout::MaxPageNameLength ||
-                it.value().toString().contains(QChar::Null))
+            if (!validateFontFamilyValue(it.value()))
                 return false;
         } else if (key == "motionEnabled" || key == "highContrast") {
-            if (it.value().metaType().id() != QMetaType::Bool)
+            if (!validateBooleanValue(it.value()))
                 return false;
         } else {
-            if (!defaults.contains(key) && key != "tileRoundness")
-                return false;
-            if (it.value().metaType().id() == QMetaType::QString || it.value().metaType().id() == QMetaType::Bool)
-                return false;
-            bool ok = false;
-            const double number = it.value().toDouble(&ok);
-            const double low = key == "typographyScale" ? HomeLayout::MinTypographyScale
-                           : key == "homeColumns"   ? HomeLayout::MinHomeColumns
-                           : key == "spacing"       ? HomeLayout::MinSpacing
-                                                    : 0;
-            const double high = key == "typographyScale" ? HomeLayout::MaxTypographyScale
-                            : key == "homeColumns"   ? HomeLayout::MaxHomeColumns
-                            : key == "spacing"       ? HomeLayout::MaxSpacing
-                                                     : 1;
-            if (!ok || !qIsFinite(number) || number < low || number > high ||
-                ((key == "homeColumns" || key == "spacing") && number != qFloor(number)))
+            if (!validateNumericValue(it.value(), key, defaults))
                 return false;
         }
         if (!defaults.contains(key) && !ThemeColors::role(key) && key != "tileRoundness")
             return false;
     }
+    return true;
+}
+
+bool validateColorValue(const QVariant& value) {
+    const QColor color(value.toString());
+    return color.isValid() && color.alpha() == 255;
+}
+
+bool validateFontFamilyValue(const QVariant& value) {
+    return value.metaType().id() == QMetaType::QString &&
+           !value.toString().trimmed().isEmpty() &&
+           value.toString().size() <= HomeLayout::MaxPageNameLength &&
+           !value.toString().contains(QChar::Null);
+}
+
+bool validateBooleanValue(const QVariant& value) {
+    return value.metaType().id() == QMetaType::Bool;
+}
+
+bool validateNumericValue(const QVariant& value, const QString& key, const QVariantMap& defaults) {
+    if (!defaults.contains(key) && key != "tileRoundness")
+        return false;
+    if (value.metaType().id() == QMetaType::QString || value.metaType().id() == QMetaType::Bool)
+        return false;
+    bool ok = false;
+    const double number = value.toDouble(&ok);
+    const double low = key == "typographyScale" ? HomeLayout::MinTypographyScale
+                   : key == "homeColumns"   ? HomeLayout::MinHomeColumns
+                   : key == "spacing"       ? HomeLayout::MinSpacing
+                                            : 0;
+    const double high = key == "typographyScale" ? HomeLayout::MaxTypographyScale
+                : key == "homeColumns"   ? HomeLayout::MaxHomeColumns
+                : key == "spacing"       ? HomeLayout::MaxSpacing
+                                         : 1;
+    if (!ok || !qIsFinite(number) || number < low || number > high ||
+        ((key == "homeColumns" || key == "spacing") && number != qFloor(number)))
+        return false;
     return true;
 }
 

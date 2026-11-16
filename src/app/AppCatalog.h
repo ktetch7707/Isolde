@@ -169,6 +169,13 @@ class AppCatalog final : public QObject {
     [[nodiscard]] bool loadStateFile(const QString& stateReadPath);
     [[nodiscard]] bool loadStateCustomPackages(const QJsonObject& stateObject);
     [[nodiscard]] bool loadStateInstalledApps(const QJsonObject& stateObject);
+    [[nodiscard]] bool parseFdroidEntry(const QJsonObject& data, Entry* entry);
+    [[nodiscard]] bool parseWebEntry(const QJsonObject& data, Entry* entry);
+    [[nodiscard]] bool validateProviderStorage(const QString& installRoot, const QString& id,
+                                                const QString& version);
+    [[nodiscard]] bool writeProviderPackage(const QString& staging, const QString& directory,
+                                             const QByteArray& downloadData, const QByteArray& manifestData);
+    [[nodiscard]] bool resolveProviderInstall(const QString& id, QString& localId);
     const Entry* findEntry(const QString& id) const;
     bool saveState();
     void setError(const QString& message);

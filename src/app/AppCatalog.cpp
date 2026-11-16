@@ -828,24 +828,11 @@ bool AppCatalog::install(const QString& id) {
         setError(tr("App installation is restricted in this profile. Change it in Settings > Profiles."));
         return false;
     }
-    if (id.startsWith("provider:")) {
-        for (const auto& value : m_providerResults) {
-            const auto result = value.toMap();
-            if ("provider:" + result.value("id").toString() == id) {
-                const auto localId =
-                    "fdroid-" +
-                    QString::fromLatin1(QCryptographicHash::hash(result.value("packageName").toString().toUtf8(),
-                                                                 QCryptographicHash::Sha256)
-                                            .toHex()
-                                            .left(24));
-                if (findEntry(localId))
-                    return install(localId);
-                return downloadAndInstall(result.value("storeId").toString());
-            }
-        }
-        setError(tr("Search again; this Store result is no longer available."));
+    QString localId;
+    if (id.startsWith("provider:") && !resolveProviderInstall(id, localId))
         return false;
-    }
+    if (!localId.isEmpty())
+        return install(localId);
     const auto* entry = findEntry(id);
     if (!entry || isInstalled(id))
         return false;
@@ -909,48 +896,55 @@ bool AppCatalog::install(const QString& id) {
 }
 
 bool AppCatalog::customEntry(const QJsonObject& data, Entry* entry) {
-    if (data.value("kind") == "fdroid") {
-        const QSet<QString> fields{
-            "schemaVersion", "kind", "id", "name", "version", "packageName", "sha256", "provenance"};
-        for (const auto& key : data.keys())
-            if (!fields.contains(key)) {
-                setError(tr("Unknown Android package field."));
-                return false;
-            }
-        const auto package = data.value("packageName").toString(), name = data.value("name").toString().trimmed();
-        const auto id =
-            "fdroid-" + QString::fromLatin1(
-                            QCryptographicHash::hash(package.toUtf8(), QCryptographicHash::Sha256).toHex().left(24));
-        if (data.value("schemaVersion").toInt() != 1 || data.value("id") != id || package.size() > 200 ||
-            !QRegularExpression("^[A-Za-z][A-Za-z0-9_]*(?:\\.[A-Za-z0-9_]+)+$").match(package).hasMatch() ||
-            !QRegularExpression("^[0-9]{1,18}$").match(data.value("version").toString()).hasMatch() ||
-            !QRegularExpression("^[a-f0-9]{64}$").match(data.value("sha256").toString()).hasMatch() || name.isEmpty() ||
-            name.size() > 80 || name.contains(QRegularExpression("[\\x00-\\x1f<>]")) ||
-            data.value("provenance").toString().isEmpty() || data.value("provenance").toString().size() > 512) {
-            setError(tr("Invalid verified Android package metadata."));
+    if (data.value("kind") == "fdroid")
+        return parseFdroidEntry(data, entry);
+    return parseWebEntry(data, entry);
+}
+
+bool AppCatalog::parseFdroidEntry(const QJsonObject& data, Entry* entry) {
+    const QSet<QString> fields{
+        "schemaVersion", "kind", "id", "name", "version", "packageName", "sha256", "provenance"};
+    for (const auto& key : data.keys())
+        if (!fields.contains(key)) {
+            setError(tr("Unknown Android package field."));
             return false;
         }
-        entry->app.id = id;
-        entry->app.name = name;
-        entry->app.type = "android";
-        entry->app.presentationMode = "desktop-bridge";
-        entry->app.networkRequirement = "none";
-        entry->app.section = m_storeOptions.value("appSection").toString();
-        entry->app.accent = QColor(m_storeOptions.value("appAccent").toString());
-        entry->app.symbol = name.left(1);
-        entry->app.launchConfiguration = {{"runtimeApp", id}, {"storeVersion", data.value("version").toString()}};
-        entry->packageId = id;
-        entry->version = data.value("version").toString();
-        entry->custom = true;
-        entry->publisher = package;
-        entry->provenance = data.value("provenance").toString();
-        entry->manifestData = QJsonDocument(data).toJson();
-        if (!entry->app.isValid()) {
-            setError(tr("Invalid Android app presentation."));
-            return false;
-        }
-        return true;
+    const auto package = data.value("packageName").toString(), name = data.value("name").toString().trimmed();
+    const auto id =
+        "fdroid-" + QString::fromLatin1(
+                        QCryptographicHash::hash(package.toUtf8(), QCryptographicHash::Sha256).toHex().left(24));
+    if (data.value("schemaVersion").toInt() != 1 || data.value("id") != id || package.size() > 200 ||
+        !QRegularExpression("^[A-Za-z][A-Za-z0-9_]*(?:\\.[A-Za-z0-9_]+)+$").match(package).hasMatch() ||
+        !QRegularExpression("^[0-9]{1,18}$").match(data.value("version").toString()).hasMatch() ||
+        !QRegularExpression("^[a-f0-9]{64}$").match(data.value("sha256").toString()).hasMatch() || name.isEmpty() ||
+        name.size() > 80 || name.contains(QRegularExpression("[\\x00-\\x1f<>]")) ||
+        data.value("provenance").toString().isEmpty() || data.value("provenance").toString().size() > 512) {
+        setError(tr("Invalid verified Android package metadata."));
+        return false;
     }
+    entry->app.id = id;
+    entry->app.name = name;
+    entry->app.type = "android";
+    entry->app.presentationMode = "desktop-bridge";
+    entry->app.networkRequirement = "none";
+    entry->app.section = m_storeOptions.value("appSection").toString();
+    entry->app.accent = QColor(m_storeOptions.value("appAccent").toString());
+    entry->app.symbol = name.left(1);
+    entry->app.launchConfiguration = {{"runtimeApp", id}, {"storeVersion", data.value("version").toString()}};
+    entry->packageId = id;
+    entry->version = data.value("version").toString();
+    entry->custom = true;
+    entry->publisher = package;
+    entry->provenance = data.value("provenance").toString();
+    entry->manifestData = QJsonDocument(data).toJson();
+    if (!entry->app.isValid()) {
+        setError(tr("Invalid Android app presentation."));
+        return false;
+    }
+    return true;
+}
+
+bool AppCatalog::parseWebEntry(const QJsonObject& data, Entry* entry) {
     const QSet<QString> fields{"schemaVersion", "kind", "id", "name", "url", "backend", "version"};
     for (const auto& key : data.keys())
         if (!fields.contains(key)) {
@@ -1039,6 +1033,54 @@ bool AppCatalog::installCustom(const QJsonObject& data) {
         return true;
     m_customPackages.remove(entry.core.app.id);
     m_entries.removeLast();
+    return false;
+}
+
+bool AppCatalog::validateProviderStorage(const QString& installRoot, const QString& id,
+                                          const QString& version) {
+    const auto directory = QDir(installRoot).filePath(id + "/" + version);
+    if (QFileInfo(installRoot).canonicalFilePath() != QDir::cleanPath(QFileInfo(installRoot).absoluteFilePath()) ||
+        QFileInfo(QDir(installRoot).filePath(id)).isSymLink() || QFileInfo(directory).isSymLink()) {
+        setError(tr("Android package storage is redirected."));
+        return false;
+    }
+    return true;
+}
+
+bool AppCatalog::writeProviderPackage(const QString& staging, const QString& directory,
+                                       const QByteArray& downloadData, const QByteArray& manifestData) {
+    if (QFileInfo(staging).exists() || !QDir().mkpath(staging)) {
+        setError(tr("Unable to stage Android package in profile storage."));
+        return false;
+    }
+    const auto write = [&](const QString& name, const QByteArray& bytes) {
+        QSaveFile file(QDir(staging).filePath(name));
+        return file.open(QIODevice::WriteOnly) && file.write(bytes) == bytes.size() && file.commit();
+    };
+    if (!write("app.apk", downloadData) || !write("manifest.json", manifestData) ||
+        !QDir().mkpath(QFileInfo(directory).absolutePath()) || !QDir().rename(staging, directory)) {
+        QDir(staging).removeRecursively();
+        return false;
+    }
+    return true;
+}
+
+bool AppCatalog::resolveProviderInstall(const QString& id, QString& localId) {
+    for (const auto& value : m_providerResults) {
+        const auto result = value.toMap();
+        if ("provider:" + result.value("id").toString() == id) {
+            localId =
+                "fdroid-" +
+                QString::fromLatin1(QCryptographicHash::hash(result.value("packageName").toString().toUtf8(),
+                                                             QCryptographicHash::Sha256)
+                                        .toHex()
+                                        .left(24));
+            if (findEntry(localId))
+                return true;
+            return downloadAndInstall(result.value("storeId").toString());
+        }
+    }
+    setError(tr("Search again; this Store result is no longer available."));
     return false;
 }
 
@@ -1170,11 +1212,8 @@ bool AppCatalog::stageProviderArtifact(const QString& storeId, const QVariantMap
     const auto directory = QDir(m_installRoot).filePath(id + "/" + entry.core.version);
     const auto staging = QDir(m_installRoot).filePath(".staging-" + id);
     QDir().mkpath(m_installRoot);
-    if (QFileInfo(m_installRoot).canonicalFilePath() != QDir::cleanPath(QFileInfo(m_installRoot).absoluteFilePath()) ||
-        QFileInfo(QDir(m_installRoot).filePath(id)).isSymLink() || QFileInfo(directory).isSymLink()) {
-        setError(tr("Android package storage is redirected."));
+    if (!validateProviderStorage(m_installRoot, id, entry.core.version))
         return false;
-    }
     if (QFileInfo(directory).exists()) {
         QFile manifestFile(directory + "/manifest.json"), apkFile(directory + "/app.apk");
         if (QFileInfo(manifestFile).isSymLink() || QFileInfo(apkFile).isSymLink() ||
@@ -1186,16 +1225,7 @@ bool AppCatalog::stageProviderArtifact(const QString& storeId, const QVariantMap
             return false;
         }
     } else {
-        if (QFileInfo(staging).exists() || !QDir().mkpath(staging)) {
-            setError(tr("Unable to stage Android package in profile storage."));
-            return false;
-        }
-        const auto write = [&](const QString& name, const QByteArray& bytes) {
-            QSaveFile file(QDir(staging).filePath(name));
-            return file.open(QIODevice::WriteOnly) && file.write(bytes) == bytes.size() && file.commit();
-        };
-        if (!write("app.apk", m_downloadData) || !write("manifest.json", entry.setup.manifestData) ||
-            !QDir().mkpath(QFileInfo(directory).absolutePath()) || !QDir().rename(staging, directory)) {
+        if (!writeProviderPackage(staging, directory, m_downloadData, entry.setup.manifestData)) {
             QDir(staging).removeRecursively();
             setError(tr("Unable to save verified Android package."));
             return false;
