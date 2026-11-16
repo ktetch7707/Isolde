@@ -43,7 +43,8 @@ void ComponentContractTests::validatesContracts() {
         QVERIFY(ComponentSchema::action(value.toMap(), &error).isEmpty());
         QVERIFY(!error.isEmpty());
     }
-    auto tile = ComponentSchema::component({{"id", "movie-tile"}, {"kind", "app"}, {"appId", "movies"}}, true);
+    auto tile = ComponentSchema::component({{"id", "movie-tile"}, {"kind", "app"}, {"appId", "movies"},
+        {"actions", QVariantList{QVariantMap{{"type", "launch-app"}, {"appId", "movies"}}}}}, true);
     QVERIFY(!tile.isEmpty());
     QCOMPARE(tile["componentType"].toString(), QString("launcher"));
     QCOMPARE(tile["source"].toMap()["provider"].toString(), QString("apps"));
