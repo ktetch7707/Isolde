@@ -235,8 +235,12 @@ class HomeLayout final : public QObject {
     void setItemCommonFields(QVariantMap& item, const QJsonObject& object) const;
     void setItemAppFields(QVariantMap& item, const QJsonObject& object) const;
     void setItemActionFields(QVariantMap& item, const QJsonObject& object) const;
-    QString itemLogo(QVariantMap& item, const QJsonObject& object, const QVariantList& actionList) const;
+    QString logoFromItem(QVariantMap& item, const QJsonObject& object, const QVariantList& actionList) const;
     void setItemUnavailableReason(QVariantMap& item, const QJsonObject& object, const QVariantList& actionList) const;
+    QVariantList appendSourceChoicesForType(QVariantList& choices, const QString& type) const;
+    void appendHdmiInputChoices(QVariantList& choices) const;
+    void appendCollectionChoices(QVariantList& choices) const;
+    void appendAppChoices(QVariantList& choices, const QString& type) const;
     QJsonArray m_pages;
     QString m_homePageId;
     QJsonObject m_rootPage;

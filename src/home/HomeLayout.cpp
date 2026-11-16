@@ -380,21 +380,37 @@ QVariantList HomeLayout::sourceChoices(const QString& itemId) const {
             continue;
         const auto actionList = normalizedActionForItem(item);
         const auto type = actionList.isEmpty() ? QString() : actionList.first().toMap().value("type").toString();
-        if (type == "switch-input") {
-            for (int input = ComponentSchema::MinHdmiInput; input <= ComponentSchema::MaxHdmiInput; ++input)
-                choices.append(QVariantMap{{"id", QString::number(input)}, {"name", QString("HDMI %1").arg(input)}});
-        } else if (type == "open-collection" || type == "play-movie" || type == "open-show") {
-            for (const auto& entry : m_collections)
-                choices.append(QVariantMap{{"id", entry.toMap().value("id")}, {"name", entry.toMap().value("name")}});
-        } else
-            for (const auto& entry : m_registry->apps()) {
-                const auto app = entry.toMap();
-                if (type == "launch-app" || app.value("handledActions").toStringList().contains(type))
-                    choices.append(QVariantMap{{"id", app.value("id")}, {"name", app.value("name")}});
-            }
+        appendSourceChoicesForType(choices, type);
         break;
     }
     return choices;
+}
+
+void HomeLayout::appendSourceChoicesForType(QVariantList& choices, const QString& type) const {
+    if (type == "switch-input")
+        appendHdmiInputChoices(choices);
+    else if (type == "open-collection" || type == "play-movie" || type == "open-show")
+        appendCollectionChoices(choices);
+    else
+        appendAppChoices(choices, type);
+}
+
+void HomeLayout::appendHdmiInputChoices(QVariantList& choices) const {
+    for (int input = ComponentSchema::MinHdmiInput; input <= ComponentSchema::MaxHdmiInput; ++input)
+        choices.append(QVariantMap{{"id", QString::number(input)}, {"name", QString("HDMI %1").arg(input)}});
+}
+
+void HomeLayout::appendCollectionChoices(QVariantList& choices) const {
+    for (const auto& entry : m_collections)
+        choices.append(QVariantMap{{"id", entry.toMap().value("id")}, {"name", entry.toMap().value("name")}});
+}
+
+void HomeLayout::appendAppChoices(QVariantList& choices, const QString& type) const {
+    for (const auto& entry : m_registry->apps()) {
+        const auto app = entry.toMap();
+        if (type == "launch-app" || app.value("handledActions").toStringList().contains(type))
+            choices.append(QVariantMap{{"id", app.value("id")}, {"name", app.value("name")}});
+    }
 }
 bool HomeLayout::rebindSource(const QString& itemId, const QString& sourceId) {
     bool compatible = false;
