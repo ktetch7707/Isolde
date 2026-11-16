@@ -41,40 +41,88 @@ bool normalizeAppearance(QVariantMap& values) {
     const auto defaults = appearanceDefaults();
     for (auto it = values.begin(); it != values.end(); ++it) {
         const auto key = it.key();
-        if (key == "colorTheme") {
-            if (!ThemeColors::valid(it.value()))
-                return false;
-            continue;
-        }
-        if (key == "sourcePolicy") {
-            if (it.value().metaType().id() != QMetaType::QVariantMap ||
-                !ComponentSchema::validSourcePolicy(it.value().toMap()))
-                return false;
-            continue;
-        }
-        if (key == "surfaceThemes") {
-            if (!ComponentSchema::validSurfaceThemes(it.value()))
-                return false;
-            continue;
-        }
-        if (key.endsWith("Color") || key == "backgroundStart" || key == "backgroundEnd") {
-            if (!validateColorValue(it.value()))
-                return false;
-            it.value() = QColor(it.value().toString()).name();
-        } else if (key == "fontFamily") {
-            if (!validateFontFamilyValue(it.value()))
-                return false;
-        } else if (key == "motionEnabled" || key == "highContrast") {
-            if (!validateBooleanValue(it.value()))
-                return false;
-        } else {
-            if (!validateNumericValue(it.value(), key, defaults))
-                return false;
-        }
-        if (!defaults.contains(key) && !ThemeColors::role(key) && key != "tileRoundness")
+        if (!validateAppearanceKey(values, key, defaults))
             return false;
     }
     return true;
+}
+
+bool validateAppearanceKey(QVariantMap& values, const QString& key, const QVariantMap& defaults) {
+    if (validateColorThemeKey(values, key))
+        return true;
+    if (validateSourcePolicyKey(values, key))
+        return true;
+    if (validateSurfaceThemesKey(values, key))
+        return true;
+    if (validateColorKey(values, key))
+        return true;
+    if (validateFontFamilyKey(values, key))
+        return true;
+    if (validateBooleanKey(values, key))
+        return true;
+    if (validateNumericKey(values, key, defaults))
+        return true;
+    return validateUnknownKey(key);
+}
+
+bool validateColorThemeKey(QVariantMap& values, const QString& key) {
+    if (key != "colorTheme")
+        return false;
+    if (!ThemeColors::valid(values.value(key)))
+        return false;
+    return true;
+}
+
+bool validateSourcePolicyKey(QVariantMap& values, const QString& key) {
+    if (key != "sourcePolicy")
+        return false;
+    if (values.value(key).metaType().id() != QMetaType::QVariantMap ||
+        !ComponentSchema::validSourcePolicy(values.value(key).toMap()))
+        return false;
+    return true;
+}
+
+bool validateSurfaceThemesKey(QVariantMap& values, const QString& key) {
+    if (key != "surfaceThemes")
+        return false;
+    if (!ComponentSchema::validSurfaceThemes(values.value(key)))
+        return false;
+    return true;
+}
+
+bool validateColorKey(QVariantMap& values, const QString& key) {
+    if (!key.endsWith("Color") && key != "backgroundStart" && key != "backgroundEnd")
+        return false;
+    if (!validateColorValue(values.value(key)))
+        return false;
+    values[key] = QColor(values.value(key).toString()).name();
+    return true;
+}
+
+bool validateFontFamilyKey(QVariantMap& values, const QString& key) {
+    if (key != "fontFamily")
+        return false;
+    if (!validateFontFamilyValue(values.value(key)))
+        return false;
+    return true;
+}
+
+bool validateBooleanKey(QVariantMap& values, const QString& key) {
+    if (key != "motionEnabled" && key != "highContrast")
+        return false;
+    if (!validateBooleanValue(values.value(key)))
+        return false;
+    return true;
+}
+
+bool validateNumericKey(QVariantMap& values, const QString& key, const QVariantMap& defaults) {
+    if (!validateNumericValue(values.value(key), key, defaults))
+        return false;
+    return true;
+}
+
+bool validateUnknownKey(const QString& key, const QVariantMap& defaults) {
+    return defaults.contains(key) || ThemeColors::role(key) || key == "tileRoundness";
 }
 
 bool validateColorValue(const QVariant& value) {
@@ -94,22 +142,52 @@ bool validateBooleanValue(const QVariant& value) {
 }
 
 bool validateNumericValue(const QVariant& value, const QString& key, const QVariantMap& defaults) {
-    if (!defaults.contains(key) && key != "tileRoundness")
+    if (!validateNumericKeyDefaults(key, defaults))
         return false;
-    if (value.metaType().id() == QMetaType::QString || value.metaType().id() == QMetaType::Bool)
+    if (!validateNumericValueType(value))
         return false;
     bool ok = false;
     const double number = value.toDouble(&ok);
-    const double low = key == "typographyScale" ? HomeLayout::MinTypographyScale
-                   : key == "homeColumns"   ? HomeLayout::MinHomeColumns
-                   : key == "spacing"       ? HomeLayout::MinSpacing
-                                            : 0;
-    const double high = key == "typographyScale" ? HomeLayout::MaxTypographyScale
-                : key == "homeColumns"   ? HomeLayout::MaxHomeColumns
-                : key == "spacing"       ? HomeLayout::MaxSpacing
-                                         : 1;
-    if (!ok || !qIsFinite(number) || number < low || number > high ||
-        ((key == "homeColumns" || key == "spacing") && number != qFloor(number)))
+    const double low = numericRangeLow(key);
+    const double high = numericRangeHigh(key);
+    if (!isValidNumber(number, ok, low, high, key))
+        return false;
+    return true;
+}
+
+bool validateNumericKeyDefaults(const QString& key, const QVariantMap& defaults) {
+    return defaults.contains(key) || key == "tileRoundness";
+}
+
+bool validateNumericValueType(const QVariant& value) {
+    return value.metaType().id() != QMetaType::QString &&
+           value.metaType().id() != QMetaType::Bool;
+}
+
+double numericRangeLow(const QString& key) {
+    if (key == "typographyScale")
+        return HomeLayout::MinTypographyScale;
+    if (key == "homeColumns")
+        return HomeLayout::MinHomeColumns;
+    if (key == "spacing")
+        return HomeLayout::MinSpacing;
+    return 0;
+}
+
+double numericRangeHigh(const QString& key) {
+    if (key == "typographyScale")
+        return HomeLayout::MaxTypographyScale;
+    if (key == "homeColumns")
+        return HomeLayout::MaxHomeColumns;
+    if (key == "spacing")
+        return HomeLayout::MaxSpacing;
+    return 1;
+}
+
+bool isValidNumber(double number, bool ok, double low, double high, const QString& key) {
+    if (!ok || !qIsFinite(number) || number < low || number > high)
+        return false;
+    if ((key == "homeColumns" || key == "spacing") && number != qFloor(number))
         return false;
     return true;
 }
@@ -241,31 +319,38 @@ bool HomeLayout::appendItem(const QJsonValue& value, QVariantList& result, const
 
 void HomeLayout::setItemKindFields(QVariantMap& item, const QJsonObject& object) {
     const auto kind = item.value("kind").toString();
-    if (kind == QStringLiteral("app")) {
-        const auto appId = item.value("appId").toString();
-        const auto* app = m_registry->find(appId);
-        item.insert("name",
-                    !item.value("name").toString().isEmpty() ? item.value("name")
-                    : app                                    ? app->name
-                                                             : appId);
-        item.insert("section", app ? app->section : QStringLiteral("Missing app"));
-        const auto tileSymbol = item.value("symbol").toString();
-        const auto tileAccent = item.value("accent").toString();
-        item.insert("symbol", tileSymbol.isEmpty() ? (app ? app->symbol : "?") : tileSymbol);
-        item.insert("accent", tileAccent.isEmpty() ? (app ? app->accent.name() : "#64748B") : tileAccent);
-        item.insert("presentationMode", app ? app->presentationMode : "native-tv");
-        item.insert("networkRequirement", app ? app->networkRequirement : "none");
-    } else if (kind == QStringLiteral("action")) {
-        const auto section = item.value("section").toString();
-        const auto symbol = item.value("symbol").toString();
-        const auto accent = item.value("accent").toString();
-        const auto networkRequirement = item.value("networkRequirement").toString();
-        item.insert("section", section.isEmpty() ? tr("Custom") : section);
-        item.insert("symbol", symbol.isEmpty() ? QStringLiteral("•") : symbol);
-        item.insert("accent", accent.isEmpty() ? QStringLiteral("#64748B") : accent);
-        item.insert("networkRequirement",
-                    networkRequirement.isEmpty() ? QStringLiteral("none") : networkRequirement);
-    }
+    if (kind == QStringLiteral("app"))
+        setItemAppFields(item);
+    else if (kind == QStringLiteral("action"))
+        setItemActionFields(item);
+}
+
+void HomeLayout::setItemAppFields(QVariantMap& item) {
+    const auto appId = item.value("appId").toString();
+    const auto* app = m_registry->find(appId);
+    item.insert("name",
+                !item.value("name").toString().isEmpty() ? item.value("name")
+                : app                                    ? app->name
+                                                         : appId);
+    item.insert("section", app ? app->section : QStringLiteral("Missing app"));
+    const auto tileSymbol = item.value("symbol").toString();
+    const auto tileAccent = item.value("accent").toString();
+    item.insert("symbol", tileSymbol.isEmpty() ? (app ? app->symbol : "?") : tileSymbol);
+    item.insert("accent", tileAccent.isEmpty() ? (app ? app->accent.name() : "#64748B") : tileAccent);
+    item.insert("presentationMode", app ? app->presentationMode : "native-tv");
+    item.insert("networkRequirement", app ? app->networkRequirement : "none");
+}
+
+void HomeLayout::setItemActionFields(QVariantMap& item) {
+    const auto section = item.value("section").toString();
+    const auto symbol = item.value("symbol").toString();
+    const auto accent = item.value("accent").toString();
+    const auto networkRequirement = item.value("networkRequirement").toString();
+    item.insert("section", section.isEmpty() ? tr("Custom") : section);
+    item.insert("symbol", symbol.isEmpty() ? QStringLiteral("•") : symbol);
+    item.insert("accent", accent.isEmpty() ? QStringLiteral("#64748B") : accent);
+    item.insert("networkRequirement",
+                networkRequirement.isEmpty() ? QStringLiteral("none") : networkRequirement);
 }
 
 void HomeLayout::setItemLogo(QVariantMap& item, const QJsonObject& object, const QVariantList& actionList) {
@@ -290,14 +375,31 @@ void HomeLayout::setItemLogo(QVariantMap& item, const QJsonObject& object, const
 
 void HomeLayout::setItemUnavailableReason(QVariantMap& item, const QJsonObject& object,
                                            const QVariantList& actionList) {
-    auto unavailable = ComponentSchema::unavailable(
+    unavailableReasonFromSchema(item, actionList);
+    unavailableReasonFromSwitchInput(item, actionList);
+    unavailableReasonFromCapability(item, object);
+    item.insert("unavailableReason", unavailableReasonValue(item));
+}
+
+void HomeLayout::unavailableReasonFromSchema(QVariantMap& item, const QVariantList& actionList) {
+    item["unavailableReason"] = ComponentSchema::unavailable(
         actionList.isEmpty() ? QVariantMap() : actionList.first().toMap(), m_registry, m_collections);
-    if (unavailable.isEmpty() && !actionList.isEmpty() &&
+}
+
+void HomeLayout::unavailableReasonFromSwitchInput(QVariantMap& item, const QVariantList& actionList) {
+    if (unavailableReasonValue(item).isEmpty() && !actionList.isEmpty() &&
         actionList.first().toMap().value("type").toString() == "switch-input" && !m_captureInputsReady)
-        unavailable = "Configure Settings → System → HDMI Inputs";
-    if (object.value("requiredCapability") == "capture-inputs" && !m_captureInputsReady)
-        unavailable = tr("HDMI capture unavailable · configure inputs in Settings");
-    item.insert("unavailableReason", unavailable);
+        item["unavailableReason"] = "Configure Settings → System → HDMI Inputs";
+}
+
+void HomeLayout::unavailableReasonFromCapability(QVariantMap& item, const QJsonObject& object) {
+    if (unavailableReasonValue(item).isEmpty() &&
+        object.value("requiredCapability") == "capture-inputs" && !m_captureInputsReady)
+        item["unavailableReason"] = tr("HDMI capture unavailable · configure inputs in Settings");
+}
+
+QString HomeLayout::unavailableReasonValue(const QVariantMap& item) {
+    return item.value("unavailableReason").toString();
 }
 
 QVariantMap HomeLayout::componentPresentation(const QVariantMap& authored) const {

@@ -233,9 +233,20 @@ class HomeLayout final : public QObject {
     QSet<QString> computeHiddenIds() const;
     bool appendItem(const QJsonValue& value, QVariantList& result, const QSet<QString>& hidden);
     void setItemKindFields(QVariantMap& item, const QJsonObject& object);
+    void setItemAppFields(QVariantMap& item);
+    void setItemActionFields(QVariantMap& item);
     void setItemLogo(QVariantMap& item, const QJsonObject& object, const QVariantList& actionList);
     void setItemUnavailableReason(QVariantMap& item, const QJsonObject& object,
                                   const QVariantList& actionList);
+    void unavailableReasonFromSchema(QVariantMap& item, const QVariantList& actionList);
+    void unavailableReasonFromSwitchInput(QVariantMap& item, const QVariantList& actionList);
+    void unavailableReasonFromCapability(QVariantMap& item, const QJsonObject& object);
+    QString unavailableReasonValue(const QVariantMap& item);
+    bool validateNumericKeyDefaults(const QString& key, const QVariantMap& defaults);
+    bool validateNumericValueType(const QVariant& value);
+    double numericRangeLow(const QString& key);
+    double numericRangeHigh(const QString& key);
+    bool isValidNumber(double number, bool ok, double low, double high, const QString& key);
     void appendRootPage(QVariantList& result) const;
     QJsonArray m_pages;
     QString m_homePageId;
