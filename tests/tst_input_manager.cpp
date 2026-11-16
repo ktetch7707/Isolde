@@ -3,24 +3,22 @@
 ** $QT_END_HEADER**
 ****************************************************************************/
 
-#include <QtTest/QtTest>
 #include <QtCore/QObject>
 #include <QtCore/QString>
+#include <QtTest/QtTest>
 #include "../src/input/InputManager.h"
 
-class InputManagerTests : public QObject
-{
+class InputManagerTests : public QObject {
     Q_OBJECT
 
-private slots:
+  private slots:
     void test_commandForKey_mapping();
     void test_commandForKey_edge_cases();
     void test_labelForCommand_labels();
     void test_labelForCommand_edge_cases();
 };
 
-void InputManagerTests::test_commandForKey_mapping()
-{
+void InputManagerTests::test_commandForKey_mapping() {
     InputManager manager;
 
     // Test all standard key mappings
@@ -50,8 +48,7 @@ void InputManagerTests::test_commandForKey_mapping()
     QCOMPARE(manager.commandForKey(Qt::Key_Search), InputManager::Search);
 }
 
-void InputManagerTests::test_commandForKey_edge_cases()
-{
+void InputManagerTests::test_commandForKey_edge_cases() {
     InputManager manager;
 
     // Test default case returns None
@@ -62,8 +59,7 @@ void InputManagerTests::test_commandForKey_edge_cases()
     QCOMPARE(manager.commandForKey(0), InputManager::None);
 }
 
-void InputManagerTests::test_labelForCommand_labels()
-{
+void InputManagerTests::test_labelForCommand_labels() {
     InputManager manager;
 
     // Test all command labels
@@ -84,8 +80,7 @@ void InputManagerTests::test_labelForCommand_labels()
     QCOMPARE(manager.labelForCommand(InputManager::None), QStringLiteral("Unknown input"));
 }
 
-void InputManagerTests::test_labelForCommand_edge_cases()
-{
+void InputManagerTests::test_labelForCommand_edge_cases() {
     InputManager manager;
 
     // Test unknown command returns default label

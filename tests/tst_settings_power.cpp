@@ -1,34 +1,50 @@
-#include "tst_component_common.h"
+#include <QDBusContext>
+#include <QSettings>
 #include "../src/home/HomeLayout.h"
-#include "../src/settings/SearchSettings.h"
 #include "../src/settings/PowerSettings.h"
 #include "../src/settings/ProfileManager.h"
-#include <QSettings>
-#include <QDBusContext>
+#include "../src/settings/SearchSettings.h"
+#include "tst_component_common.h"
 
 class PowerBoundaryFixture final : public QObject, protected QDBusContext {
     Q_OBJECT
     Q_CLASSINFO("D-Bus Interface", "org.freedesktop.login1.Manager")
-public:
+  public:
     int accepted = 0;
     bool interactive = false, deny = false;
-public slots:
-    QString CanSuspend() const { return "no"; }
-    QString CanReboot() const { return "challenge"; }
-    QString CanPowerOff() const { return "yes"; }
-    void PowerOff(bool value) { interactive = value; ++accepted; }
-    void Reboot(bool) { if (deny) sendErrorReply("org.freedesktop.DBus.Error.AccessDenied", "Fixture denial"); else ++accepted; }
-    void Suspend(bool) { ++accepted; }
+  public slots:
+    QString CanSuspend() const {
+        return "no";
+    }
+    QString CanReboot() const {
+        return "challenge";
+    }
+    QString CanPowerOff() const {
+        return "yes";
+    }
+    void PowerOff(bool value) {
+        interactive = value;
+        ++accepted;
+    }
+    void Reboot(bool) {
+        if (deny)
+            sendErrorReply("org.freedesktop.DBus.Error.AccessDenied", "Fixture denial");
+        else
+            ++accepted;
+    }
+    void Suspend(bool) {
+        ++accepted;
+    }
 };
 
 class SettingsPowerTests : public QObject {
     Q_OBJECT
-private slots:
+  private slots:
     void powerCapabilitiesGuardAndActions();
     void settingsNavigationIsBoundedAndProfileLocal();
 };
 
-int main(int argc, char *argv[]) {
+int main(int argc, char* argv[]) {
     QCoreApplication app(argc, argv);
     SettingsPowerTests test;
     return QTest::qExec(&test, argc, argv);
@@ -72,12 +88,15 @@ void SettingsPowerTests::powerCapabilitiesGuardAndActions() {
 }
 
 void SettingsPowerTests::settingsNavigationIsBoundedAndProfileLocal() {
-    QTemporaryDir dir; ProfileManager profiles(dir.path());
+    QTemporaryDir dir;
+    ProfileManager profiles(dir.path());
     QVERIFY(profiles.createProfile("Other"));
     const auto other = profiles.profiles().last().toMap()["id"].toString();
     QVERIFY(profiles.selectProfile(other));
-    AppRegistry registry; QVERIFY(registry.loadFromData(apps));
-    HomeLayout home(&registry); QVERIFY(home.load(QFINDTESTDATA("../config/default-home-layout.json"), profiles.layoutPath()));
+    AppRegistry registry;
+    QVERIFY(registry.loadFromData(apps));
+    HomeLayout home(&registry);
+    QVERIFY(home.load(QFINDTESTDATA("../config/default-home-layout.json"), profiles.layoutPath()));
     const auto profileNavigation = home.settingsNavigation();
     QVERIFY(profileNavigation.contains("network"));
     QCOMPARE(profileNavigation.contains("system"), true);

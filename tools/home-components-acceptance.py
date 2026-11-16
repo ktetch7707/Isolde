@@ -1,102 +1,145 @@
-#!/usr/bin/env python3
-"""Exercise the built shell through X11 remote keys in a disposable profile.
+#!/ usr / bin / env python3
+""
+    "Exercise the built shell through X11 remote keys in a disposable profile.
 
-Requires the VM graphical session, wmctrl and Xlib. Temporarily stops the
-normal user service and restores it in finally. Never edits personal layouts.
-"""
-import argparse
-import ctypes
-import ctypes.util
-import fcntl
-import hashlib
-import importlib.util
-import re
-import json
-import os
-import signal
-from pathlib import Path
-import subprocess
-import sys
-import tempfile
-import time
+    Requires the VM graphical session,
+    wmctrl and Xlib.Temporarily stops the normal user service and restores it in finally.Never edits personal layouts
+        .""
+         "
+    import argparse import ctypes import ctypes.util import fcntl import hashlib import importlib
+        .util import re import json import os import signal from pathlib import Path import subprocess import sys import
+            tempfile import time
 
+                def run(*args, **kwargs)
+    : return subprocess.run(args, check = True, text = True, capture_output = True, **kwargs)
+        .stdout
 
-def run(*args, **kwargs):
-    return subprocess.run(args, check=True, text=True, capture_output=True, **kwargs).stdout
+      def studio_page_menu(layout, key, action, extra_pages = 0)
+    : ""
+      "Navigate the grouped Studio menu using ordinary remote input."
+      "" offsets = {
+        "page" : 0,
+        "new" : 0,
+        "edit" : 1,
+        "add" : 2,
+        "appearance" : 3,
+        "layers" : 4,
+        "designs" : 5,
+        "reuse" : 5,
+        "editorSettings" : 6,
+        "safety" : 6,
+        "apply" : 7,
+        "versions" : 0
+    } key("Up", 30);
+key("Down") if action == "versions" : key("Up");
+key("Right", 2);
+key("Return");
+return key("Down", offsets[action]);
+key("Return") if action in("designs", "reuse") : key("Down", int(action == "reuse"));
+key("Return") elif action == "editorSettings" : key("Return") elif action == "new" : document = json.loads(
+    layout.read_text()) pages = len(document.get("pages", [])) +
+                                int(document.get("rootPage", {}).get("visible", True)) + extra_pages key("Down", pages);
+key("Return") elif action == "page" : document = json.loads(layout.read_text()) pages =
+    len(document.get("pages", [])) +
+    int(document.get("rootPage", {}).get("visible", True)) + extra_pages key("Down", pages + 1);
+key("Return")
 
+    def studio_legacy_menu(layout, key, index)
+    : actions = {
+          0 : "new",
+          1 : "page",
+          2 : "add",
+          3 : "appearance",
+          4 : "layers",
+          5 : "designs",
+          6 : "editorSettings",
+          7 : "apply",
+          8 : "edit"
+      } studio_page_menu(layout, key, actions[index])
 
-def studio_page_menu(layout, key, action, extra_pages=0):
-    """Navigate the grouped Studio menu using ordinary remote input."""
-    offsets = {"page":0, "new":0, "edit":1, "add":2, "appearance":3,
-               "layers":4, "designs":5, "reuse":5, "editorSettings":6,
-               "safety":6, "apply":7, "versions":0}
-    key("Up", 30); key("Down")
-    if action == "versions":
-        key("Up"); key("Right",2); key("Return"); return
-    key("Down", offsets[action]); key("Return")
-    if action in ("designs", "reuse"):
-        key("Down", int(action == "reuse")); key("Return")
-    elif action == "editorSettings":
-        key("Return")
-    elif action == "new":
-        document = json.loads(layout.read_text())
-        pages = len(document.get("pages", [])) + int(document.get("rootPage", {}).get("visible", True)) + extra_pages
-        key("Down",pages); key("Return")
-    elif action == "page":
-        document = json.loads(layout.read_text())
-        pages = len(document.get("pages", [])) + int(document.get("rootPage", {}).get("visible", True)) + extra_pages
-        key("Down",pages+1); key("Return")
-
-
-def studio_legacy_menu(layout, key, index):
-    actions = {0:"new", 1:"page", 2:"add", 3:"appearance", 4:"layers",
-               5:"designs", 6:"editorSettings", 7:"apply", 8:"edit"}
-    studio_page_menu(layout, key, actions[index])
-
-
-def studio_catalog_family(key, identity):
-    options = json.loads((Path(__file__).resolve().parents[1] / "config/studio-defaults.json").read_text())
-    primary = options["simpleStudio"]["basicFamilies"]
-    if identity in primary:
-        index = primary.index(identity)
-    else:
-        key("Right", len(primary)); key("Return")
+          def studio_catalog_family(key, identity)
+    : options = json.loads((Path(__file__).resolve().parents[1] / "config/studio-defaults.json").read_text()) primary =
+          options["simpleStudio"]["basicFamilies"] if identity in primary
+    : index = primary.index(identity) else : key("Right", len(primary)); key("Return")
         additional = [family for family in options["catalog"] if family["id"] not in primary]
         index = next(i for i, family in enumerate(additional) if family["id"] == identity)
-    key("Right", index); key("Return")
+    key("Right", index);
+key("Return")
 
+    def studio_advanced_inspector(key)
+    : key("Down", 30);
+key("Return") #Explicit Advanced settings from the short summary.
 
-def studio_advanced_inspector(key):
-    key("Down", 30); key("Return")  # Explicit Advanced settings from the short summary.
+    def studio_design_management(key)
+    : key("Down", 30);
+key("Up");
+key("Return");
+key("Up", 30) #Manage designs, before Back;
+orient to the first operation.
 
-
-def studio_design_management(key):
-    key("Down", 30); key("Up"); key("Return"); key("Up",30)  # Manage designs, before Back; orient to the first operation.
-
-
-def capture_x11_window(x11, display, window, path):
-    """Capture the owned installed window; XWayland's root drawable is not readable."""
-    from PIL import Image
-    class Frame(ctypes.Structure):
-        _fields_=[("width",ctypes.c_int),("height",ctypes.c_int),("xoffset",ctypes.c_int),("format",ctypes.c_int),
-            ("data",ctypes.c_void_p),("byte_order",ctypes.c_int),("bitmap_unit",ctypes.c_int),
-            ("bitmap_bit_order",ctypes.c_int),("bitmap_pad",ctypes.c_int),("depth",ctypes.c_int),
-            ("bytes_per_line",ctypes.c_int),("bits_per_pixel",ctypes.c_int),
-            ("red_mask",ctypes.c_ulong),("green_mask",ctypes.c_ulong),("blue_mask",ctypes.c_ulong)]
-    x11.XGetGeometry.argtypes=[ctypes.c_void_p,ctypes.c_ulong,ctypes.POINTER(ctypes.c_ulong),ctypes.POINTER(ctypes.c_int),ctypes.POINTER(ctypes.c_int),ctypes.POINTER(ctypes.c_uint),ctypes.POINTER(ctypes.c_uint),ctypes.POINTER(ctypes.c_uint),ctypes.POINTER(ctypes.c_uint)]
-    x11.XGetGeometry.restype=ctypes.c_int
-    owner=ctypes.c_ulong();left=ctypes.c_int();top=ctypes.c_int()
-    width=ctypes.c_uint();height=ctypes.c_uint();border=ctypes.c_uint();depth=ctypes.c_uint()
-    if not x11.XGetGeometry(display,window,ctypes.byref(owner),ctypes.byref(left),ctypes.byref(top),ctypes.byref(width),ctypes.byref(height),ctypes.byref(border),ctypes.byref(depth)):
-        raise RuntimeError("Cannot measure owned X11 acceptance window")
-    if not (0<width.value<=3840 and 0<height.value<=2160):raise RuntimeError("Unsupported acceptance window bounds")
-    x11.XGetImage.argtypes=[ctypes.c_void_p,ctypes.c_ulong,ctypes.c_int,ctypes.c_int,ctypes.c_uint,ctypes.c_uint,ctypes.c_ulong,ctypes.c_int]
-    x11.XGetImage.restype=ctypes.POINTER(Frame)
-    x11.XDestroyImage.argtypes=[ctypes.POINTER(Frame)];x11.XDestroyImage.restype=ctypes.c_int
-    frame=x11.XGetImage(display,window,0,0,width.value,height.value,ctypes.c_ulong(-1).value,2)
-    if not frame:raise RuntimeError("Cannot read owned X11 acceptance window")
-    try:
-        data=frame.contents
+    def capture_x11_window(x11, display, window, path)
+    : ""
+      "Capture the owned installed window; XWayland's root drawable is not readable."
+      "" from PIL import Image class Frame(ctypes.Structure)
+    : _fields_ =
+    [
+        ("width", ctypes.c_int),
+        ("height", ctypes.c_int),
+        ("xoffset", ctypes.c_int),
+        ("format", ctypes.c_int),
+        ("data", ctypes.c_void_p),
+        ("byte_order", ctypes.c_int),
+        ("bitmap_unit", ctypes.c_int),
+        ("bitmap_bit_order", ctypes.c_int),
+        ("bitmap_pad", ctypes.c_int),
+        ("depth", ctypes.c_int),
+        ("bytes_per_line", ctypes.c_int),
+        ("bits_per_pixel", ctypes.c_int),
+        ("red_mask", ctypes.c_ulong),
+        ("green_mask", ctypes.c_ulong),
+        ("blue_mask", ctypes.c_ulong)
+    ] x11.XGetGeometry.argtypes =
+        [
+            ctypes.c_void_p,
+            ctypes.c_ulong,
+            ctypes.POINTER(ctypes.c_ulong),
+            ctypes.POINTER(ctypes.c_int),
+            ctypes.POINTER(ctypes.c_int),
+            ctypes.POINTER(ctypes.c_uint),
+            ctypes.POINTER(ctypes.c_uint),
+            ctypes.POINTER(ctypes.c_uint),
+            ctypes.POINTER(ctypes.c_uint)
+        ] x11.XGetGeometry.restype = ctypes.c_int owner = ctypes.c_ulong();
+left = ctypes.c_int();
+top = ctypes.c_int() width = ctypes.c_uint();
+height = ctypes.c_uint();
+border = ctypes.c_uint();
+depth = ctypes.c_uint() if not x11
+            .XGetGeometry(display,
+                          window,
+                          ctypes.byref(owner),
+                          ctypes.byref(left),
+                          ctypes.byref(top),
+                          ctypes.byref(width),
+                          ctypes.byref(height),
+                          ctypes.byref(border),
+                          ctypes.byref(depth))
+    : raise RuntimeError("Cannot measure owned X11 acceptance window") if not(0 < width.value <= 3840 and
+                                                                              0 < height.value <= 2160)
+    : raise RuntimeError("Unsupported acceptance window bounds") x11.XGetImage.argtypes = [
+    ctypes.c_void_p,
+    ctypes.c_ulong,
+    ctypes.c_int,
+    ctypes.c_int,
+    ctypes.c_uint,
+    ctypes.c_uint,
+    ctypes.c_ulong,
+    ctypes.c_int
+] x11.XGetImage.restype = ctypes.POINTER(Frame) x11.XDestroyImage.argtypes = [ctypes.POINTER(Frame)];
+x11.XDestroyImage.restype = ctypes.c_int frame =
+    x11.XGetImage(display, window, 0, 0, width.value, height.value, ctypes.c_ulong(-1).value, 2) if not frame
+    : raise RuntimeError("Cannot read owned X11 acceptance window") try
+    : data=frame.contents
         if data.byte_order!=0 or data.bits_per_pixel not in (24,32) or (data.red_mask,data.green_mask,data.blue_mask)!=(0xff0000,0xff00,0xff):
             raise RuntimeError("Unsupported X11 acceptance pixel format")
         if data.width!=width.value or data.height!=height.value or not (data.width*data.bits_per_pixel//8<=data.bytes_per_line<=data.width*4+64):
@@ -137,7 +180,8 @@ def main():
                 "items": [{"id": "personal-source", "kind": "app", "appId": "missing-source", "size": "wide", "opacity": 0.65}]}
     layout = config / "home-layout.json"
     if args.designs_only:
-        original["composition"]={"schemaVersion":1,"enabled":True,"grid":{"columns":4,"rows":3,"mode":"screen"}}
+        original["composition"]={
+        "schemaVersion" : 1, "enabled" : True, "grid" : {"columns" : 4, "rows" : 3, "mode" : "screen"}}
         original["items"][0].update(name="Design source",placement={"x":0,"y":0,"width":1,"height":1},presentation={"labelColor":"#e89ab0","radius":16})
     original_bytes = json.dumps(original).encode()
     search_profile=None
@@ -176,8 +220,8 @@ def main():
     if args.search_only:
         with (config/"Kodi.conf").open("a") as settings:settings.write(search_profile+"\\kodi\\autoStart=false\n")
     (config / "Isolde.conf").write_text("[sources]\nautomaticSourcesEnabled=false\n")
-    # SourceManager currently uses default QSettings (no organization set),
-    # whereas device audio/Kodi use explicit Isolde namespaces.
+#SourceManager currently uses default QSettings(no organization set),
+#whereas device audio / Kodi use explicit Isolde namespaces.
     default_settings = evidence / "config" / "Unknown Organization"
     default_settings.mkdir()
     (default_settings / "Isolde.conf").write_text("[sources]\nautomaticSourcesEnabled=false\n")
@@ -208,14 +252,15 @@ def main():
     class Event(ctypes.Union):
         _fields_ = [("key", KeyEvent), ("padding", ctypes.c_long * 24)]
     x11.XSendEvent.argtypes = [ctypes.c_void_p, ctypes.c_ulong, ctypes.c_int, ctypes.c_long, ctypes.POINTER(Event)]
-    # Set before opening Xlib: it reads the process environment itself.
-    os.environ.update({key: env[key] for key in ("DISPLAY", "XAUTHORITY") if key in env})
+#Set before opening Xlib : it reads the process environment itself.
+    os.environ.update({
+    key: env[key] for key in ("DISPLAY", "XAUTHORITY") if key in env})
     display = x11.XOpenDisplay(env.get("DISPLAY", "").encode())
     if not display:
         raise RuntimeError("Cannot open the VM X11 display")
-    # XWayland can list a window before it is focusable. Without a custom
-    # error handler Xlib's default handler exits the process, which would skip
-    # the finally block and leave the user service stopped.
+#XWayland can list a window before it is focusable.Without a custom
+#error handler Xlib's default handler exits the process, which would skip
+#the finally block and leave the user service stopped.
     error_type = ctypes.CFUNCTYPE(ctypes.c_int, ctypes.c_void_p, ctypes.c_void_p)
     x11_errors = []
     error_handler = error_type(lambda _display, _event: x11_errors.append(1) or 0)
@@ -223,8 +268,8 @@ def main():
     x11.XSetErrorHandler(error_handler)
 
     def focus_window(target_window):
-        # The window may not be focusable yet; activating it through the
-        # window manager and retrying is enough for XSendEvent delivery.
+#The window may not be focusable yet; activating it through the
+#window manager and retrying is enough for XSendEvent delivery.
         focused = ctypes.c_ulong(); revert = ctypes.c_int()
         for _ in range(20):
             run("wmctrl", "-i", "-a", target_window, env=env)
@@ -245,8 +290,8 @@ def main():
         if not code:
             raise RuntimeError(f"No keycode for {name}")
         for _ in range(count):
-            # Window-targeted X11 events work on XWayland without injecting
-            # compositor-global shortcuts into other applications.
+#Window - targeted X11 events work on XWayland without injecting
+#compositor - global shortcuts into other applications.
             for event_type, mask in ((2, 1), (3, 2)):
                 event = Event()
                 event.key = KeyEvent(type=event_type, send_event=1, display=display, window=int(window, 16),
@@ -273,8 +318,8 @@ def main():
         raise RuntimeError(message + " did not complete; evidence: " + str(evidence))
 
     def pointer(event_type, x, y, held=False):
-        # Window-targeted events stay inside this disposable application's X11
-        # window. KeyEvent and XButtonEvent share the same wire field layout.
+#Window - targeted events stay inside this disposable application's X11
+#window.KeyEvent and XButtonEvent share the same wire field layout.
         geometry = next(line.split() for line in run("wmctrl", "-lG", env=env).splitlines()
                         if line.split()[0] == window)
         origin_x, origin_y, width, height = map(int, geometry[2:6])
@@ -292,8 +337,8 @@ def main():
 
     offline_module = None
     if args.designs_only or args.search_only:
-        # Reuse the frozen production-boundary fixture; deny only the child,
-        # preserving the oracle transport and local display/session sockets.
+#Reuse the frozen production - boundary fixture; deny only the child,
+#preserving the oracle transport and local display / session sockets.
         module_path = Path(__file__).with_name("guide-soak-acceptance.py")
         spec = importlib.util.spec_from_file_location("studio_offline_fixture", module_path)
         offline_module = importlib.util.module_from_spec(spec)
@@ -306,16 +351,16 @@ def main():
     sound_observations = []
     if args.themes_controls_only:
         def cancel_audio_acceptance(_signal, _frame):
-            # Bypass the optional failure-inspection pause so bounded runner
-            # cancellation immediately executes output/service restoration.
+#Bypass the optional failure - inspection pause so bounded runner
+#cancellation immediately executes output / service restoration.
             raise KeyboardInterrupt("Audio acceptance cancelled")
         signal.signal(signal.SIGTERM,cancel_audio_acceptance)
     try:
         if active:
             run("systemctl", "--user", "stop", "isolde.service")
         if args.themes_controls_only:
-            # Guest-only temporary output. Restore the exact previous default
-            # before the ordinary service starts; never record physical output.
+#Guest - only temporary output.Restore the exact previous default
+#before the ordinary service starts; never record physical output.
             sound_original_sink=run("pactl","get-default-sink",env=env,timeout=10).strip()
             if not sound_original_sink or "\n" in sound_original_sink:raise RuntimeError("Missing original guest output identity")
             sound_module = run("pactl", "load-module", "module-null-sink",
@@ -363,7 +408,7 @@ def main():
                     run("wmctrl", "-i", "-a", child_window, env=env)
                     return child, child_window, focus_window(child_window)
                 except BaseException:
-                    # Startup has not assigned the outer process yet.
+#Startup has not assigned the outer process yet.
                     if child.poll() is None:
                         child.terminate()
                         try:
@@ -398,15 +443,15 @@ def main():
                         time.sleep(.3);capture(phase);phases.append(phase)
                     def source_center():
                         key("Home");key("Up",30);key("Left",10);key("Return")
-                    # Use the packaged default, including its reserved Sources header.
+#Use the packaged default, including its reserved Sources header.
                     snap("sourcesdefault")
                     source_center();snap("sourceslist")
                     assert layout.read_bytes()==original_bytes,"Opening Sources changed the layout"
-                    # Mode is the second policy field; editing and cancelling must write nothing.
+#Mode is the second policy field; editing and cancelling must write nothing.
                     key("Return");key("Down");key("Return");key("Return")
                     snap("sourcesdraft");key("Escape",2)
                     assert layout.read_bytes()==original_bytes,"Cancelled policy changed the layout"
-                    # Hide and restore through real remote actions, checking the durable decision.
+#Hide and restore through real remote actions, checking the durable decision.
                     key("Up",30);key("Down",3);key("Return");key("Down",3);key("Return")
                     decisions=config/"sources.json"
                     expect(lambda:decisions.exists() and any(v.get("hidden") is True for v in json.loads(decisions.read_text())["decisions"].values()),"Remote Hide persisted")
@@ -426,7 +471,7 @@ def main():
                     for path in disconnected.iterdir():path.rename(movies/path.name)
                     key("Up",30);key("Down");key("Return");snap("sourcesretry")
                     assert layout.read_bytes()==original_bytes,"Disconnect/retry changed the layout"
-                    # Render the same generic bounded component under dark and pastel palettes.
+#Render the same generic bounded component under dark and pastel palettes.
                     defaults=json.loads((Path(__file__).resolve().parents[1]/"config/studio-defaults.json").read_text())
                     key("Up",30);key("Return")
                     for field_index,field in enumerate(defaults["sourcePolicyFields"]):
@@ -443,7 +488,7 @@ def main():
                     assert all(applied[field] is False for field in ("reconnect","suppressPlayback","suppressSetup","suppressEditing"))
                     assert "movie-disc" not in applied["events"] and "movie-disc" not in applied["types"]
                     snap("sourcespolicysaved")
-                    # Explicit handler/Keep confirmation uses the real durable model.
+#Explicit handler / Keep confirmation uses the real durable model.
                     before_keep=json.loads(layout.read_text())
                     key("Up",30);key("Down",3);key("Return");key("Down",4);key("Return");key("Return")
                     expect(lambda:any(v.get("handler") for v in json.loads(decisions.read_text())["decisions"].values()),"Remote handler saved")
@@ -520,9 +565,9 @@ def main():
                             fields=json.loads((Path(__file__).resolve().parents[1]/"config/interface-sounds.json").read_text())["fields"]
                             preview_index=next(i for i,field in enumerate(fields) if field["key"]=="preview")
                             def route_owned_audio():
-                                # Qt chooses an explicit QAudioDevice, which may
-                                # override PULSE_SINK. Move only streams whose
-                                # server-reported owner is this private shell.
+#Qt chooses an explicit QAudioDevice, which may
+#override PULSE_SINK.Move only streams whose
+#server - reported owner is this private shell.
                                 inputs=json.loads(run("pactl","--format=json","list","sink-inputs",env=env,timeout=5))
                                 owned=[]
                                 for stream in inputs:
@@ -530,7 +575,8 @@ def main():
                                     identity=stream.get("index")
                                     if type(identity)!=int or identity<0:raise RuntimeError("Invalid owned audio stream identity")
                                     run("pactl","move-sink-input",str(identity),sound_sink,env=env,timeout=5)
-                                    owned.append({key:stream.get(key) for key in ("index","sink","mute","corked","volume")})
+                                    owned.append({
+    key:stream.get(key) for key in ("index","sink","mute","corked","volume")})
                                 (evidence/(tag+"sound-routing.json")).write_text(json.dumps(dict(pid=process.pid,target=sound_sink,owned=owned),indent=2))
                                 return owned
                             def record_sound(label, stimulus):
@@ -583,8 +629,8 @@ def main():
                             key("Up",20);key("Right",20)
                             theme_provider.mode="loading";theme_provider.release.clear()
                             previous=theme_provider.completed_movies;key("Return")
-                            # Capture the real installed X11 frame before host transport
-                            # acknowledgement can outlast the production RPC deadline.
+#Capture the real installed X11 frame before host transport
+#acknowledgement can outlast the production RPC deadline.
                             capture_x11_window(x11,display,int(window,16),evidence/(tag+"loading-frame.png"))
                             theme_provider.release.set()
                             expect(lambda:theme_provider.completed_movies>previous,"Loading request completed")
@@ -640,7 +686,20 @@ def main():
                     native_after={str(f.relative_to(native_directory)):hashlib.sha256(f.read_bytes()).hexdigest() for f in native_directory.glob("*.xml")}
                     assert native_before==native_after and native_before,"Appearance changed native Kodi fixture settings"
                     assert not theme_provider.errors,theme_provider.errors
-                    result={"passed":True,"journey":"themecontrols" if args.themes_controls_only else "themecustom" if args.themes_custom_only else "themes","executable":str(executable),"freshProfile":True,"normalProfileUsed":False,"palettes":["custom"] if args.themes_custom_only else ["dark","pastel","custom"],"phases":phases,"fixtureOnly":True,"nativeKodiBefore":native_before,"nativeKodiAfter":native_after,"layoutBytesUnchanged":True}
+                    result={
+        "passed" : True,
+                   "journey"
+            : "themecontrols" if args.themes_controls_only else "themecustom" if args.themes_custom_only else "themes",
+                   "executable" : str(executable),
+                                  "freshProfile" : True,
+                                                   "normalProfileUsed"
+            : False,
+              "palettes" : ["custom"] if args.themes_custom_only else["dark", "pastel", "custom"],
+              "phases" : phases,
+                         "fixtureOnly" : True,
+                                         "nativeKodiBefore" : native_before,
+                                                              "nativeKodiAfter" : native_after,
+                                                                                  "layoutBytesUnchanged" : True}
                     if args.themes_controls_only:result.update(soundAcceptanceVersion=1,soundOutput=sound_observations,powerConfirmationReview=True)
                     (evidence/"result.json").write_text(json.dumps(result,indent=2))
                     print("Evidence: "+str(evidence),flush=True)
@@ -763,7 +822,7 @@ def main():
                 capture("edit")  # Actual full-size editing surface, without a Preview step.
 
                 def page_menu(index):
-                    # The named history row sits above the first page-menu item.
+#The named history row sits above the first page - menu item.
                     studio_legacy_menu(layout, key, index)
 
                 if args.desktop:
@@ -787,8 +846,8 @@ def main():
                     baseline = apply_at(1)
                     reopen_clock()
                     capture("baseline")
-                    # Fixture-relative centers: the selected Clock's full card,
-                    # then one free cell right. No tiny resize handle is used.
+#Fixture - relative centers : the selected Clock's full card,
+#then one free cell right.No tiny resize handle is used.
                     start, end = (0.225, 0.246), (0.335, 0.246)
                     pointer(4, *start); pointer(6, *end, held=True)
                     capture("pointer")
@@ -803,8 +862,8 @@ def main():
                     reopen_clock()
                     capture("pointerapplied")
 
-                    # Author the ordinary packaged 4x2 input group, then move
-                    # one of its children through the actual nested canvas.
+#Author the ordinary packaged 4x2 input group, then move
+#one of its children through the actual nested canvas.
                     key("Escape"); page_menu(2)
                     studio_catalog_family(key, "widgets"); key("Down", 3); key("Return")
                     key("Left", 20); key("Down"); key("Return")
@@ -1104,7 +1163,8 @@ def filter_title_response(request, response):
         items=[item for item in result[field] if query["value"].casefold() in item.get("title","").casefold()]
         result[field]=items
         start=request.get("params",{}).get("limits",{}).get("start",0)
-        result["limits"]={"start":start,"end":start+len(items),"total":len(items)}
+        result["limits"]={
+        "start" : start, "end" : start + len(items), "total" : len(items)}
     return result
 
 
@@ -1136,7 +1196,8 @@ def prepare_theme_provider(evidence):
                             message+=chunk
                         request=json.loads(message);self.requests.append(request)
                         movies=request["method"]=="VideoLibrary.GetMovies"
-                        response={"jsonrpc":"2.0","id":request["id"]}
+                        response={
+        "jsonrpc" : "2.0", "id" : request["id"]}
                         if movies and self.mode=="loading":
                             if not self.release.wait(15):raise ValueError("Theme loading gate not released")
                         if movies and self.mode=="error":
@@ -1159,9 +1220,8 @@ def prepare_theme_provider(evidence):
         (native/name).write_text("<isolated-theme-fixture>keep native Kodi owned data</isolated-theme-fixture>")
     return provider
 
-
-# Collection acceptance stays in this helper so the SHA-addressed overlay
-# cannot import an unfrozen or accidentally modified dependency.
+#Collection acceptance stays in this helper so the SHA - addressed overlay
+#cannot import an unfrozen or accidentally modified dependency.
 def prepare_collections(evidence, executable, gallery_presentation=None):
     repository = Path(__file__).resolve().parents[1]
     presets = json.loads((repository / "config/studio-defaults.json").read_text())["componentPresets"]
@@ -1289,7 +1349,7 @@ def exercise_collections(evidence, executable, layout, original, fixture, key, p
     def native_cycle(number,phase):
         expect(lambda:state().get("launches")==number and not state().get("exited"),"Real isolated client did not launch")
         assert state()["namespace"]=="1"
-        # Address the actual client window, preserving the shell key target.
+#Address the actual client window, preserving the shell key target.
         client_window=hex(state()["window"])
         run("wmctrl","-i","-a",client_window,env=env)
         send_client_key(client_window,"Right",env)
@@ -1304,7 +1364,7 @@ def exercise_collections(evidence, executable, layout, original, fixture, key, p
         key("Up",12);key("Down",2)
     def store():
         top();key("Down",3);key("Return");time.sleep(1)
-        # Initial Android grid -> tools -> header -> Device apps.
+#Initial Android grid->tools->header->Device apps.
         key("Up",2);key("Left");key("Return")
         index=fixture["nativeIndex"]
         key("Down",index//2)
@@ -1318,7 +1378,7 @@ def exercise_collections(evidence, executable, layout, original, fixture, key, p
     filter_gallery("free");capture("collectionfilter")
     key("Return");native_cycle(1,"collectionclient")
     capture("selectedreturn")
-    # Confirm without navigation must launch the exact remembered gallery app.
+#Confirm without navigation must launch the exact remembered gallery app.
     key("Return");native_cycle(2,"collectionrepeat")
     filter_gallery("");capture("collectionfiltercleared")
     key("Escape");key("Escape");key("Down",2);key("Return");capture("buttongallery")
@@ -1331,8 +1391,8 @@ def exercise_collections(evidence, executable, layout, original, fixture, key, p
     expect(lambda:"freetube" not in json.loads(fixture["state"].read_text())["installed"],"Store removal failed")
     key("Escape",2);top();key("Down");capture("allremoved")
     key("Up");key("Return");capture("selectedmissing")
-    # The dedicated gallery removes uninstalled entries; do not press Confirm
-    # on the surviving neighbor and mistake a different app for a failed launch.
+#The dedicated gallery removes uninstalled entries; do not press Confirm
+#on the surviving neighbor and mistake a different app for a failed launch.
     assert state()["launches"]==5
     capture("missingrefused");key("Escape");key("Escape")
     top();key("Down",3);key("Return");key("Return");key("Right");key("Return")
@@ -1351,7 +1411,7 @@ def exercise_collections(evidence, executable, layout, original, fixture, key, p
 
 
 def send_client_key(window,name,env):
-    # Client input uses its X11 window, never compositor/global shortcuts.
+#Client input uses its X11 window, never compositor / global shortcuts.
     display_api=ctypes.CDLL(ctypes.util.find_library("X11"))
     display_api.XOpenDisplay.argtypes=[ctypes.c_char_p];display_api.XOpenDisplay.restype=ctypes.c_void_p
     display_api.XStringToKeysym.argtypes=[ctypes.c_char_p];display_api.XStringToKeysym.restype=ctypes.c_ulong
@@ -1517,7 +1577,7 @@ def exercise_studio_designs(evidence, layout, key, capture, expect, enter_from_s
     original_root=current()["components"]
     shot("detachedapplied")
     named("new");name_digit(2)
-    # The unsaved page is already visible in Studio's menu; do not derive its count from applied bytes.
+#The unsaved page is already visible in Studio's menu; do not derive its count from applied bytes.
     named("apply",1);key("Return")
     expect(lambda:len(current().get("pages",[]))==1,"Created a named destination through the normal remote page flow")
     original_ids=[node["id"] for node in original_root]
@@ -1534,7 +1594,7 @@ def exercise_studio_designs(evidence, layout, key, capture, expect, enter_from_s
         expect(lambda:page_document()["theme"].get("backgroundStart",page_document()["theme"].get("colorTheme",{}).get("colors",{}).get("background"))=="#e89ab0","Customized template color through named swatches: "+template["name"])
         assert current()["components"]==original_root
         shot(phase+"customized")
-    # A named version is durable metadata; choosing it previews without changing applied bytes.
+#A named version is durable metadata; choosing it previews without changing applied bytes.
     saved=layout.read_bytes();named("versions");key("Down",len(json.loads(Path(str(layout)+".studio-versions.json").read_text())["versions"]));key("Return");name_digit(3)
     archive=Path(str(layout)+".studio-versions.json")
     expect(lambda:any(entry["name"]=="3" for entry in json.loads(archive.read_text())["versions"]),"Named milestone saved in the isolated profile")
@@ -1640,7 +1700,7 @@ def exercise_catalog(evidence,executable,layout,original,key,run,env,poll):
     key('Down');key('Return');key('Return');capture('imageplaced')
     assert layout.read_bytes()==original
     key('Return');key('Down');key('Return');capture('imageinspector')
-    # Inspector opens on Content. The ordinary fields are derived from its packaged schema.
+#Inspector opens on Content.The ordinary fields are derived from its packaged schema.
     fields('Content','animateArtwork',start_tabs=True);capture('imagemotiondraft')
     assert layout.read_bytes()==original
     fields('Appearance','crop');capture('imageframing')

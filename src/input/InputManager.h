@@ -1,13 +1,13 @@
 #pragma once
 
-#include <QObject>
-#include <QString>
-#include <QVariantMap>
-#include <QVariantList>
 #include <QMap>
-#include <QTimer>
+#include <QObject>
 #include <QPointer>
 #include <QSet>
+#include <QString>
+#include <QTimer>
+#include <QVariantList>
+#include <QVariantMap>
 
 class InputManager final : public QObject {
     Q_OBJECT
@@ -32,9 +32,10 @@ class InputManager final : public QObject {
     Q_PROPERTY(QString bindingStatus READ bindingStatus NOTIFY bindingsChanged)
     Q_PROPERTY(QString errorString READ errorString NOTIFY bindingsChanged)
     Q_PROPERTY(bool acceptTextKeys READ acceptTextKeys NOTIFY bindingsChanged)
-    Q_PROPERTY(bool ambientInputActive READ ambientInputActive WRITE setAmbientInputActive NOTIFY ambientInputActiveChanged)
+    Q_PROPERTY(
+        bool ambientInputActive READ ambientInputActive WRITE setAmbientInputActive NOTIFY ambientInputActiveChanged)
 
-public:
+  public:
     enum Command {
         None,
         NavigateUp,
@@ -54,55 +55,99 @@ public:
     };
     Q_ENUM(Command)
 
-    explicit InputManager(QObject *parent = nullptr);
-    explicit InputManager(const QString &storagePath, QObject *parent = nullptr);
+    explicit InputManager(QObject* parent = nullptr);
+    explicit InputManager(const QString& storagePath, QObject* parent = nullptr);
     ~InputManager() override;
     Q_INVOKABLE Command commandForKey(int key) const;
     Q_INVOKABLE QString labelForCommand(Command command) const;
-    Q_INVOKABLE QString webRemoteScript(const QVariantMap &appearance) const;
-    QVariantMap webRemoteOptions(const QVariantMap &appearance) const;
+    Q_INVOKABLE QString webRemoteScript(const QVariantMap& appearance) const;
+    QVariantMap webRemoteOptions(const QVariantMap& appearance) const;
     QString nativeReturnShortcut() const;
     QVariantList bindingRows() const;
-    bool bindingActive() const { return m_target != None; }
-    bool listening() const { return bindingActive() && !m_candidate; }
-    QString bindingStatus() const { return m_status; }
-    QString errorString() const { return m_error; }
+    bool bindingActive() const {
+        return m_target != None;
+    }
+    bool listening() const {
+        return bindingActive() && !m_candidate;
+    }
+    QString bindingStatus() const {
+        return m_status;
+    }
+    QString errorString() const {
+        return m_error;
+    }
     Q_INVOKABLE bool beginBinding(int command);
     Q_INVOKABLE bool saveBinding();
     Q_INVOKABLE void cancelBinding();
     Q_INVOKABLE bool clearBinding(int command);
     Q_INVOKABLE bool resetBindings();
-    bool acceptTextKeys() const { return m_acceptTextKeys; }
+    bool acceptTextKeys() const {
+        return m_acceptTextKeys;
+    }
     Q_INVOKABLE bool setAcceptTextKeys(bool enabled);
-    Q_INVOKABLE void setTextInputTarget(QObject *target, bool active);
-    bool ambientInputActive() const { return m_ambientInputActive; }
+    Q_INVOKABLE void setTextInputTarget(QObject* target, bool active);
+    bool ambientInputActive() const {
+        return m_ambientInputActive;
+    }
     void setAmbientInputActive(bool active);
 
-    Command none() const { return None; }
-    Command navigateUp() const { return NavigateUp; }
-    Command navigateDown() const { return NavigateDown; }
-    Command navigateLeft() const { return NavigateLeft; }
-    Command navigateRight() const { return NavigateRight; }
-    Command confirm() const { return Confirm; }
-    Command back() const { return Back; }
-    Command home() const { return Home; }
-    Command volumeUp() const { return VolumeUp; }
-    Command volumeDown() const { return VolumeDown; }
-    Command mute() const { return Mute; }
-    Command power() const { return Power; }
-    Command playPause() const { return PlayPause; }
-    Command menu() const { return Menu; }
-    Command search() const { return Search; }
-signals:
+    Command none() const {
+        return None;
+    }
+    Command navigateUp() const {
+        return NavigateUp;
+    }
+    Command navigateDown() const {
+        return NavigateDown;
+    }
+    Command navigateLeft() const {
+        return NavigateLeft;
+    }
+    Command navigateRight() const {
+        return NavigateRight;
+    }
+    Command confirm() const {
+        return Confirm;
+    }
+    Command back() const {
+        return Back;
+    }
+    Command home() const {
+        return Home;
+    }
+    Command volumeUp() const {
+        return VolumeUp;
+    }
+    Command volumeDown() const {
+        return VolumeDown;
+    }
+    Command mute() const {
+        return Mute;
+    }
+    Command power() const {
+        return Power;
+    }
+    Command playPause() const {
+        return PlayPause;
+    }
+    Command menu() const {
+        return Menu;
+    }
+    Command search() const {
+        return Search;
+    }
+  signals:
     void bindingsChanged();
     void ambientInputActiveChanged();
     void ambientWakeRequested();
     void inputActivity();
-protected:
-    bool eventFilter(QObject *object, QEvent *event) override;
-private:
+
+  protected:
+    bool eventFilter(QObject* object, QEvent* event) override;
+
+  private:
     static Command defaultCommandForKey(int key);
-    bool persist(const QMap<int, int> &bindings, bool acceptTextKeys);
+    bool persist(const QMap<int, int>& bindings, bool acceptTextKeys);
     void loadBindings();
     QString m_storagePath, m_status, m_error;
     QMap<int, int> m_bindings; // command -> additional key; standard keys remain available

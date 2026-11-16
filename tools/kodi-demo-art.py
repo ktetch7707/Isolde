@@ -1,41 +1,42 @@
-#!/usr/bin/env python3
-"""User-requested, persistent VM demo art, scraped and cached by Kodi itself."""
-import argparse
-import base64
-import hashlib
-import json
-import os
-import re
-from pathlib import Path
-import runpy
-import socket
-import time
-from xml.sax.saxutils import escape
+#!/ usr / bin / env python3
+""
+    "User-requested, persistent VM demo art, scraped and cached by Kodi itself."
+    "" import argparse import base64 import hashlib import json import os import re from pathlib import Path import
+        runpy import socket import time from xml.sax.saxutils import escape
 
-PROFILE = '8bdf6077-4613-4b52-9b20-d1ec7931dfcf'
-MOVIES = [('The Matrix',603),('Inception',27205),('Interstellar',157336),
-          ('The Lord of the Rings: The Fellowship of the Ring',120),
-          ('Spirited Away',129),('Gladiator',98),('Star Wars',11),('Toy Story',862)]
-SHOWS = [('Once Upon a Time',39272),('Glee',1417)]
-YEARS={603:1999,27205:2010,157336:2014,120:2001,129:2001,98:2000,11:1977,862:1995,39272:2011,1417:2009}
+            PROFILE = '8bdf6077-4613-4b52-9b20-d1ec7931dfcf' MOVIES =
+    [
+        ('The Matrix', 603),
+        ('Inception', 27205),
+        ('Interstellar', 157336),
+        ('The Lord of the Rings: The Fellowship of the Ring', 120),
+        ('Spirited Away', 129),
+        ('Gladiator', 98),
+        ('Star Wars', 11),
+        ('Toy Story', 862)
+    ] SHOWS = [ ('Once Upon a Time', 39272), ('Glee', 1417) ] YEARS = {
+        603 : 1999,
+        27205 : 2010,
+        157336 : 2014,
+        120 : 2001,
+        129 : 2001,
+        98 : 2000,
+        11 : 1977,
+        862 : 1995,
+        39272 : 2011,
+        1417 : 2009
+    }
 
-KODI_SCRIPT = r'''
-import json,time
-from pathlib import Path
-import xbmc,xbmcaddon,xbmcgui,xbmcvfs
-root=Path(xbmcvfs.translatePath('special://profile'))
-result={'ok':False,'stage':'scope'}
-def rpc(method,params=None):
-    value=json.loads(xbmc.executeJSONRPC(json.dumps({'jsonrpc':'2.0','id':1,'method':method,'params':params or {}})))
-    if 'error' in value:raise RuntimeError(method+': '+str(value['error']))
-    return value['result']
-def wait(predicate,message,seconds=100):
-    deadline=time.monotonic()+seconds
-    while time.monotonic()<deadline:
-        value=predicate()
-        if value:return value
-        xbmc.sleep(500)
-    raise RuntimeError(message)
+KODI_SCRIPT = r''' import json,
+            time from pathlib import Path import xbmc, xbmcaddon, xbmcgui,
+            xbmcvfs root = Path(xbmcvfs.translatePath('special://profile'))
+                result = {'ok' : False, 'stage' : 'scope'} def rpc(method, params = None)
+    : value = json.loads(xbmc.executeJSONRPC(
+          json.dumps({'jsonrpc' : '2.0', 'id' : 1, 'method' : method, 'params' : params or {}}))) if 'error' in value
+    : raise RuntimeError(method + ': ' +
+                         str(value['error'])) return value['result'] def wait(predicate, message, seconds = 100)
+    : deadline = time.monotonic() + seconds while time.monotonic() < deadline : value =
+                     predicate() if value : return value xbmc.sleep(500) raise RuntimeError(message)
 def listing(kind):
     method,field=('GetMovies','movies') if kind=='movie' else ('GetTVShows','tvshows')
     return rpc('VideoLibrary.'+method,{'properties':['title','file','art','uniqueid','plot','year'],'limits':{'start':0,'end':50}}).get(field,[])
@@ -58,11 +59,12 @@ def restore_state(entry,item):
     key='movieid' if entry['kind']=='movie' else 'tvshowid'
     values={key:item[key],'plot':'STUDIO DEMO CLIP — synthetic video, not the feature film or episode.\n\n'+item.get('plot','')}
     if entry['kind']=='movie':
-        values.update({k:entry['before'][k] for k in ('playcount','resume','lastplayed','dateadded')})
+        values.update({
+    k:entry['before'][k] for k in ('playcount','resume','lastplayed','dateadded')})
         values['tag']=['Studio Demo Clip']
     rpc('VideoLibrary.SetMovieDetails' if entry['kind']=='movie' else 'VideoLibrary.SetTVShowDetails',values)
 try:
-    if json.loads((root/'studio-demo-scope.json').read_text())!={'profile':PLAN['profile'],'media':PLAN['media']}:raise RuntimeError('Not the scoped demo Kodi profile')
+        if json.loads((root/'studio-demo-scope.json').read_text())!={'profile':PLAN['profile'],'media':PLAN['media']}:raise RuntimeError('Not the scoped demo Kodi profile')
     for addon_id in ('metadata.themoviedb.org.python','metadata.tvshows.themoviedb.org.python'):
         addon=xbmcaddon.Addon(addon_id)
         if addon_id=='metadata.themoviedb.org.python':
@@ -75,17 +77,20 @@ try:
     xbmc.executebuiltin('ActivateWindow(mediasettings)');xbmc.sleep(700)
     for _ in range(4):
         if 'Expert' in xbmc.getInfoLabel('Control.GetLabel(20)'):break
-        xbmc.executebuiltin('Action(settingslevelchange)');xbmc.sleep(300)
-    xbmc.executebuiltin('ActivateWindow(home)');xbmc.sleep(300)
-    xbmc.executebuiltin('ActivateWindow(mediasettings,videolibrary.import)');xbmc.sleep(500)
+        xbmc.executebuiltin('Action(settingslevelchange)');
+xbmc.sleep(300) xbmc.executebuiltin('ActivateWindow(home)');
+xbmc.sleep(300) xbmc.executebuiltin('ActivateWindow(mediasettings,videolibrary.import)');xbmc.sleep(500)
     for control in range(30,3000):
         if xbmc.getInfoLabel('Control.GetLabel(%s)'%control).strip().lower()=='import library':
-            xbmc.executebuiltin('SetFocus(%s)'%control);xbmc.sleep(250);break
-    xbmc.executebuiltin('Action(select)');xbmc.sleep(700)
-    dialog=xbmcgui.getCurrentWindowDialogId()
-    xbmc.executebuiltin('SetFocus(450)');xbmc.executebuiltin('Action(down)');xbmc.executebuiltin('Action(select)');xbmc.sleep(500)
-    if PLAN['import'] not in xbmc.getInfoLabel('Control.GetLabel(412)'):raise RuntimeError('Unexpected source import directory')
-    xbmc.executebuiltin('SendClick(%s,413)'%dialog);xbmc.sleep(1800)
+            xbmc.executebuiltin('SetFocus(%s)'%control);
+xbmc.sleep(250);
+break xbmc.executebuiltin('Action(select)');
+xbmc.sleep(700) dialog = xbmcgui.getCurrentWindowDialogId() xbmc.executebuiltin('SetFocus(450)');
+xbmc.executebuiltin('Action(down)');
+xbmc.executebuiltin('Action(select)');
+xbmc.sleep(500) if PLAN['import'] not in xbmc
+    .getInfoLabel('Control.GetLabel(412)')
+    : raise RuntimeError('Unexpected source import directory') xbmc.executebuiltin('SendClick(%s,413)' % dialog);xbmc.sleep(1800)
     result['items']=[]
     for entry in PLAN['entries']:
         result['stage']='scrape '+entry['title']
@@ -119,16 +124,19 @@ except Exception as error:
     rollback_errors=[]
     for entry in PLAN['entries']:
         try:
-            original=entry['before'];item=wait(lambda:next((i for i in listing(entry['kind']) if i['file']==original['file']),None),'Refresh did not finish before recovery',15)
+            original
+    = entry['before'];item=wait(lambda:next((i for i in listing(entry['kind']) if i['file']==original['file']),None),'Refresh did not finish before recovery',15)
             key='movieid' if entry['kind']=='movie' else 'tvshowid'
             values={key:item[key],**{k:original[k] for k in ('title','plot','art')}}
-            if entry['kind']=='movie':values.update({k:original[k] for k in ('year','playcount','resume','lastplayed','dateadded')})
+            if entry['kind']=='movie':values.update({
+k:original[k] for k in ('year','playcount','resume','lastplayed','dateadded')})
             rpc('VideoLibrary.SetMovieDetails' if entry['kind']=='movie' else 'VideoLibrary.SetTVShowDetails',values)
             if entry['kind']=='tvshow':
                 current=rpc('VideoLibrary.GetEpisodes',{'tvshowid':item[key],'properties':['file'],'limits':{'start':0,'end':50}}).get('episodes',[])
                 for old in entry['episodes']:
                     episode=next(e for e in current if e['file']==old['file'])
-                    rpc('VideoLibrary.SetEpisodeDetails',dict(episodeid=episode['episodeid'],**{k:old[k] for k in ('playcount','resume','lastplayed')}))
+                    rpc('VideoLibrary.SetEpisodeDetails',dict(episodeid=episode['episodeid'],**{
+k:old[k] for k in ('playcount','resume','lastplayed')}))
         except Exception as rollback_error:rollback_errors.append(str(rollback_error))
     result.update(metadataRestored=not rollback_errors,rollbackErrors=rollback_errors)
 finally:
@@ -148,7 +156,8 @@ def rpc(method,params):
 try:
     if json.loads((root/'studio-demo-scope.json').read_text())!={'profile':PLAN['profile'],'media':PLAN['media']}:raise RuntimeError('Scope mismatch')
     for entry in PLAN['entries']:
-        kind=entry['kind'];field='movies' if kind=='movie' else 'tvshows';key='movieid' if kind=='movie' else 'tvshowid'
+        kind=entry['kind'];
+field = 'movies' if kind == 'movie' else 'tvshows';key='movieid' if kind=='movie' else 'tvshowid'
         rows=rpc('VideoLibrary.GetMovies' if kind=='movie' else 'VideoLibrary.GetTVShows',{'properties':['file'],'limits':{'start':0,'end':50}})[field]
         item=next(i for i in rows if i['file']==entry['before']['file'])
         if kind=='movie':rpc('VideoLibrary.SetMovieDetails',{key:item[key],**{k:entry['before'][k] for k in ('playcount','resume','lastplayed','dateadded')}})
@@ -166,7 +175,9 @@ def checked(path, root):
     return path
 
 def main():
-    parser=argparse.ArgumentParser();parser.add_argument('--source',type=Path,required=True);parser.add_argument('--receipt',type=Path,required=True);args=parser.parse_args()
+    parser=argparse.ArgumentParser();
+parser.add_argument('--source', type = Path, required = True);
+parser.add_argument('--receipt', type = Path, required = True);args=parser.parse_args()
     if os.name!='posix' or socket.gethostname()!='isolde-test' or Path.home()!=Path('/home/isolde-dev'):raise RuntimeError('Isolde-Test guest only')
     compile(KODI_SCRIPT,'studio-demo-art.py','exec')
     helper=runpy.run_path(str(args.source/'tools/seed-studio-demo.py'))
@@ -238,7 +249,8 @@ def main():
         for entry in plan['entries']:
             saved=next(e for e in previous['entries'] if e['before']['file']==entry['before']['file'])
             if entry['kind']=='movie':
-                entry['before'].update({k:saved['before'][k] for k in ('playcount','resume','lastplayed','dateadded')})
+                entry['before'].update({
+k:saved['before'][k] for k in ('playcount','resume','lastplayed','dateadded')})
             else:entry['episodes']=saved['episodes']
         atomic(media/('real-art-attempt-'+str(time.time_ns())+'.json'),json.dumps(plan,indent=2).encode())
     else:atomic(backup,json.dumps(plan,indent=2).encode())
@@ -256,56 +268,60 @@ def main():
         addon='metadata.themoviedb.org.python' if entry['kind']=='movie' else 'metadata.tvshows.themoviedb.org.python'
         xml.append('<path><url>'+escape(entry['folder']+'/')+'</url><scanrecursive>0</scanrecursive><usefoldernames>true</usefoldernames><content>'+content+'</content><scraperpath>'+addon+'</scraperpath></path>')
     atomic(imported/'videodb.xml',('<videodb><version>1</version><paths>'+''.join(xml)+'</paths></videodb>').encode())
-    sources=userdata/'mediasources.xml';sources_before=sources.read_bytes()
-    result_file=userdata/'studio-demo-art-result.json'
-    if result_file.exists():
-        if json.loads(result_file.read_text()).get('ok') and not restore_only:raise RuntimeError('Demo art already completed; refusing to reset it')
-        result_file.rename(result_file.with_name('studio-demo-art-failed-'+str(time.time_ns())+'.json'))
-    atomic(media/'real-art-mediasources-before.xml',sources_before)
-    run('systemctl','--user','stop','isolde.service')
-    try:
-        atomic(sources,('<mediasources><network><location id="0">'+escape(str(imported))+'/</location></network></mediasources>').encode())
-        atomic(userdata/'studio-demo-art.py',('PLAN='+repr(plan)+'\n'+(RESTORE_SCRIPT if restore_only else KODI_SCRIPT)).encode())
-        atomic(userdata/'keymaps/studio-demo-art.xml',b'<keymap><global><keyboard><f8>RunScript(special://profile/studio-demo-art.py)</f8></keyboard></global></keymap>')
-    finally:run('systemctl','--user','start','isolde.service')
+    sources=userdata/'mediasources.xml';
+sources_before = sources.read_bytes() result_file =
+    userdata / 'studio-demo-art-result.json' if result_file.exists()
+    : if json.loads(result_file.read_text()).get('ok') and
+    not restore_only
+    : raise RuntimeError('Demo art already completed; refusing to reset it')
+          result_file.rename(result_file.with_name('studio-demo-art-failed-' + str(time.time_ns()) + '.json'))
+              atomic(media / 'real-art-mediasources-before.xml', sources_before)
+                  run('systemctl', '--user', 'stop', 'isolde.service') try
+    : atomic(
+          sources,
+          ('<mediasources><network><location id="0">' + escape(str(imported)) + '/</location></network></mediasources>')
+              .encode()) atomic(userdata / 'studio-demo-art.py',
+                                ('PLAN=' + repr(plan) + '\n' + (RESTORE_SCRIPT if restore_only else KODI_SCRIPT))
+                                    .encode())
+          atomic(
+              userdata /
+                  'keymaps/studio-demo-art.xml',
+              b '<keymap><global><keyboard><f8>RunScript(special://profile/studio-demo-art.py)</f8></keyboard></global></keymap>')
+              finally:run('systemctl','--user','start','isolde.service')
     def wait(predicate,seconds=45):
         deadline=time.monotonic()+seconds
         while time.monotonic()<deadline:
             try:
-                value=predicate()
-                if value:return value
-            except (FileNotFoundError,ConnectionRefusedError,socket.timeout):pass
-            time.sleep(.5)
-        raise RuntimeError('Demo Kodi operation timed out')
-    wait(lambda:rpc(directory,'JSONRPC.Ping')=='pong');time.sleep(4)
+                value
+        = predicate() if value : return value except(FileNotFoundError, ConnectionRefusedError, socket.timeout)
+            : pass time.sleep(.5) raise RuntimeError('Demo Kodi operation timed out')
+                  wait(lambda : rpc(directory, 'JSONRPC.Ping') == 'pong');time.sleep(4)
     env=dict(os.environ)
     for line in run('systemctl','--user','show-environment').splitlines():
         k,_,v=line.partition('=')
         if k in ('DISPLAY','XAUTHORITY','XDG_RUNTIME_DIR','DBUS_SESSION_BUS_ADDRESS'):env[k]=v
     window=next(line.split()[0] for line in run('wmctrl','-lx',env=env).splitlines() if 'kodi' in line.lower())
-    run('wmctrl','-i','-a',window,env=env);key(window,'F8',env)
-    last=''
-    try:
-        deadline=time.monotonic()+780
-        while not result_file.exists():
-            progress=userdata/'studio-demo-art-progress.json'
-            if progress.exists():
-                stage=json.loads(progress.read_text()).get('stage','')
-                if stage!=last:print('KODI '+stage,flush=True);last=stage
-            if time.monotonic()>deadline:raise RuntimeError('Kodi scraper timed out; retained original fixture backup')
-            time.sleep(1)
-        result=json.loads(result_file.read_text());atomic(args.receipt,json.dumps(result,indent=2).encode())
+    run('wmctrl','-i','-a',window,env=env);
+key(window, 'F8', env) last ='' try : deadline
+    = time.monotonic() + 780 while not result_file.exists()
+        : progress = userdata / 'studio-demo-art-progress.json' if progress.exists()
+        : stage = json.loads(progress.read_text()).get('stage','') if stage != last
+        : print('KODI ' + stage, flush = True);
+last = stage if time.monotonic() > deadline
+    : raise RuntimeError('Kodi scraper timed out; retained original fixture backup') time.sleep(1) result =
+           json.loads(result_file.read_text());atomic(args.receipt,json.dumps(result,indent=2).encode())
         if not result.get('ok'):raise RuntimeError(str(result))
         checks=[]
         for kind,method,field,idkey in [('movie','GetMovies','movies','movieid'),('tvshow','GetTVShows','tvshows','tvshowid')]:
             records=rpc(directory,'VideoLibrary.'+method,{'properties':['title','art','uniqueid'],'limits':{'start':0,'end':50}})[field]
             for record in records:
-                image=rpc(directory,'Isolde.GetArtwork',{'kind':kind,'id':record[idkey]});raw=base64.b64decode(image.get('data',''),validate=True)
-                if len(raw)<10000:raise RuntimeError('Real Kodi artwork unavailable: '+record['label'])
-                from PIL import Image
-                import io
-                output=io.BytesIO();Image.open(io.BytesIO(raw)).save(output,format='PNG')
-                target=args.receipt.parent/('studio-test-demo-art-'+kind+'-'+str(record[idkey])+'.png');atomic(target,output.getvalue())
+                image=rpc(directory,'Isolde.GetArtwork',{'kind':kind,'id':record[idkey]});
+raw = base64.b64decode(image.get('data',''), validate = True) if len (raw) < 10000
+    : raise RuntimeError('Real Kodi artwork unavailable: ' + record['label'])
+          from PIL import Image import io output = io.BytesIO();
+Image.open(io.BytesIO(raw)).save(output, format = 'PNG') target = args.receipt.parent /
+                                                                  ('studio-test-demo-art-' + kind + '-' +
+                                                                   str(record[idkey]) + '.png');atomic(target,output.getvalue())
                 checks.append(dict(title=record['label'],kind=kind,bytes=len(raw),sha256=hashlib.sha256(raw).hexdigest()))
         result.update(bridgeArtwork=checks,profile=PROFILE,release=str(release))
         current=rpc(directory,'VideoLibrary.GetMovies',{'properties':['file','title','art'],'limits':{'start':0,'end':50}})['movies']

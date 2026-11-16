@@ -3,15 +3,15 @@
 #include "app/AppRegistry.h"
 #include "app/StoreProvider.h"
 
-#include <QObject>
 #include <QHash>
-#include <QSet>
-#include <QVariantList>
-#include <QProcess>
+#include <QJsonObject>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
+#include <QObject>
 #include <QPointer>
-#include <QJsonObject>
+#include <QProcess>
+#include <QSet>
+#include <QVariantList>
 #include <optional>
 
 class AppCatalog final : public QObject {
@@ -35,62 +35,95 @@ class AppCatalog final : public QObject {
     Q_PROPERTY(QString operationStatus READ operationStatus NOTIFY entriesChanged)
     Q_PROPERTY(QString operationName READ operationName NOTIFY entriesChanged)
 
-public:
+  public:
     Q_PROPERTY(QString androidContainment READ androidContainment NOTIFY entriesChanged)
-    QString androidContainment() const { return m_androidContainment; }
-    Q_INVOKABLE bool setAndroidContainment(const QString &mode);
-    explicit AppCatalog(AppRegistry *registry, QObject *parent = nullptr);
+    QString androidContainment() const {
+        return m_androidContainment;
+    }
+    Q_INVOKABLE bool setAndroidContainment(const QString& mode);
+    explicit AppCatalog(AppRegistry* registry, QObject* parent = nullptr);
     ~AppCatalog() override;
-    QVariantMap storeOptions() const { return m_storeOptions; }
-    bool busy() const { return !m_operationId.isEmpty() || m_downloadReply; }
-    QString operationId() const { return m_operationId; }
+    QVariantMap storeOptions() const {
+        return m_storeOptions;
+    }
+    bool busy() const {
+        return !m_operationId.isEmpty() || m_downloadReply;
+    }
+    QString operationId() const {
+        return m_operationId;
+    }
     [[nodiscard]] QVariantList entries() const;
     [[nodiscard]] QString errorString() const;
-    [[nodiscard]] bool onlineStoreSearch() const { return m_onlineStoreSearch; }
-    [[nodiscard]] QVariantList providerResults() const { return m_providerResults; }
-    Q_INVOKABLE void setStoreProvider(StoreProvider *provider);
-    Q_INVOKABLE StoreProvider *storeProvider() const { return m_provider; }
+    [[nodiscard]] bool onlineStoreSearch() const {
+        return m_onlineStoreSearch;
+    }
+    [[nodiscard]] QVariantList providerResults() const {
+        return m_providerResults;
+    }
+    Q_INVOKABLE void setStoreProvider(StoreProvider* provider);
+    Q_INVOKABLE StoreProvider* storeProvider() const {
+        return m_provider;
+    }
     Q_INVOKABLE void setOnlineStoreSearch(bool enabled);
-    Q_INVOKABLE void searchStore(const QString &query);
-    Q_INVOKABLE void browseOnlineStore(const QString &query);
+    Q_INVOKABLE void searchStore(const QString& query);
+    Q_INVOKABLE void browseOnlineStore(const QString& query);
     Q_INVOKABLE void changeStorePage(int direction);
     Q_INVOKABLE bool checkForUpdates();
-    Q_INVOKABLE bool setUpdatesEnabled(const QString &id, bool enabled);
-    Q_INVOKABLE bool updateApp(const QString &id);
+    Q_INVOKABLE bool setUpdatesEnabled(const QString& id, bool enabled);
+    Q_INVOKABLE bool updateApp(const QString& id);
     Q_INVOKABLE void cancelOperation();
     Q_INVOKABLE bool setupAndroid(bool softwareRendering = false);
-    bool canCancelOperation() const { return busy() && m_cancellable && !m_cancelRequested; }
-    QString operationStatus() const { return m_operationStatus; }
-    QString operationName() const { return m_operationName; }
-    QString storeStatus() const { return m_onlineStoreSearch && m_provider ? m_provider->status() : QString(); }
-    bool hasNextStorePage() const { return m_onlineStoreSearch && m_provider && m_provider->hasNextPage(); }
-    bool hasPreviousStorePage() const { return m_onlineStoreSearch && m_provider && m_provider->hasPreviousPage(); }
-    Q_INVOKABLE bool load(const QString &catalogPath = {}, const QString &statePath = {}, const QString &installRoot = {});
-    Q_INVOKABLE bool install(const QString &id);
-    Q_INVOKABLE bool uninstall(const QString &id);
-    Q_INVOKABLE bool isInstalled(const QString &id) const;
-    Q_INVOKABLE QString packageState(const QString &id) const;
-    Q_INVOKABLE bool completeSetup(const QString &id);
-    Q_INVOKABLE bool markFailed(const QString &id, const QString &reason);
+    bool canCancelOperation() const {
+        return busy() && m_cancellable && !m_cancelRequested;
+    }
+    QString operationStatus() const {
+        return m_operationStatus;
+    }
+    QString operationName() const {
+        return m_operationName;
+    }
+    QString storeStatus() const {
+        return m_onlineStoreSearch && m_provider ? m_provider->status() : QString();
+    }
+    bool hasNextStorePage() const {
+        return m_onlineStoreSearch && m_provider && m_provider->hasNextPage();
+    }
+    bool hasPreviousStorePage() const {
+        return m_onlineStoreSearch && m_provider && m_provider->hasPreviousPage();
+    }
+    Q_INVOKABLE bool
+    load(const QString& catalogPath = {}, const QString& statePath = {}, const QString& installRoot = {});
+    Q_INVOKABLE bool install(const QString& id);
+    Q_INVOKABLE bool uninstall(const QString& id);
+    Q_INVOKABLE bool isInstalled(const QString& id) const;
+    Q_INVOKABLE QString packageState(const QString& id) const;
+    Q_INVOKABLE bool completeSetup(const QString& id);
+    Q_INVOKABLE bool markFailed(const QString& id, const QString& reason);
     Q_INVOKABLE QVariantList allEntries() const;
     Q_INVOKABLE QVariantList galleryEntries() const;
-    QVariantMap galleryPresentation() const { return m_galleryPresentation; }
-    Q_INVOKABLE bool downloadAndInstall(const QString &storeId);
-    Q_INVOKABLE QString addWebApp(const QString &name,const QString &url,const QString &backend);
-    [[nodiscard]] QString downloadProgress() const { return m_downloadProgress; }
-    QString storeSourceName() const { return m_provider ? m_provider->providerName() : tr("No online repository connected"); }
+    QVariantMap galleryPresentation() const {
+        return m_galleryPresentation;
+    }
+    Q_INVOKABLE bool downloadAndInstall(const QString& storeId);
+    Q_INVOKABLE QString addWebApp(const QString& name, const QString& url, const QString& backend);
+    [[nodiscard]] QString downloadProgress() const {
+        return m_downloadProgress;
+    }
+    QString storeSourceName() const {
+        return m_provider ? m_provider->providerName() : tr("No online repository connected");
+    }
 
-signals:
+  signals:
     void entriesChanged();
     void errorStringChanged();
     void onlineStoreSearchChanged();
     void providerResultsChanged();
     void downloadProgressChanged();
-    void operationFailed(const QString &message);
-    void packageInstalled(const QString &appId);
-    void packageUninstalled(const QString &appId);
+    void operationFailed(const QString& message);
+    void packageInstalled(const QString& appId);
+    void packageUninstalled(const QString& appId);
 
-private:
+  private:
     friend class IsoldeTests;
     struct Entry {
         AppDefinition app;
@@ -105,24 +138,24 @@ private:
         QString setupPrompt;
         QStringList capabilities;
         QByteArray manifestData;
-        bool custom=false;
+        bool custom = false;
     };
-    const Entry *findEntry(const QString &id) const;
+    const Entry* findEntry(const QString& id) const;
     bool saveState();
-    void setError(const QString &message);
-    bool androidOperation(const Entry &entry, const QString &operation);
+    void setError(const QString& message);
+    bool androidOperation(const Entry& entry, const QString& operation);
     QVariantList mergedEntries() const;
-    bool stageProviderArtifact(const QString &storeId, const QVariantMap &result);
+    bool stageProviderArtifact(const QString& storeId, const QVariantMap& result);
     void onDownloadFinished();
     void onDownloadReadyRead();
     void onDownloadError(QNetworkReply::NetworkError code);
-    bool customEntry(const QJsonObject &data,Entry *entry);
-    bool installCustom(const QJsonObject &data);
-    bool beginDownload(const QVariantMap &result, bool update);
-    bool commitUpdate(const Entry &entry);
-    void androidEvent(const QJsonObject &event);
+    bool customEntry(const QJsonObject& data, Entry* entry);
+    bool installCustom(const QJsonObject& data);
+    bool beginDownload(const QVariantMap& result, bool update);
+    bool commitUpdate(const Entry& entry);
+    void androidEvent(const QJsonObject& event);
 
-    AppRegistry *m_registry;
+    AppRegistry* m_registry;
     QVector<Entry> m_entries;
     QSet<QString> m_installedIds;
     QHash<QString, QString> m_packageStates;
@@ -145,15 +178,15 @@ private:
     QVariantList m_providerResults;
     QString m_downloadProgress;
     QNetworkAccessManager m_network;
-    QNetworkReply *m_downloadReply = nullptr;
+    QNetworkReply* m_downloadReply = nullptr;
     QByteArray m_downloadData;
     QString m_downloadStoreId;
     QString m_downloadProfile;
     QByteArray m_downloadExpectedHash;
     QVariantMap m_downloadResult;
-    QHash<QString,QString> m_customPackages;
+    QHash<QString, QString> m_customPackages;
     QSet<QString> m_updatesDisabled;
-    QHash<QString,QVariantMap> m_availableUpdates;
+    QHash<QString, QVariantMap> m_availableUpdates;
     std::optional<Entry> m_pendingUpdate;
     QString m_storeTransaction;
     QString m_operationStatus;

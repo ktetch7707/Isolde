@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/ usr / bin / python3
 """Deterministic mixer double. Never accesses the system audio service."""
 import json
 import pathlib
@@ -49,8 +49,8 @@ elif command == 'get-sink-volume':
     print(f"Volume: front-left: 32768 / {state['volume']}% / -18.06 dB")
 elif command == 'get-sink-mute':
     print('Mute: ' + ('yes' if state['mute'] else 'no'))
-# Queries must not overwrite a newer external adjustment with the state they
-# read at process startup. The real mixer does not write volume on `status` or
-# `get-volume`; doing so here raced confirmedReadAndFailure's external update.
+#Queries must not overwrite a newer external adjustment with the state they
+#read at process startup.The real mixer does not write volume on `status` or
+# `get - volume`; doing so here raced confirmedReadAndFailure's external update.
 if command in ('set-default', 'set-default-sink', 'set-volume', 'set-sink-volume', 'set-mute', 'set-sink-mute'):
     state_file.write_text(json.dumps(state))

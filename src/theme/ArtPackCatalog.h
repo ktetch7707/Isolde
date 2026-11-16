@@ -10,23 +10,23 @@ class ArtPackCatalog final : public QObject {
     Q_PROPERTY(QVariantList themes READ themes NOTIFY packsChanged)
     Q_PROPERTY(QString errorString READ errorString NOTIFY errorStringChanged)
 
-public:
-    explicit ArtPackCatalog(QObject *parent = nullptr);
+  public:
+    explicit ArtPackCatalog(QObject* parent = nullptr);
 
     [[nodiscard]] QVariantList packs() const;
     [[nodiscard]] QVariantList artwork() const;
     [[nodiscard]] QVariantList themes() const;
     [[nodiscard]] QString errorString() const;
 
-    bool load(const QString &path = {});
-    bool loadFromData(const QByteArray &data);
+    bool load(const QString& path = {});
+    bool loadFromData(const QByteArray& data);
 
-signals:
+  signals:
     void packsChanged();
     void errorStringChanged();
 
-private:
-    void setError(const QString &message);
+  private:
+    void setError(const QString& message);
 
     QVariantList m_packs;
     QVariantList m_artwork;

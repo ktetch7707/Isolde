@@ -1,61 +1,12 @@
-import base64
-import copy
-import gzip
-import hashlib
-import importlib.util
-import io
-import json
-from pathlib import Path
-import shutil
-import ssl
-import subprocess
-import tempfile
-import time
-import unittest
-from unittest.mock import patch
-from contextlib import redirect_stdout
-import zipfile
+import base64 import copy import gzip import hashlib import importlib.util import io import json from pathlib import Path import shutil import ssl import subprocess import tempfile import time import unittest from unittest.mock import patch from contextlib import redirect_stdout import zipfile
 
-ROOT = Path(__file__).resolve().parents[1]
-spec = importlib.util.spec_from_file_location("fdroid_store", ROOT/"tools/fdroid-store.py")
-store = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(store)
-TARGET = {"sdk": 30, "abis": ["x86", "x86_64"], "features": []}
+    ROOT = Path(__file__).resolve().parents[1] spec = importlib.util.spec_from_file_location("fdroid_store", ROOT / "tools/fdroid-store.py") store = importlib.util.module_from_spec(spec) spec.loader.exec_module(store) TARGET = {"sdk" : 30, "abis" : ["x86", "x86_64"], "features" : [] }
 
+                                                                                                                                                                                                                                    def fixture(count = 1) : packages = {} for i in range(count) : identity = f "org.example.app{i:03}" packages[identity] = {"metadata" : {"name" : {"en-US" : f "App {i:03}" }, "summary" : {"en-US" : "A local demo" }, "categories" : ["Games"] }, "versions" : {"a" * 64 : {"file" : {"name" : f "/{identity}_7.apk", "sha256" : "a" * 64, "size" : 123 }, "manifest" : {"versionCode" : 7, "versionName" : "1.7", "usesSdk" : {"minSdkVersion" : 21 }, "nativecode" : ["x86_64"] } } } } data = json.dumps({"repo" : {"address" : store.REPOSITORY }, "packages" : packages }).encode() entry = {"version" : 30000, "timestamp" : int(time.time() * 1000), "index" : {"name" : "/index-v2.json", "sha256" : hashlib.sha256(data).hexdigest(), "size" : len(data) } } return entry, data
 
-def fixture(count=1):
-    packages = {}
-    for i in range(count):
-        identity = f"org.example.app{i:03}"
-        packages[identity] = {"metadata": {"name": {"en-US": f"App {i:03}"},
-            "summary": {"en-US": "A local demo"}, "categories": ["Games"]}, "versions": {
-            "a"*64: {"file": {"name": f"/{identity}_7.apk", "sha256": "a"*64, "size": 123},
-                "manifest": {"versionCode": 7, "versionName": "1.7", "usesSdk": {"minSdkVersion": 21},
-                             "nativecode": ["x86_64"]}}}}
-    data = json.dumps({"repo": {"address": store.REPOSITORY}, "packages": packages}).encode()
-    entry = {"version": 30000, "timestamp": int(time.time()*1000), "index": {"name": "/index-v2.json",
-             "sha256": hashlib.sha256(data).hexdigest(), "size": len(data)}}
-    return entry, data
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 class FdroidBrowsingTests(unittest.TestCase) : def test_compressed_download_retains_signed_index_identity(self) : entry, raw = fixture(103) class Reply(io.BytesIO) : status = 200 headers = {"Content-Encoding" : "gzip" } with patch.object(store.urllib.request, "build_opener") as build : build.return_value.open.return_value = Reply(gzip.compress(raw)) downloaded = store.download("index-v2.json", len(raw)) self.assertEqual(downloaded, raw) self.assertEqual(len(store.verified_index(entry, downloaded)["apps"]), 103) self.assertEqual(build.return_value.open.call_args.args[0].get_header("Accept-encoding"), "gzip")
 
-
-class FdroidBrowsingTests(unittest.TestCase):
-    def test_compressed_download_retains_signed_index_identity(self):
-        entry,raw=fixture(103)
-        class Reply(io.BytesIO):
-            status=200
-            headers={"Content-Encoding":"gzip"}
-        with patch.object(store.urllib.request,"build_opener") as build:
-            build.return_value.open.return_value=Reply(gzip.compress(raw))
-            downloaded=store.download("index-v2.json",len(raw))
-            self.assertEqual(downloaded,raw)
-            self.assertEqual(len(store.verified_index(entry,downloaded)["apps"]),103)
-            self.assertEqual(build.return_value.open.call_args.args[0].get_header("Accept-encoding"),"gzip")
-
-    def test_download_bounds_wire_expansion_encoding_and_deadline(self):
-        class Reply(io.BytesIO):
-            status=200
-            def __init__(self,data,encoding="gzip"):
-                super().__init__(data);self.headers={"Content-Encoding":encoding}
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  def test_download_bounds_wire_expansion_encoding_and_deadline(self) : class Reply(io.BytesIO) : status = 200 def __init__(self, data, encoding = "gzip") : super().__init__(data);self.headers={"Content-Encoding":encoding}
         def rejected(data,maximum,encoding="gzip"):
             with patch.object(store.urllib.request,"build_opener") as build:
                 build.return_value.open.return_value=Reply(data,encoding)
@@ -123,23 +74,32 @@ class FdroidBrowsingTests(unittest.TestCase):
     def test_image_metadata_handles_idle_cache_and_invalidates_replaced_images(self):
         from types import SimpleNamespace
         with tempfile.TemporaryDirectory() as directory:
-            path=Path(directory)/'capabilities.json';identity={'system.img':[1,2,3,4],'vendor.img':[1,5,6,7]}
-            value={'schemaVersion':1,'images':identity,'target':TARGET}
-            path.write_text(json.dumps(value));real_stat=Path.stat
-            def info(p,*args,**kwargs):
-                result=real_stat(p,*args,**kwargs)
-                return SimpleNamespace(st_size=result.st_size,st_uid=0,st_mode=0o100644) if p==path else result
-            real_path=Path
-            with patch.object(store,'read_runtime_target',return_value=None),patch.object(store,'image_identity',return_value=identity),patch.object(store,'Path',side_effect=lambda p: path if p=='/var/lib/isolde/android-store-capabilities.json' else real_path(p)),patch.object(Path,'stat',info):
-                self.assertEqual(store.runtime_target(),TARGET)
-                value['images']={};path.write_text(json.dumps(value));self.assertIsNone(store.runtime_target())
-                value['images']=identity;value['target']={**TARGET,'sdk':'35'};path.write_text(json.dumps(value));self.assertIsNone(store.runtime_target())
-                path.write_text('invalid');self.assertIsNone(store.runtime_target())
+            path=Path(directory)/'capabilities.json';
+identity = {'system.img' : [ 1, 2, 3, 4 ],
+            'vendor.img' : [ 1, 5, 6, 7 ]} value = {'schemaVersion' : 1,
+                                                    'images' : identity,
+                                                    'target' : TARGET} path.write_text(json.dumps(value));
+real_stat = Path.stat def info(p, *args, **kwargs)
+    : result = real_stat(p, *args, **kwargs) return SimpleNamespace(
+                   st_size = result.st_size, st_uid = 0, st_mode = 0o100644) if p == path else result real_path =
+                   Path with patch.object(store, 'read_runtime_target', return_value = None),
+      patch.object(store, 'image_identity', return_value = identity),
+      patch.object(store,
+                   'Path',
+                   side_effect =
+                       lambda p : path if p == '/var/lib/isolde/android-store-capabilities.json' else real_path(p)),
+      patch.object(Path, 'stat', info) : self.assertEqual(store.runtime_target(), TARGET) value['images'] = {};
+path.write_text(json.dumps(value));
+self.assertIsNone(store.runtime_target()) value['images'] = identity;
+value['target'] = {**TARGET, 'sdk' : '35'};
+path.write_text(json.dumps(value));
+self.assertIsNone(store.runtime_target()) path.write_text('invalid');
+self.assertIsNone(store.runtime_target())
 
-    def test_image_reader_uses_actual_sdk_abi_and_features(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root=Path(directory);system=root/'image';vendor=root/'vendor'
-            (system/'system/etc/permissions').mkdir(parents=True);vendor.mkdir()
+    def test_image_reader_uses_actual_sdk_abi_and_features(self)
+    : with tempfile.TemporaryDirectory() as directory : root = Path(directory);
+system = root / 'image';
+vendor = root / 'vendor'(system / 'system/etc/permissions').mkdir(parents = True);vendor.mkdir()
             (system/'system/build.prop').write_text('ro.build.version.sdk=35\nro.product.cpu.abilist=x86_64,x86\n')
             (system/'system/etc/permissions/features.xml').write_text('<permissions><feature name="android.hardware.touchscreen"/><feature name="removed"/><unavailable-feature name="removed"/></permissions>')
             self.assertEqual(store.read_runtime_target(system,vendor),{'sdk':35,'abis':['x86_64','x86'],'features':['android.hardware.touchscreen']})
@@ -243,35 +203,33 @@ class FdroidSignatureTests(unittest.TestCase):
 
     def test_stale_future_and_bad_descriptor_rejected(self):
         for stamp in (0, int((time.time()+2*86400)*1000)):
-            entry = fixture()[0]; entry["timestamp"] = stamp
-            with self.assertRaisesRegex(ValueError, "expired or dated"):
-                store.verified_entry(self.signed(entry), self.signer)
-        entry = fixture()[0]; entry["index"]["name"] = "/../other.json"
-        with self.assertRaisesRegex(ValueError, "descriptor"):
-            store.verified_entry(self.signed(entry), self.signer)
-        entry = fixture()[0]; entry["version"] = 99999
-        with self.assertRaisesRegex(ValueError, "protocol version"):
-            store.verified_entry(self.signed(entry), self.signer)
+            entry = fixture()[0];
+entry["timestamp"] = stamp with self.assertRaisesRegex(ValueError, "expired or dated")
+    : store.verified_entry(self.signed(entry), self.signer) entry = fixture()[0];
+entry["index"]["name"] = "/../other.json" with self.assertRaisesRegex(ValueError, "descriptor")
+    : store.verified_entry(self.signed(entry), self.signer) entry = fixture()[0];
+entry["version"] = 99999 with self.assertRaisesRegex(ValueError, "protocol version")
+    : store.verified_entry(self.signed(entry), self.signer)
 
-    def test_profile_cache_reverified_and_corrupt_payload_refetched(self):
-        entry, data = fixture()
-        signed = self.signed(entry)
-        cache = self.root/"profile-cache"
-        original_verify = store.verified_entry
-        downloads = lambda name, maximum: signed if name == "entry.jar" else data
-        with patch("sys.argv", ["fdroid-store", "--cache", str(cache), "--query", "local"]), \
-                patch.object(store, "runtime_target", return_value=TARGET), \
-                patch.object(store, "verified_entry", side_effect=lambda raw: original_verify(raw, self.signer)):
-            with patch.object(store, "download", side_effect=downloads) as network, redirect_stdout(io.StringIO()):
-                store.main()
-                self.assertEqual(network.call_count, 2)
-            with patch.object(store, "download", side_effect=AssertionError("Unexpected external request")), redirect_stdout(io.StringIO()):
-                store.main()
-            (cache/"index-v2.json").write_bytes(b"corrupt")
-            with patch.object(store, "download", side_effect=downloads) as network, redirect_stdout(io.StringIO()):
-                store.main()
-                network.assert_called_once_with("index-v2.json", store.MAX_INDEX)
+          def
+          test_profile_cache_reverified_and_corrupt_payload_refetched(self)
+    : entry,
+data = fixture() signed = self.signed(entry) cache = self.root / "profile-cache" original_verify =
+                                                         store.verified_entry downloads = lambda name,
+                 maximum
+    : signed if name ==
+      "entry.jar" else data with patch("sys.argv", [ "fdroid-store", "--cache", str(cache), "--query", "local" ]),
+                 patch.object(store, "runtime_target", return_value = TARGET),
+                 patch
+                     .object(store, "verified_entry", side_effect = lambda raw : original_verify(raw, self.signer))
+    : with patch.object(store, "download", side_effect = downloads) as network,
+                 redirect_stdout(io.StringIO())
+    : store.main() self.assertEqual(network.call_count, 2) with patch.object(
+          store, "download", side_effect = AssertionError("Unexpected external request")),
+                 redirect_stdout(io.StringIO())
+    : store.main()(cache / "index-v2.json")
+          .write_bytes(b "corrupt") with patch.object(store, "download", side_effect = downloads) as network,
+                 redirect_stdout(io.StringIO())
+    : store.main() network.assert_called_once_with("index-v2.json", store.MAX_INDEX)
 
-
-if __name__ == "__main__":
-    unittest.main()
+          if __name__ == "__main__" : unittest.main()

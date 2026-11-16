@@ -1,18 +1,18 @@
+#include <QCoreApplication>
 #include "sessions/DesktopSession.h"
 #include "sessions/NativeSandbox.h"
-#include <QCoreApplication>
 
 #include <QDebug>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QJsonDocument>
 #include <QProcessEnvironment>
 #include <QStandardPaths>
 #include <QTextStream>
 #include <QTimer>
 #include <QVariantList>
 #include <QVariantMap>
-#include <QJsonDocument>
 
 namespace {
 
@@ -25,22 +25,20 @@ struct ResolvedDesktopLaunch {
     QString error;
 };
 
-QProcessEnvironment desktopEnvironment()
-{
+QProcessEnvironment desktopEnvironment() {
     auto environment = QProcessEnvironment::systemEnvironment();
     const QDir runtime(environment.value(QStringLiteral("XDG_RUNTIME_DIR"), QStringLiteral("/run/user/1000")));
-    const auto authFiles = runtime.entryList({QStringLiteral(".mutter-Xwaylandauth.*")},
-                                             QDir::Files | QDir::Hidden, QDir::Time);
+    const auto authFiles =
+        runtime.entryList({QStringLiteral(".mutter-Xwaylandauth.*")}, QDir::Files | QDir::Hidden, QDir::Time);
     if (!authFiles.isEmpty())
         environment.insert(QStringLiteral("XAUTHORITY"), runtime.filePath(authFiles.first()));
     return environment;
 }
 
-QStringList splitSearchPath(const QString &value, const QStringList &fallback)
-{
+QStringList splitSearchPath(const QString& value, const QStringList& fallback) {
     const auto raw = value.trimmed().isEmpty() ? fallback : value.split(QLatin1Char(':'), Qt::SkipEmptyParts);
     QStringList cleaned;
-    for (const auto &path : raw) {
+    for (const auto& path : raw) {
         const auto trimmed = path.trimmed();
         if (!trimmed.isEmpty() && !cleaned.contains(trimmed))
             cleaned.append(trimmed);
@@ -48,29 +46,27 @@ QStringList splitSearchPath(const QString &value, const QStringList &fallback)
     return cleaned;
 }
 
-QString desktopFileName(QString desktopId)
-{
+QString desktopFileName(QString desktopId) {
     desktopId = desktopId.trimmed();
     if (!desktopId.endsWith(QStringLiteral(".desktop")))
         desktopId += QStringLiteral(".desktop");
     return desktopId;
 }
 
-QString resolveDesktopEntryPath(const QString &desktopId, const QProcessEnvironment &environment)
-{
+QString resolveDesktopEntryPath(const QString& desktopId, const QProcessEnvironment& environment) {
     const auto fileName = desktopFileName(desktopId);
     QStringList applicationDirs;
 
-    const auto dataHome = environment.value(QStringLiteral("XDG_DATA_HOME"),
-                                            QDir::homePath() + QStringLiteral("/.local/share"));
+    const auto dataHome =
+        environment.value(QStringLiteral("XDG_DATA_HOME"), QDir::homePath() + QStringLiteral("/.local/share"));
     applicationDirs.append(QDir(dataHome).filePath(QStringLiteral("applications")));
 
     const auto dataDirs = splitSearchPath(environment.value(QStringLiteral("XDG_DATA_DIRS")),
                                           {QStringLiteral("/usr/local/share"), QStringLiteral("/usr/share")});
-    for (const auto &dataDir : dataDirs)
+    for (const auto& dataDir : dataDirs)
         applicationDirs.append(QDir(dataDir).filePath(QStringLiteral("applications")));
 
-    for (const auto &applicationDir : applicationDirs) {
+    for (const auto& applicationDir : applicationDirs) {
         const QFileInfo candidate(QDir(applicationDir).filePath(fileName));
         if (candidate.isFile() && candidate.isReadable())
             return candidate.absoluteFilePath();
@@ -78,8 +74,7 @@ QString resolveDesktopEntryPath(const QString &desktopId, const QProcessEnvironm
     return {};
 }
 
-QString unescapeDesktopValue(QString value)
-{
+QString unescapeDesktopValue(QString value) {
     value.replace(QStringLiteral("\\s"), QStringLiteral(" "));
     value.replace(QStringLiteral("\\n"), QStringLiteral("\n"));
     value.replace(QStringLiteral("\\t"), QStringLiteral("\t"));
@@ -88,8 +83,7 @@ QString unescapeDesktopValue(QString value)
     return value;
 }
 
-QStringList parseExecTokens(const QString &execLine, QString *error)
-{
+QStringList parseExecTokens(const QString& execLine, QString* error) {
     QStringList tokens;
     QString token;
     bool inQuotes = false;
@@ -151,8 +145,7 @@ QStringList parseExecTokens(const QString &execLine, QString *error)
     return cleaned;
 }
 
-bool tokenHasUnsafeShellSyntax(const QString &token)
-{
+bool tokenHasUnsafeShellSyntax(const QString& token) {
     static const QString unsafe = QStringLiteral(";&|<>`");
     for (const QChar ch : unsafe) {
         if (token.contains(ch))
@@ -161,8 +154,7 @@ bool tokenHasUnsafeShellSyntax(const QString &token)
     return token.contains(QStringLiteral("$(")) || token.contains(QStringLiteral("${"));
 }
 
-bool hasControlCharacters(const QString &value)
-{
+bool hasControlCharacters(const QString& value) {
     for (const auto ch : value) {
         if (ch.isNull() || (!ch.isSpace() && ch.category() == QChar::Other_Control))
             return true;
@@ -170,14 +162,12 @@ bool hasControlCharacters(const QString &value)
     return false;
 }
 
-QString expandActionArgument(QString argument, const QString &target)
-{
+QString expandActionArgument(QString argument, const QString& target) {
     argument.replace(QStringLiteral("{target}"), target);
     return argument;
 }
 
-bool appendActionArguments(ResolvedDesktopLaunch *launch, const QVariantMap &configuration, QString *error)
-{
+bool appendActionArguments(ResolvedDesktopLaunch* launch, const QVariantMap& configuration, QString* error) {
     const auto actionType = configuration.value(QStringLiteral("actionType")).toString().trimmed();
     const auto actionTarget = configuration.value(QStringLiteral("actionTarget")).toString().trimmed();
     if (actionType.isEmpty() && actionTarget.isEmpty())
@@ -198,16 +188,16 @@ bool appendActionArguments(ResolvedDesktopLaunch *launch, const QVariantMap &con
     if (handler.isEmpty()) {
         if (error)
             *error = QStringLiteral("%1 declares %2 support but has no launch adapter for it.")
-                .arg(configuration.value(QStringLiteral("desktopId")).toString().isEmpty()
-                         ? QStringLiteral("This app")
-                         : configuration.value(QStringLiteral("desktopId")).toString(),
-                     actionType);
+                         .arg(configuration.value(QStringLiteral("desktopId")).toString().isEmpty()
+                                  ? QStringLiteral("This app")
+                                  : configuration.value(QStringLiteral("desktopId")).toString(),
+                              actionType);
         return false;
     }
 
     const auto configuredArguments = handler.value(QStringLiteral("arguments")).toList();
     if (!configuredArguments.isEmpty()) {
-        for (const auto &argumentValue : configuredArguments) {
+        for (const auto& argumentValue : configuredArguments) {
             const auto argument = expandActionArgument(argumentValue.toString(), actionTarget);
             if (argument.trimmed().isEmpty() || tokenHasUnsafeShellSyntax(argument) || hasControlCharacters(argument)) {
                 if (error)
@@ -225,12 +215,12 @@ bool appendActionArguments(ResolvedDesktopLaunch *launch, const QVariantMap &con
     }
 
     if (error)
-        *error = QStringLiteral("Desktop action adapter for %1 does not define how to pass the target.").arg(actionType);
+        *error =
+            QStringLiteral("Desktop action adapter for %1 does not define how to pass the target.").arg(actionType);
     return false;
 }
 
-ResolvedDesktopLaunch resolveDesktopLaunch(const QString &desktopId, const QProcessEnvironment &environment)
-{
+ResolvedDesktopLaunch resolveDesktopLaunch(const QString& desktopId, const QProcessEnvironment& environment) {
     ResolvedDesktopLaunch resolved;
     resolved.desktopPath = resolveDesktopEntryPath(desktopId, environment);
     if (resolved.desktopPath.isEmpty()) {
@@ -295,9 +285,10 @@ ResolvedDesktopLaunch resolveDesktopLaunch(const QString &desktopId, const QProc
         resolved.error = parseError;
         return resolved;
     }
-    for (const auto &token : tokens) {
+    for (const auto& token : tokens) {
         if (tokenHasUnsafeShellSyntax(token)) {
-            resolved.error = QStringLiteral("Desktop Exec token contains shell syntax that Isolde will not run: %1").arg(token);
+            resolved.error =
+                QStringLiteral("Desktop Exec token contains shell syntax that Isolde will not run: %1").arg(token);
             return resolved;
         }
     }
@@ -323,8 +314,7 @@ ResolvedDesktopLaunch resolveDesktopLaunch(const QString &desktopId, const QProc
 
 } // namespace
 
-void DesktopSession::launch()
-{
+void DesktopSession::launch() {
     auto environment = desktopEnvironment();
     const auto desktopId = definition().launchConfiguration.value(QStringLiteral("desktopId")).toString();
     const auto launch = resolveDesktopLaunch(desktopId, environment);
@@ -335,38 +325,46 @@ void DesktopSession::launch()
         return;
     }
     auto resolvedLaunch = launch;
-    const auto steamGame=definition().launchConfiguration.value("steamGameId").toString();
-    const auto managedGame=definition().launchConfiguration.value("managedGameExecutable").toString();
-    if(!managedGame.isEmpty()){
-        resolvedLaunch.program=managedGame;
+    const auto steamGame = definition().launchConfiguration.value("steamGameId").toString();
+    const auto managedGame = definition().launchConfiguration.value("managedGameExecutable").toString();
+    if (!managedGame.isEmpty()) {
+        resolvedLaunch.program = managedGame;
         resolvedLaunch.arguments.clear();
-    }else if(!steamGame.isEmpty()){
-        resolvedLaunch.program="/usr/bin/python3";
-        resolvedLaunch.arguments={"/run/steam-games.py","--launch",steamGame};
-        m_steamOutput=std::make_unique<SteamSessionOutput>(steamGame);
+    } else if (!steamGame.isEmpty()) {
+        resolvedLaunch.program = "/usr/bin/python3";
+        resolvedLaunch.arguments = {"/run/steam-games.py", "--launch", steamGame};
+        m_steamOutput = std::make_unique<SteamSessionOutput>(steamGame);
     }
-    const auto sandbox = NativeSandbox::prepare(qApp->property("isoldeProfile").toString(), definition().id,
-        resolvedLaunch.program, environment, definition().launchConfiguration.value("actionTarget").toString(), {},
-        definition().launchConfiguration.value("emulatorRuntime").toString(),
-        definition().launchConfiguration.value("gameSourceRoot").toString(),steamGame,
-        definition().launchConfiguration.value("managedGameRoot").toString(),
-        definition().launchConfiguration.value("opticalMediaId").toString(),
-        definition().launchConfiguration.value("opticalObservationId").toString());
+    const auto sandbox =
+        NativeSandbox::prepare(qApp->property("isoldeProfile").toString(),
+                               definition().id,
+                               resolvedLaunch.program,
+                               environment,
+                               definition().launchConfiguration.value("actionTarget").toString(),
+                               {},
+                               definition().launchConfiguration.value("emulatorRuntime").toString(),
+                               definition().launchConfiguration.value("gameSourceRoot").toString(),
+                               steamGame,
+                               definition().launchConfiguration.value("managedGameRoot").toString(),
+                               definition().launchConfiguration.value("opticalMediaId").toString(),
+                               definition().launchConfiguration.value("opticalObservationId").toString());
     if (!sandbox.error.isEmpty()) {
         setError(sandbox.error);
         setState(State::Exited);
         return;
     }
     auto configuration = definition().launchConfiguration;
-    if (definition().id == "kodi" || definition().id=="steam") {
+    if (definition().id == "kodi" || definition().id == "steam") {
         m_kodiLock = std::make_unique<QLockFile>(sandbox.homeDirectory + "/.isolde-managed.lock");
         if (!m_kodiLock->tryLock()) {
-            setError(definition().name+" is already using this profile. Exit it normally before opening another instance.");
+            setError(definition().name +
+                     " is already using this profile. Exit it normally before opening another instance.");
             setState(State::Exited);
             return;
         }
     }
-    if (configuration.contains("actionTarget")) configuration["actionTarget"] = sandbox.actionTarget;
+    if (configuration.contains("actionTarget"))
+        configuration["actionTarget"] = sandbox.actionTarget;
     QString actionError;
     if (managedGame.isEmpty() && !appendActionArguments(&resolvedLaunch, configuration, &actionError)) {
         setError(actionError);
@@ -374,51 +372,78 @@ void DesktopSession::launch()
         setState(State::Exited);
         return;
     }
-    if(!managedGame.isEmpty())resolvedLaunch.program=sandbox.actionTarget;
-    if(!steamGame.isEmpty())
-        for(const auto &library:sandbox.steamLibraryRoots)resolvedLaunch.arguments << "--library" << library;
+    if (!managedGame.isEmpty())
+        resolvedLaunch.program = sandbox.actionTarget;
+    if (!steamGame.isEmpty())
+        for (const auto& library : sandbox.steamLibraryRoots)
+            resolvedLaunch.arguments << "--library" << library;
 
-    const auto emulator=configuration.value("emulatorRuntime").toString();
-    if(!emulator.isEmpty())resolvedLaunch.arguments={"/run/emulator-session.py","--runtime",emulator,sandbox.actionTarget};
+    const auto emulator = configuration.value("emulatorRuntime").toString();
+    if (!emulator.isEmpty())
+        resolvedLaunch.arguments = {"/run/emulator-session.py", "--runtime", emulator, sandbox.actionTarget};
     qInfo() << "Isolated native session launching" << definition().id << "profile" << qApp->property("isoldeProfile");
     m_launcher.setProcessEnvironment(sandbox.environment);
     m_launcher.setProgram(sandbox.program);
-    auto launchArguments=sandbox.arguments;
-    if(definition().presentationMode=="web-kiosk"){
-        const auto appearance=qApp->property("isoldeRemoteAppearance").toMap();
-        if(!appearance.contains("focusColor")){setError("The app's remote appearance is unavailable. Return Home and retry.");setState(State::Exited);return;}
-        const auto index=launchArguments.lastIndexOf("--");
-        launchArguments.insert(index,"--web-remote");launchArguments.insert(index+1,QString::fromLatin1(QJsonDocument::fromVariant(appearance).toJson(QJsonDocument::Compact).toBase64()));
+    auto launchArguments = sandbox.arguments;
+    if (definition().presentationMode == "web-kiosk") {
+        const auto appearance = qApp->property("isoldeRemoteAppearance").toMap();
+        if (!appearance.contains("focusColor")) {
+            setError("The app's remote appearance is unavailable. Return Home and retry.");
+            setState(State::Exited);
+            return;
+        }
+        const auto index = launchArguments.lastIndexOf("--");
+        launchArguments.insert(index, "--web-remote");
+        launchArguments.insert(
+            index + 1,
+            QString::fromLatin1(QJsonDocument::fromVariant(appearance).toJson(QJsonDocument::Compact).toBase64()));
     }
     m_launcher.setArguments(launchArguments + resolvedLaunch.arguments);
     connect(&m_launcher, &QProcess::readyReadStandardError, this, &DesktopSession::readDiagnostics);
-    connect(&m_launcher, &QProcess::readyReadStandardOutput, this, [this] { m_launcher.readAllStandardOutput(); });
+    connect(&m_launcher, &QProcess::readyReadStandardOutput, this, [this] {
+        m_launcher.readAllStandardOutput();
+    });
     connect(&m_launcher, &QProcess::errorOccurred, this, [this](QProcess::ProcessError error) {
         qWarning() << "Desktop bridge process error for" << definition().id << error << m_launcher.errorString();
         setError(QStringLiteral("The isolated app process could not run: %1").arg(m_launcher.errorString()));
     });
-    connect(&m_launcher, qOverload<int, QProcess::ExitStatus>(&QProcess::finished), this,
-            [this](int exitCode, QProcess::ExitStatus exitStatus) {
-                qInfo() << "Isolated native session finished" << definition().id << exitCode << exitStatus;
-                readDiagnostics();
-                m_kodiLock.reset();
-                if (m_stopping) return;
-                if((exitStatus!=QProcess::NormalExit || exitCode!=0) && definition().launchConfiguration.contains("steamGameId") && m_diagnostics.contains("Steam game: ")){
-                    setError(QString::fromUtf8(m_diagnostics).section("Steam game: ",-1).section('\n',0,0).left(400));
-                } else if (m_steamOutput && !m_steamObserved) {
-                    setError(QStringLiteral("Steam ended without observing the selected game process. Check the active account, offline availability and installation, then retry."));
-                } else if((exitStatus!=QProcess::NormalExit || exitCode!=0)
-                    && definition().launchConfiguration.contains("opticalMediaId") && m_diagnostics.contains("Optical game: ")){
-                    setError(QString::fromUtf8(m_diagnostics).section("Optical game: ",-1).section('\n',0,0).left(400));
-                } else
-                if ((exitStatus != QProcess::NormalExit || exitCode != 0) && definition().launchConfiguration.contains("emulatorRuntime") && m_diagnostics.contains("Emulator setup: ")) {
-                    const auto reason=QString::fromUtf8(m_diagnostics).section("Emulator setup: ",-1).section('\n',0,0).left(320);
-                    setError(reason);
-                } else if (exitStatus != QProcess::NormalExit || exitCode != 0)
-                    setError(QStringLiteral("%1 could not continue in its private profile (exit %2). No shared-account fallback was used.").arg(definition().name).arg(exitCode));
-                // Defer teardown until QProcess has finished delivering its signal.
-                QTimer::singleShot(0, this, [this] { setState(State::Exited); });
+    connect(
+        &m_launcher,
+        qOverload<int, QProcess::ExitStatus>(&QProcess::finished),
+        this,
+        [this](int exitCode, QProcess::ExitStatus exitStatus) {
+            qInfo() << "Isolated native session finished" << definition().id << exitCode << exitStatus;
+            readDiagnostics();
+            m_kodiLock.reset();
+            if (m_stopping)
+                return;
+            if ((exitStatus != QProcess::NormalExit || exitCode != 0) &&
+                definition().launchConfiguration.contains("steamGameId") && m_diagnostics.contains("Steam game: ")) {
+                setError(QString::fromUtf8(m_diagnostics).section("Steam game: ", -1).section('\n', 0, 0).left(400));
+            } else if (m_steamOutput && !m_steamObserved) {
+                setError(QStringLiteral("Steam ended without observing the selected game process. Check the active "
+                                        "account, offline availability and installation, then retry."));
+            } else if ((exitStatus != QProcess::NormalExit || exitCode != 0) &&
+                       definition().launchConfiguration.contains("opticalMediaId") &&
+                       m_diagnostics.contains("Optical game: ")) {
+                setError(QString::fromUtf8(m_diagnostics).section("Optical game: ", -1).section('\n', 0, 0).left(400));
+            } else if ((exitStatus != QProcess::NormalExit || exitCode != 0) &&
+                       definition().launchConfiguration.contains("emulatorRuntime") &&
+                       m_diagnostics.contains("Emulator setup: ")) {
+                const auto reason =
+                    QString::fromUtf8(m_diagnostics).section("Emulator setup: ", -1).section('\n', 0, 0).left(320);
+                setError(reason);
+            } else if (exitStatus != QProcess::NormalExit || exitCode != 0)
+                setError(
+                    QStringLiteral(
+                        "%1 could not continue in its private profile (exit %2). No shared-account fallback was used.")
+                        .arg(definition().name)
+                        .arg(exitCode));
+            // Defer teardown until QProcess has finished delivering its signal.
+            QTimer::singleShot(0, this, [this] {
+                setState(State::Exited);
             });
+        });
     m_launcher.start();
     if (!m_launcher.waitForStarted(5000)) {
         setError(QStringLiteral("Could not start the native isolation service: %1").arg(m_launcher.errorString()));
@@ -426,8 +451,10 @@ void DesktopSession::launch()
         setState(State::Exited);
         return;
     }
-    if(!m_steamOutput) setState(State::Running);
-    if (definition().launchConfiguration.value(QStringLiteral("containment")).toString() == QStringLiteral("fullscreen")) {
+    if (!m_steamOutput)
+        setState(State::Running);
+    if (definition().launchConfiguration.value(QStringLiteral("containment")).toString() ==
+        QStringLiteral("fullscreen")) {
         QTimer::singleShot(1200, this, &DesktopSession::applyContainment);
         QTimer::singleShot(3000, this, &DesktopSession::applyContainment);
         QTimer::singleShot(6000, this, &DesktopSession::applyContainment);
@@ -436,83 +463,103 @@ void DesktopSession::launch()
     }
 }
 
-void DesktopSession::suspend() { if (state() == State::Running) setState(State::Suspended); }
-void DesktopSession::resume() { if (state() == State::Suspended) setState(State::Running); }
+void DesktopSession::suspend() {
+    if (state() == State::Running)
+        setState(State::Suspended);
+}
+void DesktopSession::resume() {
+    if (state() == State::Suspended)
+        setState(State::Running);
+}
 
-DesktopSession::~DesktopSession() { stopProcess(); }
+DesktopSession::~DesktopSession() {
+    stopProcess();
+}
 
-void DesktopSession::readDiagnostics()
-{
-    const auto output=m_launcher.readAllStandardError();
-    m_diagnostics=(m_diagnostics+output).right(8192);
-    m_protocolBuffer+=output;
-    if(m_protocolBuffer.size()>4096)m_protocolBuffer.clear();
-    int newline=-1;
-    while((newline=m_protocolBuffer.indexOf('\n'))>=0){
-        const auto line=m_protocolBuffer.left(newline).trimmed();
-        m_protocolBuffer.remove(0,newline+1);
-        constexpr auto prefix="ISOLDE_GAMEPAD_STATUS ";
-        if(!line.startsWith(prefix) || line.size()>512)continue;
-        const auto document=QJsonDocument::fromJson(line.mid(int(sizeof("ISOLDE_GAMEPAD_STATUS ")-1)));
-        if(!document.isObject())continue;
-        const auto object=document.object();
-        if(object.size()!=4 || !object.contains("connected") || !object.contains("available")
-            || !object.contains("new") || !object.contains("missing"))continue;
+void DesktopSession::readDiagnostics() {
+    const auto output = m_launcher.readAllStandardError();
+    m_diagnostics = (m_diagnostics + output).right(8192);
+    m_protocolBuffer += output;
+    if (m_protocolBuffer.size() > 4096)
+        m_protocolBuffer.clear();
+    int newline = -1;
+    while ((newline = m_protocolBuffer.indexOf('\n')) >= 0) {
+        const auto line = m_protocolBuffer.left(newline).trimmed();
+        m_protocolBuffer.remove(0, newline + 1);
+        constexpr auto prefix = "ISOLDE_GAMEPAD_STATUS ";
+        if (!line.startsWith(prefix) || line.size() > 512)
+            continue;
+        const auto document = QJsonDocument::fromJson(line.mid(int(sizeof("ISOLDE_GAMEPAD_STATUS ") - 1)));
+        if (!document.isObject())
+            continue;
+        const auto object = document.object();
+        if (object.size() != 4 || !object.contains("connected") || !object.contains("available") ||
+            !object.contains("new") || !object.contains("missing"))
+            continue;
         QVariantMap status;
-        for(const auto &key:QStringList{"connected","available","new","missing"}){
-            const auto value=object.value(key);
-            if(!value.isDouble() || value.toInt(-1)<0 || value.toInt()>32){status.clear();break;}
-            status.insert(key,value.toInt());
+        for (const auto& key : QStringList{"connected", "available", "new", "missing"}) {
+            const auto value = object.value(key);
+            if (!value.isDouble() || value.toInt(-1) < 0 || value.toInt() > 32) {
+                status.clear();
+                break;
+            }
+            status.insert(key, value.toInt());
         }
-        if(status.isEmpty() || status.value("available").toInt()>status.value("connected").toInt()
-            || status.value("new").toInt()>status.value("connected").toInt())continue;
-        if(status!=m_gamepadStatus){m_gamepadStatus=status;emit gamepadSessionStatusChanged(status);}
+        if (status.isEmpty() || status.value("available").toInt() > status.value("connected").toInt() ||
+            status.value("new").toInt() > status.value("connected").toInt())
+            continue;
+        if (status != m_gamepadStatus) {
+            m_gamepadStatus = status;
+            emit gamepadSessionStatusChanged(status);
+        }
     }
-    if(!m_steamOutput)return;
-    const bool observed=m_steamOutput->consume(output);
-    const auto providerState=m_steamOutput->takeState();
-    if(!providerState.isEmpty())emit steamProviderStateChanged(providerState);
-    if(observed && !m_stopping && state()==State::Created){
-        m_steamObserved=true;
+    if (!m_steamOutput)
+        return;
+    const bool observed = m_steamOutput->consume(output);
+    const auto providerState = m_steamOutput->takeState();
+    if (!providerState.isEmpty())
+        emit steamProviderStateChanged(providerState);
+    if (observed && !m_stopping && state() == State::Created) {
+        m_steamObserved = true;
         setState(State::Running);
     }
 }
 
-void DesktopSession::stopProcess()
-{
+void DesktopSession::stopProcess() {
     m_stopping = true;
     if (m_launcher.state() != QProcess::NotRunning) {
         m_launcher.write("quit\n");
         m_launcher.waitForBytesWritten(500);
         const auto timeout = definition().launchConfiguration.contains("steamGameId") ? 18000 : 4000;
-        const bool finished=m_launcher.waitForFinished(timeout);
+        const bool finished = m_launcher.waitForFinished(timeout);
         if (!finished) {
             m_launcher.kill();
             m_launcher.waitForFinished(3000);
         }
         readDiagnostics();
-        if(m_steamOutput && (!finished || m_launcher.exitStatus()!=QProcess::NormalExit || m_launcher.exitCode()!=0)){
-            if(m_diagnostics.contains("Steam game: "))
-                setError(QString::fromUtf8(m_diagnostics).section("Steam game: ",-1).section('\n',0,0).left(400));
+        if (m_steamOutput &&
+            (!finished || m_launcher.exitStatus() != QProcess::NormalExit || m_launcher.exitCode() != 0)) {
+            if (m_diagnostics.contains("Steam game: "))
+                setError(QString::fromUtf8(m_diagnostics).section("Steam game: ", -1).section('\n', 0, 0).left(400));
             else
-                setError(QStringLiteral("Steam did not exit cleanly. Recent saves or Steam Cloud sync may be incomplete; open Steam to check before retrying."));
+                setError(QStringLiteral("Steam did not exit cleanly. Recent saves or Steam Cloud sync may be "
+                                        "incomplete; open Steam to check before retrying."));
         }
     }
 }
 
-void DesktopSession::exit()
-{
+void DesktopSession::exit() {
     stopProcess();
     setState(State::Exited);
 }
 
-bool DesktopSession::applyContainment()
-{
+bool DesktopSession::applyContainment() {
     if (state() != State::Running)
         return false;
     const auto windowClass = definition().launchConfiguration.value(QStringLiteral("windowClass")).toString().trimmed();
     if (windowClass.isEmpty()) {
-        qWarning() << "Desktop bridge containment skipped for" << definition().id << "because no windowClass is declared.";
+        qWarning() << "Desktop bridge containment skipped for" << definition().id
+                   << "because no windowClass is declared.";
         return false;
     }
     const auto wmctrl = QStandardPaths::findExecutable(QStringLiteral("wmctrl"));
@@ -531,16 +578,18 @@ bool DesktopSession::applyContainment()
     }
     QString windowId;
     const auto lines = QString::fromUtf8(windows.readAllStandardOutput()).split(QLatin1Char('\n'), Qt::SkipEmptyParts);
-    for (const auto &line : lines) {
+    for (const auto& line : lines) {
         if (line.contains(windowClass)) {
             windowId = line.section(QLatin1Char(' '), 0, 0).trimmed();
             break;
         }
     }
     if (windowId.isEmpty()) {
-        qWarning() << "Desktop bridge containment could not find window class" << windowClass << "for" << definition().id;
+        qWarning() << "Desktop bridge containment could not find window class" << windowClass << "for"
+                   << definition().id;
         if (m_launcher.state() == QProcess::NotRunning) {
-            qWarning() << "Desktop bridge launcher is no longer running and no contained window was found for" << definition().id;
+            qWarning() << "Desktop bridge launcher is no longer running and no contained window was found for"
+                       << definition().id;
             setState(State::Exited);
         }
         return false;
@@ -554,9 +603,15 @@ bool DesktopSession::applyContainment()
     if (!xprop.isEmpty()) {
         QProcess undecorate;
         undecorate.setProcessEnvironment(environment);
-        undecorate.start(xprop, {QStringLiteral("-id"), windowId, QStringLiteral("-f"), QStringLiteral("_MOTIF_WM_HINTS"),
-                                 QStringLiteral("32c"), QStringLiteral("-set"), QStringLiteral("_MOTIF_WM_HINTS"),
-                                 QStringLiteral("2, 0, 0, 0, 0")});
+        undecorate.start(xprop,
+                         {QStringLiteral("-id"),
+                          windowId,
+                          QStringLiteral("-f"),
+                          QStringLiteral("_MOTIF_WM_HINTS"),
+                          QStringLiteral("32c"),
+                          QStringLiteral("-set"),
+                          QStringLiteral("_MOTIF_WM_HINTS"),
+                          QStringLiteral("2, 0, 0, 0, 0")});
         undecorate.waitForFinished(1200);
     }
 
@@ -567,14 +622,19 @@ bool DesktopSession::applyContainment()
 
     QProcess maximize;
     maximize.setProcessEnvironment(environment);
-    maximize.start(wmctrl, {QStringLiteral("-i"), QStringLiteral("-r"), windowId,
-                            QStringLiteral("-b"), QStringLiteral("add,maximized_vert,maximized_horz")});
+    maximize.start(wmctrl,
+                   {QStringLiteral("-i"),
+                    QStringLiteral("-r"),
+                    windowId,
+                    QStringLiteral("-b"),
+                    QStringLiteral("add,maximized_vert,maximized_horz")});
     maximize.waitForFinished(1200);
 
     QProcess fullscreen;
     fullscreen.setProcessEnvironment(environment);
-    fullscreen.start(wmctrl, {QStringLiteral("-i"), QStringLiteral("-r"), windowId,
-                              QStringLiteral("-b"), QStringLiteral("add,fullscreen")});
+    fullscreen.start(
+        wmctrl,
+        {QStringLiteral("-i"), QStringLiteral("-r"), windowId, QStringLiteral("-b"), QStringLiteral("add,fullscreen")});
     if (!fullscreen.waitForFinished(1200) || fullscreen.exitCode() != 0) {
         qWarning() << "Desktop bridge fullscreen containment failed for" << definition().id
                    << QString::fromUtf8(fullscreen.readAllStandardError()).trimmed();

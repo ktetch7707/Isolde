@@ -1,21 +1,21 @@
 #ifndef TST_COMPONENT_COMMON_H
 #define TST_COMPONENT_COMMON_H
 
-#include <QObject>
-#include <QTemporaryDir>
+#include <QColor>
+#include <QDir>
 #include <QFile>
+#include <QImage>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QJsonArray>
-#include <QVariantMap>
-#include <QVariantList>
-#include <QColor>
+#include <QObject>
 #include <QSignalSpy>
 #include <QStandardPaths>
-#include <QUuid>
-#include <QDir>
-#include <QImage>
+#include <QTemporaryDir>
 #include <QUrl>
+#include <QUuid>
+#include <QVariantList>
+#include <QVariantMap>
 
 // Shared test data (from original tst_components.cpp)
 static const QByteArray apps = R"([
@@ -26,14 +26,24 @@ static const QByteArray apps = R"([
  {"id":"app-store","name":"Store","type":"store","section":"System","accent":"#556677"}
 ])";
 
-static const QByteArray legacy = R"({"schemaVersion":1,"theme":{"backgroundStart":"#123456","backgroundEnd":"#010203","tileRoundness":0.73},
+static const QByteArray legacy =
+    R"({"schemaVersion":1,"theme":{"backgroundStart":"#123456","backgroundEnd":"#010203","tileRoundness":0.73},
  "categories":[{"id":"personal","name":"Personal"}],"items":[
  {"id":"my-folder","kind":"action","name":"My films","categoryId":"personal","size":"wide","opacity":0.42,"showTitle":false,"customLogo":"artwork/my-folder.png","actions":[{"type":"open-folder","target":"/media/films","openWith":"gone"}]},
  {"id":"my-app","kind":"app","appId":"absent","size":"compact"},
  {"id":"clock","kind":"widget","widgetType":"clock"}]})";
 
-static void writeFile(const QString &path, const QByteArray &data) { QFile file(path); if (file.open(QIODevice::WriteOnly)) file.write(data); }
-static QByteArray readFile(const QString &path) { QFile file(path); if (!file.open(QIODevice::ReadOnly)) return {}; return file.readAll(); }
+static void writeFile(const QString& path, const QByteArray& data) {
+    QFile file(path);
+    if (file.open(QIODevice::WriteOnly))
+        file.write(data);
+}
+static QByteArray readFile(const QString& path) {
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly))
+        return {};
+    return file.readAll();
+}
 
 #include <QCoreApplication>
 #endif // TST_COMPONENT_COMMON_H

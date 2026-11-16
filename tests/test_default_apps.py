@@ -1,33 +1,8 @@
-import importlib.util
-import json
-from pathlib import Path
-import tempfile
-import shutil
-import unittest
-from types import SimpleNamespace
-from unittest.mock import patch
+import importlib.util import json from pathlib import Path import tempfile import shutil import unittest from types import SimpleNamespace from unittest.mock import patch
 
-ROOT = Path(__file__).resolve().parents[1]
-spec = importlib.util.spec_from_file_location("default_apps", ROOT / "tools/provision-default-apps.py")
-apps = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(apps)
+    ROOT = Path(__file__).resolve().parents[1] spec = importlib.util.spec_from_file_location("default_apps", ROOT / "tools/provision-default-apps.py") apps = importlib.util.module_from_spec(spec) spec.loader.exec_module(apps)
 
-
-class DefaultAppsTests(unittest.TestCase):
-    def test_surfshark_install_uses_scoped_trust_without_executing_vendor_script(self):
-        provider=json.loads((ROOT/"config/vpn-providers.json").read_text())["surfshark"]
-        commands=[]
-        def fetch(url,path,*args,**kwargs):
-            self.assertEqual(url,provider["installerUrl"])
-            path.write_bytes(b"#!/bin/sh\nnever-execute\n-----BEGIN PGP PUBLIC KEY BLOCK-----\npublic-key\n-----END PGP PUBLIC KEY BLOCK-----\n")
-            return provider["installerSha256"]
-        def execute(*args,**kwargs):
-            commands.append(args)
-            output="amd64\n" if args[0]=="dpkg" else "fpr:::::::::"+provider["signingFingerprint"]+":\n" if args[0]=="gpg" else "install ok installed\n3.0-test\n" if args[0]=="dpkg-query" else ""
-            return SimpleNamespace(stdout=output)
-        with patch.object(apps,"platform"),patch("socket.gethostname",return_value="isolde-test"),patch.object(apps.os,"geteuid",return_value=0),patch.object(apps,"download",side_effect=fetch),patch.object(apps,"run",side_effect=execute),patch.object(apps,"atomic") as write:
-            result=apps.install_surfshark(ROOT)
-        self.assertTrue(result["installed"]);self.assertFalse(result["tunnelVerified"])
+                                                                                                                                                                                                  class DefaultAppsTests(unittest.TestCase) : def test_surfshark_install_uses_scoped_trust_without_executing_vendor_script(self) : provider = json.loads((ROOT / "config/vpn-providers.json").read_text())["surfshark"] commands =[] def fetch(url, path, * args, ** kwargs) : self.assertEqual(url, provider["installerUrl"]) path.write_bytes(b "#!/bin/sh\nnever-execute\n-----BEGIN PGP PUBLIC KEY BLOCK-----\npublic-key\n-----END PGP PUBLIC KEY BLOCK-----\n") return provider["installerSha256"] def execute(* args, ** kwargs) : commands.append(args) output = "amd64\n" if args[0] == "dpkg" else "fpr:::::::::" + provider["signingFingerprint"] + ":\n" if args[0] == "gpg" else "install ok installed\n3.0-test\n" if args[0] == "dpkg-query" else "" return SimpleNamespace(stdout = output) with patch.object(apps, "platform"), patch("socket.gethostname", return_value = "isolde-test"), patch.object(apps.os, "geteuid", return_value = 0), patch.object(apps, "download", side_effect = fetch), patch.object(apps, "run", side_effect = execute), patch.object(apps, "atomic") as write : result = apps.install_surfshark(ROOT) self.assertTrue(result["installed"]);self.assertFalse(result["tunnelVerified"])
         self.assertEqual(result["version"],"3.0-test")
         self.assertIn(("apt-get","install","-y","surfshark"),commands)
         self.assertFalse(any(args[0] in {"sh","bash"} or "remove" in args for args in commands))
@@ -47,17 +22,17 @@ class DefaultAppsTests(unittest.TestCase):
             def png(size): return b"\x89PNG\r\n\x1a\n" + b"\x00\x00\x00\x0dIHDR" + size.to_bytes(4,"big")*2
             replies={"https://provider.test/favicon.ico":png(16),"https://provider.test/":b'<link rel="icon" sizes="32x32" href="/small.png"><link rel="apple-touch-icon" sizes="512x512" href="/large.png">',"https://provider.test/small.png":png(32),"https://provider.test/large.png":png(512)}
             def fetch(url,path,*args,**kwargs):
-                data=replies[url];path.write_bytes(data);return apps.hashlib.sha256(data).hexdigest()
-            with patch.object(apps,"download",side_effect=fetch):
-                output=apps.provider_icon("https://provider.test/favicon.ico",root,"https://provider.test/")
-            self.assertEqual(Path(output).read_bytes(),png(512))
-            self.assertEqual(len(list(root.iterdir())),1)
-    def test_provider_offline_metadata_retains_configured_icon(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            data=b"\x89PNG\r\n\x1a\n"+b"\x00\x00\x00\x0dIHDR"+(256).to_bytes(4,"big")*2
-            def fetch(url,path,*args,**kwargs):
-                if url.endswith("/"): raise OSError("offline")
-                path.write_bytes(data);return apps.hashlib.sha256(data).hexdigest()
+                data=replies[url];
+path.write_bytes(data);
+return apps.hashlib.sha256(data).hexdigest() with patch.object(apps, "download", side_effect = fetch)
+    : output = apps.provider_icon("https://provider.test/favicon.ico", root, "https://provider.test/")
+                   self.assertEqual(Path(output).read_bytes(), png(512))
+                       self.assertEqual(len(list(root.iterdir())), 1)
+                           def test_provider_offline_metadata_retains_configured_icon(self)
+    : with tempfile.TemporaryDirectory() as temporary
+    : data = b "\x89PNG\r\n\x1a\n" + b "\x00\x00\x00\x0dIHDR" +
+             (256).to_bytes(4, "big") * 2 def fetch(url, path, *args, **kwargs)
+    : if url.endswith("/") : raise OSError("offline") path.write_bytes(data);return apps.hashlib.sha256(data).hexdigest()
             with patch.object(apps,"download",side_effect=fetch):
                 output=apps.provider_icon("https://provider.test/icon.png",Path(temporary),"https://provider.test/")
             self.assertEqual(Path(output).read_bytes(),data)
@@ -70,35 +45,41 @@ class DefaultAppsTests(unittest.TestCase):
             with patch.object(apps,"platform"), patch.object(apps.os,"geteuid",return_value=0), patch.object(apps,"run"):
                 result=apps.install_native_isolation(root)
             self.assertFalse(result["globalBwrapPolicyChanged"])
-            wrapper=root/"usr/lib/isolde-native/bwrap"; profile=root/"etc/apparmor.d/isolde-native"
-            self.assertEqual(wrapper.parent.stat().st_mode & 0o777, 0o755)
-            apps.os.chmod(wrapper.parent, 0o775)
-            with patch.object(apps,"platform"), patch.object(apps.os,"geteuid",return_value=0), patch.object(apps,"run"):
-                apps.install_native_isolation(root)
-            self.assertEqual(wrapper.parent.stat().st_mode & 0o777, 0o755)
-            previous=(wrapper.read_bytes(),profile.read_bytes())
-            self.assertIn(b"flags=(unconfined)",previous[1])
-            with patch.object(apps,"platform"), patch.object(apps.os,"geteuid",return_value=0), patch.object(apps,"run",side_effect=[RuntimeError("reload failed"),None]):
-                with self.assertRaisesRegex(RuntimeError,"reload failed"): apps.install_native_isolation(root)
-            self.assertEqual(previous,(wrapper.read_bytes(),profile.read_bytes()))
-    def test_isolation_setup_requires_administrator(self):
-        with patch.object(apps,"platform"),patch.object(apps.os,"geteuid",return_value=1000):
-            with self.assertRaisesRegex(RuntimeError,"administrator"): apps.install_native_isolation()
-    def test_native_wrapper_keeps_supplied_icon_name(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary); (root/"applications").mkdir()
-            (root/"applications/spotify.desktop").write_text("[Desktop Entry]\nIcon=spotify-client\nExec=never-execute\n")
-            self.assertEqual(apps.native_icon("spotify", "spotify", root), "spotify-client")
-    def test_steam_sign_in_belongs_to_the_client(self):
-        manifest = json.loads((ROOT/"config/packages/steam/manifest.json").read_text())
-        self.assertFalse(manifest["setup"]["required"])
-    def test_existing_native_clients_do_not_request_privileges_or_downloads(self):
-        with patch.object(apps, "platform"), patch.object(apps.os, "geteuid", return_value=1000), patch.object(apps, "native_missing", return_value=[]), patch.object(apps, "run") as execute:
-            apps.system(apps.load(ROOT), delegated=True)
-            execute.assert_not_called()
-    def test_provider_url_cannot_inject_browser_arguments(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary); (root/"config").mkdir()
+            wrapper=root/"usr/lib/isolde-native/bwrap";
+profile = root / "etc/apparmor.d/isolde-native" self.assertEqual(wrapper.parent.stat().st_mode & 0o777, 0o755)
+                     apps.os.chmod(wrapper.parent, 0o775) with patch.object(apps, "platform"),
+    patch.object(apps.os, "geteuid", return_value = 0),
+    patch.object(apps, "run")
+    : apps.install_native_isolation(root) self.assertEqual(
+          wrapper.parent.stat().st_mode & 0o777,
+          0o755) previous =
+        (wrapper.read_bytes(), profile.read_bytes())self.assertIn(b "flags=(unconfined)",
+                                                                  previous[1]) with patch.object(apps, "platform"),
+                 patch.object(apps.os, "geteuid", return_value = 0),
+                 patch.object(apps, "run", side_effect = [ RuntimeError("reload failed"), None ])
+    : with self.assertRaisesRegex(RuntimeError, "reload failed")
+    : apps.install_native_isolation(root) self
+          .assertEqual(previous, (wrapper.read_bytes(), profile.read_bytes())) def
+      test_isolation_setup_requires_administrator(self)
+    : with patch.object(apps, "platform"),
+                 patch.object(apps.os, "geteuid", return_value = 1000)
+    : with self.assertRaisesRegex(RuntimeError, "administrator")
+    : apps.install_native_isolation() def test_native_wrapper_keeps_supplied_icon_name(self)
+    : with tempfile.TemporaryDirectory() as temporary : root = Path(temporary);
+(root / "applications")
+    .mkdir()(root / "applications/spotify.desktop")
+    .write_text("[Desktop Entry]\nIcon=spotify-client\nExec=never-execute\n")
+        self.assertEqual(apps.native_icon("spotify", "spotify", root), "spotify-client")
+            def test_steam_sign_in_belongs_to_the_client(self)
+    : manifest = json.loads((ROOT / "config/packages/steam/manifest.json").read_text())
+                     self.assertFalse(manifest["setup"]["required"])
+                         def test_existing_native_clients_do_not_request_privileges_or_downloads(self)
+    : with patch.object(apps, "platform"),
+      patch.object(apps.os, "geteuid", return_value = 1000), patch.object(apps, "native_missing", return_value = []),
+      patch.object(apps, "run") as execute
+    : apps.system(apps.load(ROOT), delegated = True)
+          execute.assert_not_called() def test_provider_url_cannot_inject_browser_arguments(self)
+    : with tempfile.TemporaryDirectory() as temporary : root = Path(temporary); (root/"config").mkdir()
             document = apps.load(ROOT)
             for app_id in document["apps"]:
                 source = ROOT/"config/packages"/app_id
@@ -109,68 +90,77 @@ class DefaultAppsTests(unittest.TestCase):
     def test_atomic_output_rejects_redirected_directory(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            outside = root/"outside"; outside.mkdir()
-            (root/"redirect").symlink_to(outside, target_is_directory=True)
-            with self.assertRaisesRegex(ValueError, "redirected"):
-                apps.atomic(root/"redirect/changed", b"refused")
-            self.assertFalse((outside/"changed").exists())
-    def test_requested_set_uses_native_youtube_client_and_steam_library(self):
-        document = apps.load(ROOT)
-        self.assertEqual(set(document["apps"]), {"kodi", "freetube", "spotify", "cbc-gem", "prime-video", "disney-plus", "paramount-plus", "crunchyroll", "netflix", "peacock", "steam"})
-        self.assertEqual(document["gamesBackend"], "steam")
-        self.assertEqual(document["native"]["steam"]["arguments"], ["-gamepadui"])
-        self.assertNotIn("smarttube", document["apps"])
+            outside = root/"outside";
+outside.mkdir()(root / "redirect")
+    .symlink_to(outside, target_is_directory = True) with self.assertRaisesRegex(ValueError, "redirected")
+    : apps.atomic(root / "redirect/changed", b "refused") self.assertFalse((outside / "changed").exists()) def
+      test_requested_set_uses_native_youtube_client_and_steam_library(self)
+    : document = apps.load(ROOT) self
+                     .assertEqual(set(document["apps"]),
+                                  {"kodi",
+                                   "freetube",
+                                   "spotify",
+                                   "cbc-gem",
+                                   "prime-video",
+                                   "disney-plus",
+                                   "paramount-plus",
+                                   "crunchyroll",
+                                   "netflix",
+                                   "peacock",
+                                   "steam"}) self.assertEqual(document["gamesBackend"], "steam") self
+                     .assertEqual(document["native"]["steam"]["arguments"], ["-gamepadui"]) self
+                     .assertNotIn("smarttube", document["apps"])
 
-    def test_missing_native_client_writes_nothing(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            base = Path(temporary)
-            config = base / "config"; config.mkdir()
-            state = config / "installed-apps.json"
-            state.write_bytes(b'{"installed":["plex"],"packageStates":{}}')
-            before = state.read_bytes()
-            with patch.object(apps.os, "geteuid", return_value=1000), patch.object(apps.os, "access", return_value=False):
-                with self.assertRaisesRegex(RuntimeError, "incomplete"):
-                    apps.activate(ROOT, apps.load(ROOT), config, base/"data/Isolde", base/"applications")
-            self.assertEqual(state.read_bytes(), before)
-            self.assertFalse((base/"applications").exists())
+                         def test_missing_native_client_writes_nothing(self)
+    : with tempfile.TemporaryDirectory() as temporary : base = Path(temporary) config = base / "config";
+config.mkdir() state = config /
+                       "installed-apps.json" state.write_bytes(b '{"installed":["plex"],"packageStates":{}}') before =
+                           state.read_bytes() with patch.object(apps.os, "geteuid", return_value = 1000),
+               patch.object(apps.os, "access", return_value = False)
+    : with self.assertRaisesRegex(RuntimeError, "incomplete")
+    : apps.activate(ROOT, apps.load(ROOT), config, base / "data/Isolde", base / "applications") self
+          .assertEqual(state.read_bytes(), before) self
+          .assertFalse((base / "applications").exists())
 
-    def test_activation_preserves_existing_state_and_layout(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            base = Path(temporary)
-            config = base / "config"; config.mkdir()
-            state = config / "installed-apps.json"
-            state.write_text(json.dumps({"installed": ["plex"], "packageStates": {"plex": "failed"}, "failureReasons": {"plex": "Existing error"}}))
-            layout = config / "home-layout.json"; layout.write_bytes(b'authored layout unchanged')
-            with patch.object(apps.os, "geteuid", return_value=1000), patch.object(apps.os, "access", return_value=True), patch.object(apps, "provider_icon", return_value="/usr/share/icons/provider.ico"):
-                result = apps.activate(ROOT, apps.load(ROOT), config, base/"data/Isolde", base/"applications")
-            saved = json.loads(state.read_text())
-            self.assertEqual(len(saved["installed"]), 12)
-            self.assertEqual(saved["packageStates"]["plex"], "failed")
-            self.assertEqual(saved["failureReasons"]["plex"], "Existing error")
-            self.assertEqual(layout.read_bytes(), b'authored layout unchanged')
-            self.assertFalse(result["subscriptionPlaybackVerified"])
-            self.assertIn("-gamepadui", (base/"applications/isolde-steam.desktop").read_text())
-            self.assertIn("--app=https://www.netflix.com/", (base/"applications/isolde-netflix.desktop").read_text())
-            self.assertTrue((config/"default-apps-completed.json").is_file())
+              def test_activation_preserves_existing_state_and_layout(self)
+    : with tempfile.TemporaryDirectory() as temporary : base = Path(temporary) config = base / "config";
+config.mkdir() state = config / "installed-apps.json" state.write_text(json.dumps({
+    "installed" : ["plex"],
+    "packageStates" : {"plex" : "failed"},
+    "failureReasons" : {"plex" : "Existing error"}
+})) layout = config / "home-layout.json";
+layout.write_bytes(b 'authored layout unchanged') with patch.object(apps.os, "geteuid", return_value = 1000),
+    patch.object(apps.os, "access", return_value = True),
+    patch.object(apps, "provider_icon", return_value = "/usr/share/icons/provider.ico")
+    : result = apps.activate(ROOT, apps.load(ROOT), config, base / "data/Isolde", base / "applications") saved =
+        json.loads(state.read_text()) self.assertEqual(len(saved["installed"]), 12) self
+            .assertEqual(saved["packageStates"]["plex"],
+                         "failed") self.assertEqual(saved["failureReasons"]["plex"], "Existing error") self
+            .assertEqual(layout.read_bytes(),
+                         b 'authored layout unchanged') self.assertFalse(result["subscriptionPlaybackVerified"]) self
+            .assertIn("-gamepadui", (base / "applications/isolde-steam.desktop").read_text()) self
+            .assertIn("--app=https://www.netflix.com/", (base / "applications/isolde-netflix.desktop").read_text()) self
+            .assertTrue((config / "default-apps-completed.json").is_file())
 
-    def test_failed_state_commit_keeps_previous_activation(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            base = Path(temporary)
-            config = base/"config"; config.mkdir()
-            state = config/"installed-apps.json"; state.write_bytes(b'{"installed":[],"packageStates":{}}')
-            before = state.read_bytes()
-            write = apps.atomic
-            def fail_state(path, *args, **kwargs):
-                if path == state: raise OSError("deterministic write failure")
-                return write(path, *args, **kwargs)
-            with patch.object(apps.os, "geteuid", return_value=1000), patch.object(apps.os, "access", return_value=True), patch.object(apps, "provider_icon", return_value="/usr/share/icons/provider.ico"), patch.object(apps, "atomic", side_effect=fail_state):
-                with self.assertRaises(OSError): apps.activate(ROOT, apps.load(ROOT), config, base/"data/Isolde", base/"applications")
-            self.assertEqual(state.read_bytes(), before)
-            self.assertFalse((config/"default-apps-completed.json").exists())
+                def test_failed_state_commit_keeps_previous_activation(self)
+    : with tempfile.TemporaryDirectory() as temporary : base = Path(temporary) config = base / "config";
+config.mkdir() state = config / "installed-apps.json";
+state.write_bytes(b '{"installed":[],"packageStates":{}}')
+    before = state.read_bytes() write = apps.atomic def fail_state(path, *args, **kwargs)
+    : if path == state : raise OSError("deterministic write failure") return write(
+                             path, *args, **kwargs) with patch.object(apps.os, "geteuid", return_value = 1000),
+    patch.object(apps.os, "access", return_value = True),
+    patch.object(apps, "provider_icon", return_value = "/usr/share/icons/provider.ico"),
+    patch.object(apps, "atomic", side_effect = fail_state)
+    : with self.assertRaises(OSError)
+    : apps.activate(ROOT, apps.load(ROOT), config, base / "data/Isolde", base / "applications") self
+          .assertEqual(state.read_bytes(), before) self
+          .assertFalse((config / "default-apps-completed.json").exists())
 
-    def test_native_provisioning_refuses_other_platforms(self):
-        with patch.object(apps.sys, "platform", "win32"):
-            with self.assertRaisesRegex(RuntimeError, "Ubuntu"): apps.platform()
+              def test_native_provisioning_refuses_other_platforms(self)
+    : with patch.object(apps.sys, "platform", "win32")
+    : with self.assertRaisesRegex(RuntimeError, "Ubuntu")
+    : apps.platform()
 
-
-if __name__ == "__main__": unittest.main()
+          if __name__
+        == "__main__" : unittest.main()

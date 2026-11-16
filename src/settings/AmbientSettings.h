@@ -1,8 +1,8 @@
 #pragma once
 
 #include <QObject>
-#include <QVariantList>
 #include <QStringList>
+#include <QVariantList>
 
 class AmbientSettings final : public QObject {
     Q_OBJECT
@@ -21,14 +21,16 @@ class AmbientSettings final : public QObject {
     Q_PROPERTY(bool shuffle READ shuffle NOTIFY changed)
     Q_PROPERTY(QString errorString READ errorString NOTIFY changed)
 
-public:
-    explicit AmbientSettings(QObject *parent = nullptr);
+  public:
+    explicit AmbientSettings(QObject* parent = nullptr);
 
     [[nodiscard]] bool enabled() const;
     [[nodiscard]] int timeoutMinutes() const;
     [[nodiscard]] QString mode() const;
-    QStringList pageIds() const { return m_pageIds; }
-    Q_INVOKABLE bool setPageIds(const QStringList &ids);
+    QStringList pageIds() const {
+        return m_pageIds;
+    }
+    Q_INVOKABLE bool setPageIds(const QStringList& ids);
     [[nodiscard]] int slideshowSeconds() const;
     [[nodiscard]] bool showClock() const;
     [[nodiscard]] bool showDate() const;
@@ -48,17 +50,17 @@ public:
     Q_INVOKABLE void toggleDate();
     Q_INVOKABLE void toggleSystemHint();
     Q_INVOKABLE void useManagedPhotoDirectory();
-    Q_INVOKABLE bool setPhotoDirectory(const QString &path);
+    Q_INVOKABLE bool setPhotoDirectory(const QString& path);
     Q_INVOKABLE bool importSamplePhotos();
     Q_INVOKABLE void rescanPhotos();
     Q_INVOKABLE void nextImageFit();
     Q_INVOKABLE void toggleShuffle();
     Q_INVOKABLE void reset();
 
-signals:
+  signals:
     void changed();
 
-private:
+  private:
     const QString m_settingsGroup;
     void load();
     void save() const;

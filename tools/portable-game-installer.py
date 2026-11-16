@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/ usr / bin / env python3
 """Install bounded, inert Isolde portable-game bundles; never execute archive content."""
 import argparse
 import ctypes
@@ -168,35 +168,26 @@ def inspect_windows(source):
         if identity(before) != identity(after):
             raise ValueError("The Windows executable changed during inspection.")
         architecture = {0x14c: "x86", 0x8664: "x86-64", 0xaa64: "arm64"}.get(machine, "other")
-        return {"schemaVersion": 1, "format": "PE32+" if magic == 0x20b else "PE32",
-                "architecture": architecture, "fileSize": before.st_size,
-                "sha256": digest.hexdigest(), "supported": False}
+        return {
+    "schemaVersion" : 1, "format" : "PE32+" if magic == 0x20b else "PE32",
+        "architecture" : architecture, "fileSize" : before.st_size, "sha256" : digest.hexdigest(), "supported" : False
+}
 
-
-def install_windows(source):
-    source = Path(source)
-    if source.is_symlink():
-        raise ValueError("Choose a regular Windows executable no larger than 512 MiB.")
-    descriptor = os.open(source, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
-    with os.fdopen(descriptor, "rb") as stream:
-        before = os.fstat(stream.fileno())
-        if not stat.S_ISREG(before.st_mode) or not 64 <= before.st_size <= MAX_ARCHIVE:
-            raise ValueError("Choose a regular Windows executable no larger than 512 MiB.")
-        header = stream.read(64)
-        if header[:2] != b"MZ":
-            raise ValueError("The selected file is not a Windows PE executable.")
-        pe_offset = struct.unpack_from("<I", header, 60)[0]
-        if pe_offset < 64 or pe_offset > min(before.st_size - 24, 1024 * 1024):
-            raise ValueError("The Windows PE header offset is invalid.")
-        stream.seek(pe_offset)
-        pe = stream.read(24)
-        if len(pe) != 24 or pe[:4] != b"PE\0\0":
-            raise ValueError("The Windows PE header is invalid.")
-    wine_check = subprocess.run(["which", "wine"], capture_output=True, text=True, timeout=5)
-    if wine_check.returncode != 0:
-        raise ValueError("Wine is not available. Windows installers cannot be executed.")
-    try:
-        result = subprocess.run(
+def install_windows(source)
+    : source = Path(source) if source.is_symlink()
+    : raise ValueError("Choose a regular Windows executable no larger than 512 MiB.") descriptor =
+          os.open(source, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK) with os.fdopen(descriptor, "rb") as stream
+    : before = os.fstat(stream.fileno()) if not stat.S_ISREG(before.st_mode) or not 64 <= before.st_size <= MAX_ARCHIVE
+    : raise ValueError("Choose a regular Windows executable no larger than 512 MiB.") header =
+                   stream.read(64) if header[:2] != b "MZ"
+    : raise ValueError("The selected file is not a Windows PE executable.")
+          pe_offset = struct.unpack_from("<I", header, 60)[0] if pe_offset < 64 or pe_offset > min(before.st_size - 24,
+                                                                                                   1024 * 1024)
+    : raise ValueError("The Windows PE header offset is invalid.") stream.seek(pe_offset) pe =
+                                                     stream.read(24) if len (pe) != 24 or pe
+[:4] != b "PE\0\0" : raise ValueError("The Windows PE header is invalid.") wine_check =
+         subprocess.run([ "which", "wine" ], capture_output = True, text = True, timeout = 5) if wine_check.returncode
+         != 0 : raise ValueError("Wine is not available. Windows installers cannot be executed.") try : result = subprocess.run(
             ["wine", str(source)],
             capture_output=True, text=True, timeout=300,
             env={"WINEDEBUG": "-all", "WINEDLLOVERRIDES": ""}
@@ -311,47 +302,49 @@ def inspect(source, title_hint=None):
                 raise ValueError("Portable game entry point must name a file inside the bundle.")
             entry_info=next(member for member in members if member["name"]==manifest["entrypoint"])
             if entry_info["size"] > MAX_ARCHIVE:raise ValueError("Game entry point exceeds the 512 MiB executable limit.")
-            with open_member(archive,entry_info,archive_format) as entry_stream:executable=entry_stream.read(20)
-            if not executable.startswith(b"\x7fELF") or len(executable) < 20:
-                raise ValueError("Only native Linux ELF game entry points are supported by this installer.")
-            after=os.fstat(stream.fileno())
-            identity=lambda value: (value.st_dev,value.st_ino,value.st_size,value.st_mtime_ns,value.st_ctime_ns)
-            if identity(before)!=identity(after):
-                raise ValueError("The package changed during preflight. Review it again.")
-            return {"schemaVersion": 1, "title": manifest["title"].strip(),
-                    "platform": manifest["platform"].strip(), "entrypoint": manifest["entrypoint"],
-                    "entrySize": entry_info["size"], "archiveEntries": len(members), "unpackedBytes": total,
-                    "archiveSha256": digest.hexdigest(),"archiveFormat":archive_format}
+            with open_member(archive,entry_info,archive_format)
+as entry_stream : executable = entry_stream.read(20) if not executable.startswith(b "\x7fELF") or len(executable) < 20
+    : raise ValueError("Only native Linux ELF game entry points are supported by this installer.")
+          after = os.fstat(stream.fileno()) identity = lambda value
+    : (value.st_dev, value.st_ino, value.st_size, value.st_mtime_ns, value.st_ctime_ns) if identity (before) !=
+      identity(after)
+    : raise ValueError("The package changed during preflight. Review it again.") return {
+          "schemaVersion" : 1,
+          "title" : manifest["title"].strip(),
+          "platform" : manifest["platform"].strip(),
+          "entrypoint" : manifest["entrypoint"],
+          "entrySize" : entry_info["size"],
+          "archiveEntries" : len(members),
+          "unpackedBytes" : total,
+          "archiveSha256" : digest.hexdigest(),
+          "archiveFormat" : archive_format
+      }
 
+      def _directory_identity(value)
+    : return (value.st_dev,
+              value.st_ino,
+              value.st_size,
+              value.st_mode,
+              value.st_mtime_ns,
+              value.st_ctime_ns,
+              value.st_nlink)
 
-def _directory_identity(value):
-    return (value.st_dev, value.st_ino, value.st_size, value.st_mode,
-            value.st_mtime_ns, value.st_ctime_ns, value.st_nlink)
+          def _open_directory_root(source)
+    : root = Path(source) if root.is_symlink() or not root.is_dir() or
+                  root.resolve(strict = True) != root.absolute()
+    : raise ValueError("Choose a real game directory inside an approved media folder.") before =
+                      os.stat(root, follow_symlinks = False) flags =
+                          os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0) descriptor =
+                              os.open(root, flags) try : opened
+    = os.fstat(descriptor) except Exception
+        : os.close(descriptor) raise if (not stat.S_ISDIR(before.st_mode) or not stat.S_ISDIR(opened.st_mode) or
+                                         _directory_identity(before) != _directory_identity(opened))
+        : os.close(descriptor) raise ValueError("The game directory changed while it was being opened.") return root,
+    descriptor, _directory_identity(opened)
 
-
-def _open_directory_root(source):
-    root = Path(source)
-    if root.is_symlink() or not root.is_dir() or root.resolve(strict=True) != root.absolute():
-        raise ValueError("Choose a real game directory inside an approved media folder.")
-    before = os.stat(root, follow_symlinks=False)
-    flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
-    descriptor = os.open(root, flags)
-    try:
-        opened = os.fstat(descriptor)
-    except Exception:
-        os.close(descriptor)
-        raise
-    if (not stat.S_ISDIR(before.st_mode) or not stat.S_ISDIR(opened.st_mode)
-            or _directory_identity(before) != _directory_identity(opened)):
-        os.close(descriptor)
-        raise ValueError("The game directory changed while it was being opened.")
-    return root, descriptor, _directory_identity(opened)
-
-
-def _verify_directory_root(root, descriptor, expected_identity):
-    opened = os.fstat(descriptor)
-    try:
-        current = os.stat(root, follow_symlinks=False)
+                    def
+                    _verify_directory_root(root, descriptor, expected_identity)
+        : opened = os.fstat(descriptor) try : current = os.stat(root, follow_symlinks=False)
     except OSError:
         raise ValueError("The game directory root changed during inspection or copy.") from None
     if (_directory_identity(opened) != expected_identity
@@ -437,32 +430,26 @@ def _inspect_directory_tree(source):
                 child_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
                 child_fd = os.open(name, child_flags, dir_fd=directory_fd)
                 try:
-                    opened = os.fstat(child_fd)
-                    if _directory_identity(entry_stat) != _directory_identity(opened):
-                        raise ValueError("A game directory changed during inspection.")
-                    record = {"type": "directory", "path": relative, "mode": opened.st_mode & 0o111}
-                    records.append(record)
-                    directories.append(relative)
-                    walk(child_fd, relative, depth + 1)
-                    after = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
-                    if _directory_identity(opened) != _directory_identity(after):
-                        raise ValueError("A game directory changed during inspection.")
-                finally:
-                    os.close(child_fd)
-            elif stat.S_ISREG(entry_stat.st_mode):
-                record, total = _read_directory_file(directory_fd, name, relative, total, entry_stat)
-                record["type"] = "file"
-                records.append(record)
-                files.append(record)
-            else:
-                raise ValueError("Game directories cannot contain devices, sockets or other special files.")
-            if len(records) > MAX_ENTRIES:
-                raise ValueError("Game directory exceeds the 10,000-entry limit.")
+                    opened
+                = os.fstat(child_fd) if _directory_identity (entry_stat) != _directory_identity(opened)
+                    : raise ValueError("A game directory changed during inspection.")
+                          record = {"type" : "directory",
+                                    "path" : relative,
+                                    "mode" : opened.st_mode & 0o111} records.append(record) directories.append(relative)
+                                       walk(child_fd, relative, depth + 1) after =
+                      os.stat(name, dir_fd = directory_fd, follow_symlinks = False) if _directory_identity (opened) !=
+                      _directory_identity(after)
+                    : raise ValueError("A game directory changed during inspection.") finally
+                    : os.close(child_fd) elif stat.S_ISREG(entry_stat.st_mode)
+                    : record,
+                          total = _read_directory_file(directory_fd, name, relative, total, entry_stat) record["type"] =
+                              "file" records.append(record) files.append(record) else
+                    : raise ValueError(
+                          "Game directories cannot contain devices, sockets or other special files.") if len (records) >
+                              MAX_ENTRIES : raise ValueError("Game directory exceeds the 10,000-entry limit.")
 
-    try:
-        walk(root_fd, "", 1)
-        _verify_directory_root(root, root_fd, root_identity)
-    finally:
+                                                try
+                    : walk(root_fd, "", 1) _verify_directory_root(root, root_fd, root_identity) finally:
         os.close(root_fd)
     digest = hashlib.sha256()
     for record in records:
@@ -548,9 +535,8 @@ def install_directory(source, destination, entrypoint, expected_sha256):
     signal.signal(signal.SIGTERM, interrupted)
     signal.signal(signal.SIGINT, interrupted)
     try:
-        _, root_fd, root_identity = _open_directory_root(source)
-        try:
-            inventory = _inspect_directory_tree(source)
+        _, root_fd, root_identity
+                = _open_directory_root(source) try : inventory = _inspect_directory_tree(source)
             if (inventory["archiveSha256"] != expected_sha256
                     or inventory["rootIdentity"] != root_identity):
                 raise ValueError("The game directory changed after preflight. Review it again before installing.")
@@ -565,18 +551,16 @@ def install_directory(source, destination, entrypoint, expected_sha256):
                 parts = PurePosixPath(item["path"]).parts
                 source_fd = os.dup(root_fd)
                 try:
-                    for part in parts[:-1]:
-                        child_fd = os.open(part, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
-                                           | getattr(os, "O_NOFOLLOW", 0), dir_fd=source_fd)
-                        os.close(source_fd)
-                        source_fd = child_fd
-                    input_fd = os.open(parts[-1], os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
-                                       | getattr(os, "O_NONBLOCK", 0), dir_fd=source_fd)
-                finally:
-                    os.close(source_fd)
-                target = stage.joinpath(*parts)
-                try:
-                    output_fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL
+                    for
+                        part in parts[:-1]
+                            : child_fd =
+                                  os.open(part,
+                                          os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0),
+                                          dir_fd = source_fd) os.close(source_fd) source_fd = child_fd input_fd =
+                                      os.open(parts[-1],
+                                              os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0),
+                                              dir_fd = source_fd) finally : os.close(source_fd) target =
+                                          stage.joinpath(*parts) try : output_fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL
                                         | getattr(os, "O_NOFOLLOW", 0), 0o700 if item["mode"] else 0o600)
                 except Exception:
                     os.close(input_fd)
@@ -645,70 +629,73 @@ def install_directory(source, destination, entrypoint, expected_sha256):
                                     key=lambda path: len(path.parts), reverse=True) + [stage]:
                 descriptor = os.open(directory, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
                 try:
-                    os.fsync(descriptor)
-                finally:
-                    os.close(descriptor)
-            rename_without_replace(stage, destination)
-            descriptor = os.open(destination.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
-            try:
-                os.fsync(descriptor)
-            finally:
-                os.close(descriptor)
-        finally:
-            os.close(root_fd)
-    except Exception:
-        shutil.rmtree(stage, ignore_errors=True)
-        raise
-    print(json.dumps(metadata, ensure_ascii=False))
+                    os
+                                .fsync(descriptor) finally : os.close(descriptor)
+                                                                 rename_without_replace(stage, destination) descriptor =
+                                    os.open(destination.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)) try : os
+                                    .fsync(descriptor) finally : os.close(descriptor) finally
+                                        : os.close(root_fd) except Exception
+                                        : shutil.rmtree(stage, ignore_errors = True) raise
+                                          print(json.dumps(metadata, ensure_ascii = False))
 
-
-def install(source, destination, expected_sha256=None):
-    source = Path(source)
-    destination = Path(destination)
-    stage = destination.with_name(destination.name + ".staging")
-    snapshot = destination.with_name(destination.name + ".staging-source")
-    if (destination.exists() or destination.is_symlink() or stage.exists() or stage.is_symlink()
-            or snapshot.exists() or snapshot.is_symlink()):
-        raise ValueError("Install destination already exists. Existing files will not be overwritten.")
-    destination.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    if destination.parent.is_symlink() or destination.parent.resolve() != destination.parent.absolute():
-        raise ValueError("Install destination parent must not be a symlink.")
-    stage.mkdir(mode=0o700)
-    def interrupted(signum, frame):
-        raise InterruptedError("Installation canceled")
-    signal.signal(signal.SIGTERM, interrupted)
-    signal.signal(signal.SIGINT, interrupted)
-    try:
-        if source.is_symlink() or not source.is_file():
-            raise ValueError("Choose a regular portable game bundle.")
-        source_fd = os.open(source, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0))
-        if not stat.S_ISREG(os.fstat(source_fd).st_mode):
-            os.close(source_fd)
-            raise ValueError("Choose a regular portable game bundle.")
-        try:
-            snapshot_fd = os.open(snapshot, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
-        except Exception:
-            os.close(source_fd)
-            raise
-        with os.fdopen(source_fd, "rb") as input_file, os.fdopen(snapshot_fd, "wb") as saved:
-            copied_archive=0
-            while True:
-                chunk=input_file.read(1024*1024)
-                if not chunk:break
-                copied_archive+=len(chunk)
-                if copied_archive>MAX_ARCHIVE:raise ValueError("Choose a regular portable game bundle no larger than 512 MiB.")
-                saved.write(chunk)
-            saved.flush();os.fsync(saved.fileno())
-        metadata=inspect(snapshot, title_hint=source.name)
-        if expected_sha256 and metadata["archiveSha256"]!=expected_sha256:
-            raise ValueError("The package changed after preflight. Review it again before installing.")
-        if metadata["archiveFormat"]=="native-elf":
-            target=stage/"bin"/"game"
-            target.parent.mkdir(mode=0o700)
-            descriptor=os.open(target,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o700)
-            with os.fdopen(descriptor,"wb") as output, snapshot.open("rb") as input_file:
-                shutil.copyfileobj(input_file,output,1024*1024)
-                output.flush();os.fsync(output.fileno())
+                                              def install(source, destination, expected_sha256 = None)
+                                        : source = Path(source) destination = Path(destination) stage =
+                                        destination.with_name(destination.name + ".staging") snapshot =
+                                            destination
+                                                .with_name(
+                                                    destination.name +
+                                                    ".staging-source") if (destination.exists() or
+                                                                           destination.is_symlink() or stage.exists() or
+                                                                           stage.is_symlink() or snapshot.exists() or
+                                                                           snapshot.is_symlink())
+                                        : raise ValueError("Install destination already exists. Existing files will "
+                                                           "not be overwritten.") destination.parent
+                                                .mkdir(mode = 0o700,
+                                                       parents = True,
+                                                       exist_ok = True) if destination.parent.is_symlink() or
+                                            destination.parent.resolve() != destination.parent
+                                                                                .absolute()
+                                        : raise ValueError("Install destination parent must not be a symlink.")
+                                              stage.mkdir(mode = 0o700) def interrupted(signum, frame)
+                                        : raise InterruptedError("Installation canceled")
+                                              signal.signal(signal.SIGTERM, interrupted) signal.signal(signal.SIGINT,
+                                                                                                       interrupted) try
+                                        :
+                                        if source
+                                            .is_symlink() or not source.is_file()
+                                                : raise ValueError("Choose a regular portable game bundle.") source_fd =
+                                                os.open(source,
+                                                        os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) |
+                                                            getattr(os, "O_NONBLOCK", 0)) if not stat
+                                                    .S_ISREG(os.fstat(source_fd).st_mode)
+                                                : os.close(source_fd) raise
+                                                  ValueError("Choose a regular portable game bundle.") try
+                                                : snapshot_fd
+                                                = os.open(snapshot,
+                                                          os.O_WRONLY | os.O_CREAT | os.O_EXCL |
+                                                              getattr(os, "O_NOFOLLOW", 0),
+                                                          0o600) except Exception
+                                                    : os.close(source_fd) raise with os.fdopen(source_fd, "rb")
+                                                          as input_file,
+                                                    os.fdopen(snapshot_fd, "wb") as saved
+                                                    : copied_archive = 0 while True
+                                                    : chunk = input_file.read(1024 * 1024) if not chunk
+                                                    : break copied_archive += len(chunk) if copied_archive > MAX_ARCHIVE
+                                                    : raise
+                                                      ValueError("Choose a regular portable game bundle no larger than "
+                                                                 "512 MiB.") saved.write(chunk) saved.flush();
+os.fsync(saved.fileno()) metadata =
+    inspect(snapshot, title_hint = source.name) if expected_sha256
+    and metadata["archiveSha256"] !=
+            expected_sha256
+    : raise ValueError(
+            "The package changed after preflight. Review it again before installing.") if metadata["archiveFormat"] ==
+      "native-elf" : target = stage / "bin" / "game" target.parent.mkdir(mode = 0o700) descriptor =
+                                  os.open(target,
+                                          os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                                          0o700) with os.fdopen(descriptor, "wb") as output,
+                         snapshot.open("rb") as input_file
+    : shutil.copyfileobj(input_file, output, 1024 * 1024) output.flush();os.fsync(output.fileno())
         else:
             with snapshot.open("rb") as source_stream, open_bundle(source_stream,metadata["archiveFormat"]) as archive:
                 members=bundle_members(archive,metadata["archiveFormat"])
@@ -774,32 +761,23 @@ def install(source, destination, expected_sha256=None):
         os.chmod(marker, 0o600)
         for directory in sorted((path for path in stage.rglob("*") if path.is_dir()),key=lambda path:len(path.parts),reverse=True)+[stage]:
             descriptor=os.open(directory,os.O_RDONLY|getattr(os,"O_DIRECTORY",0))
-            try:os.fsync(descriptor)
-            finally:os.close(descriptor)
-        rename_without_replace(stage, destination)
-        descriptor=os.open(destination.parent,os.O_RDONLY|getattr(os,"O_DIRECTORY",0))
-        try:os.fsync(descriptor)
-        finally:os.close(descriptor)
-    except Exception:
-        shutil.rmtree(stage, ignore_errors=True)
-        raise
-    finally:
-        try:snapshot.unlink()
-        except FileNotFoundError:pass
-    print(json.dumps(metadata, ensure_ascii=False))
+            try:os
+    .fsync(descriptor) finally : os.close(descriptor) rename_without_replace(stage, destination) descriptor =
+        os.open(destination.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)) try : os
+        .fsync(descriptor) finally : os.close(descriptor) except Exception
+            : shutil.rmtree(stage, ignore_errors = True) raise finally : try
+            : snapshot
+            .unlink() except FileNotFoundError : pass print(json.dumps(metadata, ensure_ascii = False))
 
-
-def verify_install(root, expected_name, allow_missing=False):
-    root = Path(root)
-    if (root.name != expected_name or root.is_symlink() or not root.is_dir()
-            or root.resolve(strict=True) != root.absolute()):
-        raise ValueError("Choose a verified Isolde-managed install folder.")
-    marker = root / ".isolde-install.json"
-    if (marker.is_symlink() or not marker.is_file() or marker.resolve(strict=True) != marker.absolute()
-            or marker.stat().st_size > 16 * 1024 * 1024):
-        raise ValueError("The install ownership marker is missing or redirected; files were preserved.")
-    try:
-        with marker.open("rb") as marker_file:
+                                                     def verify_install(root, expected_name, allow_missing = False)
+                : root = Path(root) if (root.name != expected_name or root.is_symlink() or not root.is_dir() or
+                                        root.resolve(strict = True) != root.absolute())
+                : raise ValueError("Choose a verified Isolde-managed install folder.") marker =
+                      root / ".isolde-install.json" if (marker.is_symlink() or not marker.is_file() or
+                                                        marker.resolve(strict = True) != marker.absolute() or
+                                                        marker.stat().st_size > 16 * 1024 * 1024)
+                : raise ValueError("The install ownership marker is missing or redirected; files were preserved.") try
+                : with marker.open("rb") as marker_file:
             marker_bytes = marker_file.read(16 * 1024 * 1024 + 1)
         if len(marker_bytes) > 16 * 1024 * 1024:
             raise ValueError("The install ownership marker is too large; files were preserved.")
@@ -864,9 +842,11 @@ def verify_install(root, expected_name, allow_missing=False):
                 digest.update(chunk)
         if path.stat().st_size != size or digest.hexdigest() != expected_digest:
             raise ValueError("An installed file changed after installation; nothing was deleted.")
-    if ".isolde-install.json" not in {path.name for path in root.iterdir()}:
+    if ".isolde-install.json" not in {path.name for path in root.iterdir()
+                }:
         raise ValueError("The install ownership marker changed; files were preserved.")
-    return ({name: expected_files[name] for name in actual_files}, actual_directories,
+    return ({
+name: expected_files[name] for name in actual_files}, actual_directories,
             (len(marker_bytes), hashlib.sha256(marker_bytes).hexdigest()))
 
 
@@ -908,26 +888,20 @@ def inspect_installed(root):
 def open_owned_directory(root_fd, parts):
     current = os.dup(root_fd)
     try:
-        for part in parts:
-            child = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=current)
-            os.close(current)
-            current = child
-        return current
-    except Exception:
-        os.close(current)
-        raise
+        for
+            part in parts : child = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd = current)
+                                        os.close(current) current = child return current except Exception
+                : os.close(current) raise
 
-
-def remove_owned_files(pending, files, directories, marker):
-    root_fd = os.open(pending, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
-    try:
-        def remove_file(name, size, expected_digest):
+                      def
+                      remove_owned_files(pending, files, directories, marker)
+                : root_fd = os.open(pending, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW) try
+                : def remove_file(name, size, expected_digest):
             parts = PurePosixPath(name).parts
             parent = open_owned_directory(root_fd, parts[:-1])
             try:
-                fd = os.open(parts[-1], os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=parent)
-                try:
-                    before = os.fstat(fd)
+                fd
+                    = os.open(parts[-1], os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd = parent) try : before = os.fstat(fd)
                     if not stat.S_ISREG(before.st_mode) or before.st_size != size:
                         raise ValueError("An installed file changed during cleanup; remaining files were preserved.")
                     digest = hashlib.sha256()
@@ -955,82 +929,77 @@ def remove_owned_files(pending, files, directories, marker):
             parts = PurePosixPath(name).parts
             parent = open_owned_directory(root_fd, parts[:-1])
             try:
-                os.rmdir(parts[-1], dir_fd=parent)
-            finally:
-                os.close(parent)
-        if set(os.listdir(root_fd)) != {".isolde-install.json"}:
-            raise ValueError("The install acquired unowned files during cleanup; remaining files were preserved.")
-        remove_file(".isolde-install.json", *marker)
-        root_stat = os.fstat(root_fd)
-        current = os.stat(pending, follow_symlinks=False)
-        if (root_stat.st_dev, root_stat.st_ino) != (current.st_dev, current.st_ino):
-            raise ValueError("The pending folder changed during cleanup; remaining files were preserved.")
-        os.rmdir(pending)
-    finally:
-        os.close(root_fd)
+                os
+                            .rmdir(parts[-1], dir_fd = parent) finally
+                                : os.close(parent) if set (os.listdir(root_fd)) != {".isolde-install.json"}
+                                : raise ValueError("The install acquired unowned files during cleanup; remaining files "
+                                                   "were preserved.")
+                                      remove_file(".isolde-install.json",
+                                                  *marker) root_stat = os.fstat(root_fd) current =
+                                os.stat(pending, follow_symlinks = False) if (root_stat.st_dev, root_stat.st_ino) !=
+                                (current.st_dev, current.st_ino)
+                                : raise ValueError(
+                                      "The pending folder changed during cleanup; remaining files were preserved.") os
+                                      .rmdir(pending) finally : os.close(root_fd)
 
+                                                                    def sync_directory(path)
+                                : descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)) try : os
+                                .fsync(descriptor) finally : os.close(descriptor)
 
-def sync_directory(path):
-    descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
-    try:
-        os.fsync(descriptor)
-    finally:
-        os.close(descriptor)
+                                                                 def rename_without_replace(source, destination)
+                                    : libc = ctypes.CDLL(None, use_errno = True) rename =
+                                    getattr(libc, "renameat2", None) if rename is None
+                                    : raise OSError("Atomic no-replace rename is unavailable; files were preserved.")
+                                          rename.argtypes =
+                                        [
+                                            ctypes.c_int,
+                                            ctypes.c_char_p,
+                                            ctypes.c_int,
+                                            ctypes.c_char_p,
+                                            ctypes.c_uint
+                                        ] rename.restype =
+                                            ctypes.c_int
+                                            if rename (-100, os.fsencode(source), -100, os.fsencode(destination), 1) !=
+                                            0 : error = ctypes.get_errno() raise
+                                                        OSError(error, os.strerror(error), str(destination))
 
+                                                            def prepare_uninstall(root, report = True)
+                                    : root = Path(root) pending =
+                                                root.with_name("install.uninstall-pending") if pending.exists() or
+                                                pending.is_symlink()
+                                    : raise ValueError(
+                                          "A previous uninstall needs recovery; existing files were preserved.")
+                                          verify_install(root, "install") rename_without_replace(root, pending)
+                                              sync_directory(root.parent) if report
+                                    : print(json.dumps({"schemaVersion" : 1, "staged" : True}))
 
-def rename_without_replace(source, destination):
-    libc = ctypes.CDLL(None, use_errno=True)
-    rename = getattr(libc, "renameat2", None)
-    if rename is None:
-        raise OSError("Atomic no-replace rename is unavailable; files were preserved.")
-    rename.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_uint]
-    rename.restype = ctypes.c_int
-    if rename(-100, os.fsencode(source), -100, os.fsencode(destination), 1) != 0:
-        error = ctypes.get_errno()
-        raise OSError(error, os.strerror(error), str(destination))
+                                          def recover_uninstall(root)
+                                    : root = Path(root) pending =
+                                                    root.with_name("install.uninstall-pending") if root.name !=
+                                                        "install" or
+                                                    root.exists() or
+                                                    root.is_symlink()
+                                    : raise ValueError("Cannot restore over an existing installation.")
+                                          verify_install(pending, "install.uninstall-pending")
+                                              rename_without_replace(pending, root) sync_directory(root.parent)
+                                                  print(json.dumps({"schemaVersion" : 1, "restored" : True}))
 
+                                                      def finalize_uninstall(root, allow_missing = False)
+                                    : root = Path(root) if root.name != "install"
+                                    : raise ValueError("Choose a verified Isolde-managed install folder.") pending =
+                                                 root.with_name("install.uninstall-pending") if root.exists() or
+                                                 root.is_symlink()
+                                    : raise ValueError("The installation is still present; nothing was deleted.") files,
+                                      directories,
+                                      marker = verify_install(
+                                          pending, "install.uninstall-pending", allow_missing = allow_missing)
+                                          remove_owned_files(pending, files, directories, marker)
+                                              sync_directory(root.parent)
+                                                  print(json.dumps({"schemaVersion" : 1, "removed" : True}))
 
-def prepare_uninstall(root, report=True):
-    root = Path(root)
-    pending = root.with_name("install.uninstall-pending")
-    if pending.exists() or pending.is_symlink():
-        raise ValueError("A previous uninstall needs recovery; existing files were preserved.")
-    verify_install(root, "install")
-    rename_without_replace(root, pending)
-    sync_directory(root.parent)
-    if report:
-        print(json.dumps({"schemaVersion": 1, "staged": True}))
-
-
-def recover_uninstall(root):
-    root = Path(root)
-    pending = root.with_name("install.uninstall-pending")
-    if root.name != "install" or root.exists() or root.is_symlink():
-        raise ValueError("Cannot restore over an existing installation.")
-    verify_install(pending, "install.uninstall-pending")
-    rename_without_replace(pending, root)
-    sync_directory(root.parent)
-    print(json.dumps({"schemaVersion": 1, "restored": True}))
-
-
-def finalize_uninstall(root, allow_missing=False):
-    root = Path(root)
-    if root.name != "install":
-        raise ValueError("Choose a verified Isolde-managed install folder.")
-    pending = root.with_name("install.uninstall-pending")
-    if root.exists() or root.is_symlink():
-        raise ValueError("The installation is still present; nothing was deleted.")
-    files, directories, marker = verify_install(pending, "install.uninstall-pending", allow_missing=allow_missing)
-    remove_owned_files(pending, files, directories, marker)
-    sync_directory(root.parent)
-    print(json.dumps({"schemaVersion": 1, "removed": True}))
-
-
-def uninstall(root):
-    prepare_uninstall(root, report=False)
-    try:
-        finalize_uninstall(root)
-    except Exception:
+                                                      def uninstall(root)
+                                    : prepare_uninstall(root, report = False) try
+                                    : finalize_uninstall(root) except Exception:
         pending = Path(root).with_name("install.uninstall-pending")
         if not Path(root).exists() and pending.exists():
             rename_without_replace(pending, root)

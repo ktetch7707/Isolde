@@ -3,18 +3,17 @@
 ** $QT_END_HEADER**
 ****************************************************************************/
 
-#include <QtTest/QtTest>
+#include <QtCore/QJsonArray>
+#include <QtCore/QJsonObject>
 #include <QtCore/QObject>
 #include <QtCore/QString>
-#include <QtCore/QJsonObject>
-#include <QtCore/QJsonArray>
+#include <QtTest/QtTest>
 #include "../src/home/ComponentSchema.h"
 
-class ComponentSchemaTests : public QObject
-{
+class ComponentSchemaTests : public QObject {
     Q_OBJECT
 
-private slots:
+  private slots:
     void test_component_valid_components();
     void test_component_invalid_compositions();
     void test_component_grid_operations();
@@ -22,8 +21,7 @@ private slots:
     void test_component_nesting_depth();
 };
 
-void ComponentSchemaTests::test_component_valid_components()
-{
+void ComponentSchemaTests::test_component_valid_components() {
     // Test valid component creation
     QVariantMap comp = ComponentSchema::component({{"id", "test1"}, {"kind", "widget"}, {"widgetType", "button"}});
     QVERIFY(!comp.isEmpty());
@@ -31,8 +29,7 @@ void ComponentSchemaTests::test_component_valid_components()
     QCOMPARE(comp.value("kind").toString(), QString("widget"));
 }
 
-void ComponentSchemaTests::test_component_invalid_compositions()
-{
+void ComponentSchemaTests::test_component_invalid_compositions() {
     // Test invalid compositions are rejected
     QVariantMap invalid = ComponentSchema::component({{"id", ""}, {"kind", "widget"}});
     // Empty id should be invalid
@@ -48,8 +45,7 @@ void ComponentSchemaTests::test_component_invalid_compositions()
     QVERIFY(!ComponentSchema::validComposition(malformed));
 }
 
-void ComponentSchemaTests::test_component_grid_operations()
-{
+void ComponentSchemaTests::test_component_grid_operations() {
     // Test grid operations
     QJsonArray items;
     QJsonObject item;
@@ -70,8 +66,7 @@ void ComponentSchemaTests::test_component_grid_operations()
     QVERIFY(!ComponentSchema::validComposition(composition));
 }
 
-void ComponentSchemaTests::test_component_safe_id()
-{
+void ComponentSchemaTests::test_component_safe_id() {
     // Test safeId function
     QVERIFY(ComponentSchema::safeId("valid-id"));
     QVERIFY(ComponentSchema::safeId("valid_id"));
@@ -81,8 +76,7 @@ void ComponentSchemaTests::test_component_safe_id()
     QVERIFY(!ComponentSchema::safeId(".."));
 }
 
-void ComponentSchemaTests::test_component_nesting_depth()
-{
+void ComponentSchemaTests::test_component_nesting_depth() {
     // Test max nesting depth
     // MaxComponentNestingDepth is 4
     QVERIFY(ComponentSchema::MaxComponentNestingDepth == 4);

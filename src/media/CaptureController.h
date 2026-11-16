@@ -43,11 +43,11 @@ class CaptureController final : public QObject {
     Q_PROPERTY(QString sessionTransition READ sessionTransition NOTIFY changed)
     Q_PROPERTY(int transitionDuration READ transitionDuration NOTIFY changed)
     Q_PROPERTY(QString sessionReturn READ sessionReturn NOTIFY changed)
-public:
-    explicit CaptureController(QObject *parent = nullptr);
+  public:
+    explicit CaptureController(QObject* parent = nullptr);
     // Injected adapters must outlive the controller.
-    CaptureController(AudioCaptureAdapter *audioAdapter, QObject *parent);
-    CaptureController(VideoCaptureAdapter *videoAdapter, AudioCaptureAdapter *audioAdapter, QObject *parent);
+    CaptureController(AudioCaptureAdapter* audioAdapter, QObject* parent);
+    CaptureController(VideoCaptureAdapter* videoAdapter, AudioCaptureAdapter* audioAdapter, QObject* parent);
     ~CaptureController() override;
 
     QVariantList videoDevices() const;
@@ -56,69 +56,113 @@ public:
     QVariantMap capabilities() const;
     QVariantList serialPorts() const;
     QVariantList inputs() const;
-    QString captureDeviceId() const { return m_captureDeviceId; }
-    QString videoFormatKey() const { return m_videoFormatKey; }
-    QString audioDeviceId() const { return m_audioDeviceId; }
-    QString serialPortName() const { return m_serialPortName; }
-    QString commandTemplate() const { return m_commandTemplate; }
-    QString status() const { return m_status; }
-    QString audioState() const { return m_audioState; }
-    QString audioStatus() const { return m_audioStatus; }
-    QString switchStatus() const { return m_switchStatus; }
-    QString switchState() const { return m_switchState; }
-    qint64 serialWriteLatencyMs() const { return m_serialWriteLatencyMs; }
-    qint64 firstFrameCallbackLatencyMs() const { return m_firstFrameCallbackLatencyMs; }
-    double previewFrameRate() const { return m_previewFrameRate; }
-    qint64 maxFrameGapMs() const { return m_maxFrameGapMs; }
-    QString state() const { return m_state; }
-    bool previewActive() const { return m_previewRequested; }
-    int selectedInput() const { return m_selectedInput; }
-    int activeInput() const { return m_activeInput; }
-    int baudRate() const { return m_baudRate; }
-    QString sessionTransition() const { return m_sessionTransition; }
-    int transitionDuration() const { return m_transitionDuration; }
-    QString sessionReturn() const { return m_sessionReturn; }
+    QString captureDeviceId() const {
+        return m_captureDeviceId;
+    }
+    QString videoFormatKey() const {
+        return m_videoFormatKey;
+    }
+    QString audioDeviceId() const {
+        return m_audioDeviceId;
+    }
+    QString serialPortName() const {
+        return m_serialPortName;
+    }
+    QString commandTemplate() const {
+        return m_commandTemplate;
+    }
+    QString status() const {
+        return m_status;
+    }
+    QString audioState() const {
+        return m_audioState;
+    }
+    QString audioStatus() const {
+        return m_audioStatus;
+    }
+    QString switchStatus() const {
+        return m_switchStatus;
+    }
+    QString switchState() const {
+        return m_switchState;
+    }
+    qint64 serialWriteLatencyMs() const {
+        return m_serialWriteLatencyMs;
+    }
+    qint64 firstFrameCallbackLatencyMs() const {
+        return m_firstFrameCallbackLatencyMs;
+    }
+    double previewFrameRate() const {
+        return m_previewFrameRate;
+    }
+    qint64 maxFrameGapMs() const {
+        return m_maxFrameGapMs;
+    }
+    QString state() const {
+        return m_state;
+    }
+    bool previewActive() const {
+        return m_previewRequested;
+    }
+    int selectedInput() const {
+        return m_selectedInput;
+    }
+    int activeInput() const {
+        return m_activeInput;
+    }
+    int baudRate() const {
+        return m_baudRate;
+    }
+    QString sessionTransition() const {
+        return m_sessionTransition;
+    }
+    int transitionDuration() const {
+        return m_transitionDuration;
+    }
+    QString sessionReturn() const {
+        return m_sessionReturn;
+    }
 
     Q_INVOKABLE void refreshDevices();
-    Q_INVOKABLE QVariantList videoFormatsFor(const QString &deviceId) const;
-    Q_INVOKABLE void setVideoOutput(QObject *output);
-    Q_INVOKABLE bool setCaptureDevice(const QString &id);
-    Q_INVOKABLE bool setVideoFormat(const QString &key);
-    Q_INVOKABLE bool setAudioDevice(const QString &id);
-    Q_INVOKABLE bool setSerialPort(const QString &portName);
+    Q_INVOKABLE QVariantList videoFormatsFor(const QString& deviceId) const;
+    Q_INVOKABLE void setVideoOutput(QObject* output);
+    Q_INVOKABLE bool setCaptureDevice(const QString& id);
+    Q_INVOKABLE bool setVideoFormat(const QString& key);
+    Q_INVOKABLE bool setAudioDevice(const QString& id);
+    Q_INVOKABLE bool setSerialPort(const QString& portName);
     Q_INVOKABLE bool setBaudRate(int baudRate);
-    Q_INVOKABLE bool setCommandTemplate(const QString &value);
-    Q_INVOKABLE bool setInputLabel(int input, const QString &label);
+    Q_INVOKABLE bool setCommandTemplate(const QString& value);
+    Q_INVOKABLE bool setInputLabel(int input, const QString& label);
     Q_INVOKABLE void selectInput(int input);
-    Q_INVOKABLE bool applyConfiguration(const QVariantMap &configuration);
+    Q_INVOKABLE bool applyConfiguration(const QVariantMap& configuration);
     Q_INVOKABLE bool canSwitchInput(int input) const;
     Q_INVOKABLE bool startPreview();
-    bool startPreviewFor(const QString &captureId, const QString &formatKey, const QString &audioId);
+    bool startPreviewFor(const QString& captureId, const QString& formatKey, const QString& audioId);
     Q_INVOKABLE void stopPreview();
     Q_INVOKABLE bool switchInput(int input);
     Q_INVOKABLE void cancelSwitch();
 
-    static QByteArray commandForInput(const QString &commandTemplate, int input, QString *error = nullptr);
-    static bool isValidInputLabel(const QString &label);
+    static QByteArray commandForInput(const QString& commandTemplate, int input, QString* error = nullptr);
+    static bool isValidInputLabel(const QString& label);
 
-signals:
+  signals:
     void changed();
 
-private:
+  private:
     void loadSettings();
-    bool saveValue(const QString &key, const QVariant &value);
-    bool saveValues(const QMap<QString, QVariant> &values);
+    bool saveValue(const QString& key, const QVariant& value);
+    bool saveValues(const QMap<QString, QVariant>& values);
     void updateStatusForConfiguration();
     void updateIdleAudioStatus();
     bool configureAudio();
     QString inputLabel(int input) const;
-    bool hasVideoFormat(const QString &deviceId, const QString &key) const;
-    void setStatus(const QString &state, const QString &message);
-    void setAudioStatus(const QString &state, const QString &message);
-    void serialWriteFailed(const QString &message);
+    bool hasVideoFormat(const QString& deviceId, const QString& key) const;
+    void setStatus(const QString& state, const QString& message);
+    void setAudioStatus(const QString& state, const QString& message);
+    void serialWriteFailed(const QString& message);
 
-    VideoCaptureAdapter *m_videoAdapter = nullptr;
-    AudioCaptureAdapter *m_audioAdapter = nullptr;
+    VideoCaptureAdapter* m_videoAdapter = nullptr;
+    AudioCaptureAdapter* m_audioAdapter = nullptr;
     QPointer<QObject> m_videoOutput;
     QMetaObject::Connection m_outputDestroyedConnection;
     QSerialPort m_serial;

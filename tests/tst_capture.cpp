@@ -1,60 +1,95 @@
-#include "media/CaptureController.h"
-#include "media/AudioCaptureAdapter.h"
-#include "media/VideoCaptureAdapter.h"
 #include <QtTest>
+#include "media/AudioCaptureAdapter.h"
+#include "media/CaptureController.h"
+#include "media/VideoCaptureAdapter.h"
 
 class FakeAudioAdapter final : public AudioCaptureAdapter {
-public:
+  public:
     QVariantList available;
     int stops = 0;
     int configurations = 0;
     QString current;
     bool failConfigure = false;
     bool emitConfigureError = false;
-    QVariantList devices() const override { return available; }
-    bool monitoringSupported() const override { return true; }
-    QString name() const override { return "fixture audio"; }
-    bool configure(QObject *, const QString &id) override {
+    QVariantList devices() const override {
+        return available;
+    }
+    bool monitoringSupported() const override {
+        return true;
+    }
+    QString name() const override {
+        return "fixture audio";
+    }
+    bool configure(QObject*, const QString& id) override {
         ++configurations;
         current = id;
-        if (emitConfigureError) emit errorOccurred("synchronous fixture failure");
-        if (failConfigure) return false;
-        if (id.isEmpty()) return true;
-        for (const auto &entry : available)
-            if (entry.toMap().value("id").toString() == id) return true;
+        if (emitConfigureError)
+            emit errorOccurred("synchronous fixture failure");
+        if (failConfigure)
+            return false;
+        if (id.isEmpty())
+            return true;
+        for (const auto& entry : available)
+            if (entry.toMap().value("id").toString() == id)
+                return true;
         return false;
     }
-    void stop(QObject *) override { ++stops; }
-    void publish() { emit devicesChanged(); }
-    void fail() { emit errorOccurred("fixture audio failure"); }
+    void stop(QObject*) override {
+        ++stops;
+    }
+    void publish() {
+        emit devicesChanged();
+    }
+    void fail() {
+        emit errorOccurred("fixture audio failure");
+    }
 };
 
 class FakeVideoAdapter final : public VideoCaptureAdapter {
-public:
+  public:
     QVariantList available;
     QVariantList formatList;
     QObject audioBridge;
     int starts = 0;
     int stops = 0;
     bool failStart = false;
-    QObject *output = nullptr;
-    QVariantList devices() const override { return available; }
-    QVariantList formats(const QString &id) const override {
+    QObject* output = nullptr;
+    QVariantList devices() const override {
+        return available;
+    }
+    QVariantList formats(const QString& id) const override {
         return id == "fixture-video" && !available.isEmpty() ? formatList : QVariantList{};
     }
-    QString name() const override { return "fixture video"; }
-    void setOutput(QObject *value) override { output = value; }
-    bool start(const QString &, const QString &) override { ++starts; return !failStart; }
-    void stop() override { ++stops; }
-    QObject *audioContext() override { return &audioBridge; }
-    void publish() { emit devicesChanged(); }
-    void frame() { emit frameReceived(); }
-    void fail() { emit errorOccurred("fixture failure"); }
+    QString name() const override {
+        return "fixture video";
+    }
+    void setOutput(QObject* value) override {
+        output = value;
+    }
+    bool start(const QString&, const QString&) override {
+        ++starts;
+        return !failStart;
+    }
+    void stop() override {
+        ++stops;
+    }
+    QObject* audioContext() override {
+        return &audioBridge;
+    }
+    void publish() {
+        emit devicesChanged();
+    }
+    void frame() {
+        emit frameReceived();
+    }
+    void fail() {
+        emit errorOccurred("fixture failure");
+    }
 };
 
 class CaptureTests final : public QObject {
     Q_OBJECT
-private slots:
+  private slots:
     void encodesSwitchCommands();
     void rejectsUnsafeOrAmbiguousCommands();
     void validatesInputLabels();
@@ -62,15 +97,13 @@ private slots:
     void injectablePreviewLifecycle();
 };
 
-void CaptureTests::encodesSwitchCommands()
-{
+void CaptureTests::encodesSwitchCommands() {
     QCOMPARE(CaptureController::commandForInput("{input}\\r", 3), QByteArray("3\r"));
     QCOMPARE(CaptureController::commandForInput("HDMI {input}\\r\\n", 8), QByteArray("HDMI 8\r\n"));
     QCOMPARE(CaptureController::commandForInput("SW {input}\\\\r", 2), QByteArray("SW 2\\r"));
 }
 
-void CaptureTests::rejectsUnsafeOrAmbiguousCommands()
-{
+void CaptureTests::rejectsUnsafeOrAmbiguousCommands() {
     QString error;
     QVERIFY(CaptureController::commandForInput("input 1\\r", 1, &error).isEmpty());
     QVERIFY(!error.isEmpty());
@@ -83,8 +116,7 @@ void CaptureTests::rejectsUnsafeOrAmbiguousCommands()
     QVERIFY(CaptureController::commandForInput("{input}", 9).isEmpty());
 }
 
-void CaptureTests::validatesInputLabels()
-{
+void CaptureTests::validatesInputLabels() {
     QVERIFY(CaptureController::isValidInputLabel("Living room console"));
     QVERIFY(CaptureController::isValidInputLabel(QString(40, QLatin1Char('A'))));
     QVERIFY(!CaptureController::isValidInputLabel(""));
@@ -97,8 +129,7 @@ void CaptureTests::validatesInputLabels()
     QVERIFY(!CaptureController::isValidInputLabel(QString(QChar(0x85))));
 }
 
-void CaptureTests::injectedAudioDiscoveryAndHotplug()
-{
+void CaptureTests::injectedAudioDiscoveryAndHotplug() {
     FakeAudioAdapter audio;
     audio.available = {QVariantMap{{"id", "fixture-a"}, {"name", "Fixture audio"}}};
     {
@@ -119,8 +150,7 @@ void CaptureTests::injectedAudioDiscoveryAndHotplug()
     }
 }
 
-void CaptureTests::injectablePreviewLifecycle()
-{
+void CaptureTests::injectablePreviewLifecycle() {
     FakeVideoAdapter video;
     FakeAudioAdapter audio;
     video.available = {QVariantMap{{"id", "fixture-video"}, {"name", "Fixture video"}}};

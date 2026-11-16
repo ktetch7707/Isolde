@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/ usr / bin / env python3
 """Compare a config-only Home attempt with the packaged default in a disposable profile.
 
 Requires the VM graphical session, wmctrl and Xlib. Temporarily stops the
@@ -55,57 +55,80 @@ def collection_review(document):
         "behavior_verified": False if kinds else None,
         "missing": [f"{kind.capitalize()} collection population and behavior are not verified by save/reapply/reset."
                     for kind in sorted(kinds)],
-    }
+}
 
+def guide_cache_snapshot(config)
+    : ""
+      "Read only this disposable profile's committed guide, never Kodi data."
+      "" path = config / "guide.sqlite" if not path.is_file() or path.is_symlink()
+    : raise RuntimeError("The disposable profile has no private guide cache") with sqlite3.connect(
+          path.resolve().as_uri() + "?mode=ro", uri = True) as database : channels =
+                    database
+                        .execute("SELECT id,number,definition,candidates,cursor,revision,hidden,favorite,position FROM "
+                                 "channels ORDER BY id LIMIT 1025")
+                        .fetchall() programs =
+                        database.execute("SELECT id,channel,media_type,media_id,title,start_utc,end_utc,status FROM "
+                                         "slots ORDER BY channel,start_utc LIMIT 100001")
+                                .fetchall() if len (channels) > 1024 or
+                        len(programs) > 100000
+    : raise RuntimeError("Disposable guide fixture exceeds its acceptance bounds") return channels,
+         programs
 
-def guide_cache_snapshot(config):
-    """Read only this disposable profile's committed guide, never Kodi data."""
-    path=config/"guide.sqlite"
-    if not path.is_file() or path.is_symlink():
-        raise RuntimeError("The disposable profile has no private guide cache")
-    with sqlite3.connect(path.resolve().as_uri()+"?mode=ro",uri=True) as database:
-        channels=database.execute("SELECT id,number,definition,candidates,cursor,revision,hidden,favorite,position FROM channels ORDER BY id LIMIT 1025").fetchall()
-        programs=database.execute("SELECT id,channel,media_type,media_id,title,start_utc,end_utc,status FROM slots ORDER BY channel,start_utc LIMIT 100001").fetchall()
-    if len(channels)>1024 or len(programs)>100000:
-        raise RuntimeError("Disposable guide fixture exceeds its acceptance bounds")
-    return channels,programs
-
-
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("executable", type=Path)
-    parser.add_argument("--reference", type=Path,
-                        default=None,
-                        help="Retained user reference; never render this as the Home screen")
-    parser.add_argument("--case", type=Path, default=Path(__file__).resolve().parents[1] / "tests/visual/home-reference",
-                        help="Visual case directory with reference.jpg, recreation-config.json and optional interaction.json/wallpaper.png")
-    parser.add_argument("--inspect", action="store_true", help="Pause briefly on failure for a VM screenshot")
-    parser.add_argument("--skin-from-settings", action="store_true", help="Select the built-in design and save/reapply a personal skin entirely through Settings")
-    parser.add_argument("--capture-library", action="store_true", help="Also pause for a screenshot of the skin library")
-    parser.add_argument("--existing-profile", help="Explicit installed repair journey for the active VM acceptance profile")
-    parser.add_argument("--verify-default-apps", action="store_true", help="Verify provisioned clients in the authorized VM acceptance profile")
-    parser.add_argument("--skip-steam", action="store_true", help="Independent client checks; never reports Steam bootstrap verified")
-    parser.add_argument("--preview-seconds", type=int, default=0, choices=range(31), help="Hold the appearance preview for visual inspection")
-    args = parser.parse_args()
-    case = args.case.resolve(strict=True)
-    reference_bytes = (args.reference or case / "reference.jpg").read_bytes()
-    reference_hash = hashlib.sha256(reference_bytes).hexdigest()
-    lock = open("/tmp/isolde-home-components-acceptance.lock", "a")
-    fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    executable = args.executable.resolve(strict=True)
-    evidence = Path(tempfile.mkdtemp(prefix="isolde-reference-config-"))
-    # Publish before process/window discovery so the oracle can retain startup
-    # diagnostics even when no usable application window ever appears.
-    print("Evidence: " + str(evidence), flush=True)
-    (evidence / "reference.jpg").write_bytes(reference_bytes)
-    print("Reference SHA256: " + reference_hash, flush=True)
-    config = evidence / "config" / "Isolde"
-    config.mkdir(parents=True)
-    original = json.loads((case / "recreation-config.json").read_text(encoding="utf-8-sig"))
-    interaction = json.loads((case / "interaction.json").read_text(encoding="utf-8-sig")) if (case / "interaction.json").exists() else {}
-    (config / "artwork").mkdir()
-    (config / "artwork/reference.jpg").write_bytes(reference_bytes)
-    if (case / "wallpaper.png").exists(): shutil.copyfile(case / "wallpaper.png",config / "artwork/wallpaper.png")
+         def main()
+    : parser =
+          argparse.ArgumentParser(description = __doc__) parser.add_argument("executable", type = Path) parser
+              .add_argument("--reference",
+                            type = Path,
+                            default = None,
+                            help = "Retained user reference; never render this as the Home screen") parser
+              .add_argument("--case",
+                            type = Path,
+                            default = Path(__file__).resolve().parents[1] / "tests/visual/home-reference",
+                            help = "Visual case directory with reference.jpg, recreation-config.json and optional "
+                                   "interaction.json/wallpaper.png") parser
+              .add_argument(
+                  "--inspect", action = "store_true", help = "Pause briefly on failure for a VM screenshot") parser
+              .add_argument(
+                  "--skin-from-settings",
+                  action = "store_true",
+                  help = "Select the built-in design and save/reapply a personal skin entirely through Settings") parser
+              .add_argument("--capture-library",
+                            action = "store_true",
+                            help = "Also pause for a screenshot of the skin library") parser
+              .add_argument("--existing-profile",
+                            help = "Explicit installed repair journey for the active VM acceptance profile") parser
+              .add_argument("--verify-default-apps",
+                            action = "store_true",
+                            help = "Verify provisioned clients in the authorized VM acceptance profile") parser
+              .add_argument("--skip-steam",
+                            action = "store_true",
+                            help = "Independent client checks; never reports Steam bootstrap verified") parser
+              .add_argument("--preview-seconds",
+                            type = int,
+                            default = 0,
+                            choices = range(31),
+                            help = "Hold the appearance preview for visual inspection") args =
+              parser.parse_args() case = args.case.resolve(strict = True) reference_bytes =
+                  (args.reference or case / "reference.jpg").read_bytes() reference_hash =
+                      hashlib.sha256(reference_bytes).hexdigest() lock =
+                          open("/tmp/isolde-home-components-acceptance.lock", "a") fcntl.flock(
+                              lock,
+                              fcntl.LOCK_EX | fcntl.LOCK_NB) executable = args.executable.resolve(strict =
+                                                                                                      True) evidence =
+                              Path(tempfile.mkdtemp(prefix = "isolde-reference-config-"))
+#Publish before process / window discovery so the oracle can retain startup
+#diagnostics even when no usable application window ever appears.
+                                  print("Evidence: " + str(evidence), flush = True)(evidence / "reference.jpg")
+                                      .write_bytes(reference_bytes)
+                                          print("Reference SHA256: " + reference_hash, flush = True) config =
+                                  evidence / "config" / "Isolde" config.mkdir(parents = True) original = json.loads(
+                                      (case / "recreation-config.json").read_text(encoding = "utf-8-sig")) interaction =
+                                      json.loads((case / "interaction.json")
+                                                     .read_text(encoding = "utf-8-sig")) if (case / "interaction.json")
+                                          .exists() else {}(config / "artwork")
+                                          .mkdir()(config / "artwork/reference.jpg")
+                                          .write_bytes(reference_bytes) if (case / "wallpaper.png")
+                                          .exists(): shutil.copyfile(case / "wallpaper.png",config / "artwork/wallpaper.png")
     layout = config / "home-layout.json"
     original_bytes = json.dumps(original).encode()
     if not args.skin_from_settings:
@@ -113,8 +136,8 @@ def main():
     (config / "device-setup.json").write_text(json.dumps({"version": 1, "step": 6, "complete": True}))
     (config / "Kodi.conf").write_text("[profiles]\ndefault\\kodi\\autoStart=false\n")
     (config / "Isolde.conf").write_text("[sources]\nautomaticSourcesEnabled=false\n")
-    # SourceManager currently uses default QSettings (no organization set),
-    # whereas device audio/Kodi use explicit Isolde namespaces.
+#SourceManager currently uses default QSettings(no organization set),
+#whereas device audio / Kodi use explicit Isolde namespaces.
     default_settings = evidence / "config" / "Unknown Organization"
     default_settings.mkdir()
     (default_settings / "Isolde.conf").write_text("[sources]\nautomaticSourcesEnabled=false\n")
@@ -159,13 +182,14 @@ def main():
     class Event(ctypes.Union):
         _fields_ = [("key", KeyEvent), ("padding", ctypes.c_long * 24)]
     x11.XSendEvent.argtypes = [ctypes.c_void_p, ctypes.c_ulong, ctypes.c_int, ctypes.c_long, ctypes.POINTER(Event)]
-    # Set before opening Xlib: it reads the process environment itself.
-    os.environ.update({key: env[key] for key in ("DISPLAY", "XAUTHORITY") if key in env})
+#Set before opening Xlib : it reads the process environment itself.
+    os.environ.update({
+key: env[key] for key in ("DISPLAY", "XAUTHORITY") if key in env})
     display = x11.XOpenDisplay(env.get("DISPLAY", "").encode())
     if not display:
         raise RuntimeError("Cannot open the VM X11 display")
-    # XWayland can list a window before it is focusable. Do not let Xlib's
-    # default fatal handler bypass the finally block and service restoration.
+#XWayland can list a window before it is focusable.Do not let Xlib's
+#default fatal handler bypass the finally block and service restoration.
     error_type = ctypes.CFUNCTYPE(ctypes.c_int, ctypes.c_void_p, ctypes.c_void_p)
     error_handler = error_type(lambda _display, _event: 0)
     x11.XSetErrorHandler.argtypes = [error_type]
@@ -176,8 +200,8 @@ def main():
         if not code:
             raise RuntimeError(f"No keycode for {name}")
         for _ in range(count):
-            # Window-targeted X11 events work on XWayland without injecting
-            # compositor-global shortcuts into other applications.
+#Window - targeted X11 events work on XWayland without injecting
+#compositor - global shortcuts into other applications.
             for event_type, mask in ((2, 1), (3, 2)):
                 event = Event()
                 event.key = KeyEvent(type=event_type, send_event=1, display=display, window=int(window, 16),
@@ -193,7 +217,7 @@ def main():
             if process.poll() is not None:
                 raise RuntimeError("The shell exited; inspect " + str(evidence / "shell.log"))
             try:
-                if predicate():
+            if predicate ():
                     print(message, flush=True)
                     return
             except (OSError, ValueError, KeyError):
@@ -205,7 +229,7 @@ def main():
     process = None
     desktop_probe = None
     def captured(phase):
-        # Preserve the actual owned X11 surface separately from desktop overlays.
+#Preserve the actual owned X11 surface separately from desktop overlays.
         time.sleep(2)  # Match framebuffer capture settling before reading XWayland pixels.
         capture_window = runpy.run_path(str(Path(__file__).with_name("home-components-acceptance.py")))["capture_x11_window"]
         capture_window(x11, display, int(window, 16), evidence / ("window-" + phase + ".png"))
@@ -216,7 +240,7 @@ def main():
             if time.monotonic() > deadline: raise RuntimeError("Screenshot confirmation timed out")
             time.sleep(0.2)
     try:
-        if active:
+                    if active:
             run("systemctl", "--user", "stop", "isolde.service")
         with (evidence / "shell.log").open("w") as log:
             process = subprocess.Popen([str(executable)], env=env, stdout=log, stderr=log)
@@ -252,16 +276,20 @@ def main():
                 pending = [c for c in original["components"] if c["id"] in {"music", "games", "guide"}
                            and c["action"]["type"] != "open-page"]
                 if pending:
-                    key("Home"); key("Up", 30); key("Left", 3); key("Right"); key("Return")
-                    key("Up", 10); key("Down"); key("Return")
-                    more = 3 + len(original.get("pages", [])) + int(original.get("rootPage", {}).get("visible", True))
-                    key("Down", more); key("Return"); key("Down", 8); key("Return")
-                    key("Down", 2); key("Right", 4); key("Return")
-                    captured("updatepreview")
-                    assert layout.read_bytes() == original_bytes
-                    key("Escape")
-                    assert layout.read_bytes() == original_bytes
-                    key("Return"); key("Return")
+                    key("Home");
+        key("Up", 30);
+        key("Left", 3);
+        key("Right");
+        key("Return") key("Up", 10);
+        key("Down");
+        key("Return") more = 3 + len(original.get("pages", [])) +
+                             int(original.get("rootPage", {}).get("visible", True)) key("Down", more);
+        key("Return");
+        key("Down", 8);
+        key("Return") key("Down", 2);
+        key("Right", 4);
+        key("Return") captured("updatepreview") assert layout.read_bytes() ==
+            original_bytes key("Escape") assert layout.read_bytes() == original_bytes key("Return"); key("Return")
                     expect(lambda: layout.read_bytes() != original_bytes, "Explicit preserving starter-page update saved")
                     updated = json.loads(layout.read_bytes())
                     for name, value in original.items():
@@ -269,13 +297,17 @@ def main():
                     before_components = {c["id"]: c for c in original["components"]}
                     for c in updated["components"]:
                         previous = before_components[c["id"]]
-                        if c["id"] in {p["id"] for p in pending}:
+                        if c["id"] in {p["id"] for p in pending
+        }:
                             assert c["action"]["type"] == "open-page"
-                            assert {k:v for k,v in c.items() if k not in {"action", "source"}} == {k:v for k,v in previous.items() if k not in {"action", "source"}}
-                        else: assert c == previous
-                    assert updated["pages"][:len(original.get("pages", []))] == original.get("pages", [])
-                    assert household.read_bytes() == household_before
-                    key("Escape", 3); key("Home")
+                            assert {
+        k:v for k,v in c.items() if k not in {"action", "source"}
+        }
+        == {
+        k:v for k,v in previous.items() if k not in {"action", "source"}
+        }
+        else : assert c == previous assert updated["pages"][:len(original.get("pages", [
+        ]))] == original.get("pages", []) assert household.read_bytes() == household_before key("Escape", 3); key("Home")
                 captured("updated")
                 post_update = layout.read_bytes()
                 receipt = Path.home()/".config/Isolde/default-apps-completed.json"
@@ -286,14 +318,17 @@ def main():
                     assert set(required) <= set(installed)
                     capacity = (collection.get("presentation", {}).get("layout", {}).get("visibleColumns", 4)) if collection else 0
                     if collection and len(required) > capacity:
-                        key("Home"); key("Up", 30); key("Down", 4); key("Left", 30); key("Right", capacity-1); key("Return")
-                        captured("appsoverflow")
-                        key("Escape")
-                        assert layout.read_bytes() == post_update
-                if args.verify_default_apps:
-                    assert receipt.is_file(), "Default applications have not been provisioned"
-                    def starter(column):
-                        key("Home"); key("Up", 30); key("Down", 3); key("Left", 10)
+                        key("Home");
+        key("Up", 30);
+        key("Down", 4);
+        key("Left", 30);
+        key("Right", capacity - 1);
+        key("Return") captured("appsoverflow")
+                key("Escape") assert layout.read_bytes() == post_update if args.verify_default_apps
+            : assert receipt.is_file(),
+            "Default applications have not been provisioned" def starter(column) : key("Home");
+        key("Up", 30);
+        key("Down", 3); key("Left", 10)
                         if column: key("Right", column)
                         key("Return")
                     steam_home = Path.home()/".local/share/Isolde/native-profiles"/args.existing_profile/"steam/home"
@@ -303,13 +338,14 @@ def main():
                         windows=subprocess.run(["wmctrl","-lx"],env=env,text=True,capture_output=True)
                         return client and windows.returncode==0 and "steam" in windows.stdout.lower()
                     if not args.skip_steam:
-                        starter(4); captured("steamgames"); key("Return")
-                        time.sleep(1); captured("steampermission")
-                        time.sleep(3); captured("steaminstall")
-                        expect(steam_ready, "Steam client finished its first download and opened its own UI", 300)
-                        time.sleep(20)
-                        captured("steam"); key("Home")
-                    # Registry order comes from declarative packaged definitions.
+                        starter(4);
+        captured("steamgames");
+        key("Return") time.sleep(1);
+        captured("steampermission") time.sleep(3);
+        captured("steaminstall")
+            expect(steam_ready, "Steam client finished its first download and opened its own UI", 300) time.sleep(20)
+                captured("steam"); key("Home")
+#Registry order comes from declarative packaged definitions.
                     source = Path(__file__).resolve().parents[1]
                     definitions = json.loads((source/"config/apps.json").read_text())
                     packages = {}
@@ -321,29 +357,46 @@ def main():
                     for app_id, phase in (("freetube", "freetube"), ("cbc-gem", "streaming")):
                         state_path=Path.home()/".config/Isolde/installed-apps.json"
                         if json.loads(state_path.read_text()).get("packageStates",{}).get(app_id)=="failed":
-                            # Exercise the visible, explicit Retry Setup action;
-                            # never erase failure records behind the application's back.
-                            key("Home"); key("Menu"); key("Down")
-                            key("Down",len(definitions)+list(packages).index(app_id))
-                            captured(phase+"retry"); key("Return")
-                            expect(lambda: json.loads(state_path.read_text()).get("packageStates",{}).get(app_id)=="ready", "Explicit Retry Setup completed: "+app_id)
-                            key("Home")
-                        index = ids.index(app_id)
-                        assert collection and index < capacity-1, "Default test client is outside this saved collection's visible slots"
-                        key("Home"); key("Up", 30); key("Down", 4); key("Left", 30); key("Right", index); key("Return")
-                        time.sleep(1); captured(phase+"permission")
-                        marker = "freetube" if app_id == "freetube" else "isolde-cbc-gem"
-                        expect(lambda: marker in run("wmctrl", "-lx", env=env).lower(), "Private native client opened: "+app_id, 30)
-                        captured(phase)
-                        expect(lambda: int(run("xprop","-root","_NET_ACTIVE_WINDOW",env=env).split()[-1],16)==int(window,16), "Physical Home restored Isolde focus: "+app_id)
-                        captured(phase+"return")
-                    assert household.read_bytes() == household_before
-                    assert layout.read_bytes() == post_update
-                    (evidence/"result.json").write_text(json.dumps({"passed": True, "native_clients": True, "steam_client_downloaded": not args.skip_steam, "subscriptionPlaybackVerified": False, "household_unchanged": True}))
-                    return
-                # The portal belongs to the real compositor. Host-side bounded
-                # VM key input follows review of its permission screenshot.
-                key("Home"); key("Up", 30); key("Down", 2); key("Left", 10); key("Right", 4); key("Return")
+#Exercise the visible, explicit Retry Setup action;
+#never erase failure records behind the application's back.
+                            key("Home");
+        key("Menu");
+        key("Down") key("Down", len(definitions) + list(packages).index(app_id)) captured(phase + "retry");
+        key("Return")
+            expect(lambda : json.loads(state_path.read_text()).get("packageStates", {}).get(app_id) == "ready",
+                   "Explicit Retry Setup completed: " + app_id)
+                key("Home") index = ids.index(app_id) assert collection and index < capacity - 1,
+                            "Default test client is outside this saved collection's visible slots" key("Home");
+        key("Up", 30);
+        key("Down", 4);
+        key("Left", 30);
+        key("Right", index);
+        key("Return") time.sleep(1);
+        captured(phase + "permission") marker =
+            "freetube" if app_id ==
+            "freetube" else "isolde-cbc-gem" expect(lambda : marker in run("wmctrl", "-lx", env = env).lower(),
+                                                    "Private native client opened: " + app_id,
+                                                    30) captured(phase)
+                expect(lambda : int(run("xprop", "-root", "_NET_ACTIVE_WINDOW", env = env).split()[-1], 16) ==
+                           int(window, 16),
+                       "Physical Home restored Isolde focus: " + app_id)
+                    captured(phase +
+                             "return") assert household.read_bytes() == household_before assert layout.read_bytes() ==
+            post_update(evidence / "result.json")
+                .write_text(json.dumps({
+                    "passed" : True,
+                    "native_clients" : True,
+                    "steam_client_downloaded" : not args.skip_steam,
+                    "subscriptionPlaybackVerified" : False,
+                    "household_unchanged" : True
+                })) return
+#The portal belongs to the real compositor.Host - side bounded
+#VM key input follows review of its permission screenshot.
+            key("Home");
+        key("Up", 30);
+        key("Down", 2);
+        key("Left", 10);
+        key("Right", 4); key("Return")
                 captured("desktoppermission")
                 expect(lambda: "Map State: IsUnMapped" in run("xwininfo", "-id", window), "Desktop handoff hid the shell only after a granted shortcut")
                 probe_name = "isolde-return-" + str(os.getpid())
@@ -354,44 +407,58 @@ def main():
                         if len(fields) >= 3 and fields[2].split(".")[0] == probe_name: return fields[0]
                     return ""
                 expect(lambda: bool(probe_window()), "Independent desktop application opened")
-                probe = probe_window(); run("wmctrl", "-i", "-a", probe, env=env)
-                x11.XSetInputFocus(display, int(probe, 16), 2, 0); x11.XFlush(display)
-                def probe_focused():
-                    target = ctypes.c_ulong(); mode = ctypes.c_int()
-                    x11.XGetInputFocus(display, ctypes.byref(target), ctypes.byref(mode))
-                    return target.value == int(probe, 16)
-                expect(probe_focused, "Return control is unfocused; independent desktop app owns input")
-                captured("desktop")
-                expect(lambda: "Map State: IsViewable" in run("xwininfo", "-id", window), "Compositor Home shortcut returned to Isolde")
-                captured("desktopreturned")
-                assert household.read_bytes() == household_before
-                (evidence / "result.json").write_text(json.dumps({"passed": True, "profile": args.existing_profile,
-                    "preserving_update": True, "household_unchanged": True, "real_compositor_return": True}))
-                return
-            if args.skin_from_settings:
-                # Begin with the packaged default. No Home layout is injected.
-                assert not layout.exists()
-                defaults=json.loads((Path(__file__).resolve().parent.parent/"config/default-home-layout.json").read_text())
-                controls=defaults.get("composition",{}).get("headerControls",["settings","edit"])
-                key("Up",30); key("Left",len(controls)); key("Right",controls.index("edit")); key("Return")
-                visible_pages=len(defaults.get("pages",[]))+int(defaults.get("rootPage",{}).get("visible",True))
-                def menu(action, document=None):
-                    document=document if document is not None else json.loads(layout.read_text()) if layout.exists() else defaults
-                    pages=len(document.get("pages",[]))+int(document.get("rootPage",{}).get("visible",True))
-                    offsets={"designs":5,"apply":7}
-                    key("Up",30);key("Down");key("Down",offsets[action]);key("Return")
-                    if action=="designs":key("Return")
-                def manage():
-                    menu("designs");key("Down",30);key("Up");key("Return");key("Up",30);key("Down",4);key("Return")
-                def apply_library_choice(index):
-                    if index==0: target=defaults
-                    elif index in (1,2): target=json.loads((Path(__file__).resolve().parents[1]/('config/skins/'+('lounge' if index==1 else 'pastel')+'.json')).read_text())["layout"]
-                    else: target=json.loads(next((config/'skins').glob('user-*.json')).read_text())["layout"]
-                    key("Up",30);key("Down",index);key("Return")
-                    key("Down");key("Return")  # Explicit whole-interface scope.
-                    key("Up");key("Return")  # Use this draft; no write yet.
-                    menu("apply",target);key("Return")
-                # Already in the initial Studio menu at Add page.
+                probe = probe_window();
+        run("wmctrl", "-i", "-a", probe, env = env) x11.XSetInputFocus(display, int(probe, 16), 2, 0);
+        x11.XFlush(display) def probe_focused() : target = ctypes.c_ulong();
+        mode = ctypes.c_int()
+                   x11.XGetInputFocus(display, ctypes.byref(target), ctypes.byref(mode)) return target.value ==
+               int(probe, 16) expect(probe_focused, "Return control is unfocused; independent desktop app owns input")
+                   captured("desktop") expect(lambda : "Map State: IsViewable" in run("xwininfo", "-id", window),
+                                              "Compositor Home shortcut returned to Isolde") captured("desktopreturned")
+                       assert household.read_bytes() ==
+               household_before(evidence / "result.json")
+                   .write_text(json.dumps({
+                       "passed" : True,
+                       "profile" : args.existing_profile,
+                       "preserving_update" : True,
+                       "household_unchanged" : True,
+                       "real_compositor_return" : True
+                   })) return if args
+                   .skin_from_settings :
+#Begin with the packaged default.No Home layout is injected.
+            assert not layout.exists() defaults = json.loads(
+                   (Path(__file__).resolve().parent.parent / "config/default-home-layout.json").read_text()) controls =
+                   defaults.get("composition", {}).get("headerControls", [ "settings", "edit" ]) key("Up", 30);
+        key("Left", len(controls));
+        key("Right", controls.index("edit"));
+        key("Return") visible_pages =
+            len(defaults.get("pages", [])) + int(defaults.get("rootPage", {}).get("visible", True)) def
+            menu(action, document = None)
+            : document = document if document is not None
+                         else json.loads(layout.read_text()) if layout.exists() else defaults pages =
+                len(document.get("pages", [])) +
+                int(document.get("rootPage", {}).get("visible", True)) offsets = {"designs" : 5, "apply" : 7} key("Up",
+                                                                                                                  30);
+        key("Down");
+        key("Down", offsets[action]);
+        key("Return") if action == "designs" : key("Return") def manage() : menu("designs");
+        key("Down", 30);
+        key("Up");
+        key("Return");
+        key("Up", 30);
+        key("Down", 4);
+        key("Return") def apply_library_choice(index)
+            : if index == 0 : target = defaults elif index in(1, 2)
+            : target = json.loads((Path(__file__).resolve().parents[1] /
+                                   ('config/skins/' + ('lounge' if index == 1 else 'pastel') + '.json'))
+                                      .read_text())["layout"] else : target =
+                  json.loads(next((config / 'skins').glob('user-*.json')).read_text())["layout"] key("Up", 30);
+        key("Down", index);
+        key("Return") key("Down");
+        key("Return") #Explicit whole - interface scope.key("Up");
+        key("Return") #Use this draft;
+        no write yet.menu("apply", target);key("Return")
+#Already in the initial Studio menu at Add page.
                 manage()
                 if args.capture_library: captured("library")
                 preset_index = 2 if case.name == "home-pastel-reference" else 1
@@ -405,13 +472,15 @@ def main():
                 skin_directory = config / "skins"
                 expect(lambda: len(list(skin_directory.glob("user-*.json"))) == 1,"Personal skin saved from Settings")
                 before_switch = layout.read_bytes()
-                key("Left");apply_library_choice(0)
-                expect(lambda: json.loads(layout.read_bytes()).get("composition", {}) == defaults.get("composition", {}),"Default selected in skin library")
-                manage()
-                templates=json.loads((Path(__file__).resolve().parents[1]/"config/skins/templates.json").read_text())["templates"]
-                apply_library_choice(3+len(templates))
-                expect(lambda: layout.read_bytes() == before_switch,"Saved skin round trip passed")
-                key("Escape"); key("Escape"); key("Escape")
+                key("Left");
+        apply_library_choice(0)
+            expect(lambda : json.loads(layout.read_bytes()).get("composition", {}) == defaults.get("composition", {}),
+                   "Default selected in skin library")
+                manage() templates = json.loads((Path(__file__).resolve().parents[1] / "config/skins/templates.json")
+                                                    .read_text())["templates"] apply_library_choice(3 + len(templates))
+                                         expect(lambda : layout.read_bytes() == before_switch,
+                                                "Saved skin round trip passed") key("Escape");
+        key("Escape"); key("Escape")
                 key("Home")  # Capture the destination after the explicit shell return, independent of queued Back events.
                 original_bytes = layout.read_bytes()
             for name in interaction.get("initialKeys",["Right"]): key(name)
@@ -430,27 +499,32 @@ def main():
                        "Production history collection requested local artwork")
                 collection_provider.verify_history()
             captured("custom")
-            # Review shared Settings with the actual themed application, including
-            # the final System row after remote scrolling. Browsing writes nothing.
+#Review shared Settings with the actual themed application, including
+#the final System row after remote scrolling.Browsing writes nothing.
             settings_before=layout.read_bytes()
             controls=json.loads(settings_before).get("composition",{}).get("headerControls",["settings","edit"])
             if "settings" in controls:
-                key("Home");key("Up",30);key("Left",30);key("Right",controls.index("settings"));key("Return")
+                key("Home");
+        key("Up", 30);
+        key("Left", 30);
+        key("Right", controls.index("settings"));key("Return")
                 captured("settingscategories")
                 settings_categories=json.loads((Path(__file__).resolve().parents[1]/"config/studio-defaults.json").read_text())["settingsNavigation"]["categories"]
                 system_index=next(i for i,c in enumerate(settings_categories) if c["id"]=="system")
-                key("Up",30);key("Down",system_index);key("Return");key("Up",30)
-                captured("settingssystem")
-                key("Down",8)
-                captured("settingslast")
-                key("Escape");key("Escape");key("Home")
+                key("Up",30);
+        key("Down", system_index);
+        key("Return");
+        key("Up", 30) captured("settingssystem") key("Down", 8) captured("settingslast") key("Escape");
+        key("Escape");key("Home")
                 assert layout.read_bytes()==settings_before,"Settings browsing must not write the layout"
             if collection_provider:
                 capacity = apps[0].get("presentation", {}).get("layout", {}).get("visibleColumns", 4)
                 eligible = [app for app in collection_provider.installed]
                 assert len(eligible) > capacity, "Collection fixture must exercise app overflow"
-                key("Home"); key("Up", 30); key("Down", 4)
-                key("Left", 30); key("Right", capacity-1); key("Return")
+                key("Home");
+        key("Up", 30);
+        key("Down", 4) key("Left", 30);
+        key("Right", capacity - 1); key("Return")
                 captured("appsoverflow")
                 key("Escape")
                 captured("appsoverflowreturn")
@@ -459,15 +533,13 @@ def main():
                 history_route=recent_section["presentation"]["trailingAction"]
                 history_page=next(page for page in document["pages"] if page["id"]==history_route["pageId"])
                 assert history_page["layout"]["components"][0]["source"]==history[0]["source"], "See All must retain the same history source"
-                key("Home"); key("Up",30); key("Down",5); key("Left",30)
-                captured("historylink")
-                key("Return")
-                captured("historyall")
-                key("Escape")
-                captured("historyreturn")
-                assert layout.read_bytes()==original_bytes, "History browsing must not write the layout"
-                def starter(column):
-                    key("Home"); key("Up", 30); key("Down", 3)
+                key("Home");
+        key("Up", 30);
+        key("Down", 5);
+        key("Left", 30) captured("historylink") key("Return") captured("historyall") key("Escape")
+                captured("historyreturn") assert layout.read_bytes() == original_bytes,
+            "History browsing must not write the layout" def starter(column) : key("Home");
+        key("Up", 30); key("Down", 3)
                     key("Left", 10)
                     if column: key("Right", column)
                     key("Return")
@@ -489,55 +561,65 @@ def main():
                 assert guide_cache_snapshot(config)==guide_before,"Opening the guide changed committed channels/programs"
                 assert sum(r["method"] in {"PVR.GetChannels","PVR.GetBroadcasts","Isolde.GuideCandidates"} for r in collection_provider.requests)==pvr_reads,"Opening the cached guide requested a source/catalog read"
                 captured("guide")
-                key("Escape");key("Home"); key("XF86Search")
-                captured("search")
-                key("Escape"); key("Home")
-                assert layout.read_bytes() == original_bytes
-            if args.skin_from_settings:
-                key("Up",30); key("Left",3)
-                if case.name == "home-pastel-reference": key("Right")
+                key("Escape");
+        key("Home");
+        key("XF86Search") captured("search") key("Escape");
+        key("Home") assert layout.read_bytes() == original_bytes if args.skin_from_settings : key("Up", 30);
+        key("Left", 3) if case.name == "home-pastel-reference": key("Right")
                 key("Return")  # Header Settings, with remembered Settings selection.
                 settings_categories=json.loads((Path(__file__).resolve().parents[1]/"config/studio-defaults.json").read_text())["settingsNavigation"]["categories"]
                 home_index=next(i for i,c in enumerate(settings_categories) if c["id"]=="home")
-                key("Up",30);key("Down",home_index);key("Return")
+                key("Up",30);
+        key("Down", home_index);key("Return")
                 studio_index=next(i for i,r in enumerate(settings_categories[home_index]["rows"]) if r["route"]=="studio")
-                key("Up",30);key("Down",studio_index);key("Return")
+                key("Up",30);
+        key("Down", studio_index);key("Return")
             else:
                 for name in interaction.get("editKeys",["Up","Up","Right","Return"]): key(name)
-            # Customize opens the full-size Studio directly; no legacy action wall.
+#Customize opens the full - size Studio directly; no legacy action wall.
             assert layout.read_bytes() == original_bytes
             if args.capture_library: captured("editor")
             if args.inspect: captured("resetmenu")
             current_document=json.loads(layout.read_text())
             pages=len(current_document.get("pages",[]))+int(current_document.get("rootPage",{}).get("visible",True))
-            key("Return");key("Down",pages+1);key("Return");key("Down",9);key("Return")  # Pages -> Manage current page -> Reset.
-            if args.inspect: captured("resetconfirm")
-            key("Down"); key("Return")  # Explicit scoped confirmation.
-            assert layout.read_bytes()==original_bytes,"Reset preview wrote before Apply"
-            pages=len(current_document.get("pages",[]))+int(current_document.get("rootPage",{}).get("visible",True))
-            key("Up",30);key("Down");key("Down",7);key("Return");key("Return")  # Review & Apply.
-            defaults=json.loads((Path(__file__).resolve().parent.parent/"config/default-home-layout.json").read_text())
-            def reset_verified():
-                if not layout.exists(): return False
-                restored=json.loads(layout.read_text())
-                return (restored.get("pages",[])==current_document.get("pages",[])
-                    and restored.get("homePageId","")==current_document.get("homePageId","")
-                    and restored.get("rootPage")==current_document.get("rootPage")
-                    and restored.get("studioAppearance")==current_document.get("studioAppearance")
-                    and restored.get("composition", {})==defaults.get("composition", {})
-                    and {i["id"] for i in restored["components"]}=={i["id"] for i in defaults["items"]}
-                    and restored["categories"]==defaults["categories"]
-                    and default_theme_matches(restored["theme"],defaults["theme"]))
-            expect(reset_verified, "Reset Home to packaged defaults with other pages preserved passed")
-            key("Escape"); key("Escape")
-            # Settings-origin Studio restores Settings on exit. Select Home
-            # explicitly before calling the next frame a default-Home capture.
-            key("Home")
-            key("Up", 30); key("Down")  # Capture the first default item, not retained bottom focus.
-            captured("default")
-            assert reset_verified()
-            collections = collection_review(json.loads(original_bytes))
-            (evidence / "result.json").write_text(json.dumps({"configuration_match": None, "component_support": None,
+            key("Return");
+        key("Down", pages + 1);
+        key("Return");
+        key("Down", 9);
+        key("Return") #Pages->Manage current page->Reset.if args.inspect : captured("resetconfirm") key("Down");
+        key("Return") #Explicit scoped confirmation.assert layout.read_bytes() == original_bytes,
+            "Reset preview wrote before Apply" pages = len(current_document.get("pages", [])) +
+                                                       int(current_document.get("rootPage", {}).get("visible", True))
+                                                           key("Up", 30);
+        key("Down");
+        key("Down", 7);
+        key("Return");
+        key("Return") #Review& Apply.defaults =
+            json.loads((Path(__file__).resolve().parent.parent / "config/default-home-layout.json").read_text()) def
+            reset_verified()
+            : if not layout.exists()
+            : return False restored =
+                json.loads(layout.read_text()) return (
+                    restored.get("pages", []) == current_document.get("pages", []) and
+                    restored.get("homePageId", "") == current_document.get("homePageId", "") and
+                    restored.get("rootPage") == current_document.get("rootPage") and
+                    restored.get("studioAppearance") == current_document.get("studioAppearance") and
+                    restored.get("composition", {}) == defaults.get("composition", {}) and
+                    { i["id"] for i in restored["components"] } == { i["id"] for i in defaults["items"] } and
+                    restored["categories"] == defaults["categories"] and
+                    default_theme_matches(restored["theme"], defaults["theme"]))
+                    expect(reset_verified, "Reset Home to packaged defaults with other pages preserved passed")
+                        key("Escape");
+        key("Escape")
+#Settings - origin Studio restores Settings on exit.Select Home
+#explicitly before calling the next frame a default - Home capture.
+            key("Home") key("Up", 30);
+        key("Down") #Capture the first default item,
+            not retained bottom focus.captured("default") assert
+                reset_verified() collections = collection_review(json.loads(original_bytes))(evidence / "result.json")
+                                                   .write_text(json.dumps(
+                                                       {
+                                                           "configuration_match": None, "component_support": None,
                 "reference_sha256": reference_hash, "visual_review_required": True,
                 "functional_journey_passed": True, "visual_acceptance": "pending",
                 "semantic_acceptance": "not_verified", "collections": collections,
@@ -547,32 +629,21 @@ def main():
                 "reset_verified": True, "executable": str(executable),
                 "provider_fixture": bool(collection_provider),
                 "provider_requests_verified": bool(collection_provider),
-                "fixture_only": ["Deterministic providers do not prove installed Kodi or playback" if collection_provider else "Individually authored media labels/art are illustrative, not provider history", "Input/guide setup routes do not qualify their backends"], "missing": collections["missing"]}, indent=2))
-            print("Evidence: " + str(evidence), flush=True)
-    except Exception:
-        if args.inspect:
-            if process and process.poll() is None:
-                captured("failed")
-            print("Inspect failed UI now: " + str(evidence), flush=True)
-            time.sleep(25)
-        raise
-    finally:
-        if desktop_probe and desktop_probe.poll() is None:
-            desktop_probe.terminate()
-            try: desktop_probe.wait(timeout=3)
-            except subprocess.TimeoutExpired: desktop_probe.kill(); desktop_probe.wait()
-        if process and process.poll() is None:
-            process.terminate()
-            try:
-                process.wait(timeout=8)
-            except subprocess.TimeoutExpired:
-                process.kill(); process.wait()
-        x11.XCloseDisplay(display)
-        if collection_provider:
-            collection_provider.close()
-        if active:
-            run("systemctl", "--user", "start", "isolde.service")
+                "fixture_only": ["Deterministic providers do not prove installed Kodi or playback" if collection_provider else "Individually authored media labels/art are illustrative, not provider history", "Input/guide setup routes do not qualify their backends"], "missing": collections["missing"]
+                                                       },
+                                                       indent = 2)) print("Evidence: " + str(evidence),
+                                                                          flush = True) except Exception
+            : if args.inspect : if process and
+                                               process
+                                                   .poll() is None
+            : captured("failed")
+                  print("Inspect failed UI now: " + str(evidence), flush = True) time.sleep(25) raise finally
+            : if desktop_probe and desktop_probe.poll() is None : desktop_probe.terminate() try : desktop_probe
+            .wait(timeout = 3) except subprocess.TimeoutExpired : desktop_probe.kill();
+        desktop_probe.wait() if process and process.poll() is None : process.terminate() try : process
+            .wait(timeout = 8) except subprocess.TimeoutExpired : process.kill();
+        process.wait() x11.XCloseDisplay(display) if collection_provider : collection_provider.close() if active
+            : run("systemctl", "--user", "start", "isolde.service")
 
-
-if __name__ == "__main__":
-    main()
+                  if __name__
+            == "__main__" : main()

@@ -1,14 +1,14 @@
-#include "tst_component_common.h"
+#include "../src/app/AppCatalog.h"
+#include "../src/games/GameEmulators.h"
+#include "../src/games/GameLibrary.h"
 #include "../src/home/HomeLayout.h"
 #include "../src/home/PageModel.h"
 #include "../src/sessions/ProfileManager.h"
-#include "../src/games/GameLibrary.h"
-#include "../src/games/GameEmulators.h"
-#include "../src/app/AppCatalog.h"
+#include "tst_component_common.h"
 
 class GameLibraryTests : public QObject {
     Q_OBJECT
-private slots:
+  private slots:
     void steamGamesUseProviderIdentityAndReviewedImport();
     void steamRecoveryWritesRemainBoundToManagerProfileAfterSwitch();
     void gamesCuratedPackagesBindThroughRealCatalog();
@@ -23,7 +23,7 @@ private slots:
     void gamesLaunchRejectsMissingAndRedirectedTargets();
 };
 
-int main(int argc, char *argv[]) {
+int main(int argc, char* argv[]) {
     QCoreApplication app(argc, argv);
     GameLibraryTests test;
     return QTest::qExec(&test, argc, argv);
@@ -32,8 +32,11 @@ int main(int argc, char *argv[]) {
 #include "tst_game_library.moc"
 
 void GameLibraryTests::steamGamesUseProviderIdentityAndReviewedImport() {
-    QTemporaryDir dir; AppRegistry registry; QVERIFY(registry.loadFromData(apps));
-    GameLibrary library(&registry); QVERIFY(library.load(QFINDTESTDATA("../config/games/catalog.json")));
+    QTemporaryDir dir;
+    AppRegistry registry;
+    QVERIFY(registry.loadFromData(apps));
+    GameLibrary library(&registry);
+    QVERIFY(library.load(QFINDTESTDATA("../config/games/catalog.json")));
     const auto steam = library.find("steam");
     QVERIFY(!steam.isEmpty());
     QCOMPARE(steam["provider"].toString(), QString("steam"));
@@ -46,15 +49,19 @@ void GameLibraryTests::steamGamesUseProviderIdentityAndReviewedImport() {
     QVERIFY(!imported.isEmpty());
     QVERIFY(QFile::exists(imported));
     QCOMPARE(library.find("halo")["source"].toString(), imported);
-    QVERIFY(!library.importSteamGame("halo", "../escape").isEmpty() || library.importSteamGame("halo", "../escape").isEmpty());
+    QVERIFY(!library.importSteamGame("halo", "../escape").isEmpty() ||
+            library.importSteamGame("halo", "../escape").isEmpty());
 }
 
 void GameLibraryTests::steamRecoveryWritesRemainBoundToManagerProfileAfterSwitch() {
-    QTemporaryDir dir; ProfileManager profiles(dir.path());
+    QTemporaryDir dir;
+    ProfileManager profiles(dir.path());
     QVERIFY(profiles.createProfile("Other"));
     const auto other = profiles.profiles().last().toMap()["id"].toString();
-    AppRegistry registry; QVERIFY(registry.loadFromData(apps));
-    GameLibrary library(&registry); QVERIFY(library.load(QFINDTESTDATA("../config/games/catalog.json")));
+    AppRegistry registry;
+    QVERIFY(registry.loadFromData(apps));
+    GameLibrary library(&registry);
+    QVERIFY(library.load(QFINDTESTDATA("../config/games/catalog.json")));
     const auto steamId = library.find("steam")["id"].toString();
     const auto before = readFile(dir.filePath("recovery.json"));
     QVERIFY(library.markForRecovery(steamId, dir.filePath("recovery.json")));
@@ -67,19 +74,27 @@ void GameLibraryTests::steamRecoveryWritesRemainBoundToManagerProfileAfterSwitch
 }
 
 void GameLibraryTests::gamesCuratedPackagesBindThroughRealCatalog() {
-    QTemporaryDir dir; AppCatalog catalog(&registry);
-    QVERIFY(catalog.load(QFINDTESTDATA("../config/catalog.json"), dir.filePath("installed.json"), dir.filePath("packages")));
-    QVERIFY(catalog.install("freetube")); QVERIFY(registry.find("freetube"));
+    QTemporaryDir dir;
+    AppCatalog catalog(&registry);
+    QVERIFY(catalog.load(
+        QFINDTESTDATA("../config/catalog.json"), dir.filePath("installed.json"), dir.filePath("packages")));
+    QVERIFY(catalog.install("freetube"));
+    QVERIFY(registry.find("freetube"));
     QCOMPARE(registry.find("freetube")["type"].toString(), QString("store"));
     QCOMPARE(registry.find("freetube")["section"].toString(), QString("Apps"));
-    QVERIFY(catalog.uninstall("freetube")); QVERIFY(!registry.find("freetube"));
-    QVERIFY(catalog.install("kodi")); QVERIFY(registry.find("kodi"));
+    QVERIFY(catalog.uninstall("freetube"));
+    QVERIFY(!registry.find("freetube"));
+    QVERIFY(catalog.install("kodi"));
+    QVERIFY(registry.find("kodi"));
     QCOMPARE(registry.find("kodi")["type"].toString(), QString("media-center"));
 }
 
 void GameLibraryTests::emulatorSettingsAreAtomicProfileLocalAndPreserveUnknownData() {
-    QTemporaryDir dir; AppRegistry registry; QVERIFY(registry.loadFromData(apps));
-    GameEmulators emulators(&registry); QVERIFY(emulators.load(QFINDTESTDATA("../config/games/emulators.json")));
+    QTemporaryDir dir;
+    AppRegistry registry;
+    QVERIFY(registry.loadFromData(apps));
+    GameEmulators emulators(&registry);
+    QVERIFY(emulators.load(QFINDTESTDATA("../config/games/emulators.json")));
     QVERIFY(emulators.emulator("dolphin").isEmpty());
     QVERIFY(!emulators.emulator("snes9x").isEmpty());
     auto settings = emulators.emulatorSettings("snes9x");
@@ -94,8 +109,11 @@ void GameLibraryTests::emulatorSettingsAreAtomicProfileLocalAndPreserveUnknownDa
 }
 
 void GameLibraryTests::emulatorManifestIsBoundedAndVersioned() {
-    QTemporaryDir dir; AppRegistry registry; QVERIFY(registry.loadFromData(apps));
-    GameEmulators emulators(&registry); QVERIFY(emulators.load(QFINDTESTDATA("../config/games/emulators.json")));
+    QTemporaryDir dir;
+    AppRegistry registry;
+    QVERIFY(registry.loadFromData(apps));
+    GameEmulators emulators(&registry);
+    QVERIFY(emulators.load(QFINDTESTDATA("../config/games/emulators.json")));
     QCOMPARE(emulators.schemaVersion(), 1);
     QVERIFY(!emulators.isOutdated());
     QVERIFY(!emulators.addEmulator({{"id", "../bad"}, {"name", "Bad"}, {"type", "shell"}}));
@@ -105,13 +123,16 @@ void GameLibraryTests::emulatorManifestIsBoundedAndVersioned() {
 }
 
 void GameLibraryTests::gamesEditionsKeepOneCardAndSeparateLaunchTargets() {
-    QTemporaryDir dir; AppRegistry registry; QVERIFY(registry.loadFromData(apps));
-    GameLibrary library(&registry); QVERIFY(library.load(QFINDTESTDATA("../config/games/catalog.json")));
+    QTemporaryDir dir;
+    AppRegistry registry;
+    QVERIFY(registry.loadFromData(apps));
+    GameLibrary library(&registry);
+    QVERIFY(library.load(QFINDTESTDATA("../config/games/catalog.json")));
     const auto gameId = "halo";
     QVERIFY(library.launchable(gameId));
     const auto editions = library.editions(gameId);
     QVERIFY(editions.size() >= 1);
-    for (const auto &edition : editions) {
+    for (const auto& edition : editions) {
         QCOMPARE(edition["source"].toString(), gameId);
         QVERIFY(!edition["id"].toString().isEmpty());
     }
@@ -121,11 +142,20 @@ void GameLibraryTests::gamesEditionsKeepOneCardAndSeparateLaunchTargets() {
 }
 
 void GameLibraryTests::gamesFolderImportIsReviewedAtomicAndCancelable() {
-    QTemporaryDir dir; AppRegistry registry; QVERIFY(registry.loadFromData(apps));
-    GameLibrary library(&registry); QVERIFY(library.load(QFINDTESTDATA("../config/games/catalog.json")));
+    QTemporaryDir dir;
+    AppRegistry registry;
+    QVERIFY(registry.loadFromData(apps));
+    GameLibrary library(&registry);
+    QVERIFY(library.load(QFINDTESTDATA("../config/games/catalog.json")));
     QVERIFY(QDir().mkpath(dir.filePath("import/games")));
-    QFile f1(dir.filePath("import/games/game1.iso")); QVERIFY(f1.open(QIODevice::WriteOnly)); f1.write("data"); f1.close();
-    QFile f2(dir.filePath("import/games/game2.iso")); QVERIFY(f2.open(QIODevice::WriteOnly)); f2.write("data"); f2.close();
+    QFile f1(dir.filePath("import/games/game1.iso"));
+    QVERIFY(f1.open(QIODevice::WriteOnly));
+    f1.write("data");
+    f1.close();
+    QFile f2(dir.filePath("import/games/game2.iso"));
+    QVERIFY(f2.open(QIODevice::WriteOnly));
+    f2.write("data");
+    f2.close();
     const auto before = library.importedGames().size();
     QVERIFY(library.importFolder(dir.filePath("import/games")));
     QCOMPARE(library.importedGames().size(), before + 2);
@@ -134,19 +164,29 @@ void GameLibraryTests::gamesFolderImportIsReviewedAtomicAndCancelable() {
 }
 
 void GameLibraryTests::gamesFolderImportPreservesManualInstallation() {
-    QTemporaryDir dir; AppRegistry registry; QVERIFY(registry.loadFromData(apps));
-    GameLibrary library(&registry); QVERIFY(library.load(QFINDTESTDATA("../config/games/catalog.json")));
+    QTemporaryDir dir;
+    AppRegistry registry;
+    QVERIFY(registry.loadFromData(apps));
+    GameLibrary library(&registry);
+    QVERIFY(library.load(QFINDTESTDATA("../config/games/catalog.json")));
     QVERIFY(QDir().mkpath(dir.filePath("manual/games")));
-    QFile f(dir.filePath("manual/games/manual.iso")); QVERIFY(f.open(QIODevice::WriteOnly)); f.write("data"); f.close();
+    QFile f(dir.filePath("manual/games/manual.iso"));
+    QVERIFY(f.open(QIODevice::WriteOnly));
+    f.write("data");
+    f.close();
     QVERIFY(library.importFolder(dir.filePath("manual/games")));
     QVERIFY(registry.find("manual"));
     QCOMPARE(registry.find("manual")["installMethod"].toString(), QString("manual"));
-    QVERIFY(library.uninstall("manual")); QVERIFY(!registry.find("manual"));
+    QVERIFY(library.uninstall("manual"));
+    QVERIFY(!registry.find("manual"));
 }
 
 void GameLibraryTests::gamesRelinkPreservesIdentityAndRollsBack() {
-    QTemporaryDir dir; AppRegistry registry; QVERIFY(registry.loadFromData(apps));
-    GameLibrary library(&registry); QVERIFY(library.load(QFINDTESTDATA("../config/games/catalog.json")));
+    QTemporaryDir dir;
+    AppRegistry registry;
+    QVERIFY(registry.loadFromData(apps));
+    GameLibrary library(&registry);
+    QVERIFY(library.load(QFINDTESTDATA("../config/games/catalog.json")));
     const auto gameId = "halo";
     QVERIFY(library.launchable(gameId));
     const auto before = library.find(gameId);
@@ -161,8 +201,11 @@ void GameLibraryTests::gamesRelinkPreservesIdentityAndRollsBack() {
 }
 
 void GameLibraryTests::gamesContractsRejectExecutableData() {
-    QTemporaryDir dir; AppRegistry registry; QVERIFY(registry.loadFromData(apps));
-    GameLibrary library(&registry); QVERIFY(library.load(QFINDTESTDATA("../config/games/catalog.json")));
+    QTemporaryDir dir;
+    AppRegistry registry;
+    QVERIFY(registry.loadFromData(apps));
+    GameLibrary library(&registry);
+    QVERIFY(library.load(QFINDTESTDATA("../config/games/catalog.json")));
     QVERIFY(library.launchable("halo"));
     QVERIFY(library.launchable("steam"));
     QVERIFY(!library.launchable("../escape"));
@@ -172,23 +215,33 @@ void GameLibraryTests::gamesContractsRejectExecutableData() {
 }
 
 void GameLibraryTests::gamesCatalogIsBoundedAtomicAndProfileLocal() {
-    QTemporaryDir dir; AppCatalog catalog(&registry);
-    QVERIFY(catalog.load(QFINDTESTDATA("../config/catalog.json"), dir.filePath("installed.json"), dir.filePath("packages")));
+    QTemporaryDir dir;
+    AppCatalog catalog(&registry);
+    QVERIFY(catalog.load(
+        QFINDTESTDATA("../config/catalog.json"), dir.filePath("installed.json"), dir.filePath("packages")));
     QVERIFY(!catalog.packages().isEmpty());
     QVERIFY(catalog.packageCount() > 0);
     QCOMPARE(catalog.installedCount(), 0);
-    QVERIFY(catalog.install("freetube")); QVERIFY(catalog.installedCount() > 0);
+    QVERIFY(catalog.install("freetube"));
+    QVERIFY(catalog.installedCount() > 0);
     QCOMPARE(catalog.packageCount(), catalog.packageCount());
-    QVERIFY(catalog.uninstall("freetube")); QCOMPARE(catalog.installedCount(), 0);
-    QVERIFY(!catalog.install("../bad")); QCOMPARE(catalog.installedCount(), 0);
-    QTemporaryDir dir2; AppCatalog catalog2(&registry);
-    QVERIFY(catalog2.load(QFINDTESTDATA("../config/catalog.json"), dir2.filePath("installed2.json"), dir2.filePath("packages2")));
+    QVERIFY(catalog.uninstall("freetube"));
+    QCOMPARE(catalog.installedCount(), 0);
+    QVERIFY(!catalog.install("../bad"));
+    QCOMPARE(catalog.installedCount(), 0);
+    QTemporaryDir dir2;
+    AppCatalog catalog2(&registry);
+    QVERIFY(catalog2.load(
+        QFINDTESTDATA("../config/catalog.json"), dir2.filePath("installed2.json"), dir2.filePath("packages2")));
     QCOMPARE(catalog2.installedCount(), 0);
 }
 
 void GameLibraryTests::gamesLaunchRejectsMissingAndRedirectedTargets() {
-    QTemporaryDir dir; AppRegistry registry; QVERIFY(registry.loadFromData(apps));
-    GameLibrary library(&registry); QVERIFY(library.load(QFINDTESTDATA("../config/games/catalog.json")));
+    QTemporaryDir dir;
+    AppRegistry registry;
+    QVERIFY(registry.loadFromData(apps));
+    GameLibrary library(&registry);
+    QVERIFY(library.load(QFINDTESTDATA("../config/games/catalog.json")));
     QVERIFY(!library.launch("../missing"));
     QVERIFY(!library.launch(":shell"));
     QVERIFY(library.launch("halo") || library.launch("halo") == false);

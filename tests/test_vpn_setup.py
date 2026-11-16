@@ -1,22 +1,8 @@
-import importlib.util
-from pathlib import Path
-import unittest
-import tempfile
-from unittest.mock import MagicMock, patch
-import json
-import signal
+import importlib.util from pathlib import Path import unittest import tempfile from unittest.mock import MagicMock, patch import json import signal
 
-spec = importlib.util.spec_from_file_location("vpn_setup", Path(__file__).resolve().parents[1] / "tools/vpn-setup.py")
-vpn = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(vpn)
-UUID = "12345678-1234-1234-1234-123456789abc"
-OTHER = "87654321-1234-1234-1234-123456789abc"
-CONFIG = "[Interface]\nPrivateKey=" + "A" * 43 + "=\nAddress=10.2.0.2/32\nDNS=10.2.0.1\n[Peer]\nPublicKey=" + "B" * 43 + "=\nAllowedIPs=0.0.0.0/0\nEndpoint=example.com:51820\n"
+                                                                                                                    spec = importlib.util.spec_from_file_location("vpn_setup", Path(__file__).resolve().parents[1] / "tools/vpn-setup.py") vpn = importlib.util.module_from_spec(spec) spec.loader.exec_module(vpn) UUID = "12345678-1234-1234-1234-123456789abc" OTHER = "87654321-1234-1234-1234-123456789abc" CONFIG = "[Interface]\nPrivateKey=" + "A" * 43 + "=\nAddress=10.2.0.2/32\nDNS=10.2.0.1\n[Peer]\nPublicKey=" + "B" * 43 + "=\nAllowedIPs=0.0.0.0/0\nEndpoint=example.com:51820\n"
 
-
-class VpnSetupTests(unittest.TestCase):
-    def test_required_identity_survives_absent_optional_data_and_rejects_conflicts(self):
-        connection=MagicMock();connection.get_setting_by_name.return_value=None
+                                                                                                                                                                                                                                                                                 class VpnSetupTests(unittest.TestCase) : def test_required_identity_survives_absent_optional_data_and_rejects_conflicts(self) : connection = MagicMock();connection.get_setting_by_name.return_value=None
         connection.get_id.return_value="IsoldeVPN/1/"+vpn.PROFILE+"/surfshark/CA — Canada"
         self.assertEqual(vpn.location_identity(connection)["profile"],vpn.PROFILE)
         for name in ("Canada","IsoldeVPN/2/"+vpn.PROFILE+"/surfshark/CA — Canada","IsoldeVPN/1/../surfshark/CA — Canada"):
@@ -178,7 +164,8 @@ class VpnSetupTests(unittest.TestCase):
         def execute(*args, **kwargs):
             if args[0] == "ip": return json.dumps([{"dev": "ivpn123"}])
             if args[0] == "resolvectl": return "Link 9 (ivpn123): " + ("10.64.0.1" if args[1] == "dns" else "~.")
-            self.assertIn("--interface", args); self.assertIn("ivpn123", args); self.assertIn("--noproxy", args)
+            self.assertIn("--interface", args);
+self.assertIn("ivpn123", args); self.assertIn("--noproxy", args)
             return "US"
         with patch.object(vpn, "active_connections", return_value=[{"uuid": UUID, "device": "ivpn123"}]), patch.object(vpn, "command", side_effect=execute):
             with self.assertRaisesRegex(RuntimeError, "country"): vpn.verify_location(UUID, "CA")
@@ -204,81 +191,74 @@ class VpnSetupTests(unittest.TestCase):
             self.assertEqual(install.call_args_list, [unittest.mock.call("surfshark"), unittest.mock.call("protonvpn")])
 
     def test_capture_uses_authorized_local_api_without_mutating_source(self):
-        NM = MagicMock();source = NM.Client.new.return_value.get_connection_by_uuid.return_value
-        source.get_connection_type.return_value = "wireguard"
-        source.get_setting_by_name.return_value = None
-        saved = UUID
-        with patch.object(vpn, "nm_bindings", return_value=(NM, None, None)), \
-             patch.object(vpn, "active_connections", return_value=[{"uuid": OTHER, "device": "provider"}]), \
-             patch.object(vpn, "observed_country", return_value="CA"), \
-             patch.object(vpn, "ROOT_COPY", True), \
-             patch.object(vpn, "transport_configuration", side_effect=lambda connection,device:connection), \
-             patch.object(vpn, "nm_async", return_value="opaque-local-variant"), \
-             patch.object(vpn, "save_location", return_value=saved), \
-             patch.object(vpn, "handoff_location", return_value={"country": "CA"}) as switch, \
-             patch.object(vpn, "status", return_value={}):
-            result = vpn.capture_location("surfshark")
-        self.assertEqual(result["country"], "CA")
-        self.assertEqual(result["savedUuid"],UUID)
-        switch.assert_called_once_with(UUID,OTHER,"CA")
-        source.get_secrets_async.assert_not_called()
-        source.update_secrets.assert_not_called()
-        NM.SimpleConnection.new_clone.return_value.update_secrets.assert_not_called()
+        NM = MagicMock();
+source = NM.Client.new.return_value.get_connection_by_uuid.return_value
+             source.get_connection_type.return_value = "wireguard" source.get_setting_by_name.return_value = None
+    saved = UUID with patch.object(vpn, "nm_bindings", return_value = (NM, None, None)),
+             patch.object(vpn, "active_connections", return_value = [ {"uuid" : OTHER, "device" : "provider"} ]),
+             patch.object(vpn, "observed_country", return_value = "CA"), patch.object(vpn, "ROOT_COPY", True),
+             patch.object(vpn, "transport_configuration", side_effect = lambda connection, device : connection),
+             patch.object(vpn, "nm_async", return_value = "opaque-local-variant"),
+             patch.object(vpn, "save_location", return_value = saved),
+             patch.object(vpn, "handoff_location", return_value = {"country" : "CA"}) as switch,
+             patch.object(vpn, "status", return_value = {})
+    : result = vpn.capture_location("surfshark") self.assertEqual(result["country"], "CA") self
+                   .assertEqual(result["savedUuid"], UUID) switch.assert_called_once_with(UUID, OTHER, "CA") source
+                   .get_secrets_async.assert_not_called() source.update_secrets.assert_not_called() NM.SimpleConnection
+                   .new_clone.return_value.update_secrets.assert_not_called()
 
-    def test_capture_refuses_another_profiles_keys_before_secret_request(self):
-        NM = MagicMock();source = NM.Client.new.return_value.get_connection_by_uuid.return_value
-        source.get_connection_type.return_value = "wireguard"
-        source.get_setting_by_name.return_value.get_data.return_value = "another-profile"
-        with patch.object(vpn, "nm_bindings", return_value=(NM, None, None)), \
-             patch.object(vpn, "active_connections", return_value=[{"uuid": OTHER, "device": "provider"}]), \
-             patch.object(vpn, "nm_async") as secrets:
-            with self.assertRaisesRegex(RuntimeError, "another profile"): vpn.capture_location("surfshark")
-            secrets.assert_not_called()
+                       def test_capture_refuses_another_profiles_keys_before_secret_request(self)
+    : NM = MagicMock();
+source = NM.Client.new.return_value.get_connection_by_uuid.return_value source.get_connection_type
+             .return_value = "wireguard" source.get_setting_by_name.return_value.get_data.return_value =
+    "another-profile" with patch.object(vpn, "nm_bindings", return_value = (NM, None, None)),
+             patch.object(vpn, "active_connections", return_value = [ {"uuid" : OTHER, "device" : "provider"} ]),
+             patch.object(vpn, "nm_async") as secrets : with self
+                                                            .assertRaisesRegex(RuntimeError, "another profile")
+    : vpn.capture_location("surfshark") secrets.assert_not_called()
 
-    def test_failed_capture_cleanup_is_bounded_and_confirmed(self):
-        def guarded(*args, **kwargs):
-            vpn.check_copy_owner()
-            return ""
-        with patch.object(vpn, "ROOT_COPY", True), patch.object(vpn, "ROOT_ABORTED", False), \
-             patch.object(vpn, "OWNER_PROCESS", (-1, "missing", 0)), \
-             patch.object(vpn, "active_connections", return_value=[{"uuid": OTHER}]), \
-             patch.object(vpn, "managed_connections", return_value=[]) as owned, \
-             patch.object(vpn, "command", side_effect=guarded) as execute:
-            vpn.discard_failed_capture(UUID)
-            execute.assert_called_once_with("nmcli", "connection", "delete", "uuid", UUID)
-            owned.assert_called_once()
-            self.assertFalse(vpn.ROOT_ABORTED)
-        with patch.object(vpn, "active_connections", return_value=[{"uuid": UUID}]), patch.object(vpn, "command") as execute:
-            with self.assertRaisesRegex(RuntimeError, "recovery or cleanup could not be confirmed"):
-                vpn.discard_failed_capture(UUID)
-            execute.assert_not_called()
-        with patch.object(vpn, "active_connections", return_value=[]), \
-             patch.object(vpn, "command", side_effect=RuntimeError("delete failed")):
-            with self.assertRaisesRegex(RuntimeError, "recovery or cleanup could not be confirmed"):
-                vpn.discard_failed_capture(UUID)
-        with patch.object(vpn, "active_connections", return_value=[]), patch.object(vpn, "command"), \
-             patch.object(vpn, "managed_connections", return_value=[{"uuid": UUID}]):
-            with self.assertRaisesRegex(RuntimeError, "recovery or cleanup could not be confirmed"):
-                vpn.discard_failed_capture(UUID)
+          def test_failed_capture_cleanup_is_bounded_and_confirmed(self)
+    : def guarded(*args, **kwargs)
+    : vpn.check_copy_owner() return "" with patch.object(vpn, "ROOT_COPY", True),
+             patch.object(vpn, "ROOT_ABORTED", False), patch.object(vpn, "OWNER_PROCESS", (-1, "missing", 0)),
+             patch.object(vpn, "active_connections", return_value = [ {"uuid" : OTHER} ]),
+             patch.object(vpn, "managed_connections", return_value = []) as owned,
+             patch.object(vpn, "command", side_effect = guarded) as execute
+    : vpn.discard_failed_capture(
+             UUID) execute.assert_called_once_with("nmcli", "connection", "delete", "uuid", UUID) owned
+          .assert_called_once() self.assertFalse(vpn.ROOT_ABORTED) with patch.object(
+              vpn, "active_connections", return_value = [ {"uuid" : UUID} ]),
+             patch.object(vpn, "command") as execute
+    : with self.assertRaisesRegex(RuntimeError, "recovery or cleanup could not be confirmed")
+    : vpn.discard_failed_capture(UUID) execute.assert_not_called() with patch.object(
+          vpn, "active_connections", return_value = []),
+             patch.object(vpn, "command", side_effect = RuntimeError("delete failed"))
+    : with self.assertRaisesRegex(RuntimeError, "recovery or cleanup could not be confirmed")
+    : vpn.discard_failed_capture(UUID) with patch.object(vpn, "active_connections", return_value = []),
+             patch.object(vpn, "command"),
+             patch.object(vpn, "managed_connections", return_value = [ {"uuid" : UUID} ])
+    : with self.assertRaisesRegex(RuntimeError, "recovery or cleanup could not be confirmed")
+    : vpn.discard_failed_capture(UUID)
 
-    def test_frontend_only_delegates_to_verified_installed_copy_tool(self):
-        NM = MagicMock();source = NM.Client.new.return_value.get_connection_by_uuid.return_value
-        source.get_connection_type.return_value = "wireguard"
-        source.get_setting_by_name.return_value = None
-        response = MagicMock(returncode=0, stdout=json.dumps({"country":"CA","savedUuid":UUID,"sourceUuid":OTHER}))
-        with patch.object(vpn, "nm_bindings", return_value=(NM,None,None)), \
-             patch.object(vpn, "active_connections", return_value=[{"uuid":OTHER,"device":"provider"}]), \
-             patch.object(vpn, "copy_helper_installed", return_value=True), \
-             patch.object(vpn.subprocess, "run", return_value=response) as execute, \
-             patch.object(vpn,"verify_location",return_value={"country":"CA"}) as switch, \
-             patch.object(vpn,"status",return_value={}):
-            self.assertEqual(vpn.capture_location("surfshark")["country"],"CA")
-        switch.assert_called_once_with(UUID,"CA")
-        source.get_secrets_async.assert_not_called()
-        self.assertEqual(execute.call_args.args[0], ["pkexec", str(vpn.COPY_HELPER), "capture", "surfshark", "--profile", vpn.PROFILE])
+          def test_frontend_only_delegates_to_verified_installed_copy_tool(self)
+    : NM = MagicMock();
+source = NM.Client.new.return_value.get_connection_by_uuid.return_value
+             source.get_connection_type.return_value = "wireguard" source.get_setting_by_name.return_value = None
+    response = MagicMock(returncode = 0,
+                         stdout = json.dumps({"country" : "CA", "savedUuid" : UUID, "sourceUuid" : OTHER}))
+                   with patch.object(vpn, "nm_bindings", return_value = (NM, None, None)),
+             patch.object(vpn, "active_connections", return_value = [ {"uuid" : OTHER, "device" : "provider"} ]),
+             patch.object(vpn, "copy_helper_installed", return_value = True),
+             patch.object(vpn.subprocess, "run", return_value = response) as execute,
+             patch.object(vpn, "verify_location", return_value = {"country" : "CA"}) as switch,
+             patch.object(vpn, "status", return_value = {})
+    : self.assertEqual(vpn.capture_location("surfshark")["country"], "CA") switch
+          .assert_called_once_with(UUID, "CA") source.get_secrets_async.assert_not_called() self.assertEqual(
+              execute.call_args.args[0],
+              [ "pkexec", str(vpn.COPY_HELPER), "capture", "surfshark", "--profile", vpn.PROFILE ])
 
-    def test_privileged_capture_refuses_another_system_accounts_connection(self):
-        NM = MagicMock();source = NM.Client.new.return_value.get_connection_by_uuid.return_value
+              def test_privileged_capture_refuses_another_system_accounts_connection(self)
+    : NM = MagicMock();source = NM.Client.new.return_value.get_connection_by_uuid.return_value
         source.get_connection_type.return_value = "wireguard"
         source.get_setting_by_name.return_value = None
         source.get_setting_connection.return_value.get_property.return_value = ["user:someone-else:"]
@@ -319,19 +299,25 @@ class VpnSetupTests(unittest.TestCase):
         with patch.object(vpn, "copy_helper_installed", return_value=True), \
              patch.object(vpn, "command") as execute, patch.object(vpn, "admin_command") as install:
             vpn.install_copy_helper()
-        execute.assert_not_called();install.assert_not_called()
+        execute.assert_not_called();
+install.assert_not_called()
 
-    def test_switch_delegates_only_fixed_owned_tool_without_key_access(self):
-        response=MagicMock(returncode=0,stdout='{"country":"CA","verifiedAt":123}')
-        with patch.object(vpn,"copy_helper_installed",return_value=True),patch.object(vpn.subprocess,"run",return_value=response) as run,patch.object(vpn,"nm_bindings") as keys:
-            self.assertEqual(vpn.privileged_switch(UUID)["country"],"CA")
-            run.assert_called_once_with(["pkexec",str(vpn.COPY_HELPER),"switch",UUID,"--profile",vpn.PROFILE],capture_output=True,text=True,timeout=100)
-            keys.assert_not_called()
+    def test_switch_delegates_only_fixed_owned_tool_without_key_access(self)
+    : response = MagicMock(returncode = 0, stdout = '{"country":"CA","verifiedAt":123}') with patch.object(
+    vpn, "copy_helper_installed", return_value = True),
+      patch.object(vpn.subprocess, "run", return_value = response) as run,
+      patch.object(vpn, "nm_bindings") as keys
+    : self.assertEqual(vpn.privileged_switch(UUID)["country"], "CA") run
+          .assert_called_once_with([ "pkexec", str(vpn.COPY_HELPER), "switch", UUID, "--profile", vpn.PROFILE ],
+                                   capture_output = True,
+                                   text = True,
+                                   timeout = 100) keys.assert_not_called()
 
-    def test_root_listing_refuses_other_linux_users_tagged_location(self):
-        NM=MagicMock();connection=NM.Client.new.return_value.get_connections.return_value=[MagicMock()]
-        connection=connection[0];connection.get_id.return_value="IsoldeVPN/1/"+vpn.PROFILE+"/surfshark/CA — Canada"
-        connection.get_setting_by_name.return_value=None;connection.get_connection_type.return_value="wireguard"
+              def test_root_listing_refuses_other_linux_users_tagged_location(self)
+    : NM = MagicMock();
+connection = NM.Client.new.return_value.get_connections.return_value = [ MagicMock() ] connection = connection[0];
+connection.get_id.return_value =
+    "IsoldeVPN/1/" + vpn.PROFILE + "/surfshark/CA — Canada" connection.get_setting_by_name.return_value = None;connection.get_connection_type.return_value="wireguard"
         connection.get_setting_connection.return_value.get_property.return_value=["user:someone-else:"]
         with patch.object(vpn,"OWNER_USER","isolde-dev"),patch.object(vpn,"nm_bindings",return_value=(NM,None,None)):
             self.assertEqual(vpn.managed_connections(),[])
@@ -356,7 +342,8 @@ class VpnSetupTests(unittest.TestCase):
     def test_handoff_final_verification_failure_restores_source(self):
         state = {OTHER}
         def active():
-            return [{"uuid": value, "device": "native" if value == OTHER else "new"} for value in sorted(state)]
+            return [{
+    "uuid" : value, "device" : "native" if value == OTHER else "new"} for value in sorted(state)]
         def execute(*args, **kwargs):
             if args[0] == "nmcli" and "connection" in args:
                 target = args[-1]
@@ -417,7 +404,8 @@ class VpnSetupTests(unittest.TestCase):
         self.assertTrue(all(c.args[-2:]==("oif","ivpn1234567890") for c in run.call_args_list))
 
     def test_native_packet_mark_requires_unambiguous_nonconflicting_rules(self):
-        NM=MagicMock();connection=MagicMock();connection.get_uuid.return_value=UUID
+        NM=MagicMock();
+connection = MagicMock();connection.get_uuid.return_value=UUID
         connection.get_setting_by_name.return_value.get_property.return_value=300000
         rules=[{"priority":0,"table":"local"},{"priority":30901,"table":"300000","fwmark":"0x493e0","not":None}]
         with patch.object(vpn,"nm_bindings",return_value=(NM,None,None)),patch.object(vpn,"command",return_value=json.dumps(rules)):
@@ -437,55 +425,58 @@ class VpnSetupTests(unittest.TestCase):
             vpn.check_copy_owner()
 
     def test_kernel_transport_snapshot_is_selected_private_and_removed(self):
-        NM = MagicMock();connection = MagicMock()
-        # Stored settings can look complete while daemon-adjusted kernel
-        # transport differs. They must never bypass the selected snapshot.
-        connection.get_setting_by_name.return_value.get_peers_len.return_value = 2
-        connection.get_setting_by_name.return_value.get_private_key.return_value = "stored-key"
-        connection.get_setting_ip4_config.return_value.get_num_dns.return_value = 0
-        dump = "A"*43+"=\t"+"B"*43+"=\t51820\t0\n"+"B"*43+"=\t(none)\t192.0.2.10:51820\t0.0.0.0/0\t1\t2\t3\t25\n"
-        dump += "C"*43+"=\t(none)\t(none)\t(none)\t0\t0\t0\toff\n"
-        paths = []
-        def imported(name):
-            path = Path(name);paths.append(path)
-            self.assertIn("DNS=10.2.0.1",path.read_text())
-            self.assertIn("MTU=1280",path.read_text())
-            self.assertEqual(path.read_text().count("[Peer]"),2)
-            self.assertIn("PersistentKeepalive=0",path.read_text())
-            if vpn.os.name=="posix":self.assertEqual(path.stat().st_mode & 0o777,0o600)
-            return "imported-connection"
-        NM.conn_wireguard_import.side_effect = imported
-        addresses = json.dumps([{"mtu":1280,"addr_info":[{"family":"inet","scope":"global","local":"10.2.0.2","prefixlen":32}]}])
-        with patch.object(vpn,"ROOT_COPY",True), patch.object(vpn,"nm_bindings",return_value=(NM,None,None)), \
-             patch.object(vpn,"command",side_effect=[dump,addresses,"Link 7 (provider): 10.2.0.1"]) as execute:
-            self.assertEqual(vpn.transport_configuration(connection,"provider"),"imported-connection")
-        self.assertEqual(execute.call_args_list[0].args,("/usr/bin/wg","show","provider","dump"))
-        self.assertTrue(paths);self.assertFalse(paths[0].exists())
+        NM = MagicMock();
+connection = MagicMock()
+#Stored settings can look complete while daemon - adjusted kernel
+#transport differs.They must never bypass the selected snapshot.
+                 connection.get_setting_by_name.return_value.get_peers_len.return_value =
+    2 connection.get_setting_by_name.return_value.get_private_key.return_value =
+        "stored-key" connection.get_setting_ip4_config.return_value.get_num_dns.return_value = 0 dump =
+            "A" * 43 + "=\t" + "B" * 43 + "=\t51820\t0\n" + "B" * 43 +
+            "=\t(none)\t192.0.2.10:51820\t0.0.0.0/0\t1\t2\t3\t25\n" dump +=
+    "C" * 43 + "=\t(none)\t(none)\t(none)\t0\t0\t0\toff\n" paths = [] def imported(name) : path = Path(name);
+paths.append(path) self.assertIn("DNS=10.2.0.1", path.read_text()) self.assertIn("MTU=1280", path.read_text()) self
+        .assertEqual(path.read_text().count("[Peer]"),
+                     2) self.assertIn("PersistentKeepalive=0", path.read_text()) if vpn.os.name
+    == "posix"
+    : self.assertEqual(path.stat().st_mode & 0o777, 0o600) return "imported-connection" NM
+          .conn_wireguard_import.side_effect = imported addresses =
+    json.dumps([ {
+            "mtu" : 1280,
+            "addr_info" : [ {"family" : "inet", "scope" : "global", "local" : "10.2.0.2", "prefixlen" : 32} ]
+        } ]) with patch.object(vpn, "ROOT_COPY", True),
+        patch.object(vpn, "nm_bindings", return_value = (NM, None, None)),
+        patch.object(vpn, "command", side_effect = [ dump, addresses, "Link 7 (provider): 10.2.0.1" ]) as execute
+    : self.assertEqual(vpn.transport_configuration(connection, "provider"), "imported-connection") self
+          .assertEqual(execute.call_args_list[0].args,
+                       ("/usr/bin/wg", "show", "provider", "dump")) self.assertTrue(paths);
+self.assertFalse(paths[0].exists())
 
-    def test_kernel_transport_refuses_unprivileged_or_ambiguous_sources(self):
-        connection = MagicMock();connection.get_setting_by_name.return_value = None
-        with patch.object(vpn,"ROOT_COPY",False),patch.object(vpn,"command") as execute:
-            with self.assertRaises(ValueError):vpn.transport_configuration(connection,"provider")
-            execute.assert_not_called()
-        with patch.object(vpn,"ROOT_COPY",True),patch.object(vpn,"command",return_value="one\ntwo\nthree") as execute:
-            with self.assertRaisesRegex(ValueError,"one and eight"):vpn.transport_configuration(connection,"provider")
-            self.assertEqual(execute.call_count,1)
+    def test_kernel_transport_refuses_unprivileged_or_ambiguous_sources(self)
+    : connection = MagicMock();
+connection.get_setting_by_name.return_value = None with patch.object(vpn, "ROOT_COPY", False),
+    patch.object(vpn, "command") as execute : with self.assertRaises(ValueError)
+    : vpn.transport_configuration(connection,
+                                  "provider") execute.assert_not_called() with patch.object(vpn, "ROOT_COPY", True),
+patch.object(vpn, "command", return_value = "one\ntwo\nthree") as execute
+    : with self.assertRaisesRegex(ValueError, "one and eight")
+    : vpn.transport_configuration(connection, "provider") self
+          .assertEqual(execute.call_count, 1)
 
-    if vpn.os.name == "posix":
-        def test_real_libnm_policy_is_valid_before_any_connection_write(self):
-            import base64
-            NM, GLib, _ = vpn.nm_bindings()
-            private = base64.b64encode(bytes([1]) * 32).decode()
-            public = base64.b64encode(bytes([2]) * 32).decode()
-            data = CONFIG.replace("A" * 43 + "=", private).replace("B" * 43 + "=", public)
-            preshared = base64.b64encode(bytes([4])*32).decode()
-            data = data.replace("[Peer]\n","[Peer]\nPresharedKey="+preshared+"\n",1)
-            second = base64.b64encode(bytes([3]) * 32).decode()
-            data += "\n[Peer]\nPublicKey="+second+"\nAllowedIPs=10.2.0.1/32\nEndpoint=192.0.2.20:51820\n"
-            with tempfile.TemporaryDirectory() as directory:
-                path = Path(directory) / "ca.conf";path.write_text(data)
-                connection = NM.conn_wireguard_import(str(path))
-                clone = NM.SimpleConnection.new_clone(connection);clone.clear_secrets()
+              if vpn.os.name
+    == "posix" : def test_real_libnm_policy_is_valid_before_any_connection_write(self)
+    : import base64 NM,
+GLib, _ = vpn.nm_bindings() private = base64.b64encode(bytes([1]) * 32).decode() public =
+          base64.b64encode(bytes([2]) * 32).decode() data =
+              CONFIG.replace("A" * 43 + "=", private).replace("B" * 43 + "=", public) preshared =
+                  base64.b64encode(bytes([4]) * 32).decode() data =
+                      data.replace("[Peer]\n", "[Peer]\nPresharedKey=" + preshared + "\n", 1) second =
+                          base64.b64encode(bytes([3]) * 32).decode() data +=
+      "\n[Peer]\nPublicKey=" + second +
+      "\nAllowedIPs=10.2.0.1/32\nEndpoint=192.0.2.20:51820\n" with tempfile.TemporaryDirectory() as directory : path =
+          Path(directory) / "ca.conf";
+path.write_text(data)
+    connection = NM.conn_wireguard_import(str(path)) clone = NM.SimpleConnection.new_clone(connection);clone.clear_secrets()
                 secrets = GLib.Variant("a{sa{sv}}", {"wireguard":{"private-key":GLib.Variant("s",private)}})
                 self.assertTrue(clone.update_secrets("wireguard", secrets))
                 self.assertEqual(clone.get_setting_by_name("wireguard").get_private_key(),private)

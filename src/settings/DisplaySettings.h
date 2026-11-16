@@ -8,8 +8,8 @@ class DisplaySettings final : public QObject {
     Q_PROPERTY(int uiScale READ uiScale NOTIFY changed)
     Q_PROPERTY(bool reduceMotion READ reduceMotion NOTIFY changed)
 
-public:
-    explicit DisplaySettings(QObject *parent = nullptr);
+  public:
+    explicit DisplaySettings(QObject* parent = nullptr);
 
     [[nodiscard]] int safeArea() const;
     [[nodiscard]] int uiScale() const;
@@ -20,10 +20,10 @@ public:
     Q_INVOKABLE void toggleReduceMotion();
     Q_INVOKABLE void reset();
 
-signals:
+  signals:
     void changed();
 
-private:
+  private:
     void load();
     void save() const;
     static int clamp(int value, int minimum, int maximum);

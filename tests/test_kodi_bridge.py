@@ -1,44 +1,29 @@
-import importlib.util
-import ast
-import json
-import os
-from pathlib import Path
-import socket
-import tempfile
-import threading
-import unittest
-from unittest.mock import patch
-import xml.etree.ElementTree as ET
+import importlib.util import ast import json import os from pathlib import Path import socket import tempfile import threading import unittest from unittest.mock import patch import xml.etree.ElementTree as ET
 
-spec = importlib.util.spec_from_file_location("bridge", Path(__file__).resolve().parents[1] / "kodi/service.isolde.bridge/bridge.py")
-bridge = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(bridge)
+    spec = importlib.util.spec_from_file_location("bridge", Path(__file__).resolve().parents[1] / "kodi/service.isolde.bridge/bridge.py") bridge = importlib.util.module_from_spec(spec) spec.loader.exec_module(bridge)
 
-
-class BridgeTests(unittest.TestCase):
-    @unittest.skipUnless(os.name=="posix","Source transactions use the guest's descriptor-relative filesystem")
-    def test_source_preview_stale_failure_recovery_and_profile_boundary(self):
-        spec=importlib.util.spec_from_file_location("isolde_sources",Path(__file__).resolve().parents[1]/"kodi/service.isolde.bridge/sources.py")
-        module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
-        with tempfile.TemporaryDirectory() as temporary:
-            profile=Path(temporary)/'profile';profile.mkdir();media=Path(temporary)/'media';media.mkdir()
-            other=Path(temporary)/'other';other.mkdir()
-            control=profile/'isolde';state=[];backup=[];fail_set=False;fail_restore=False;playing=False
-            def execute(raw):
-                request=json.loads(raw)
-                if request['method']=='Player.GetActivePlayers':result=[{'playerid':1}] if playing else []
-                else:result={'addons':[{'addonid':'metadata.local','name':'Local metadata'}]}
-                return json.dumps({'result':result})
-            def builtin(command):
-                nonlocal state,backup
-                request=json.loads((control/'source-request.json').read_text());operation=request['operation']
-                self.assertEqual(command,'IsoldeSources('+request['token']+')')
-                ok=True
-                if operation=='set':
-                    self.assertEqual(request['expected'],state)
-                    backup=json.loads(json.dumps(state));(control/'source-config-backup.xml').write_text('<sources/>')
-                    (control/'source-native-backup.json').write_text('{}')
-                    source=dict(request['source']);state=[row for row in state if (row['category'],row['path'])!=(source['category'],source['path'])]
+                                                                                                                                                                                       class BridgeTests(unittest.TestCase) : @unittest.skipUnless(os.name == "posix", "Source transactions use the guest's descriptor-relative filesystem") def test_source_preview_stale_failure_recovery_and_profile_boundary(self) : spec = importlib.util.spec_from_file_location("isolde_sources", Path(__file__).resolve().parents[1] / "kodi/service.isolde.bridge/sources.py") module = importlib.util.module_from_spec(spec);
+spec.loader.exec_module(module) with tempfile.TemporaryDirectory() as temporary : profile = Path(temporary) / 'profile';
+profile.mkdir();
+media = Path(temporary) / 'media';
+media.mkdir() other = Path(temporary) / 'other';
+other.mkdir() control = profile / 'isolde';
+state = [];
+backup = [];
+fail_set = False;
+fail_restore = False;
+playing = False def execute(raw)
+    : request = json.loads(raw) if request['method'] == 'Player.GetActivePlayers' : result =
+                    [ {'playerid' : 1} ] if playing else[] else
+    : result = {'addons' : [ {'addonid' : 'metadata.local', 'name' : 'Local metadata'} ]} return json.dumps(
+          {'result' : result}) def builtin(command)
+    : nonlocal state,
+      backup request = json.loads((control / 'source-request.json').read_text());
+operation = request['operation'] self.assertEqual(command, 'IsoldeSources(' + request['token'] + ')') ok =
+    True if operation == 'set' : self.assertEqual(request['expected'], state) backup = json.loads(json.dumps(state));
+(control / 'source-config-backup.xml')
+    .write_text('<sources/>')(control / 'source-native-backup.json')
+    .write_text('{}') source = dict(request['source']);state=[row for row in state if (row['category'],row['path'])!=(source['category'],source['path'])]
                     if not source.pop('remove'):state.append(dict(source,singlePath=True))
                     ok=not fail_set
                 elif operation=='restore':
@@ -51,54 +36,49 @@ class BridgeTests(unittest.TestCase):
                 (control/'source-reply.json').write_text(json.dumps(dict(version=1,token=request['token'],ok=ok,sources=state,sourceFileExists=True)))
             store=module.Sources(profile,execute,builtin,True,[str(media)])
             draft=dict(name='Movies',path=str(media)+'/',category='video',content='movies',scraper='metadata.local',recursive=True,folderNames=False,noUpdate=False,exclude=False,remove=False)
-            preview=store.handle('Isolde.PreviewSource',{'source':draft});self.assertEqual(state,[])
-            self.assertFalse((control/'source-journal.json').exists())
-            result=store.handle('Isolde.ApplySource',dict(source=draft,revision=preview['revision']))
-            self.assertTrue(result['applied']);saved=json.loads(json.dumps(state));self.assertEqual(result['sources'][0]['name'],'Movies')
-            self.assertFalse((control/'source-journal.json').exists())
-            changed=dict(draft,name='Renamed');preview=store.handle('Isolde.PreviewSource',{'source':changed})
-            state[0]['name']='External change'
-            with self.assertRaisesRegex(ValueError,'changed after preview'):store.handle('Isolde.ApplySource',dict(source=changed,revision=preview['revision']))
-            state=saved;preview=store.handle('Isolde.PreviewSource',{'source':changed});fail_set=True
-            with self.assertRaises(ValueError):store.handle('Isolde.ApplySource',dict(source=changed,revision=preview['revision']))
-            self.assertEqual(state,saved);self.assertFalse((control/'source-journal.json').exists())
-            fail_restore=True
-            with self.assertRaises(ValueError):store.handle('Isolde.ApplySource',dict(source=changed,revision=preview['revision']))
-            self.assertTrue((control/'source-journal.json').exists())
-            fail_restore=False;fail_set=False
-            store=module.Sources(profile,execute,builtin,True,[str(media)])
-            self.assertEqual(state,saved);self.assertFalse((control/'source-journal.json').exists())
+            preview=store.handle('Isolde.PreviewSource',{'source':draft});
+self.assertEqual(state, []) self.assertFalse((control / 'source-journal.json').exists()) result =
+    store.handle('Isolde.ApplySource',
+                 dict(source = draft, revision = preview['revision'])) self.assertTrue(result['applied']);
+saved = json.loads(json.dumps(state));
+self.assertEqual(result['sources'][0]['name'], 'Movies') self.assertFalse(
+    (control / 'source-journal.json').exists()) changed = dict(draft, name = 'Renamed');
+preview = store.handle('Isolde.PreviewSource', {'source' : changed}) state[0]['name'] =
+    'External change' with self.assertRaisesRegex(ValueError, 'changed after preview')
+    : store.handle('Isolde.ApplySource', dict(source = changed, revision = preview['revision'])) state = saved;
+preview = store.handle('Isolde.PreviewSource', {'source' : changed});
+fail_set = True with self.assertRaises(ValueError)
+    : store.handle('Isolde.ApplySource', dict(source = changed, revision = preview['revision']))
+          self.assertEqual(state, saved);
+self.assertFalse((control / 'source-journal.json').exists())
+    fail_restore = True with self.assertRaises(ValueError)
+    : store.handle('Isolde.ApplySource', dict(source = changed, revision = preview['revision'])) self.assertTrue(
+          (control / 'source-journal.json').exists()) fail_restore = False;
+fail_set = False store = module.Sources(profile, execute, builtin, True, [str(media)]) self.assertEqual(state, saved);self.assertFalse((control/'source-journal.json').exists())
             for unsafe in (dict(draft,path=str(other)+'/'),dict(draft,recursive=1),dict(draft,path=str(media)+'/../other/'),dict(draft,scraper='missing')):
                 with self.assertRaises(ValueError):store.handle('Isolde.PreviewSource',{'source':unsafe})
             playing=True
             with self.assertRaisesRegex(ValueError,'Stop playback'):store.handle('Isolde.ApplySource',dict(source=changed,revision=preview['revision']))
-            self.assertEqual(state,saved);playing=False
-            music=dict(draft,category='music',content='music',scraper='',name='Music')
-            self.assertTrue(store.handle('Isolde.PreviewSource',{'source':music})['preview'])
-            with self.assertRaisesRegex(ValueError,'Add an allowed music source'):
-                store.handle('Isolde.ScanMusic',{})
-            music_preview=store.handle('Isolde.PreviewSource',{'source':music})
-            store.handle('Isolde.ApplySource',dict(source=music,revision=music_preview['revision']))
-            music_saved=json.loads(json.dumps(state))
-            self.assertEqual(store.handle('Isolde.ScanMusic',{}),'OK')
-            self.assertEqual(state,music_saved)
-            moved=Path(temporary)/'original-media'
-            media.rename(moved);media.symlink_to(other,target_is_directory=True)
-            try:
-                with self.assertRaisesRegex(ValueError,'Reconnect'):
-                    store.handle('Isolde.ScanMusic',{})
-            finally:
-                media.unlink();moved.rename(media)
-            playing=True
-            with self.assertRaisesRegex(ValueError,'Stop playback'):
-                store.handle('Isolde.ScanMusic',{})
-            playing=False
-            remove_music=dict(music,remove=True)
-            preview=store.handle('Isolde.PreviewSource',{'source':remove_music})
-            store.handle('Isolde.ApplySource',dict(source=remove_music,revision=preview['revision']))
-            remove=dict(draft,remove=True);preview=store.handle('Isolde.PreviewSource',{'source':remove})
-            store.handle('Isolde.ApplySource',dict(source=remove,revision=preview['revision']))
-            self.assertEqual(state,[]);self.assertTrue(media.is_dir());self.assertFalse((other/'isolde').exists())
+            self.assertEqual(state,saved);
+playing = False music = dict(draft, category = 'music', content = 'music', scraper ='', name = 'Music')
+                            self.assertTrue(store.handle('Isolde.PreviewSource', {'source' : music})['preview'])
+                                with self.assertRaisesRegex(ValueError, 'Add an allowed music source')
+    : store.handle('Isolde.ScanMusic', {}) music_preview =
+    store.handle('Isolde.PreviewSource', {'source' : music})
+        store.handle('Isolde.ApplySource', dict(source = music, revision = music_preview['revision'])) music_saved =
+        json.loads(json.dumps(state)) self.assertEqual(store.handle('Isolde.ScanMusic', {}), 'OK')
+            self.assertEqual(state, music_saved) moved = Path(temporary) / 'original-media' media.rename(moved);
+media.symlink_to(other, target_is_directory = True) try : with self
+    .assertRaisesRegex(ValueError, 'Reconnect') : store.handle('Isolde.ScanMusic', {}) finally : media.unlink();
+moved.rename(media) playing = True with self.assertRaisesRegex(ValueError, 'Stop playback')
+    : store.handle('Isolde.ScanMusic', {}) playing = False remove_music = dict(music, remove = True) preview =
+    store.handle('Isolde.PreviewSource', {'source' : remove_music}) store.handle(
+        'Isolde.ApplySource', dict(source = remove_music, revision = preview['revision'])) remove =
+        dict(draft, remove = True);
+preview = store.handle('Isolde.PreviewSource', {'source' : remove})
+              store.handle('Isolde.ApplySource', dict(source = remove, revision = preview['revision']))
+                  self.assertEqual(state, []);
+self.assertTrue(media.is_dir());self.assertFalse((other/'isolde').exists())
             unmanaged=module.Sources(other,execute,builtin,False,[str(media)])
             with self.assertRaises(ValueError):unmanaged.handle('Isolde.GetSources',{})
 
@@ -115,24 +95,24 @@ class BridgeTests(unittest.TestCase):
                     properties=next(value for key,value in zip(params.keys,params.values) if ast.literal_eval(key)=='properties')
                     self.assertEqual(ast.literal_eval(properties),[],name)
         helper_spec=importlib.util.spec_from_file_location('guide_fixture_identity',root/'tools/guide_lifecycle.py')
-        helper=importlib.util.module_from_spec(helper_spec);helper_spec.loader.exec_module(helper)
-        observed=[]
-        def rpc(directory,method,params):
-            def execute(raw):
-                observed.append(json.loads(raw));return json.dumps({'result':{'episodes':[{'episodeid':7,'season':1,'episode':2}]}})
-            response=bridge.dispatch(self.request(method,params),execute)
-            self.assertNotIn('error',response);return response['result']
-        media=Path('/known-fixture')
-        with patch.object(helper,'fixture_file',side_effect=lambda root,path:path):
-            self.assertEqual(helper.episode_fixture(media,7,rpc,None),media/'Isolde Television Fixture/Fixture S01E02.ogv')
-            with self.assertRaises(RuntimeError):helper.episode_fixture(media,8,rpc,None)
-        self.assertEqual(observed[0]['params'],{'properties':['season','episode'],'limits':{'start':0,'end':50}})
+        helper=importlib.util.module_from_spec(helper_spec);
+helper_spec.loader.exec_module(helper) observed = [] def rpc(directory, method, params)
+    : def execute(raw) : observed.append(json.loads(raw));
+return json.dumps({'result' : {'episodes' : [ {'episodeid' : 7, 'season' : 1, 'episode' : 2} ]}}) response =
+           bridge.dispatch(self.request(method, params), execute) self.assertNotIn('error', response);
+return response['result'] media =
+           Path('/known-fixture')
+               with patch.object(helper, 'fixture_file', side_effect = lambda root, path : path)
+    : self.assertEqual(helper.episode_fixture(media, 7, rpc, None),
+                       media / 'Isolde Television Fixture/Fixture S01E02.ogv')
+          with self.assertRaises(RuntimeError)
+    : helper.episode_fixture(media, 8, rpc, None) self.assertEqual(
+          observed[0]['params'], {'properties' : [ 'season', 'episode' ], 'limits' : {'start' : 0, 'end' : 50}})
 
-    def test_player_identity_read_is_strict_and_path_free(self):
-        calls=[]
-        def execute(raw):
-            request=json.loads(raw);calls.append(request)
-            self.assertEqual(request["method"],"Player.GetItem");self.assertEqual(request["params"]["properties"],[])
+          def test_player_identity_read_is_strict_and_path_free(self)
+    : calls =
+               [] def execute(raw) : request = json.loads(raw);
+calls.append(request) self.assertEqual(request["method"], "Player.GetItem");self.assertEqual(request["params"]["properties"],[])
             return json.dumps({"result":{"item":{"id":7,"type":"episode","label":"Local fixture"}}})
         for player in (0,1):
             reply=bridge.dispatch(self.request("Player.GetItem",{"playerid":player,"properties":[]}),execute)
@@ -180,30 +160,56 @@ class BridgeTests(unittest.TestCase):
     def test_guide_candidates_join_show_metadata_without_scanning_or_mutating(self):
         calls=[]
         def execute(raw):
-            request=json.loads(raw);calls.append(request);method=request["method"];params=request["params"]
-            if method=="VideoLibrary.GetEpisodes":
-                self.assertEqual(params["limits"],{"start":0,"end":50})
-                self.assertNotIn("tag",params["properties"])
-                result={"episodes":[{"episodeid":7,"tvshowid":9,"title":"Local cartoon","runtime":1200,"file":"/media/cartoon.mkv","showtitle":"Series","season":1,"episode":1,"firstaired":"2020-01-02",
-                    "cast":[{"name":"Fixture actor"}],"streamdetails":{"audio":[{"language":"eng"}]}},
-                    {"episodeid":8,"tvshowid":9,"title":"Remote","runtime":1200,"file":"https://example.invalid/video"}],"limits":{"start":0,"end":2,"total":2}}
-            elif method=="VideoLibrary.GetTVShowDetails":
-                self.assertEqual(params["tvshowid"],9);result={"tvshowdetails":{"studio":["Cartoon Network"],"genre":["Animation"],"tag":["Family"],"year":2019}}
-            else:self.fail("Unexpected/mutating guide method: "+method)
-            return json.dumps({"result":result})
-        result=bridge.dispatch(self.request("Isolde.GuideCandidates",{"kind":"episode","start":0,"end":50}),execute)["result"]
-        self.assertEqual(result["skipped"],1);self.assertEqual(len(result["items"]),1)
-        item=result["items"][0];self.assertEqual(item["mediaType"],"episode");self.assertEqual(item["mediaId"],7)
-        self.assertEqual(item["studio"],["Cartoon Network"]);self.assertEqual(item["genre"],["Animation"]);self.assertEqual(item["year"],2020)
-        self.assertEqual(item["tag"],["Family"]);self.assertEqual(item["actor"],["Fixture actor"]);self.assertEqual(item["language"],["eng"])
+            request=json.loads(raw);
+calls.append(request);
+method = request["method"];
+params = request["params"] if method == "VideoLibrary.GetEpisodes"
+    : self.assertEqual(params["limits"], {"start" : 0, "end" : 50}) self.assertNotIn("tag", params["properties"])
+          result = {
+    "episodes" : [
+        {
+            "episodeid" : 7,
+            "tvshowid" : 9,
+            "title" : "Local cartoon",
+            "runtime" : 1200,
+            "file" : "/media/cartoon.mkv",
+            "showtitle" : "Series",
+            "season" : 1,
+            "episode" : 1,
+            "firstaired" : "2020-01-02",
+            "cast" : [ {"name" : "Fixture actor"} ],
+            "streamdetails" : {"audio" : [ {"language" : "eng"} ]}
+        },
+        {
+            "episodeid" : 8,
+            "tvshowid" : 9,
+            "title" : "Remote",
+            "runtime" : 1200,
+            "file" : "https://example.invalid/video"
+        }
+    ],
+    "limits" : {"start" : 0, "end" : 2, "total" : 2}
+} elif method == "VideoLibrary.GetTVShowDetails" : self.assertEqual(params["tvshowid"], 9);
+result = {
+    "tvshowdetails" : {"studio" : ["Cartoon Network"], "genre" : ["Animation"], "tag" : ["Family"], "year" : 2019}
+} else : self.fail("Unexpected/mutating guide method: " + method) return json.dumps({"result" : result}) result =
+    bridge
+        .dispatch(self.request("Isolde.GuideCandidates", {"kind" : "episode", "start" : 0, "end" : 50}),
+                  execute)["result"] self.assertEqual(result["skipped"], 1);
+self.assertEqual(len(result["items"]), 1) item = result["items"][0];
+self.assertEqual(item["mediaType"], "episode");
+self.assertEqual(item["mediaId"], 7) self.assertEqual(item["studio"], ["Cartoon Network"]);
+self.assertEqual(item["genre"], ["Animation"]);
+self.assertEqual(item["year"], 2020) self.assertEqual(item["tag"], ["Family"]);
+self.assertEqual(item["actor"], ["Fixture actor"]);self.assertEqual(item["language"],["eng"])
         self.assertEqual([r["method"] for r in calls],["VideoLibrary.GetEpisodes","VideoLibrary.GetTVShowDetails"])
         for invalid in ({"kind":"shell","start":0,"end":50},{"kind":"movie","start":False,"end":50},{"kind":"movie","start":0,"end":51},{"kind":"movie","start":0,"end":50,"file":"/private"}):
             result=bridge.dispatch(self.request("Isolde.GuideCandidates",invalid),lambda _:self.fail("Invalid parameters reached Kodi"))
             self.assertIn("error",result)
 
     def test_guide_metadata_requests_obey_kodi_field_enums(self):
-        # Supported subset from Omega schema/types.json, not the bridge's field map.
-        # Episode deliberately has no tag; parent TVShow does.
+#Supported subset from Omega schema / types.json, not the bridge's field map.
+#Episode deliberately has no tag; parent TVShow does.
         common={"title","file","playcount","year","genre","rating","lastplayed"}
         allowed={"movie":common|{"runtime","studio","tag","director","cast","streamdetails","plot","country"},
                  "episode":(common-{"genre"})|{"runtime","showtitle","season","episode","tvshowid","firstaired","director","cast","streamdetails","plot"},
@@ -215,7 +221,8 @@ class BridgeTests(unittest.TestCase):
             with self.subTest(kind=kind):
                 calls=[]
                 def execute(raw):
-                    request=json.loads(raw);calls.append(request);params=request["params"]
+                    request=json.loads(raw);
+calls.append(request);params=request["params"]
                     if request["method"]==method:
                         self.assertLessEqual(set(params["properties"]),allowed[kind])
                         self.assertEqual(params["limits"],{"start":0,"end":50})
@@ -229,23 +236,29 @@ class BridgeTests(unittest.TestCase):
                     else:self.fail("Unexpected/mutating metadata query: "+request["method"])
                     return json.dumps({"result":result})
                 reply=bridge.dispatch(self.request("Isolde.GuideCandidates",{"kind":kind,"start":0,"end":50}),execute)
-                self.assertIn("result",reply);self.assertEqual(reply["result"]["skipped"],0)
-                item=reply["result"]["items"][0];self.assertEqual((item["mediaType"],item["mediaId"],item["playcount"]),(kind,7,0))
-                if kind=="episode":self.assertEqual(item["tag"],["Inherited"])
-                self.assertEqual(len(calls),2 if kind=="episode" else 1)
+                self.assertIn("result",reply);
+self.assertEqual(reply["result"]["skipped"], 0) item = reply["result"]["items"][0];
+self.assertEqual((item["mediaType"], item["mediaId"], item["playcount"]), (kind, 7, 0)) if kind == "episode"
+    : self.assertEqual(item["tag"], ["Inherited"]) self
+          .assertEqual(len(calls), 2 if kind == "episode" else 1)
 
-    @unittest.skipUnless(os.name=="posix","Kodi playlist writes run inside the Linux guest")
-    def test_create_playlist_is_kodi_owned_atomic_and_profile_bounded(self):
-        module_spec=importlib.util.spec_from_file_location("isolde_playlists",Path(__file__).resolve().parents[1]/"kodi/service.isolde.bridge/playlists.py")
-        module=importlib.util.module_from_spec(module_spec);module_spec.loader.exec_module(module)
-        with tempfile.TemporaryDirectory() as directory:
-            profile=Path(directory)/"profile";profile.mkdir()
-            store=module.Playlists(profile,True)
-            params={"name":"Family & friends","kind":"movies","view":"genre","value":"Adventure"}
-            result=store.create(params);folder=profile/"playlists/video";saved=folder/result["playlistName"]
-            self.assertTrue(saved.is_file());self.assertEqual(saved.stat().st_mode & 0o777,0o600)
-            xml=ET.fromstring(saved.read_bytes());self.assertEqual(xml.attrib["type"],"movies")
-            self.assertEqual(xml.findtext("name"),"Family & friends");self.assertEqual(xml.find("rule").attrib,{"field":"genre","operator":"is"})
+              @unittest.skipUnless(os.name == "posix", "Kodi playlist writes run inside the Linux guest") def
+      test_create_playlist_is_kodi_owned_atomic_and_profile_bounded(self)
+    : module_spec = importlib.util.spec_from_file_location(
+    "isolde_playlists", Path(__file__).resolve().parents[1] / "kodi/service.isolde.bridge/playlists.py") module =
+    importlib.util.module_from_spec(module_spec);
+module_spec.loader.exec_module(module) with tempfile.TemporaryDirectory() as directory
+    : profile = Path(directory) / "profile";
+profile.mkdir() store = module.Playlists(profile, True) params = {
+    "name" : "Family & friends",
+    "kind" : "movies",
+    "view" : "genre",
+    "value" : "Adventure"
+} result = store.create(params);
+folder = profile / "playlists/video";
+saved = folder / result["playlistName"] self.assertTrue(saved.is_file());
+self.assertEqual(saved.stat().st_mode & 0o777, 0o600) xml = ET.fromstring(saved.read_bytes());
+self.assertEqual(xml.attrib["type"], "movies") self.assertEqual(xml.findtext("name"), "Family & friends");self.assertEqual(xml.find("rule").attrib,{"field":"genre","operator":"is"})
             self.assertEqual(xml.findtext("rule/value"),"Adventure")
             before={p.name:p.read_bytes() for p in folder.iterdir()}
             real_fsync=module.os.fsync;count=0
@@ -260,21 +273,25 @@ class BridgeTests(unittest.TestCase):
             for invalid in (dict(params,name=""),dict(params,view="shell"),dict(params,value="x\x00y"),dict(params,directory="/private")):
                 with self.assertRaises(ValueError):store.create(invalid)
             with self.assertRaises(ValueError):module.Playlists(profile,False).create(params)
-            other=Path(directory)/"other";other.mkdir();linked=Path(directory)/"linked";linked.symlink_to(other,target_is_directory=True)
-            with self.assertRaises(OSError):module.Playlists(linked,True).create(params)
-            self.assertEqual(list(other.iterdir()),[])
-            reply=bridge.dispatch(self.request("Isolde.CreatePlaylist",params),lambda _:self.fail("No generic RPC for playlist write"),playlists=store)
-            self.assertTrue(reply["result"]["saved"])
-            self.assertIn("error",bridge.dispatch(self.request("Isolde.CreatePlaylist",params),lambda _:None))
-            # Exercise the existing management operations against real owned files.
-            renamed='Renamed.xsp'
-            store.rename({'name':saved.name,'newName':renamed})
-            self.assertFalse(saved.exists());self.assertEqual(ET.fromstring((folder/renamed).read_bytes()).findtext('name'),'Renamed')
-            collision=folder/'Collision.xsp';collision.write_bytes(b'existing playlist')
+            other=Path(directory)/"other";
+other.mkdir();
+linked = Path(directory) / "linked";
+linked.symlink_to(other, target_is_directory = True) with self.assertRaises(OSError)
+    : module.Playlists(linked, True).create(params) self.assertEqual(list(other.iterdir()), []) reply =
+    bridge
+        .dispatch(self.request("Isolde.CreatePlaylist", params),
+                  lambda _ : self.fail("No generic RPC for playlist write"),
+                  playlists = store) self.assertTrue(reply["result"]["saved"]) self
+        .assertIn("error", bridge.dispatch(self.request("Isolde.CreatePlaylist", params), lambda _ : None))
+#Exercise the existing management operations against real owned files.
+            renamed =
+        'Renamed.xsp' store.rename({'name' : saved.name, 'newName' : renamed}) self.assertFalse(saved.exists());
+self.assertEqual(ET.fromstring((folder / renamed).read_bytes()).findtext('name'),
+                 'Renamed') collision = folder / 'Collision.xsp';collision.write_bytes(b'existing playlist')
             before={p.name:p.read_bytes() for p in folder.iterdir()}
             with self.assertRaises(ValueError):store.rename({'name':renamed,'newName':collision.name})
             self.assertEqual({p.name:p.read_bytes() for p in folder.iterdir()},before)
-            # Actual process death after destination publication must restore on cold open.
+#Actual process death after destination publication must restore on cold open.
             child=os.fork()
             if child==0:
                 real_write=store._write
@@ -282,34 +299,38 @@ class BridgeTests(unittest.TestCase):
                     real_write(descriptor,name,data)
                     if name=='Crash.xsp':os._exit(73)
                 store._write=crash_after_write
-                store.rename({'name':renamed,'newName':'Crash.xsp'});os._exit(1)
-            _,status=os.waitpid(child,0);self.assertEqual(os.waitstatus_to_exitcode(status),73)
-            store=module.Playlists(profile,True)
-            self.assertEqual({p.name:p.read_bytes() for p in folder.iterdir()},before)
-            real_write=store._write;failed=False
-            def fail_replacement(descriptor,name,data):
-                nonlocal failed
-                real_write(descriptor,name,data)
-                if name==renamed and not failed:failed=True;raise OSError('Injected replacement failure')
-            with patch.object(store,'_write',side_effect=fail_replacement):
-                with self.assertRaises(OSError):store.sort({'name':renamed,'sort':'year','direction':'descending'})
-            self.assertEqual({p.name:p.read_bytes() for p in folder.iterdir()},before)
-            preview_params={'name':renamed,'view':'search','value':'Fixture'}
-            def execute_preview(raw):
-                request=json.loads(raw);self.assertEqual(request['method'],'VideoLibrary.GetMovies')
-                self.assertEqual(request['params']['limits'],{'start':0,'end':50})
-                self.assertEqual(request['params']['filter'],{'field':'title','operator':'contains','value':'Fixture'})
-                return json.dumps({'result':{'movies':[{'movieid':1,'title':'Fixture'}],'limits':{'start':0,'end':1,'total':1}}})
-            preview=store.preview(preview_params,execute_preview)
-            self.assertEqual({p.name:p.read_bytes() for p in folder.iterdir()},before)
-            store.edit(dict(preview_params,revision=preview['revision']))
-            edited=(folder/renamed).read_bytes();self.assertEqual(ET.fromstring(edited).findtext('rule/value'),'Fixture')
-            with self.assertRaises(ValueError):store.edit(dict(preview_params,revision=preview['revision']))
-            self.assertEqual((folder/renamed).read_bytes(),edited)
-            store.sort({'name':renamed,'sort':'title','direction':'descending'})
-            self.assertEqual(ET.fromstring((folder/renamed).read_bytes()).find('order').get('direction'),'descending')
-            member=folder/'Members.m3u8';member.write_text('#EXTM3U\n#EXTINF:1,Alpha\n/a.ogv\n#EXTINF:2,Beta\n/b.ogv\n#EXTINF:3,Gamma\n/c.ogv\n')
-            order=store.members({'name':member.name});original=member.read_bytes()
+                store.rename({'name':renamed,'newName':'Crash.xsp'});
+os._exit(1) _, status = os.waitpid(child, 0);
+self.assertEqual(os.waitstatus_to_exitcode(status), 73) store = module.Playlists(profile, True) self.assertEqual(
+    { p.name : p.read_bytes() for p in folder.iterdir() }, before) real_write = store._write;
+failed = False def fail_replacement(descriptor, name, data)
+    : nonlocal failed real_write(descriptor, name, data) if name == renamed and not failed : failed = True;
+raise OSError(
+    'Injected replacement failure') with patch.object(store, '_write', side_effect = fail_replacement)
+    : with self.assertRaises(OSError)
+    : store.sort({'name' : renamed, 'sort' : 'year', 'direction' : 'descending'}) self.assertEqual(
+          { p.name : p.read_bytes() for p in folder.iterdir() },
+          before) preview_params = {'name' : renamed, 'view' : 'search', 'value' : 'Fixture'} def execute_preview(raw)
+    : request = json.loads(raw);
+self.assertEqual(request['method'],
+                 'VideoLibrary.GetMovies') self.assertEqual(request['params']['limits'], {'start' : 0, 'end' : 50}) self
+    .assertEqual(request['params']['filter'],
+                 {'field' : 'title', 'operator' : 'contains', 'value' : 'Fixture'}) return json.dumps({
+        'result' :
+            {'movies' : [ {'movieid' : 1, 'title' : 'Fixture'} ], 'limits' : {'start' : 0, 'end' : 1, 'total' : 1}}
+    }) preview = store.preview(preview_params, execute_preview) self
+                     .assertEqual(
+                         { p.name : p.read_bytes() for p in folder.iterdir() },
+                         before) store.edit(dict(preview_params, revision = preview['revision'])) edited =
+    (folder / renamed).read_bytes();
+self.assertEqual(ET.fromstring(edited).findtext('rule/value'), 'Fixture') with self.assertRaises(ValueError)
+    : store.edit(dict(preview_params,
+                      revision = preview['revision'])) self.assertEqual((folder / renamed).read_bytes(), edited) store
+          .sort({'name' : renamed, 'sort' : 'title', 'direction' : 'descending'}) self.assertEqual(
+              ET.fromstring((folder / renamed).read_bytes()).find('order').get('direction'), 'descending') member =
+    folder / 'Members.m3u8';
+member.write_text('#EXTM3U\n#EXTINF:1,Alpha\n/a.ogv\n#EXTINF:2,Beta\n/b.ogv\n#EXTINF:3,Gamma\n/c.ogv\n') order =
+    store.members({'name' : member.name});original=member.read_bytes()
             self.assertEqual([r['title'] for r in order['members']],['Alpha','Beta','Gamma'])
             for invalid in ([0],[True,1,2],[0,0,2],[0,1,3]):
                 with self.assertRaises(ValueError):store.reorderPlaylist({'name':member.name,'order':invalid,'revision':order['revision']})
@@ -317,17 +338,18 @@ class BridgeTests(unittest.TestCase):
             store.reorderPlaylist({'name':member.name,'order':[2,0,1],'revision':order['revision']})
             self.assertEqual(member.read_text(),'#EXTM3U\n#EXTINF:3,Gamma\n/c.ogv\n#EXTINF:1,Alpha\n/a.ogv\n#EXTINF:2,Beta\n/b.ogv\n')
             with self.assertRaises(ValueError):store.reorderPlaylist({'name':member.name,'order':[0,1,2],'revision':order['revision']})
-            foreign=Path(directory)/'untouched.xsp';foreign.write_text('untouched');link=folder/'Link.xsp';link.symlink_to(foreign)
-            with self.assertRaises(OSError):store.delete({'name':link.name})
-            self.assertEqual(foreign.read_text(),'untouched');link.unlink()
-            store.delete({'name':renamed});self.assertFalse((folder/renamed).exists())
+            foreign=Path(directory)/'untouched.xsp';
+foreign.write_text('untouched');
+link = folder / 'Link.xsp';
+link.symlink_to(foreign) with self.assertRaises(OSError)
+    : store.delete({'name' : link.name})self.assertEqual(foreign.read_text(), 'untouched');
+link.unlink() store.delete({'name' : renamed});
+self.assertFalse((folder / renamed).exists())
 
-    def test_saved_playlist_catalog_and_members_are_read_only_and_bounded(self):
-        calls=[]
-        def execute(raw):
-            req=json.loads(raw);calls.append(req)
-            self.assertEqual(req["method"],"Files.GetDirectory")
-            params=req["params"];start=params["limits"]["start"]
+    def test_saved_playlist_catalog_and_members_are_read_only_and_bounded(self)
+    : calls =
+    [] def execute(raw) : req = json.loads(raw);
+calls.append(req) self.assertEqual(req["method"], "Files.GetDirectory") params = req["params"];start=params["limits"]["start"]
             self.assertLessEqual(params["limits"]["end"]-start,50)
             if params["directory"].endswith("/video/"):
                 files=[{"file":"special://profile/playlists/video/Family films.xsp","label":"Family films"},
@@ -501,7 +523,7 @@ class BridgeTests(unittest.TestCase):
             self.assertEqual(server.socket_path.stat().st_mode & 0o777, 0o600)
             with self.assertRaises(RuntimeError):
                 bridge.LocalBridge(server.directory, lambda raw: raw).start()
-            # Duplicate detection creates an empty connection; drain it first.
+#Duplicate detection creates an empty connection; drain it first.
             server.poll()
             worker = threading.Thread(target=server.poll)
             worker.start()
@@ -526,26 +548,27 @@ class BridgeTests(unittest.TestCase):
     def test_managed_poster_updates_kodi_and_rolls_back_failed_ack(self):
         import base64
         art_spec = importlib.util.spec_from_file_location("artwork", Path(__file__).resolve().parents[1] / "kodi/service.isolde.bridge/artwork.py")
-        module = importlib.util.module_from_spec(art_spec); art_spec.loader.exec_module(module)
-        png = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a2ioAAAAASUVORK5CYII=")
-        calls=[]; fail=False
-        def execute(raw):
-            request=json.loads(raw);calls.append(request)
-            if request["method"]=="VideoLibrary.GetMovieDetails":
-                return json.dumps({"result":{"moviedetails":{"art":{"poster":"old-poster","fanart":"keep-fanart"}}}})
-            self.assertEqual(request["method"],"VideoLibrary.SetMovieDetails")
-            if fail and request["params"]["art"]["poster"]!="old-poster":return json.dumps({"error":{"code":-1}})
-            return json.dumps({"result":"OK"})
-        with tempfile.TemporaryDirectory() as directory:
-            art=module.Artwork(execute,directory)
-            params={"kind":"movie","id":7,"data":base64.b64encode(png).decode()}
-            reply=bridge.dispatch(self.request("Isolde.SetPoster",params),execute,artwork=art)
-            self.assertEqual(reply["result"],{"updated":True})
-            saved=Path(calls[-1]["params"]["art"]["poster"])
-            self.assertEqual(saved.parent,Path(directory));self.assertEqual(saved.read_bytes(),png)
-            self.assertEqual(set(calls[-1]["params"]),{"movieid","art"})
-            self.assertNotIn("fanart",calls[-1]["params"]["art"])
-            art.set_poster(params);self.assertEqual(len(list(Path(directory).iterdir())),1)
+        module = importlib.util.module_from_spec(art_spec);
+art_spec.loader.exec_module(module) png = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a2ioAAAAASUVORK5CYII=") calls = [];
+fail = False def execute(raw) : request = json.loads(raw);
+calls.append(request) if request["method"] == "VideoLibrary.GetMovieDetails"
+    : return json
+          .dumps({
+              "result" : {"moviedetails" : {"art" : {"poster" : "old-poster", "fanart" : "keep-fanart"}}}
+          }) self.assertEqual(request["method"], "VideoLibrary.SetMovieDetails") if fail
+    and request["params"]["art"]["poster"] != "old-poster"
+    : return json.dumps({"error" : {"code" : -1}}) return json.dumps({"result" : "OK"}) with tempfile
+          .TemporaryDirectory() as directory : art = module.Artwork(execute, directory) params = {
+    "kind" : "movie",
+    "id" : 7,
+    "data" : base64.b64encode(png).decode()
+} reply = bridge.dispatch(self.request("Isolde.SetPoster", params),
+                          execute,
+                          artwork = art) self.assertEqual(reply["result"], {"updated" : True}) saved =
+    Path(calls[-1]["params"]["art"]["poster"]) self.assertEqual(saved.parent, Path(directory));
+self.assertEqual(saved.read_bytes(), png) self.assertEqual(set(calls[-1]["params"]), {"movieid", "art"}) self
+    .assertNotIn("fanart", calls[-1]["params"]["art"]) art.set_poster(params);self.assertEqual(len(list(Path(directory).iterdir())),1)
             fail=True
             with self.assertRaises(ValueError):art.set_poster(params)
             self.assertEqual(calls[-1]["params"]["art"],{"poster":"old-poster"})
@@ -553,18 +576,15 @@ class BridgeTests(unittest.TestCase):
                 count=len(calls)
                 with self.assertRaises(ValueError):art.set_poster(invalid)
                 self.assertEqual(len(calls),count)
-            saved.unlink();saved.symlink_to(Path(directory)/"missing")
-            with self.assertRaises(OSError):art.set_poster(params)
-            self.assertTrue(saved.is_symlink())
+            saved.unlink();
+saved.symlink_to(Path(directory) / "missing") with self.assertRaises(OSError)
+    : art.set_poster(params) self
+          .assertTrue(saved.is_symlink())
 
-    def test_stale_socket_recovered(self):
-        with tempfile.TemporaryDirectory() as directory:
-            with socket.socket(socket.AF_UNIX) as stale:
-                stale.bind(str(Path(directory) / "rpc.sock"))
-            server = bridge.LocalBridge(directory, lambda raw: raw)
-            server.start()
-            server.close()
+              def test_stale_socket_recovered(self)
+    : with tempfile.TemporaryDirectory() as directory : with socket.socket(socket.AF_UNIX) as stale
+    : stale.bind(str(Path(directory) / "rpc.sock")) server =
+    bridge.LocalBridge(directory, lambda raw : raw) server.start() server.close()
 
-
-if __name__ == "__main__":
-    unittest.main()
+        if __name__
+    == "__main__" : unittest.main()

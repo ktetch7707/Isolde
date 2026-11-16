@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/ usr / bin / env python3
 """T03 static verification: Kodi title-search hardening + Web toggle model.
 
 Checks the tree (no Qt build needed) for:
@@ -30,12 +30,12 @@ cc = read("qml/CommandCenter.qml")
 ss_h = read("src/settings/SearchSettings.h")
 ss_cpp = read("src/settings/SearchSettings.cpp")
 
-# T03.1 — debounce (250ms single-shot timer restarting on each keystroke)
+#T03.1 — debounce(250ms single - shot timer restarting on each keystroke)
 check("T03.1 debounce timer",
       bool(re.search(r"Timer\s*\{\s*id:\s*mediaSearchTimer;\s*interval:\s*250;\s*repeat:\s*false", cc)))
 check("T03.1 keystroke restarts debounce",
       "mediaSearchTimer.restart()" in cc)
-# min-length gate + cancel path
+#min - length gate + cancel path
 check("T03.1 min-length gate + invalidate on short/closed",
       "text.length < 2" in cc and "invalidateMediaSearch()" in cc)
 check("T03.1 three per-type clients",
@@ -44,7 +44,7 @@ check("T03.1 three per-type clients",
                             "episodeSearchClient.openView(\"episodes\", \"search\"")))
 check("T03.1 explicit Kodi-unavailable state",
       "unavailable" in cc and "mediaStatus" in cc)
-# T03.2 — persisted toggle, default OFF, stubbed ON path
+#T03.2 — persisted toggle, default OFF, stubbed ON path
 check("T03.2 persisted webEnabled default false",
       "m_webEnabled = false" in ss_h and 'settings->value(QStringLiteral("webEnabled"), false)' in ss_cpp)
 check("T03.2 actual header switch outside search results",

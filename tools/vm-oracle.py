@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/ usr / bin / env python3
 """Bounded Linux runner: tests, explicit guest provisioning and isolated acceptance."""
 import argparse
 import contextlib
@@ -59,59 +59,51 @@ def remove_guest_index_cache(cache, home, mounts):
     total=0
     for directory,names,files in os.walk(cache,followlinks=False):
         for name in names+files:
-            entry=Path(directory)/name;info=entry.lstat()
-            if entry.is_symlink() or info.st_uid!=os.getuid() or not (stat.S_ISDIR(info.st_mode) or stat.S_ISREG(info.st_mode)):raise RuntimeError('Unsafe guest index cache entry')
-            if stat.S_ISREG(info.st_mode):total+=info.st_size
-    shutil.rmtree(cache)
-    return total
+            entry=Path(directory)/name;
+info = entry.lstat() if entry.is_symlink() or info.st_uid != os.getuid() or
+       not(stat.S_ISDIR(info.st_mode) or stat.S_ISREG(info.st_mode))
+    : raise RuntimeError('Unsafe guest index cache entry') if stat.S_ISREG(info.st_mode)
+    : total += info.st_size shutil.rmtree(cache) return total
 
-
-def repository_dns_probe(host):
-    if not isinstance(host, str) or not re.fullmatch(r"[A-Za-z0-9.-]{1,253}", host):
-        raise ValueError("Invalid Android repository hostname")
-    try:
-        result = subprocess.run(
-            ["getent", "ahosts", host], capture_output=True, text=True, timeout=8
-        )
-    except subprocess.TimeoutExpired:
-        return {"host": host, "resolved": False, "error": "DNS lookup timed out"}
-    addresses = sorted({line.split()[0] for line in result.stdout.splitlines() if line.split()})
-    return {
-        "host": host,
-        "resolved": result.returncode == 0 and bool(addresses),
-        "addresses": addresses,
-        "error": result.stderr[:2048] if result.returncode else "",
+                   def
+                   repository_dns_probe(host)
+    : if not isinstance(host, str) or
+               not re.fullmatch(r "[A-Za-z0-9.-]{1,253}", host)
+    : raise ValueError("Invalid Android repository hostname") try : result
+    = subprocess.run([ "getent", "ahosts", host ], capture_output = True, text = True, timeout = 8)
+          except subprocess.TimeoutExpired
+        : return {"host" : host, "resolved" : False, "error" : "DNS lookup timed out"} addresses =
+        sorted({ line.split()[0] for line in result.stdout.splitlines() if line.split() }) return {
+        "host" : host,
+                 "resolved" : result.returncode == 0 and bool(addresses),
+                 "addresses" : addresses,
+                               "error" : result.stderr[:2048] if result.returncode else "",
     }
 
+def resolver_status()
+    : command = shutil.which("resolvectl") if not command
+    : return {"available" : False, "error" : "resolvectl is not installed"} try
+    : result
+    = subprocess
+          .run([ command, "status", "--no-pager" ], capture_output = True, text = True, timeout = 8)
+              except subprocess.TimeoutExpired
+        : return {"available" : True, "error" : "resolvectl status timed out"} return {
+            "available" : True,
+            "exit" : result.returncode,
+            "output" : result.stdout[:16384], "error" : result.stderr
+            [:2048],
+        }
 
-def resolver_status():
-    command = shutil.which("resolvectl")
-    if not command:
-        return {"available": False, "error": "resolvectl is not installed"}
-    try:
-        result = subprocess.run(
-            [command, "status", "--no-pager"], capture_output=True, text=True, timeout=8
-        )
-    except subprocess.TimeoutExpired:
-        return {"available": True, "error": "resolvectl status timed out"}
-    return {
-        "available": True,
-        "exit": result.returncode,
-        "output": result.stdout[:16384],
-        "error": result.stderr[:2048],
-    }
+          def guide_backend_probe(home)
+        : ""
+          "Read only the active Isolde profile's bridge, with no scan/tune/auth.
 
-
-def guide_backend_probe(home):
-    """Read only the active Isolde profile's bridge, with no scan/tune/auth.
-
-    Missing configuration is a capability finding, not a fabricated lineup.
-    Never inspect another profile to find a more convenient working backend.
-    """
-    home=Path(home)
-    result={"available":False,"playbackVerified":False,"profileIsolation":"active-only"}
-    try:
-        profiles=home/".config/Isolde/profiles.json"
+          Missing configuration is a capability finding,
+    not a fabricated lineup.Never inspect another profile to find a more convenient working backend.""
+                                                                                                    "
+        home =
+        Path(home) result = {"available" : False, "playbackVerified" : False, "profileIsolation" : "active-only"} try
+        : profiles=home/".config/Isolde/profiles.json"
         if any(path.is_symlink() for path in (profiles,*profiles.parents)):
             raise ValueError("Refusing redirected profile configuration")
         if profiles.is_symlink() or not profiles.is_file() or profiles.stat().st_size>65536:
@@ -123,8 +115,8 @@ def guide_backend_probe(home):
         for path in (profiles,*profiles.parents,directory,*directory.parents):
             if path.is_symlink():raise ValueError("Refusing redirected profile path")
         result["activeProfile"]=active
-        # Linux AF_UNIX paths are bounded; the descriptor path also prevents
-        # a final directory symlink from redirecting the connection.
+#Linux AF_UNIX paths are bounded; the descriptor path also prevents
+#a final directory symlink from redirecting the connection.
         descriptor=os.open(directory,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW|os.O_CLOEXEC)
         try:
             def query(method,params):
@@ -311,29 +303,29 @@ def secret_prompt_paths(tree):
 
 def guest_notification_owner(pid, proc=Path('/proc')):
     if not isinstance(pid,int) or isinstance(pid,bool) or pid<=0:return False
-    try:return (proc/str(pid)/'comm').read_text().strip() in {'gnome-shell','gsd-housekeepin'}
-    except OSError:return False
+    try:
+    return (proc / str(pid) / 'comm')
+               .read_text()
+               .strip() in{'gnome-shell', 'gsd-housekeepin'} except OSError : return False
 
-
-def dismiss_guest_disk_banner():
-    import gi
-    gi.require_version('Atspi','2.0')
-    from gi.repository import Atspi
-    Atspi.set_timeout(100,100)
-    pending=[(Atspi.get_desktop(0),[])];nodes=[];started=time.monotonic()
-    while pending:
-        if len(nodes)>=2048 or time.monotonic()-started>8:raise RuntimeError('Guest desktop accessibility inventory exceeded its bound')
-        node,ancestors=pending.pop()
-        if node is None:continue
-        try:
-            # Enumerate notifications, not every Isolde/Kodi/browser child.
-            # Process identity is verified independently of accessible names.
-            if len(ancestors)==1 and not guest_notification_owner(node.get_process_id()):continue
-            # Hidden shell menus/history cannot obscure an installed window.
-            # Avoid walking those potentially large, remote accessibility trees.
-            if len(ancestors)>=2 and not node.get_state_set().contains(Atspi.StateType.SHOWING):continue
-            name=(node.get_name() or '')[:256]
-            index=len(nodes);nodes.append((node,name,ancestors))
+                                                                                  def dismiss_guest_disk_banner()
+        : import gi gi.require_version('Atspi', '2.0') from gi.repository import Atspi Atspi.set_timeout(100, 100)
+              pending = [(Atspi.get_desktop(0), [])];
+nodes = [];
+started = time.monotonic() while pending : if len (nodes) >= 2048 or time.monotonic() - started > 8
+    : raise RuntimeError('Guest desktop accessibility inventory exceeded its bound') node,
+    ancestors = pending.pop() if node is None : continue try:
+#Enumerate notifications, not every Isolde / Kodi / browser child.
+#Process identity is verified independently of accessible names.
+    if len (ancestors)
+        == 1 and
+            not guest_notification_owner(node.get_process_id())
+            : continue
+#Hidden shell menus / history cannot obscure an installed window.
+#Avoid walking those potentially large, remote accessibility trees.
+              if len (ancestors) >= 2 and
+            not node.get_state_set().contains(Atspi.StateType.SHOWING)
+            : continue name = (node.get_name() or '') [:256] index = len(nodes);nodes.append((node,name,ancestors))
             if len(ancestors)<12:
                 count=node.get_child_count()
                 if count>512:raise RuntimeError('Unbounded guest desktop accessibility children')
@@ -342,7 +334,7 @@ def dismiss_guest_disk_banner():
     warnings=[set(ancestors+[i]) for i,(_,name,ancestors) in enumerate(nodes) if 'low disk space' in name.lower()]
     for node,name,ancestors in nodes:
         if name!='Ignore':continue
-        # Require a shared notification container, never the desktop/app root.
+#Require a shared notification container, never the desktop / app root.
         if not any(any(index in warning for index in ancestors[-4:] if len(nodes[index][2])>=2) for warning in warnings):continue
         for button in [node]+[nodes[index][0] for index in reversed(ancestors[-2:])]:
             if button.get_role()!=Atspi.Role.PUSH_BUTTON:continue
@@ -360,14 +352,15 @@ def dismiss_guest_disk_banner():
                 raise RuntimeError('Identified guest Ignore button did not dismiss after bounded input')
         details=[]
         for target in [node]+[nodes[index][0] for index in reversed(ancestors[-4:])]:
-            action=target.get_action_iface();component=target.get_component_iface()
-            details.append({'role':target.get_role_name(),'actions':action.get_n_actions() if action else 0,'bounds':str(component.get_extents(Atspi.CoordType.SCREEN)) if component else None})
-        raise RuntimeError('Could not dismiss the identified guest disk notification button: '+json.dumps(details))
-    return {'identifiedDiskWarning':bool(warnings),'ignored':False}
+            action=target.get_action_iface();
+component = target.get_component_iface() details.append({
+    'role' : target.get_role_name(), 'actions' : action.get_n_actions() if action else 0,
+        'bounds' : str(component.get_extents(Atspi.CoordType.SCREEN)) if component else None
+}) raise RuntimeError('Could not dismiss the identified guest disk notification button: ' +
+                      json.dumps(details)) return {'identifiedDiskWarning' : bool(warnings), 'ignored' : False}
 
-
-def visual_result_passed(case, result):
-    if case=='music-transport':
+            def visual_result_passed(case, result)
+    : if case == 'music-transport':
         return (result.get('passed') is True and result.get('diagnosticOnly') is True
                 and result.get('stopped') is True
                 and all(result.get(key) in ('playing','paused') for key in ('directed','focused'))
@@ -414,10 +407,33 @@ def visual_result_passed(case, result):
             and result.get("independentInstances")==[dict(count=5,capacity=3),dict(count=1,capacity=1)]
             and result.get("captures")==["historylibrary","historyplaying","historyupdated","historyfocused","historyreplaying","historyreturned","historyrepeatreturn"])
     if case == "collections":
-        required=("passed","freshProfile","actualNativeInput","normalExit","exactGalleryReturn","buttonReturn","storeRemoveReinstall","layoutUnchanged")
-        phases=["collectionhome","selectedgallery","collectionclient","selectedreturn","collectionrepeat","buttongallery","buttonclient","buttonreturn","buttonrepeat","storeclient","collectionuninstall","allremoved","selectedmissing","missingrefused","allrestored","reinstalledclient","reinstalledreturn"]
-        if result.get("localFilterVerified") is True:
-            phases.insert(2,"collectionfilter");phases.insert(phases.index("buttongallery"),"collectionfiltercleared")
+        required = ("passed",
+                    "freshProfile",
+                    "actualNativeInput",
+                    "normalExit",
+                    "exactGalleryReturn",
+                    "buttonReturn",
+                    "storeRemoveReinstall",
+                    "layoutUnchanged")phases =
+            [
+                "collectionhome",
+                "selectedgallery",
+                "collectionclient",
+                "selectedreturn",
+                "collectionrepeat",
+                "buttongallery",
+                "buttonclient",
+                "buttonreturn",
+                "buttonrepeat",
+                "storeclient",
+                "collectionuninstall",
+                "allremoved",
+                "selectedmissing",
+                "missingrefused",
+                "allrestored",
+                "reinstalledclient",
+                "reinstalledreturn"
+            ] if result.get("localFilterVerified") is True : phases.insert(2, "collectionfilter");phases.insert(phases.index("buttongallery"),"collectionfiltercleared")
         if 'galleryPresentationApplied' in result and (result['galleryPresentationApplied'] is not True or not isinstance(result.get('galleryPresentation'),dict) or not 1<=len(result['galleryPresentation'])<=10 or not re.fullmatch(r'[a-f0-9]{64}',str(result.get('galleryPresentationSha256')))):return False
         if result.get("appHistoryVerified") is True:
             if result.get("appHistorySessionOnly") is not True or result.get("appHistoryReopenCycles")!=2:return False
@@ -441,21 +457,67 @@ def visual_result_passed(case, result):
                 and type(result.get('localSearchMatches')) is int and result['localSearchMatches']>0
                 and result.get('captures')==['guidesoakhome','guidesoakguide','guidesoakvideo','guidesoakreturn','guidesoaksearch','guidesoakresults','guidesoakrecovery'])
     if case=="guide-features":
-        phases=['guidefeedsetup','guidefeedpreview','guidefeedmapped','guidefeedimported','guidefeednolistings','guidefeedreturn','guidefeedauth','guidefeedoff','guidestationselect','guidestationlogo','guidestationcolor','guideappearanceapplied','guideexport','guideimportdraft','guideimportpreview','guideimported','guidetemplatesaved','guidetemplatereuse','guidecartoonrules','guidecalendarblock','guidecalendarsaved','guidemixedrules','guidemixedpreview','guidemixedcreated','guidedirectdraft','guidedirectpreview','guidedirectimported','guidefeedrefreshfailed']
-        base=dict(result);base['captures']=result.get('captures',[])[:-len(phases)];base['cachedChannelCount']=3
+        phases = [
+            'guidefeedsetup',      'guidefeedpreview',   'guidefeedmapped',     'guidefeedimported',
+            'guidefeednolistings', 'guidefeedreturn',    'guidefeedauth',       'guidefeedoff',
+            'guidestationselect',  'guidestationlogo',   'guidestationcolor',   'guideappearanceapplied',
+            'guideexport',         'guideimportdraft',   'guideimportpreview',  'guideimported',
+            'guidetemplatesaved',  'guidetemplatereuse', 'guidecartoonrules',   'guidecalendarblock',
+            'guidecalendarsaved',  'guidemixedrules',    'guidemixedpreview',   'guidemixedcreated',
+            'guidedirectdraft',    'guidedirectpreview', 'guidedirectimported', 'guidefeedrefreshfailed'
+        ] base = dict(result);
+        base['captures'] = result.get('captures', []) [:-len(phases)];base['cachedChannelCount']=3
         return (visual_result_passed('guide-surfaces',base) and result.get('captures',[])[-len(phases):]==phases and type(result.get('cachedChannelCount')) is int and result['cachedChannelCount']==10
                 and all(result.get(key) is True for key in ('nativeFeedImport','sourceTimesRetained','explicitEpgMapping','actualNoEpgPlayback','authenticationFailureVisible','sourceOffPreservesCache','managedStationLogo','remoteColorWheel','portableArtwork','portableSchedule','savedRuleTemplate','remoteCalendarPolicy','cartoonNetworkOneSave','mixedNestedRules','directSourceImport','failedFeedRefreshPreservesCache')))
     if case=="guide-lifecycle":
-        phases=['guidecontinuousready','guidecontinuousvideo','guidecontinuousnext','guidesurfed','guidesurfreturn','guidedeletedready','guidedeletedfile','guidedeletedreturn','guiderepairselect','guiderepaircontext','guiderepairreview','guiderepairconfirm','guiderepaired']
-        base=dict(result);base['captures']=result.get('captures',[])[:-len(phases)]
+        phases = [
+            'guidecontinuousready',
+            'guidecontinuousvideo',
+            'guidecontinuousnext',
+            'guidesurfed',
+            'guidesurfreturn',
+            'guidedeletedready',
+            'guidedeletedfile',
+            'guidedeletedreturn',
+            'guiderepairselect',
+            'guiderepaircontext',
+            'guiderepairreview',
+            'guiderepairconfirm',
+            'guiderepaired'
+        ] base = dict(result);base['captures']=result.get('captures',[])[:-len(phases)]
         timings=result.get('cachedFirstPaintMs')
         return (visual_result_passed('guide-surfaces',base) and result.get('captures',[])[-len(phases):]==phases
                 and all(result.get(key) is True for key in ('continuousTransition','remoteSurf','actualDeletedFile','targetedRepair','unaffectedSlotsPreserved'))
                 and isinstance(timings,list) and 1<=len(timings)<=64 and all(type(value) is int and 0<=value<=1000 for value in timings))
     if case=="guide-surfaces":
-        initial=["guidestartup","guideorigin","guidehome","guideempty","guidesource","guidepvr","guidevideo","guidereturn"]
-        extra=["guidelocaldraft","guidelocalpreview","guidelocalreview","guidelocalcreated","guidelocalvideo","guidelocalosd","guidelocalreturn","guideduplicatedraft","guidelineup","guidewidgetentry","guidecompact","guideoverlay","guideexpanded","guideoverlayreturn","guidecompactreturn"]
-        base=dict(result);base["captures"]=initial
+        initial =
+            [
+                "guidestartup",
+                "guideorigin",
+                "guidehome",
+                "guideempty",
+                "guidesource",
+                "guidepvr",
+                "guidevideo",
+                "guidereturn"
+            ] extra =
+                [
+                    "guidelocaldraft",
+                    "guidelocalpreview",
+                    "guidelocalreview",
+                    "guidelocalcreated",
+                    "guidelocalvideo",
+                    "guidelocalosd",
+                    "guidelocalreturn",
+                    "guideduplicatedraft",
+                    "guidelineup",
+                    "guidewidgetentry",
+                    "guidecompact",
+                    "guideoverlay",
+                    "guideexpanded",
+                    "guideoverlayreturn",
+                    "guidecompactreturn"
+                ] base = dict(result);base["captures"]=initial
         return (visual_result_passed("guide",base) and result.get("captures")==initial+extra
                 and type(result.get("nativeChannelsCreated")) is int and result["nativeChannelsCreated"]==2
                 and type(result.get("cachedChannelCount")) is int and result["cachedChannelCount"]==3
@@ -526,9 +588,11 @@ def visual_result_passed(case, result):
                 and result.get("normal_profile_used") is False and result.get("picker_ui_verified") is True
                 and result.get("remoteSubtitleEnabled") is True and result.get("episodes")==3)
     if case == "shell":
-        return (result.get("passed") is True and result.get("reviewSequenceCaptured")==["shellnavigation","shellgallery","shellstore","shellreturn","shellambient","shellwake"]
-                and result.get("hostUiAutomationUsed") is False and result.get("layoutWrites") is False and result.get("semanticAcceptance")=="not_verified")
-    if case == "vpn":
+        return (result.get("passed") is True and
+                result.get("reviewSequenceCaptured") ==
+                    [ "shellnavigation", "shellgallery", "shellstore", "shellreturn", "shellambient", "shellwake" ] and
+                result.get("hostUiAutomationUsed") is False and result.get("layoutWrites") is False and
+                result.get("semanticAcceptance") == "not_verified") if case == "vpn":
         return (all(result.get(k) is True for k in ("passed", "defaultProvidersInstalled", "uiAuthoredRule", "countryVerified", "nativeClientOpened"))
                 and result.get("app")=="cbc-gem" and result.get("country")=="CA"
                 and result.get("browserUsedForSetup") is False and result.get("hostUiAutomationUsed") is False)
@@ -539,14 +603,12 @@ def visual_result_passed(case, result):
     if case == "repairs":
         return all(result.get(key) is True for key in ("passed", "preserving_update", "household_unchanged", "real_compositor_return"))
     if case in ("lounge", "pastel"):
-        functional = (result.get("functional_journey_passed") is True
-                      if "functional_journey_passed" in result else
-                      result.get("component_support") is True and result.get("missing") == [])
-        return (functional
-                and result.get("reset_verified") is True
-                and result.get("settings_skin_round_trip") is True
-                and result.get("saved_skin_survives_reset") is True)
-    if case == "sources":
+        functional =
+            (result.get("functional_journey_passed")
+                 is True if "functional_journey_passed" in result else result.get("component_support") is True and
+             result.get("missing") == []) return (functional and result.get("reset_verified") is True and
+                                                  result.get("settings_skin_round_trip") is True and
+                                                  result.get("saved_skin_survives_reset") is True) if case == "sources":
         phases={"sourcesdefault","sourceslist","sourcesdraft","sourceshidden","sourcesrestored","sourceshandlers","sourcesdisconnected","sourcesretry","sourcespolicy","sourcespolicysaved","sourceskeep","sourceskept","darksourcesbounded","darksourcesactions","darksourcesnotice","pastelsourcesbounded","pastelsourcesactions","pastelsourcesnotice"}
         return (result.get("journey")==case and set(result.get("phases",[]))==phases
                 and all(result.get(key) is True for key in ("passed","freshProfile","noUnintendedLayoutWrites","explicitPolicySave","remoteHandlerSaved","remoteKeepSaved","fixtureOnly","remoteHideRestore","policyCancelNoWrite"))
@@ -557,13 +619,16 @@ def visual_result_passed(case, result):
             phases |= {"custompower","custompowerconfirm","custompowercancel"}
         if "soundAcceptanceVersion" in result:
             if type(result["soundAcceptanceVersion"])!=int or result["soundAcceptanceVersion"]!=1:return False
-            phases |= {tag+phase for tag in ("dark","pastel","custom") for phase in ("sounds","soundpreview","sounddisabled")}
+            phases |= {tag+phase for tag in ("dark","pastel","custom") for phase in ("sounds","soundpreview","sounddisabled")
+        }
             observations=result.get("soundOutput",[])
             expected={(tag,kind) for tag in ("dark","pastel","custom") for kind in ("preview","disabled")}
-            if not isinstance(observations,list) or len(observations)!=6 or {(o.get("palette"),o.get("case")) for o in observations if isinstance(o,dict)}!=expected:return False
+            if not isinstance(observations,list) or len(observations)!=6 or {(o.get("palette"),o.get("case")) for o in observations if isinstance(o,dict)
+            }!=expected:return False
             for observation in observations:
                 if not isinstance(observation,dict):return False
-                size=observation.get("bytes");peak=observation.get("peak");nonzero=observation.get("nonzero")
+                size=observation.get("bytes");
+            peak = observation.get("peak");nonzero=observation.get("nonzero")
                 if type(size)!=int or not 96000<=size<=2*1024*1024 or size%2 or type(peak)!=int or type(nonzero)!=int:return False
                 if not re.fullmatch(r"[a-f0-9]{64}",str(observation.get("sha256",""))):return False
                 if observation["case"]=="preview" and not (50<peak<=32768 and 100<nonzero<=size//2):return False
@@ -717,7 +782,15 @@ def guide_backend_diagnostics(run):
             result=subprocess.run([str(sandbox),*flags,'--cap-drop','ALL','--bind','/','/','--proc','/proc','--','python3','-c',code],capture_output=True,text=True,timeout=10)
             probe[name]={'exit':result.returncode,'output':result.stdout[-1024:],'error':result.stderr[-1024:]}
     privilege=subprocess.run(['sudo','-n','-l'],capture_output=True,text=True,timeout=5)
-    return {'profile':profile,'rootExists':base.is_dir(),'backendLogs':logs,'slots':slot_proof,'namespaceIdentityProbe':probe,'guestTestPrivileges':privilege.stdout[-4096:],'sandboxMode':oct(sandbox.stat().st_mode & 0o7777) if sandbox.exists() else None}
+    return {
+    'profile' : profile,
+                'rootExists' : base.is_dir(),
+                'backendLogs' : logs,
+                                'slots' : slot_proof,
+                                          'namespaceIdentityProbe'
+        : probe,
+          'guestTestPrivileges' : privilege.stdout [-4096:],
+          'sandboxMode' : oct(sandbox.stat().st_mode & 0o7777) if sandbox.exists() else None}
 
 
 def safe_relative(name):
@@ -975,7 +1048,7 @@ def search_origin_main_delta(before,after):
 
 def focused_qml_coverage(root, run, base_id, suite):
     if suite=='media_controls':
-        # Check the exact scan and transport corrections before reusing coverage.
+#Check the exact scan and transport corrections before reusing coverage.
         before=manifest(root/'runs'/base_id/'files.sha256');after=manifest(run/'files.sha256')
         for name,old,new in (
             ('src/media/KodiMedia.cpp',
@@ -1202,7 +1275,8 @@ def campaign_pending(registered, results):
 
 def campaign_results(path):
     cases=list(ET.parse(path).getroot().iter('testcase'))
-    return [{'name':case.get('name'), 'state':'failed' if case.find('failure') is not None or case.find('error') is not None
+    return [{
+'name' : case.get('name'), 'state':'failed' if case.find('failure') is not None or case.find('error') is not None
              else 'skipped' if case.find('skipped') is not None or case.get('status') in {'notrun','disabled'} else 'passed'} for case in cases]
 
 
@@ -1243,46 +1317,65 @@ class Oracle:
             for process in Path('/proc').iterdir():
                 if not process.name.isdigit():continue
                 for name in ('exe','cwd'):
-                    try:found.append((process/name).resolve(strict=True))
-                    except (OSError,RuntimeError):pass
-                try:
-                    command=(process/'cmdline').read_bytes()[:262144]
+                    try:found
+        .append((process / name).resolve(strict = True)) except(OSError, RuntimeError) : pass try : command=(process/'cmdline').read_bytes()[:262144]
                     for identity in re.findall(re.escape(os.fsencode(releases))+rb'/([a-f0-9]{24})(?:/|\x00)',command):found.append(releases/identity.decode())
                 except OSError:pass
             return found
-        prefix=Path.home()/'.local/share/isolde-appliance';prefix.mkdir(parents=True,exist_ok=True)
-        with exclusive_lock(prefix/'.install.lock'):
-            service_before=self.service();links_before=self.links();layouts_before=self.layout_hashes()
-            before=shutil.disk_usage(self.root).free
-            plan=storage_retention_plan(self.root,self.run,mounts,getattr(self,'maintenance_pins',()),live_paths())
-            atomic_json(self.run/'storage-retention-plan.json',plan)
-            removed=apply_storage_retention(self.root,plan,mounts,live_paths()) if apply else []
-            after=shutil.disk_usage(self.root).free
-            result=dict(applied=apply,removed=removed,freeBefore=before,freeAfter=after,reclaimedBytes=after-before,retainedRuns=plan['retainedRuns'],refused=plan['refused'],normalProfilesPreserved=True,incrementalBuildCachePreserved=True)
-            result.update(serviceBefore=service_before,serviceAfter=self.service(),linksBefore=links_before,linksAfter=self.links(),normalLayoutsUnchanged=layouts_before==self.layout_hashes())
-            atomic_json(self.run/'storage-retention-result.json',result)
-            if apply:
-                if result['serviceBefore']!=result['serviceAfter'] or result['linksBefore']!=result['linksAfter'] or not result['normalLayoutsUnchanged']:raise RuntimeError('Normal service, releases or layouts changed during storage retention')
-                atomic_json(self.root/'storage-policy.json',dict(version=1,keepNewestReleases=3,keepNewestPayloads=3,protectCurrentPreviousRecoveryLiveAndReachableBases=True,activatedBy=self.state['runId']))
-            print('STORAGE_RETENTION '+json.dumps(dict(applied=apply,releases=len(plan['releases']),payloads=len(plan['payloads']),refused=len(plan['refused']),freeGiB=round(after/1024**3,2))),flush=True)
-            return result
+        prefix=Path.home()/'.local/share/isolde-appliance';
+    prefix.mkdir(parents = True, exist_ok = True) with exclusive_lock(prefix / '.install.lock')
+        : service_before = self.service();
+    links_before = self.links();
+    layouts_before = self.layout_hashes() before = shutil.disk_usage(self.root).free plan =
+        storage_retention_plan(self.root, self.run, mounts, getattr(self, 'maintenance_pins', ()), live_paths())
+            atomic_json(self.run / 'storage-retention-plan.json', plan) removed =
+                apply_storage_retention(self.root, plan, mounts, live_paths()) if apply else[] after =
+                    shutil.disk_usage(self.root).free result =
+                        dict(applied = apply,
+                             removed = removed,
+                             freeBefore = before,
+                             freeAfter = after,
+                             reclaimedBytes = after - before,
+                             retainedRuns = plan['retainedRuns'],
+                             refused = plan['refused'],
+                             normalProfilesPreserved = True,
+                             incrementalBuildCachePreserved = True)
+                                result.update(serviceBefore = service_before,
+                                              serviceAfter = self.service(),
+                                              linksBefore = links_before,
+                                              linksAfter = self.links(),
+                                              normalLayoutsUnchanged = layouts_before == self.layout_hashes())
+                                    atomic_json(self.run / 'storage-retention-result.json', result) if apply
+        : if result['serviceBefore'] != result['serviceAfter'] or
+                        result['linksBefore'] != result['linksAfter'] or
+                        not result['normalLayoutsUnchanged']
+        : raise RuntimeError('Normal service, releases or layouts changed during storage retention')
+              atomic_json(self.root / 'storage-policy.json',
+                          dict(version = 1,
+                               keepNewestReleases = 3,
+                               keepNewestPayloads = 3,
+                               protectCurrentPreviousRecoveryLiveAndReachableBases = True,
+                               activatedBy = self.state['runId']))
+                  print('STORAGE_RETENTION ' + json.dumps(dict(applied = apply,
+                                                               releases = len(plan['releases']),
+                                                               payloads = len(plan['payloads']),
+                                                               refused = len(plan['refused']),
+                                                               freeGiB = round(after / 1024 * *3, 2))),
+                        flush = True) return result
 
-    def stage(self, name, argv, timeout=120, env=None, on_line=None):
-        self.update(stage=name)
-        print("STAGE " + name, flush=True)
-        log = self.run / (name + ".log")
-        if log.exists():
-            log = self.run / (name + "-" + str(time.time_ns()) + ".log")
-        self.update(stageLog=str(log))
-        process = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                   env=env, start_new_session=True, bufsize=0)
-        start = last_heartbeat = time.monotonic()
-        pending = b""
-        tail = ""
-        selector = selectors.DefaultSelector()
-        selector.register(process.stdout, selectors.EVENT_READ)
-        try:
-            with log.open("wb") as output:
+                      def
+                      stage(self, name, argv, timeout = 120, env = None, on_line = None)
+        : self.update(stage = name) print("STAGE " + name, flush = True) log =
+                            self.run / (name + ".log") if log.exists()
+        : log = self.run / (name + "-" + str(time.time_ns()) + ".log") self.update(stageLog = str(log)) process =
+                    subprocess.Popen(argv,
+                                     stdout = subprocess.PIPE,
+                                     stderr = subprocess.STDOUT,
+                                     env = env,
+                                     start_new_session = True,
+                                     bufsize = 0) start = last_heartbeat = time.monotonic() pending = b
+        "" tail = "" selector =
+            selectors.DefaultSelector() selector.register(process.stdout, selectors.EVENT_READ) try : with log.open("wb") as output:
                 while selector.get_map():
                     now = time.monotonic()
                     if now - start > timeout:
@@ -1311,9 +1404,9 @@ class Oracle:
                         on_line(tail)
             if code:
                 lines = log.read_text(errors="replace").splitlines()[-25:]
-                # A failed graphical stage already streamed control markers.
-                # Prefix diagnostic replay so the host cannot interpret an old
-                # *_READY line as a new capture/input checkpoint.
+#A failed graphical stage already streamed control markers.
+#Prefix diagnostic replay so the host cannot interpret an old
+#* _READY line as a new capture / input checkpoint.
                 print("\n".join(("LOG " if on_line else "")+line for line in lines), flush=True)
                 raise RuntimeError(f"{name} exited {code}; see {log}")
         finally:
@@ -1330,7 +1423,9 @@ class Oracle:
 
     def links(self):
         prefix = Path.home() / ".local/share/isolde-appliance"
-        return {name: str((prefix / name).resolve()) for name in ("current", "previous")}
+        return {
+        name: str((prefix / name).resolve()) for name in ("current", "previous")
+        }
 
     def deployed_release(self, payload, target):
         deployment = self.run / "deploy-result.json"
@@ -1362,8 +1457,8 @@ class Oracle:
 
     def check(self):
         atomic_json(self.run/"guide-runtime-capabilities.json",guide_backend_probe(Path.home()))
-        # T30 capability discovery is bounded. No game startup, account
-        # enumeration, ROM scan or runtime installation occurs here.
+#T30 capability discovery is bounded.No game startup, account
+#enumeration, ROM scan or runtime installation occurs here.
         game_tools = {name: shutil.which(name) for name in
                       ("PPSSPPSDL", "PPSSPPQt", "ppsspp", "retroarch", "dolphin-emu", "pcsx2-qt", "flatpak", "wine", "wine64", "neverball", "supertux2")}
         package_probe = subprocess.run(
@@ -1414,7 +1509,8 @@ class Oracle:
         atomic_json(self.run / "guest-disk-usage.json", {"guestHome": str(Path.home()), **guest_disk_usage_diagnostic(locations)})
         privileges = subprocess.run(["sudo", "-n", "-l"], capture_output=True, text=True, timeout=10)
         atomic_json(self.run / "guest-privileges.json", {"exit": privileges.returncode, "policy": privileges.stdout[:8192], "error": privileges.stderr[:2048]})
-        atomic_json(self.run/"native-admin-tools.json", {name:shutil.which(name) for name in ("pkexec","gnome-terminal","kgx","ptyxis","systemd-run")})
+        atomic_json(self.run/"native-admin-tools.json", {
+    name:shutil.which(name) for name in ("pkexec","gnome-terminal","kgx","ptyxis","systemd-run")})
         terminal_help=subprocess.run(["ptyxis","--help"],env=environment,capture_output=True,text=True,timeout=10)
         atomic_json(self.run/"native-terminal-help.json",{"exit":terminal_help.returncode,"output":terminal_help.stdout[:16384],"error":terminal_help.stderr[:2048]})
         native_setup={}
@@ -1423,7 +1519,8 @@ class Oracle:
             native_setup[filename]={"exists":file.is_file(),"symlink":file.is_symlink()}
             if file.is_file(): native_setup[filename].update(uid=file.stat().st_uid,mode=oct(file.stat().st_mode & 0o7777),sha256=digest(file))
         if Path("/usr/lib/isolde-native/bwrap").is_file():
-            native_setup["ancestors"]=[{"path":str(p),"symlink":p.is_symlink(),"uid":p.stat().st_uid,"mode":oct(p.stat().st_mode & 0o7777)} for p in Path("/usr/lib/isolde-native/bwrap").parents]
+            native_setup["ancestors"]=[{
+        "path" : str(p), "symlink" : p.is_symlink(), "uid" : p.stat().st_uid, "mode" : oct(p.stat().st_mode & 0o7777)} for p in Path("/usr/lib/isolde-native/bwrap").parents]
             label=subprocess.run(["/usr/lib/isolde-native/bwrap","--ro-bind","/","/","--proc","/proc","--","/usr/bin/cat","/proc/self/attr/current"],capture_output=True,text=True,timeout=10)
             native_setup["loadedLabel"]={"exit":label.returncode,"output":label.stdout[:2048],"error":label.stderr[:2048]}
         atomic_json(self.run/"native-setup-state.json",native_setup)
@@ -1453,8 +1550,8 @@ class Oracle:
                 content=file.read_text(errors="replace")
                 if "unpriv_bwrap" in content: matching_profiles[file.name]=content
         atomic_json(self.run/"native-bwrap-profile.json", matching_profiles)
-        # Read-only Android runtime preflight. Never load modules, install a
-        # runtime, change graphics or inspect Android/account data here.
+#Read - only Android runtime preflight.Never load modules, install a
+#runtime, change graphics or inspect Android / account data here.
         kernel = os.uname().release
         android = {"kernel": kernel, "machine": os.uname().machine,
                    "tools": {name: shutil.which(name) for name in ("waydroid", "weston", "adb")},
@@ -1506,70 +1603,133 @@ class Oracle:
         reuse=focused_qml_coverage(self.root,self.run,reuse_full_run,suite) if reuse_full_run else None
         work = self.root / "work"
         old = json.loads((work / "manifest.json").read_text()) if (work / "manifest.json").exists() else {}
-        changed = sync_workspace(source, work / "source", entries, old)
-        atomic_json(work / "manifest.json", entries)
-        self.update(changedFiles=changed, suite=suite, sourceDigest=digest(self.run / "files.sha256"))
-        build = work / "build"
-        self.stage("configure", ["cmake", "-S", str(work / "source"), "-B", str(build), "-G", "Ninja",
-                                 "-DBUILD_TESTING=ON", "-DCMAKE_BUILD_TYPE=Debug", "-DCMAKE_CXX_FLAGS_DEBUG=-g1"], 120)
-        command = ["cmake", "--build", str(build), "--parallel", "2"]
-        targets, pattern = suite_selection(suite)
-        if reuse:targets=targets+['isolde','isolde-recovery','isolde-native-host']
-        if reuse and suite=='studio_artwork':pattern='^(studio_artwork|studio_selection|studio_quick|studio_colors|studio_color_interactions)$'
-        if targets:
-            command += ["--target"] + targets
-        self.stage("build", command, 1200)
-        env = dict(os.environ, QT_QPA_PLATFORM="offscreen", QT_QUICK_BACKEND="software",
-                   ISOLDE_TEST_ARTIFACTS=str(self.run))
-        command = ctest_command(build, self.run / "ctest.xml")
-        if suite != "all":
-            command += ["-R", pattern]
-        # The 45-suite passing baseline took 557.69s; the 53-suite Studio
-        # candidate adds measured design/reuse/cutover/safety coverage. Bound
-        # the aggregate at 15 minutes, retaining every individual deadline.
-        try:
-            self.stage("ctest", command, 900 if suite == "all" else 600 if suite == "studio" else 360, env)
-        finally:
-            last = build / "Testing/Temporary/LastTest.log"
-            if last.is_file():
-                shutil.copy2(last, self.run / "LastTest.log")
-        xml = ET.parse(self.run / "ctest.xml").getroot()
-        cases = list(xml.iter("testcase"))
-        if suite != "all":
-            expected = {"studio_quick", "studio_safety", "studio_selection", "studio_artwork", "studio_colors", "studio_color_interactions", "studio_workflows", "studio_cutover", "studio_performance", "studio_reuse", "studio_designs", "studio_design_contracts", "studio_gestures", "studio_grid", "studio_grid_controls", "studio_destinations", "studio_ordered", "studio_policies", "studio_overlays", "studio_unit", "studio_behavior"} if suite == "studio" else {suite}
-            if reuse and suite == "studio_artwork":expected={"studio_artwork","studio_selection","studio_quick","studio_colors","studio_color_interactions"}
-            if suite == "studio_closure_regressions":expected={"studio_quick","studio_colors","studio_color_interactions","home_component_navigation","studio_design_contracts","studio_performance","studio_cutover"}
-            if suite == "studio_colors":expected={"studio_colors","studio_color_interactions"}
-            if suite == "remote_bindings":expected={"remote_bindings","studio_shell"}
-            if suite == "shell_appearance":expected={"studio_selection","studio_shell","surface_appearance_contracts","home_component_navigation"}
-            if suite == "campaign_repairs":expected=REPAIR_TESTS
-            if suite == "runtime_contracts":expected=RUNTIME_TESTS
-            if suite == "studio_visuals":expected={"studio_quick","studio_artwork","studio_shell","home_component_navigation","studio_navigation"}
-            if suite == "app_icons":expected={"isolde_tests","component_contracts","studio_artwork","studio_selection","home_component_navigation","studio_navigation"}
-            if suite == "studio_remaining":expected={"studio_quick","studio_performance","studio_design_contracts","component_contracts"}
-            if suite == "studio_performance":expected={"studio_performance","studio_design_contracts","component_contracts"}
-            if suite == "studio_reuse":expected={"studio_reuse","studio_design_contracts"}
-            if suite == "studio_designs":
-                expected = {"studio_designs", "studio_design_contracts", "component_contracts", "studio_quick", "studio_colors", "studio_color_interactions", "studio_cutover"}
-            if suite == "studio_grid":
-                expected = {"studio_grid", "studio_grid_controls"}
-            if suite == "home_component_navigation":
-                expected = {"home_component_navigation", "studio_navigation"}
-            if suite == "vpn":
-                expected = {"vpn_setup", "vpn_launch"}
-            if suite == "sources":
-                expected = {"studio_quick", "isolde_tests", "component_contracts", "sources_remote_ui", "home_component_navigation"}
-            if suite == "store":
-                expected = {"isolde_tests", "studio_selection", "android_provisioning", "web_remote", "fdroid_store", "store_lifecycle"}
-            if suite == "media_controls":
-                expected = {"home_component_navigation","studio_navigation","kodi_media_client","kodi_local_bridge","kodi_cached_artwork","kodi_playback","kodi_import_contracts","native_profile_isolation"}
-            if suite == "games":
-                expected = {"component_contracts", "games_remote_ui", "isolde_tests", "games_provisioning", "steam_games"}
-            if suite == "guide":
-                expected = {"guide_contracts", "guide_remote_ui", "kodi_local_bridge", "kodi_playback", "kodi_media_client"}
-            if suite == "kodi_media_client":
-                expected = {"kodi_media_client","kodi_import_contracts","kodi_local_bridge"}
-            if {c.get("name") for c in cases} != expected:
+    changed =
+        sync_workspace(source, work / "source", entries, old) atomic_json(work / "manifest.json", entries)
+            self.update(changedFiles = changed, suite = suite, sourceDigest = digest(self.run / "files.sha256")) build =
+            work / "build" self.stage("configure",
+                                      [
+                                          "cmake",
+                                          "-S",
+                                          str(work / "source"),
+                                          "-B",
+                                          str(build),
+                                          "-G",
+                                          "Ninja",
+                                          "-DBUILD_TESTING=ON",
+                                          "-DCMAKE_BUILD_TYPE=Debug",
+                                          "-DCMAKE_CXX_FLAGS_DEBUG=-g1"
+                                      ],
+                                      120) command = [ "cmake", "--build", str(build), "--parallel", "2" ] targets,
+    pattern = suite_selection(suite) if reuse
+        : targets =
+              targets + [ 'isolde', 'isolde-recovery', 'isolde-native-host' ] if reuse and suite == 'studio_artwork'
+        : pattern =
+                  '^(studio_artwork|studio_selection|studio_quick|studio_colors|studio_color_interactions)$' if targets
+        : command += ["--target"] + targets self.stage("build", command, 1200)
+                                        env = dict(os.environ,
+                                                   QT_QPA_PLATFORM = "offscreen",
+                                                   QT_QUICK_BACKEND = "software",
+                                                   ISOLDE_TEST_ARTIFACTS = str(self.run)) command =
+                         ctest_command(build, self.run / "ctest.xml") if suite != "all" : command += [ "-R", pattern ]
+#The 45 - suite passing baseline took 557.69s; the 53 - suite Studio
+#candidate adds measured design / reuse / cutover / safety coverage.Bound
+#the aggregate at 15 minutes, retaining every individual deadline.
+          try
+        : self
+        .stage("ctest", command, 900 if suite == "all" else 600 if suite == "studio" else 360, env) finally : last =
+            build / "Testing/Temporary/LastTest.log" if last.is_file()
+            : shutil.copy2(last, self.run / "LastTest.log") xml = ET.parse(self.run / "ctest.xml").getroot() cases =
+                list(xml.iter("testcase")) if suite != "all"
+            : expected = {"studio_quick",        "studio_safety",  "studio_selection",
+                          "studio_artwork",      "studio_colors",  "studio_color_interactions",
+                          "studio_workflows",    "studio_cutover", "studio_performance",
+                          "studio_reuse",        "studio_designs", "studio_design_contracts",
+                          "studio_gestures",     "studio_grid",    "studio_grid_controls",
+                          "studio_destinations", "studio_ordered", "studio_policies",
+                          "studio_overlays",     "studio_unit",    "studio_behavior"} if suite == "studio" else {
+            suite
+        }
+    if reuse
+        and suite == "studio_artwork" : expected = {"studio_artwork",
+                                                    "studio_selection",
+                                                    "studio_quick",
+                                                    "studio_colors",
+                                                    "studio_color_interactions"} if suite ==
+                                                   "studio_closure_regressions"
+            : expected = {"studio_quick",
+                          "studio_colors",
+                          "studio_color_interactions",
+                          "home_component_navigation",
+                          "studio_design_contracts",
+                          "studio_performance",
+                          "studio_cutover"} if suite == "studio_colors"
+            : expected = {"studio_colors", "studio_color_interactions"} if suite == "remote_bindings"
+            : expected = {"remote_bindings", "studio_shell"} if suite == "shell_appearance"
+            : expected = {"studio_selection",
+                          "studio_shell",
+                          "surface_appearance_contracts",
+                          "home_component_navigation"} if suite == "campaign_repairs" : expected =
+                             REPAIR_TESTS if suite == "runtime_contracts" : expected =
+                                 RUNTIME_TESTS if suite == "studio_visuals"
+            : expected = {"studio_quick",
+                          "studio_artwork",
+                          "studio_shell",
+                          "home_component_navigation",
+                          "studio_navigation"} if suite == "app_icons" : expected = {"isolde_tests",
+                                                                                     "component_contracts",
+                                                                                     "studio_artwork",
+                                                                                     "studio_selection",
+                                                                                     "home_component_navigation",
+                                                                                     "studio_navigation"} if suite ==
+                                                                                    "studio_remaining"
+            : expected = {"studio_quick",
+                          "studio_performance",
+                          "studio_design_contracts",
+                          "component_contracts"} if suite == "studio_performance"
+            : expected = {"studio_performance", "studio_design_contracts", "component_contracts"} if suite ==
+                         "studio_reuse"
+            : expected = {"studio_reuse", "studio_design_contracts"} if suite == "studio_designs"
+            : expected = {"studio_designs",
+                          "studio_design_contracts",
+                          "component_contracts",
+                          "studio_quick",
+                          "studio_colors",
+                          "studio_color_interactions",
+                          "studio_cutover"} if suite == "studio_grid"
+            : expected = {"studio_grid", "studio_grid_controls"} if suite == "home_component_navigation"
+            : expected = {"home_component_navigation", "studio_navigation"} if suite == "vpn"
+            : expected = {"vpn_setup", "vpn_launch"} if suite == "sources"
+            : expected = {"studio_quick",
+                          "isolde_tests",
+                          "component_contracts",
+                          "sources_remote_ui",
+                          "home_component_navigation"} if suite == "store"
+            : expected = {"isolde_tests",
+                          "studio_selection",
+                          "android_provisioning",
+                          "web_remote",
+                          "fdroid_store",
+                          "store_lifecycle"} if suite == "media_controls"
+            : expected = {"home_component_navigation",
+                          "studio_navigation",
+                          "kodi_media_client",
+                          "kodi_local_bridge",
+                          "kodi_cached_artwork",
+                          "kodi_playback",
+                          "kodi_import_contracts",
+                          "native_profile_isolation"} if suite == "games" : expected = {"component_contracts",
+                                                                                        "games_remote_ui",
+                                                                                        "isolde_tests",
+                                                                                        "games_provisioning",
+                                                                                        "steam_games"} if suite ==
+                                                                                       "guide"
+            : expected = {"guide_contracts",
+                          "guide_remote_ui",
+                          "kodi_local_bridge",
+                          "kodi_playback",
+                          "kodi_media_client"} if suite == "kodi_media_client"
+            : expected = {"kodi_media_client", "kodi_import_contracts", "kodi_local_bridge"} if {c.get("name") for c in cases
+        } != expected:
                 raise RuntimeError("CTest did not execute exactly the selected suites")
         if not cases or any(c.find("failure") is not None or c.find("error") is not None for c in cases):
             raise RuntimeError("CTest report contains no tests or failures")
@@ -1610,16 +1770,18 @@ class Oracle:
         progress_path=previous/'campaign-progress.json'
         if progress_path.is_file():
             progress=json.loads(progress_path.read_text())
-            chain=progress['runs'];results=progress['results']
-            origin=self.root/'runs'/chain[0]
-        else:
-            state=json.loads((previous/'status.json').read_text())
-            if state.get('suite')!='all' or state.get('stage')!='ctest' or state.get('state')!='failed':
-                raise RuntimeError('Campaign base must be a diagnosed failed full CTest run')
-            chain=[previous_id];results=campaign_results(previous/'ctest.xml');origin=previous
+            chain=progress['runs'];
+    results = progress['results'] origin =
+        self.root / 'runs' / chain[0] else : state =
+            json.loads((previous / 'status.json').read_text()) if state.get('suite') != 'all' or
+            state.get('stage') != 'ctest' or
+            state.get('state') != 'failed'
+        : raise RuntimeError('Campaign base must be a diagnosed failed full CTest run') chain = [previous_id];
+    results = campaign_results(previous / 'ctest.xml');origin=previous
         if len(chain)>128 or previous_id!=chain[-1] or self.run.name in chain or any(not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{0,63}', item) for item in chain):
             raise RuntimeError('Invalid campaign chain')
-        original=manifest(origin/'files.sha256');work=self.root/'work';build=work/'build'
+        original=manifest(origin/'files.sha256');
+    work = self.root / 'work';build=work/'build'
         self.maintenance_pins={origin,previous}
         if shutil.disk_usage(self.root).free < 2*1024**3:
             self.automatic_test_cleanup()
@@ -1701,13 +1863,16 @@ class Oracle:
         if record.get('guest')!='isolde-test' or record.get('runId')!=self.state['runId'] or not isinstance(units,list) or len(units)>32 or any(not isinstance(unit,str) or not re.fullmatch(r'(?:tracker-[A-Za-z0-9_.@-]+|localsearch-3|tinysparql-[A-Za-z0-9_.@-]+)\.service',unit) for unit in units):raise RuntimeError('Invalid test indexer restoration lease')
         prior_stage=self.state.get('stage')
         if units:self.stage('restore-test-indexer',['systemctl','--user','start',*units],30)
-        lease.unlink();atomic_json(self.run/'test-indexer-restored.json',dict(guest='isolde-test',units=units,restored=True));self.update(stage=prior_stage)
+        lease.unlink();
+    atomic_json(self.run / 'test-indexer-restored.json', dict(guest = 'isolde-test', units = units, restored = True));
+    self.update(stage = prior_stage)
 
-    def restore_kodi_indexer(self):
-        lease=self.root/'kodi-indexer-lease.json'
-        if not lease.exists() and not lease.is_symlink():return
-        if lease.resolve()!=lease or lease.stat().st_size>16384:raise RuntimeError('Unsafe native indexer restoration lease')
-        record=json.loads(lease.read_text());units=record.get('units',[])
+        def restore_kodi_indexer(self)
+        : lease =
+        self.root / 'kodi-indexer-lease.json' if not lease.exists() and not lease.is_symlink()
+        : return if lease.resolve() != lease or
+        lease.stat().st_size > 16384 : raise RuntimeError('Unsafe native indexer restoration lease') record =
+            json.loads(lease.read_text());units=record.get('units',[])
         if record.get('guest')!='isolde-test' or not isinstance(units,list) or len(units)>32 or any(not isinstance(unit,str) or not re.fullmatch(r'(?:tracker-[A-Za-z0-9_.@-]+|localsearch-3|tinysparql-[A-Za-z0-9_.@-]+)\.service',unit) for unit in units):raise RuntimeError('Invalid native indexer restoration lease')
         if units:self.stage('restore-guest-indexer',['systemctl','--user','start',*units],30)
         atomic_json(self.run/'kodi-indexer-restored.json',dict(guest='isolde-test',units=units,restored=True));lease.unlink()
@@ -1763,16 +1928,15 @@ class Oracle:
             for process in Path('/proc').iterdir():
                 if not process.name.isdigit():continue
                 for name in ('cwd','exe'):
-                    try:active.append((process/name).resolve(strict=True))
-                    except (OSError,RuntimeError):pass
-                try:
+                    try:active
+            .append((process / name).resolve(strict = True)) except(OSError, RuntimeError) : pass try:
                     for item in (process/'environ').read_bytes().split(b'\0'):
                         if item.startswith(b'XDG_CACHE_HOME='):active.append(Path(os.fsdecode(item.split(b'=',1)[1])))
                 except OSError:pass
             removed=remove_fixture_caches(Path('/tmp'),mounts,active)
             if shutil.disk_usage(self.root).free<2*1024**3:
-                # Recent completed caches are reproducible too; active
-                # fixtures and all config/media/evidence remain protected.
+#Recent completed caches are reproducible too; active
+#fixtures and all config / media / evidence remain protected.
                 removed+=remove_fixture_caches(Path('/tmp'),mounts,active,preserve_recent=0)
             atomic_json(self.run/'guest-fixture-cache-cleanup.json',{'guest':'isolde-test','targets':removed,'fixtureDataPreserved':True,'freeGiB':round(shutil.disk_usage(self.root).free/1024**3,2)})
             if shutil.disk_usage(self.root).free<3*1024**3:
@@ -1794,8 +1958,8 @@ class Oracle:
                 removed=remove_backed_up_reports(self.root,json.loads(reports.read_text()),mounts,protected={self.run,*getattr(self,'maintenance_pins',())})
                 atomic_json(self.run/'guest-report-cleanup.json',{'guest':'isolde-test','targets':removed,'hostBackupsVerified':True,'rawEvidencePreserved':True})
         if shutil.disk_usage(self.root).free<minimum_gib*1024**3:
-            # Keeping selected linked tests is only a speed optimization. When
-            # it prevents preflight, relink them from retained compiled objects.
+#Keeping selected linked tests is only a speed optimization.When
+#it prevents preflight, relink them from retained compiled objects.
             removed=remove_linked_test_executables(self.root,mounts,active)
             record=self.run/'guest-linked-tests-cleanup.json'
             prior=json.loads(record.read_text()).get('targets',[]) if record.exists() else []
@@ -1804,8 +1968,8 @@ class Oracle:
             reports=self.run/'host-report-backups.json'
             if reports.exists():
                 if reports.resolve()!=reports or reports.stat().st_size>262144:raise RuntimeError('Unsafe report backup receipt')
-                # Only duplicate outer transports: pinned source, payload,
-                # logs and case archives remain, with exact host backups.
+#Only duplicate outer transports : pinned source, payload,
+#logs and case archives remain, with exact host backups.
                 removed=remove_backed_up_reports(self.root,json.loads(reports.read_text()),mounts,protected={self.run},target_free=minimum_gib*1024**3,preserve_recent=False)
                 record=self.run/'guest-report-cleanup.json'
                 prior=json.loads(record.read_text()).get('targets',[]) if record.exists() else []
@@ -1829,9 +1993,9 @@ class Oracle:
             removed=remove_packaged_psp_build(Path.home()/'.cache/isolde-emulators/ppsspp-1.20.4',mounts,active,prune_source=True)
             atomic_json(self.run/'guest-packaged-runtime-build-cleanup.json',{'guest':'isolde-test','targets':removed,'verifiedOfflinePackageAndReceiptPreserved':True,'upstreamCheckoutRemoved':any(Path(p).name=='source' for p in removed)})
         if shutil.disk_usage(self.root).free<minimum_gib*1024**3:
-            # Last resort: regenerate a bounded amount of declared production
-            # object cache. Retain source, selected test objects,
-            # tests, staged/installed candidates and every evidence path.
+#Last resort : regenerate a bounded amount of declared production
+#object cache.Retain source, selected test objects,
+#tests, staged / installed candidates and every evidence path.
             removed=remove_unselected_test_objects(self.root,mounts,active,getattr(self,'maintenance_build_targets',()),target_free=minimum_gib*1024**3,include_production=True)
             atomic_json(self.run/'guest-production-object-cleanup.json',{'guest':'isolde-test','targets':removed,'objectsRegeneratedByNinja':True,'sourceAndAcceptanceEvidencePreserved':True})
         if shutil.disk_usage(self.root).free<minimum_gib*1024**3:
@@ -1849,7 +2013,7 @@ class Oracle:
             if key in {'DBUS_SESSION_BUS_ADDRESS','XDG_RUNTIME_DIR','DISPLAY','XAUTHORITY'}:environment[key]=value
         def run(argv):
             return subprocess.run(argv,env=environment,capture_output=True,text=True,timeout=10,check=True).stdout.strip()
-        # Cancel outstanding unlock requests, never unlock or read credentials.
+#Cancel outstanding unlock requests, never unlock or read credentials.
         tree=run(['busctl','--user','--list','tree','org.freedesktop.secrets'])
         paths=secret_prompt_paths(tree)
         restart=False
@@ -1857,17 +2021,17 @@ class Oracle:
             try:
                 run(['gdbus','call','--session','--dest','org.freedesktop.secrets','--object-path',path,'--method','org.freedesktop.Secret.Prompt.Dismiss'])
             except subprocess.CalledProcessError as error:
-                # Secret Service can restrict Dismiss to its original caller.
-                # Restart only this disposable guest's user keyring service to
-                # cancel pending operations, without touching credential files.
+#Secret Service can restrict Dismiss to its original caller.
+#Restart only this disposable guest's user keyring service to
+#cancel pending operations, without touching credential files.
                 if error.stderr is None:raise
                 atomic_json(self.run/'guest-prompt-dismiss-error.json',{'error':error.stderr[:2048]})
                 run(['systemctl','--user','restart','gnome-keyring-daemon.service'])
                 restart=True
                 break
         before=run(['gsettings','get','org.gnome.desktop.notifications','show-banners'])
-        # Guest desktop notifications must not cover owned-window evidence.
-        # This does not change Isolde notification, permission or storage policy.
+#Guest desktop notifications must not cover owned - window evidence.
+#This does not change Isolde notification, permission or storage policy.
         run(['gsettings','set','org.gnome.desktop.notifications','show-banners','false'])
         disk_banner=dismiss_guest_disk_banner()
         if disk_banner['identifiedDiskWarning'] and not disk_banner['ignored']:
@@ -1906,9 +2070,9 @@ class Oracle:
                 for name in sorted(names):
                     path=trees[0]/name
                     if path.is_symlink() or path.resolve()!=path:raise RuntimeError('Redirected Kodi audit source: '+name)
-                    if not path.exists():audit[name]={'missing':True};continue
-                    if not path.is_file() or path.stat().st_size>1024*1024:raise RuntimeError('Unsafe Kodi audit source: '+name)
-                    lines=path.read_text().splitlines();selected=set()
+                    if not path.exists():audit[name]={'missing':True};
+    continue if not path.is_file() or path.stat().st_size > 1024 * 1024
+        : raise RuntimeError('Unsafe Kodi audit source: ' + name) lines = path.read_text().splitlines();selected=set()
                     for index,line in enumerate(lines):
                         if any(token in line for token in ('GUI_MSG_PLAYBACK_STARTED','AddMsgTarget','AddMessageTarget','m_vecMsgTargets','DispatchThreadMessages','OnPlayBackStarted','ResetCurrentItem','DeInitialize','UnloadSkin','Minimize','TMSG_MINIMIZE','DestroyWindows','ScanLibrary','StartMusicScan','AudioLibrary::Scan','UpdateLibrary','MusicInfoScanner::Start','CMusicDatabase::GetPaths','m_pathsToScan','CMusicLibraryQueue::AddJob','CMusicLibraryScanningJob::','CMusicInfoScanner::Process','::PlayPause','::Pause()','::GetSpeed','"speed"','IsPausedPlayback')):
                             selected.update(range(max(0,index-8),min(len(lines),index+24)))
@@ -1970,9 +2134,9 @@ class Oracle:
                 atomic_json(self.run/'guest-index-cache-cleanup.json',{'guest':'isolde-test','cache':str(Path.home()/'.cache/tracker3'),'reclaimedBytes':reclaimed,'normalProfilesPreserved':True,'unitsPaused':units})
             self.automatic_test_cleanup()
             self.check()
-            # The frozen release is retained separately. A dependency rebuild
-            # may discard even the newest unused legacy CMake cache, preserving
-            # its authored source and LastTest evidence. This is guest-only.
+#The frozen release is retained separately.A dependency rebuild
+#may discard even the newest unused legacy CMake cache, preserving
+#its authored source and LastTest evidence.This is guest - only.
             legacy=Path.home()/'isolde-runs';removed=[]
             if shutil.disk_usage(self.root).free<4*1024**3 and legacy.is_dir() and not legacy.is_symlink() and legacy.resolve()==legacy:
                 mounts=[Path(line.split()[4].replace('\\040',' ')) for line in Path('/proc/self/mountinfo').read_text().splitlines()]
@@ -2003,14 +2167,15 @@ class Oracle:
             self.update(service=self.service(),releases=self.links())
             return
         if target=='store-test-data':
-            payload=self.tested_payload();release=self.deployed_release(payload,target)
-            if self.command('hostname')!='isolde-test':raise RuntimeError('Guest-only fixture cleanup')
-            helper=verified_studio_helper(self.root,store_helper_digest,'store')
-            with exclusive_lock(Path('/tmp/isolde-home-components-acceptance.lock')):
-                self.stage('store-test-data',store_helper_command(self.run/'source',helper,Path(release)/'bin/isolde',['--discard-completed-data']),300)
-            return
-        if target=="kodi-demo-art":
-            payload=self.tested_payload();self.deployed_release(payload,target)
+            payload=self.tested_payload();
+    release = self.deployed_release(payload, target) if self.command('hostname') != 'isolde-test'
+        : raise RuntimeError('Guest-only fixture cleanup')
+              helper = verified_studio_helper(self.root, store_helper_digest, 'store')
+                           with exclusive_lock(Path('/tmp/isolde-home-components-acceptance.lock'))
+        : self.stage('store-test-data',
+                     store_helper_command(
+                         self.run / 'source', helper, Path(release) / 'bin/isolde', ['--discard-completed-data']),
+                     300) return if target == "kodi-demo-art" : payload = self.tested_payload();self.deployed_release(payload,target)
             if self.command('hostname')!='isolde-test' or not isinstance(demo_art_helper_digest,str) or not re.fullmatch(r'[a-f0-9]{64}',demo_art_helper_digest):raise RuntimeError('Demo artwork setup requires the tested Isolde VM and a verified helper')
             helper=self.root/'bin'/('kodi-demo-art-'+demo_art_helper_digest+'.py')
             if helper.resolve()!=helper or digest(helper)!=demo_art_helper_digest:raise RuntimeError('Demo artwork helper identity mismatch')
@@ -2064,20 +2229,31 @@ class Oracle:
             raise RuntimeError("Native configuration is restricted to Isolde-Test")
         if target=='android-store-support':
             self.stage('android-compositor-install',['sudo','-n','/usr/bin/apt-get','install','-y','--no-install-recommends','weston'],180)
-            release=self.deployed_release(payload,target);support=Path(release)/'share/isolde'
-            package_root=self.run/'android-support-package';package_root.mkdir(mode=0o700)
-            bootstrap="import importlib.util,sys;from pathlib import Path;s=importlib.util.spec_from_file_location('setup',Path(sys.argv[1])/'android-setup.py');m=importlib.util.module_from_spec(s);s.loader.exec_module(m);m.build_support(Path(sys.argv[1]),Path(sys.argv[2]))"
-            self.stage('android-support-package',['python3','-B','-c',bootstrap,str(support),str(package_root)],90)
-            self.stage('android-support-install',['sudo','-n','/usr/bin/dpkg','-i',str(package_root/'isolde-android-support.deb')],180)
-            check="import importlib.util,json,sys;from pathlib import Path;s=importlib.util.spec_from_file_location('setup',Path(sys.argv[1])/'android-setup.py');m=importlib.util.module_from_spec(s);s.loader.exec_module(m);m.trusted_support();print(Path('/var/lib/isolde/android-store-capabilities.json').read_text())"
-            self.stage('android-support-verify',['python3','-B','-c',check,str(support)],30)
-            atomic_json(self.run/'android-support-result.json',{'guest':'isolde-test','passed':True,'support':'/usr/lib/isolde-android-setup','imagesReadOnly':True,'runtimeAndProfilesPreserved':True})
-            return
-        if target=='audio-test-recover':
-            if self.command('hostname')!='isolde-test':raise RuntimeError('Audio test recovery is restricted to Isolde-Test')
-            before=self.service()
-            try:
-                self.stage('audio-recover-stop-shell',['systemctl','--user','stop','isolde.service'],30)
+            release=self.deployed_release(payload,target);
+    support = Path(release) / 'share/isolde' package_root = self.run / 'android-support-package';
+    package_root.mkdir(mode = 0o700) bootstrap =
+        "import importlib.util,sys;from pathlib import "
+        "Path;s=importlib.util.spec_from_file_location('setup',Path(sys.argv[1])/"
+        "'android-setup.py');m=importlib.util.module_from_spec(s);s.loader.exec_module(m);m.build_support(Path(sys."
+        "argv[1]),Path(sys.argv[2]))" self
+            .stage('android-support-package', [ 'python3', '-B', '-c', bootstrap, str(support), str(package_root) ], 90)
+                self.stage('android-support-install',
+                           [ 'sudo', '-n', '/usr/bin/dpkg', '-i', str(package_root / 'isolde-android-support.deb') ],
+                           180) check =
+            "import importlib.util,json,sys;from pathlib import "
+            "Path;s=importlib.util.spec_from_file_location('setup',Path(sys.argv[1])/"
+            "'android-setup.py');m=importlib.util.module_from_spec(s);s.loader.exec_module(m);m.trusted_support();"
+            "print(Path('/var/lib/isolde/android-store-capabilities.json').read_text())" self.stage(
+                'android-support-verify', [ 'python3', '-B', '-c', check, str(support) ], 30)
+                atomic_json(self.run / 'android-support-result.json', {
+                    'guest' : 'isolde-test',
+                    'passed' : True,
+                    'support' : '/usr/lib/isolde-android-setup',
+                    'imagesReadOnly' : True,
+                    'runtimeAndProfilesPreserved' : True
+                }) return if target == 'audio-test-recover' : if self.command('hostname') !=
+            'isolde-test' : raise RuntimeError('Audio test recovery is restricted to Isolde-Test') before =
+                self.service() try : self.stage('audio-recover-stop-shell',['systemctl','--user','stop','isolde.service'],30)
                 self.stage('audio-recover-guest-services',['systemctl','--user','restart','pipewire.service','pipewire-pulse.service','wireplumber.service'],45)
                 states=self.command('systemctl','--user','show','pipewire.service','pipewire-pulse.service','wireplumber.service','--property=Id,ActiveState,SubState')
                 if states.count('ActiveState=active')!=3:raise RuntimeError('Guest audio services did not recover')
@@ -2092,8 +2268,8 @@ class Oracle:
             atomic_json(self.run/'browser-test-tools.json',{'guest':'isolde-test','package':'xvfb','tool':shutil.which('Xvfb'),'hostChanged':False})
             return
         if target=="audio-test-tools":
-            # Test-only guest package, through its pre-existing delegated apt
-            # permission. No repository, host or application dependency change.
+#Test - only guest package, through its pre - existing delegated apt
+#permission.No repository, host or application dependency change.
             self.stage("audio-test-tools-install",["sudo","-n","/usr/bin/apt-get","install","-y","--no-install-recommends","pulseaudio-utils"],180)
             for tool in ("pactl","parec"):
                 if not shutil.which(tool):raise RuntimeError("Missing installed audio test utility: "+tool)
@@ -2102,8 +2278,8 @@ class Oracle:
         if target=="android":self.prepare_guest_space(8)
         script=self.run/"source/tools/provision-default-apps.py"
         command=["/usr/bin/python3",str(script),"isolation","--source",str(self.run/"source")]
-        # Older tested installers inherited the administrator's group-writable
-        # umask. Tighten only the exact approved directory after installation.
+#Older tested installers inherited the administrator's group-writable
+#umask.Tighten only the exact approved directory after installation.
         command=["/usr/bin/python3","-c","import os,runpy,sys; sys.argv="+repr(command[1:])+"; runpy.run_path(sys.argv[0],run_name='__main__'); os.chmod('/usr/lib/isolde-native',0o755)"]
         if target=="surfshark":command=["/usr/bin/python3",str(script),"surfshark","--source",str(self.run/"source")]
         if target=="android":command=["/usr/bin/python3",str(self.run/"source/tools/provision-android.py"),"--source",str(self.run/"source"),"--software-rendering"]
@@ -2112,8 +2288,8 @@ class Oracle:
         title="Isolde Android setup" if target.startswith("android") else "Isolde Surfshark setup" if target=="surfshark" else "Isolde native setup"
         launcher.write_text("import subprocess\nprint("+repr(title+" — enter the VM administrator password only here.")+", flush=True)\nr = subprocess.run("+repr(["pkexec"]+command)+")\nprint('Setup finished with exit code', r.returncode, flush=True)\n"+("if r.returncode: input('Press Enter to close this window. ')\n" if target in {"surfshark","android"} else "input('Press Enter to close this window. ')\n")+"raise SystemExit(r.returncode)\n")
         if target.startswith("android"):
-            # Capture installer output, never the administrator authentication
-            # dialog. Errors close automatically and produce a structured exit.
+#Capture installer output, never the administrator authentication
+#dialog.Errors close automatically and produce a structured exit.
             (self.run/"android-admin-exit.json").unlink(missing_ok=True)
             launcher.write_text(android_admin_launcher(command,self.run,title))
         environment=dict(os.environ)
@@ -2149,8 +2325,8 @@ class Oracle:
             (self.root/"service-lease.json").unlink(missing_ok=True)
             if self.links()!=links or self.layout_hashes()!=layouts: raise RuntimeError("Native configuration changed a release or saved layout")
         if target=="surfshark":
-            # The VPN control app runs in the guest desktop, not a private media
-            # app sandbox. Its system daemon must manage this guest's network.
+#The VPN control app runs in the guest desktop, not a private media
+#app sandbox.Its system daemon must manage this guest's network.
             self.stage("surfshark-open",["/usr/bin/python3","-c","import subprocess; subprocess.Popen(['gtk-launch','surfshark'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,start_new_session=True)"],15,env=environment)
 
     def diagnose(self, app_id="freetube"):
@@ -2173,75 +2349,182 @@ class Oracle:
         before, links, layouts = self.service(), self.links(), self.layout_hashes()
         atomic_json(self.root/"service-lease.json", {"service": before, "releases": links, "runId": self.state["runId"], "pid": os.getpid()})
         try:
-            self.stage("native-diagnostic-stop", ["systemctl", "--user", "stop", "isolde.service"], 30)
-            # Existing production-bridge helper, same explicitly authorized
-            # Studio Demo profile. No shell, shared home, login or policy change.
-            seconds=30 if app_id=="steam" else 5
-            self.stage("native-"+app_id+"-diagnostic", [str(executable), app_id, profile_id, str(seconds)], seconds+15, env=environment)
-        finally:
-            self.update(service=self.restore(before), normalLayoutsBefore=layouts, normalLayoutsAfter=self.layout_hashes(), diagnosticOnly=True)
-            (self.root/"service-lease.json").unlink(missing_ok=True)
-            if self.links()!=links or self.layout_hashes()!=layouts:
-                raise RuntimeError("Native diagnostic changed a release or saved layout")
+            self
+            .stage("native-diagnostic-stop", [ "systemctl", "--user", "stop", "isolde.service" ], 30)
+#Existing production - bridge helper, same explicitly authorized
+#Studio Demo profile.No shell, shared home, login or policy change.
+                seconds =
+                30 if app_id ==
+                    "steam" else 5 self
+                        .stage("native-" + app_id + "-diagnostic",
+                               [ str(executable), app_id, profile_id, str(seconds) ],
+                               seconds + 15,
+                               env = environment) finally
+                : self.update(service = self.restore(before),
+                              normalLayoutsBefore = layouts,
+                              normalLayoutsAfter = self.layout_hashes(),
+                              diagnosticOnly = True)(self.root / "service-lease.json")
+                        .unlink(missing_ok = True) if self.links() != links or
+                self.layout_hashes() != layouts
+                : raise RuntimeError("Native diagnostic changed a release or saved layout")
 
-    def visual(self, case, installed=False, reopen_helper_digest=None, feature_helper_digest=None, studio_helper_digest=None, history_helper_digest=None, reference_helper_digest=None, reference_collections_digest=None, diagnostic=False, store_helper_digest=None):
-        self.prepare_visual_desktop()
-        if diagnostic and installed:raise RuntimeError('Diagnostic payloads cannot be deployed or tested as installed')
-        if store_helper_digest and case not in ('store','store-web','store-offline','store-updates','store-discovery'):raise RuntimeError('Store helper is Store-only')
-        if reference_collections_digest and (not reference_helper_digest or case not in ('lounge','pastel')):raise RuntimeError('Reference collections helper is Lounge/Pastel-only')
-        if reference_helper_digest and case not in ('lounge','pastel'):raise RuntimeError('Reference helper is Lounge/Pastel-only')
-        if history_helper_digest and case not in ('local-search','history','pages','playlists','movieart','music-transport','kodi-import','playlist-playback','playlist-shelf','games','emulators'):raise RuntimeError('Unsupported library helper case')
-        if feature_helper_digest and case!='guide-features':raise RuntimeError('Feature helper is guide-features-only')
-        if studio_helper_digest and case not in ('studio','studio-designs','studio-search','themes','themecustom','themefaults','themecontrols','sources','desktop','collections','catalog'):raise RuntimeError('Studio helper requires a Studio/desktop case')
-        if case in ("repairs", "apps", "clients", "vpn", "shell", "androidapps") and not installed:
+                      def visual(self,
+                                 case,
+                                 installed = False,
+                                 reopen_helper_digest = None,
+                                 feature_helper_digest = None,
+                                 studio_helper_digest = None,
+                                 history_helper_digest = None,
+                                 reference_helper_digest = None,
+                                 reference_collections_digest = None,
+                                 diagnostic = False,
+                                 store_helper_digest = None)
+                : self.prepare_visual_desktop() if diagnostic and
+                    installed
+                : raise RuntimeError(
+                      'Diagnostic payloads cannot be deployed or tested as installed') if store_helper_digest and
+                  case not in('store', 'store-web', 'store-offline', 'store-updates', 'store-discovery'):
+            raise RuntimeError('Store helper is Store-only') if reference_collections_digest and
+                (not reference_helper_digest or case not in('lounge', 'pastel'))
+                : raise RuntimeError(
+                      'Reference collections helper is Lounge/Pastel-only') if reference_helper_digest and
+                  case not in('lounge', 'pastel'):
+            raise RuntimeError('Reference helper is Lounge/Pastel-only') if history_helper_digest and case not in(
+                'local-search',
+                'history',
+                'pages',
+                'playlists',
+                'movieart',
+                'music-transport',
+                'kodi-import',
+                'playlist-playback',
+                'playlist-shelf',
+                'games',
+                'emulators'):
+            raise RuntimeError('Unsupported library helper case') if feature_helper_digest and case != 'guide-features':
+            raise RuntimeError('Feature helper is guide-features-only') if studio_helper_digest and case not in(
+                'studio',
+                'studio-designs',
+                'studio-search',
+                'themes',
+                'themecustom',
+                'themefaults',
+                'themecontrols',
+                'sources',
+                'desktop',
+                'collections',
+                'catalog'):
+            raise RuntimeError('Studio helper requires a Studio/desktop case') if case in(
+                "repairs", "apps", "clients", "vpn", "shell", "androidapps") and
+                not installed:
             raise RuntimeError("The explicit Studio Demo repair journey requires the verified installed release")
-        payload = self.tested_payload(diagnostic=diagnostic) if diagnostic else self.tested_payload()
-        if installed:
-            deployed = json.loads((self.run / "deploy-result.json").read_text())
-            executable = Path(deployed["release"]) / "bin/isolde"
-            if self.links()["current"] != deployed["release"] or digest(executable) != digest(payload / "bin/isolde"):
-                raise RuntimeError("Installed release does not match this tested run")
-        else:
-            executable = payload / "bin/isolde"
-        print("EXECUTABLE " + str(executable), flush=True)
-        source = self.run / "source"
-        script, flags = CASES[case]
-        command = ["python3", str(source / "tools" / script), str(executable)] + flags
-        if store_helper_digest:
-            helper=verified_studio_helper(self.root,store_helper_digest,'store')
-            command=store_helper_command(source,helper,executable,flags)
-            self.update(acceptanceHelperSha256=store_helper_digest)
-        if reference_helper_digest:
-            helper=verified_studio_helper(self.root,reference_helper_digest,'reference')
-            collections_helper=verified_studio_helper(self.root,reference_collections_digest,'reference-collections') if reference_collections_digest else None
-            command=reference_helper_command(source,helper,executable,flags,collections_helper)
-            if reference_collections_digest:self.update(referenceCollectionsHelperSha256=reference_collections_digest)
-            self.update(acceptanceHelperSha256=reference_helper_digest)
-        if case in ('local-search','history','pages','playlists','movieart','music-transport','kodi-import','playlist-playback','playlist-shelf','games','emulators') and history_helper_digest:
-            helper=verified_studio_helper(self.root,history_helper_digest,'history')
-            command=history_helper_command(source,helper,executable,local_search=case=='local-search',pages=case=='pages',playlists=case=='playlists',movie_art=case=='movieart',music_transport=case=='music-transport',kodi_import=case=='kodi-import',playlist_playback=case=='playlist-playback',playlist_shelf=case=='playlist-shelf',game_case=case if case in ('games','emulators') else None)
-            self.update(acceptanceHelperSha256=history_helper_digest)
-        if case in ('studio','studio-designs','studio-search','themes','themecustom','themefaults','themecontrols','sources','desktop','collections','catalog') and studio_helper_digest:
-            helper=verified_studio_helper(self.root,studio_helper_digest)
-            gallery_path,gallery_digest=verified_gallery_evidence(self.run,json.loads((self.run/'test-result.json').read_text())) if case=='collections' else (None,None)
-            command=studio_helper_command(source,helper,executable,desktop=case=='desktop',collections=case=='collections',catalog=case=='catalog',designs=case=='studio-designs',search=case=='studio-search',themes=case=='themes',themefaults=case=='themefaults',themecustom=case=='themecustom',themecontrols=case=='themecontrols',sources=case=='sources',gallery_evidence=gallery_path,gallery_digest=gallery_digest)
-            self.update(acceptanceHelperSha256=studio_helper_digest)
-        if case=='guide-features' and feature_helper_digest:
-            helper=verified_guide_helper(self.root,feature_helper_digest,'features')
-            command=feature_helper_command(source,helper,executable,flags)
-            self.update(acceptanceHelperSha256=feature_helper_digest)
-        if case=="guide-reopen":
-            helper=verified_reopen_helper(self.root,reopen_helper_digest)
-            arguments=[str(helper),str(executable),'--cold-reopen','--deny-network','--receipt',str(self.run/'guide-soak-receipt.json')]
-            command=['python3','-c','import sys,runpy;sys.path.insert(0,sys.argv.pop(1));path=sys.argv[1];sys.argv=sys.argv[1:];runpy.run_path(path,run_name="__main__")',str(source/'tools')]+arguments
-            self.update(acceptanceHelperSha256=reopen_helper_digest)
-        if case=="guide-soak":command += ['--receipt',str(self.run/'guide-soak-receipt.json')]
-        if case in ("lounge", "pastel", "repairs", "apps", "clients"):
-            fixture = "home-reference" if case == "lounge" else "home-pastel-reference"
-            command += ["--case", str(source / "tests/visual" / fixture)]
-        before, links = self.service(), self.links()
-        layouts = self.layout_hashes()
-        lease = {"service": before, "releases": links, "runId": self.state["runId"], "pid": os.getpid()}
+                payload =
+                    self.tested_payload(diagnostic = diagnostic) if diagnostic else self.tested_payload() if installed
+                : deployed = json.loads((self.run / "deploy-result.json").read_text()) executable =
+                        Path(deployed["release"]) / "bin/isolde" if self.links()["current"] != deployed["release"] or
+                        digest(executable) != digest(payload / "bin/isolde")
+                : raise RuntimeError("Installed release does not match this tested run") else : executable =
+                            payload / "bin/isolde" print("EXECUTABLE " + str(executable), flush = True) source =
+                                self.run / "source" script,
+                flags = CASES[case] command =
+                    [ "python3", str(source / "tools" / script), str(executable) ] + flags if store_helper_digest
+                : helper = verified_studio_helper(self.root, store_helper_digest, 'store') command =
+                        store_helper_command(source, helper, executable, flags)
+                            self.update(acceptanceHelperSha256 = store_helper_digest) if reference_helper_digest
+                : helper = verified_studio_helper(self.root, reference_helper_digest, 'reference') collections_helper =
+                            verified_studio_helper(
+                                self.root,
+                                reference_collections_digest,
+                                'reference-collections') if reference_collections_digest else None command =
+                                reference_helper_command(source,
+                                                         helper,
+                                                         executable,
+                                                         flags,
+                                                         collections_helper) if reference_collections_digest
+                : self.update(referenceCollectionsHelperSha256 = reference_collections_digest)
+                      self.update(acceptanceHelperSha256 = reference_helper_digest) if case in('local-search',
+                                                                                               'history',
+                                                                                               'pages',
+                                                                                               'playlists',
+                                                                                               'movieart',
+                                                                                               'music-transport',
+                                                                                               'kodi-import',
+                                                                                               'playlist-playback',
+                                                                                               'playlist-shelf',
+                                                                                               'games',
+                                                                                               'emulators') and
+                                history_helper_digest:
+            helper = verified_studio_helper(self.root, history_helper_digest, 'history') command =
+                history_helper_command(source,
+                                       helper,
+                                       executable,
+                                       local_search = case == 'local-search',
+                                       pages = case == 'pages',
+                                       playlists = case == 'playlists',
+                                       movie_art = case == 'movieart',
+                                       music_transport = case == 'music-transport',
+                                       kodi_import = case == 'kodi-import',
+                                       playlist_playback = case == 'playlist-playback',
+                                       playlist_shelf = case == 'playlist-shelf',
+                                       game_case = case if case in('games', 'emulators') else None)
+                    self.update(acceptanceHelperSha256 = history_helper_digest) if case in('studio',
+                                                                                           'studio-designs',
+                                                                                           'studio-search',
+                                                                                           'themes',
+                                                                                           'themecustom',
+                                                                                           'themefaults',
+                                                                                           'themecontrols',
+                                                                                           'sources',
+                                                                                           'desktop',
+                                                                                           'collections',
+                                                                                           'catalog') and
+                studio_helper_digest:
+            helper = verified_studio_helper(self.root, studio_helper_digest) gallery_path,
+            gallery_digest =
+                verified_gallery_evidence(self.run, json.loads((self.run / 'test-result.json').read_text())) if case ==
+                'collections' else(None, None) command =
+                    studio_helper_command(source,
+                                          helper,
+                                          executable,
+                                          desktop = case == 'desktop',
+                                          collections = case == 'collections',
+                                          catalog = case == 'catalog',
+                                          designs = case == 'studio-designs',
+                                          search = case == 'studio-search',
+                                          themes = case == 'themes',
+                                          themefaults = case == 'themefaults',
+                                          themecustom = case == 'themecustom',
+                                          themecontrols = case == 'themecontrols',
+                                          sources = case == 'sources',
+                                          gallery_evidence = gallery_path,
+                                          gallery_digest = gallery_digest)
+                            self.update(acceptanceHelperSha256 = studio_helper_digest) if case == 'guide-features' and
+                    feature_helper_digest:
+            helper = verified_guide_helper(self.root, feature_helper_digest, 'features') command =
+                feature_helper_command(source, helper, executable, flags)
+                    self.update(acceptanceHelperSha256 = feature_helper_digest) if case == "guide-reopen":
+            helper = verified_reopen_helper(self.root, reopen_helper_digest) arguments =
+                [
+                    str(helper),
+                    str(executable),
+                    '--cold-reopen',
+                    '--deny-network',
+                    '--receipt',
+                    str(self.run / 'guide-soak-receipt.json')
+                ] command =
+                    [
+                        'python3',
+                        '-c',
+                        'import sys,runpy;sys.path.insert(0,sys.argv.pop(1));path=sys.argv[1];sys.argv=sys.argv[1:];runpy.run_path(path,run_name="__main__")',
+                        str(source / 'tools')
+                    ] + arguments self.update(acceptanceHelperSha256 = reopen_helper_digest) if case ==
+                    "guide-soak":
+            command += [ '--receipt', str(self.run / 'guide-soak-receipt.json') ] if case in(
+                "lounge", "pastel", "repairs", "apps", "clients"):
+            fixture = "home-reference" if case == "lounge" else "home-pastel-reference" command +=
+                [ "--case", str(source / "tests/visual" / fixture) ] before,
+            links = self.service(), self.links() layouts = self.layout_hashes() lease = {"service":
+                before, "releases" : links, "runId" : self.state["runId"], "pid" : os.getpid()}
         atomic_json(self.root / "service-lease.json", lease)
         evidence = set()
 
@@ -2252,7 +2535,7 @@ class Oracle:
                 evidence.add(Path(match.group()))
         journey_failure = None
         try:
-            # The existing harness lock is still authoritative for the graphical session.
+#The existing harness lock is still authoritative for the graphical session.
             self.stage("visual-" + case, command, 1740 if case in {"themes","guide-lifecycle","guide-features"} else 900 if case in ("studio-designs","pages","history","guide","guide-surfaces","movieart","playlists","android","androidapps","store","store-updates","emulators") else 480, on_line=line_output)
             results = [json.loads((p / "result.json").read_text()) for p in evidence if (p / "result.json").is_file()]
             if not results or not all(visual_result_passed(case, r) for r in results):
@@ -2264,7 +2547,7 @@ class Oracle:
         except (RuntimeError, TimeoutError) as error:
             journey_failure = error
         finally:
-            # This guard also runs on timeouts/SIGHUP when a harness cannot reach its own finally.
+#This guard also runs on timeouts / SIGHUP when a harness cannot reach its own finally.
             if case in ('store','store-updates') and store_helper_digest:
                 for directory in evidence:
                     if (directory/'authorization.json').is_file():
@@ -2334,28 +2617,29 @@ class Oracle:
             raise RuntimeError("Guest provisioning is restricted to Isolde-Test")
         if self.root != Path.home()/"isolde-oracle" or self.root.resolve() != self.root:
             raise RuntimeError("Guest maintenance requires the native oracle directory")
-        # Only obsolete generated payloads; source, logs, screenshots, releases,
-        # native build cache and all profile/account trees are retained.
+#Only obsolete generated payloads; source, logs, screenshots, releases,
+#native build cache and all profile / account trees are retained.
         runs = self.root / "runs"
         candidates = sorted((p for p in runs.iterdir() if p.is_dir() and not p.is_symlink()), key=lambda p:p.stat().st_mtime, reverse=True)
-        protected = {self.run, *candidates[:3], *getattr(self, 'maintenance_pins', ())}
+        protected = {
+    self.run, *candidates[:3], *getattr(self, 'maintenance_pins', ())}
         if prune_payloads:
             payloads=sorted((p for p in candidates if (p/'payload').is_dir()),key=lambda p:(p/'payload').stat().st_mtime,reverse=True)
             protected.update(payloads[:3])
-        # Focused candidates depend on an original full-suite proof. Retain its
-        # payload while any existing reuse receipt still pins that run.
+#Focused candidates depend on an original full - suite proof.Retain its
+#payload while any existing reuse receipt still pins that run.
         for candidate in candidates:
             record = candidate / "test-result.json"
             if record.is_file() and not record.is_symlink():
                 base_id = json.loads(record.read_text()).get("coverageReuse", {}).get("baseRunId", "")
                 if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", base_id):
                     protected.add(runs / base_id)
-        # A stopped-profile acceptance receipt still needs its exact executable.
-        # Never discard that payload while reclaiming older generated runs.
+#A stopped - profile acceptance receipt still needs its exact executable.
+#Never discard that payload while reclaiming older generated runs.
         protected.update(p for p in candidates if (p/'guide-soak-receipt.json').exists() or (p/'guide-soak-receipt.json').is_symlink())
         if prune_sources and not prune_payloads:
-            # Explicit source-copy maintenance retains every staged acceptance
-            # payload, including the last passing candidate used for captures.
+#Explicit source - copy maintenance retains every staged acceptance
+#payload, including the last passing candidate used for captures.
             protected.update(p for p in candidates if (p/"payload").exists() or (p/"payload").is_symlink())
         mounts = [Path(line.split()[4].replace("\\040", " ")) for line in Path("/proc/self/mountinfo").read_text().splitlines()]
         cleanup_path = self.run / "guest-payload-cleanup.json"
@@ -2381,9 +2665,9 @@ class Oracle:
             removed.append(str(target))
             atomic_json(self.run / "guest-payload-cleanup.json", {"guest": "isolde-test", "targets": removed})
             shutil.rmtree(target)
-        # Downloaded distro archives are reproducible cache, not installed
-        # packages, profiles or source evidence. Prefer this over deleting
-        # immutable source snapshots when obsolete payloads are insufficient.
+#Downloaded distro archives are reproducible cache, not installed
+#packages, profiles or source evidence.Prefer this over deleting
+#immutable source snapshots when obsolete payloads are insufficient.
         if shutil.disk_usage(self.root).free < target_gib * 1024**3:
             cache = Path("/var/cache/apt/archives")
             if cache.is_dir():
@@ -2401,14 +2685,14 @@ class Oracle:
                     for name in ("cwd", "exe"):
                         try: active.append((process/name).resolve(strict=True))
                         except (OSError, RuntimeError): pass
-            # Retain the newest legacy build plus every live process tree.
-            # The incremental oracle cache is separate and remains untouched.
+#Retain the newest legacy build plus every live process tree.
+#The incremental oracle cache is separate and remains untouched.
             for old in old_runs[:-1][:128]:
                 if shutil.disk_usage(self.root).free >= target_gib * 1024**3: break
                 target = old/"build"
                 if not target.is_dir() or any(p == target or p.is_relative_to(target) for p in active): continue
-                # Record the checked absolute target before deleting generated
-                # artifacts. The helper rejects links, mounts and unknown trees.
+#Record the checked absolute target before deleting generated
+#artifacts.The helper rejects links, mounts and unknown trees.
                 removed.append(str(target))
                 atomic_json(cleanup_path, {"guest": "isolde-test", "targets": removed})
                 remove_guest_build(target, legacy, mounts)
@@ -2556,8 +2840,8 @@ def recover_visual_orphan(run, pid, proc_root=Path("/proc")):
     if not any(path.stat().st_size <= 8*1024**2 and fixture in path.read_text() and "NameError" in path.read_text() for path in logs):
         raise RuntimeError("No matching failed-startup evidence for this visual child")
     started = (proc / "stat").read_text().split()[21]
-    # Recheck birth identity immediately before signalling; never use pkill or
-    # a window PID alone, and never touch the installed service process.
+#Recheck birth identity immediately before signalling; never use pkill or
+#a window PID alone, and never touch the installed service process.
     if (proc / "stat").read_text().split()[21] != started or (proc / "exe").resolve(strict=True) != executable:
         raise RuntimeError("Visual child identity changed during recovery")
     os.kill(pid, signal.SIGTERM)
@@ -2603,8 +2887,8 @@ def exclusive_lock(path, wait_seconds=0):
 
 
 def interrupted(signum, _frame):
-    # selectors treats InterruptedError as a retryable interrupted system call.
-    # Cancellation must escape that retry and reach the stage/service finally.
+#selectors treats InterruptedError as a retryable interrupted system call.
+#Cancellation must escape that retry and reach the stage / service finally.
     raise RuntimeError("Oracle interrupted by signal " + str(signum))
 
 
@@ -2620,7 +2904,8 @@ def vpn_platform():
         if not (name.startswith(("/usr/bin/","/usr/share/applications/","/usr/lib/systemd/system/","/lib/systemd/system/")) and (name.endswith((".desktop",".service")) or name.startswith("/usr/bin/"))):continue
         path=Path(name)
         if not path.is_file():continue
-        entry={"path":name}
+        entry={
+    "path" : name}
         if path.stat().st_size<=16384:
             content=path.read_bytes()
             if name.endswith((".desktop",".service")):
@@ -2643,7 +2928,8 @@ def vpn_platform():
     routing={}
     for family in ("-4","-6"):
         rules=json.loads(query(["ip","-j",family,"rule","show"]) or "[]")
-        routing[family]=[{k:r[k] for k in ("priority","table","fwmark","fwmask","not","suppress_prefixlength") if k in r} for r in rules[:64]]
+        routing[family]=[{
+k:r[k] for k in ("priority","table","fwmark","fwmask","not","suppress_prefixlength") if k in r} for r in rules[:64]]
     return {"installedVersion":version,"protonPackage":proton,"protonCliFiles":[p for p in proton_files if p.startswith('/usr/bin/')],"nmBindings":bindings,"packageFiles":metadata[:32],"vpnConnections":connections,"networkManagerPermissions":permissions,"recentIsoldeActivationReasons":reasons[-20:],"routingPolicy":routing}
 
 
@@ -2662,14 +2948,15 @@ def cancel_owned(root, run_id):
     if (not owned_driver or "--run-id" not in command or command[command.index("--run-id") + 1] != run_id
             or state.get("processStartTicks") != start_ticks):
         raise RuntimeError("Refusing to signal a process whose ownership/start identity does not match")
-    # SIGINT also unwinds older guardians whose SIGTERM handler raised the
-    # retryable InterruptedError. Ownership and process-start checks stay above.
+#SIGINT also unwinds older guardians whose SIGTERM handler raised the
+#retryable InterruptedError.Ownership and process - start checks stay above.
     os.kill(pid, signal.SIGINT)
     deadline = time.monotonic() + 20
     while time.monotonic() < deadline:
         state = json.loads(path.read_text())
         if state.get("state") != "running":
-            return {"cancelled": True, "state": state}
+            return {
+    "cancelled" : True, "state" : state}
         if not proc.is_dir():
             state.update(state="failed", error="Cancelled owned runner", updated=time.time())
             atomic_json(path, state)
@@ -2819,8 +3106,8 @@ def remove_runner_test_bundles(root, driver, mounts=(), target_free=3*1024**3):
         if bundle.resolve()!=bundle or not bundle.is_dir():raise RuntimeError('Unsafe runner test bundle')
         if any(m!=Path('/') and (m==bundle or m.is_relative_to(bundle) or bundle.is_relative_to(m)) for m in mounts):raise RuntimeError('Mounted runner test bundle')
         hashes=bundle/'files.sha256'
-        # Older runner versions did not write a verification receipt. Preserve
-        # those unknown copies rather than inventing evidence for deletion.
+#Older runner versions did not write a verification receipt.Preserve
+#those unknown copies rather than inventing evidence for deletion.
         if not hashes.exists() and not hashes.is_symlink():continue
         if hashes.resolve()!=hashes or digest(hashes)!=bundle.name.rsplit('-',1)[1]:raise RuntimeError('Runner test bundle checksum mismatch')
         entries=manifest(hashes);verify_tree(bundle,entries)
@@ -2840,8 +3127,8 @@ def remove_backed_up_archives(root, backups, mounts=(), preserve_recent=False, t
     runs=root/'runs';removed=[]
     recent=set()
     if preserve_recent:
-        # Removing generated children changes a run directory's mtime. Retain
-        # actual newest source archives using their unchanged upload timestamps.
+#Removing generated children changes a run directory's mtime. Retain
+#actual newest source archives using their unchanged upload timestamps.
         recent=set(sorted((p for p in runs.iterdir() if p.is_dir() and not p.is_symlink() and (p/'source.tar.gz').is_file() and not (p/'source.tar.gz').is_symlink()),key=lambda p:(p/'source.tar.gz').stat().st_mtime,reverse=True)[:3])
     for entry in backups:
         if target_free is not None and shutil.disk_usage(root).free >= target_free:break
@@ -2946,8 +3233,8 @@ def deduplicate_tested_payloads(root, mounts=(), target_free=3*1024**3):
                     if any(m!=Path('/') and (m==release or m.is_relative_to(release) or release.is_relative_to(m)) for m in mounts):raise RuntimeError('Mounted installed dedup source')
                     remove_generated_payload_cache(run,release)
                     if payload_hashes(release)!=actual:raise RuntimeError('Installed payload identity mismatch during dedup')
-                    # Only staged destinations are replaced; the running release
-                    # remains untouched and supplies already-verified bytes.
+#Only staged destinations are replaced; the running release
+#remains untouched and supplies already - verified bytes.
                     for name,checksum in actual.items():
                         original=release/name;stat=original.stat()
                         identical.setdefault((checksum,stat.st_mode,stat.st_uid,stat.st_gid,stat.st_dev),original)
@@ -3099,7 +3386,11 @@ def main():
                 except (OSError,ValueError,IndexError):pass
             return result
         first=cpu_ticks();sample_started=time.monotonic();time.sleep(.5);second=cpu_ticks();sample_elapsed=time.monotonic()-sample_started
-        cpu=[{'pid':int(pid),'name':value[2],'cpuPercent':round((value[1]-first[pid][1])*100/os.sysconf('SC_CLK_TCK')/sample_elapsed,1)} for pid,value in second.items() if pid in first and first[pid][0]==value[0]]
+        cpu=[{
+    'pid' : int(pid),
+            'name' : value[2],
+                     'cpuPercent'
+        : round((value[1] - first[pid][1]) * 100 / os.sysconf('SC_CLK_TCK') / sample_elapsed, 1)} for pid,value in second.items() if pid in first and first[pid][0]==value[0]]
         memory={line.split(':',1)[0]:line.split(':',1)[1].strip() for line in Path('/proc/meminfo').read_text().splitlines()}
         processes=[]
         for proc in list(Path('/proc').iterdir())[:4096]:
@@ -3108,7 +3399,16 @@ def main():
                 fields={line.split(':',1)[0]:line.split(':',1)[1].strip() for line in (proc/'status').read_text().splitlines() if ':' in line}
                 processes.append({'pid':int(proc.name),'name':fields.get('Name',''),'rssKiB':int(fields.get('VmRSS','0 kB').split()[0])})
             except (OSError,ValueError):pass
-        status['guestResources']={'memory':{key:memory.get(key) for key in ('MemTotal','MemAvailable','SwapTotal','SwapFree','Dirty','Writeback')},'load':Path('/proc/loadavg').read_text().strip(),'largestProcesses':sorted(processes,key=lambda p:p['rssKiB'],reverse=True)[:12],'cpuSampleSeconds':sample_elapsed,'busiestProcesses':sorted(cpu,key=lambda p:p['cpuPercent'],reverse=True)[:8]}
+        status['guestResources']={
+    'memory' : {
+    key:memory.get(key) for key in ('MemTotal','MemAvailable','SwapTotal','SwapFree','Dirty','Writeback')
+    }
+    , 'load' : Path('/proc/loadavg').read_text().strip(),
+        'largestProcesses' : sorted(processes, key = lambda p : p['rssKiB'], reverse = True) [:12],
+                                                                                                  'cpuSampleSeconds'
+        : sample_elapsed,
+          'busiestProcesses' : sorted(cpu, key = lambda p : p['cpuPercent'], reverse = True)
+    [:8]}
         if args.storage:status["storage"]=oracle_storage_inventory(root)
         status["activeRuns"]=[]
         if args.guide_diagnostics:status['guideBackend']=guide_backend_diagnostics(root/'runs'/args.run_id)
@@ -3116,7 +3416,8 @@ def main():
             try:
                 active=json.loads(candidate.read_text())
                 if active.get("state")=="running" and Path("/proc/"+str(int(active["pid"]))).is_dir():
-                    status["activeRuns"].append({key:active.get(key) for key in ("runId","stage","action","updated")})
+                    status["activeRuns"].append({
+key:active.get(key) for key in ("runId","stage","action","updated")})
             except (OSError,ValueError,KeyError):continue
         environment = dict(os.environ)
         manager = subprocess.run(["systemctl", "--user", "show-environment"], capture_output=True, text=True, timeout=10)
@@ -3129,7 +3430,8 @@ def main():
         for window in status["windowClasses"]:
             if len(window) < 4 or window[3] != "isolde.Isolde" or not window[2].isdigit(): continue
             proc = Path("/proc") / window[2]
-            record = {"pid": int(window[2]), "exists": proc.is_dir()}
+            record = {
+    "pid" : int(window[2]), "exists" : proc.is_dir()}
             if proc.is_dir() and proc.stat().st_uid == os.getuid():
                 try:
                     record["executable"] = str((proc / "exe").resolve(strict=True))
@@ -3150,18 +3452,20 @@ def main():
         status["androidSetup"]["containerService"]=container_state.stdout[:2048]
         status["androidSetup"]["storeFiles"]=[]
         for name in ('/var/lib/isolde','/usr/lib/isolde-android-setup/android-setup.py','/var/lib/waydroid/rootfs/system/build.prop','/var/lib/waydroid/rootfs/system/system/build.prop','/var/lib/waydroid/rootfs/vendor/build.prop','/var/lib/waydroid/waydroid.prop'):
-            path=Path(name);record={'path':name}
+            path=Path(name);record={
+    'path' : name}
             try:
                 info=path.stat();record.update(size=info.st_size,uid=info.st_uid,mode=oct(info.st_mode & 0o777),symlink=path.is_symlink())
                 if path.suffix=='.prop' and info.st_size<=1024**2:
                     wanted={'ro.build.version.sdk','ro.product.cpu.abilist','ro.system.build.version.sdk','ro.system.product.cpu.abilist'}
-                    record['properties']={key:value for line in path.read_text().splitlines() for key,sep,value in [line.partition('=')] if sep and key in wanted}
+                    record['properties']={
+key:value for line in path.read_text().splitlines() for key,sep,value in [line.partition('=')] if sep and key in wanted}
             except OSError as error:record['error']=type(error).__name__
             status['androidSetup']['storeFiles'].append(record)
         container_log=subprocess.run(["journalctl","-u","waydroid-container.service","--since=-15min","-n","60","--no-pager","-o","cat"],capture_output=True,text=True,timeout=10)
         status["androidSetup"]["containerStartupLog"]=container_log.stdout[-12288:]
-        # Inspect only this guardian's descendant tree; never unrelated app
-        # arguments, environment, account files or terminal contents.
+#Inspect only this guardian's descendant tree; never unrelated app
+#arguments, environment, account files or terminal contents.
         status["guardianAlive"]=False
         try:
             proc=Path("/proc")/str(status.get("pid",0))

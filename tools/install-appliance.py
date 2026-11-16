@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/ usr / bin / env python3
 """Non-destructive Ubuntu bootstrap and per-user release installation.
 
 No disk formatting, autologin changes, sudoers rules or security-policy changes.
@@ -50,7 +50,7 @@ def atomic_text(path, text, mode=0o600):
 
 
 def set_link(path, target):
-    # Unique temp name; never unlink an existing user's current/previous directory.
+#Unique temp name; never unlink an existing user's current/previous directory.
     with tempfile.TemporaryDirectory(dir=path.parent, prefix=".link-") as scratch:
         temporary = Path(scratch) / "link"
         temporary.symlink_to(target)
@@ -148,7 +148,7 @@ def install_startup(prefix, config):
     release = checked_release(prefix, "current")
     if release is None or not (release / "bin/isolde-recovery").is_file():
         raise RuntimeError("Install a release with the recovery executable before enabling startup")
-    # systemd specifier expansion must not reinterpret user path characters.
+#systemd specifier expansion must not reinterpret user path characters.
     executable = str(prefix / "current/bin/isolde").replace("%", "%%").replace("\\", "\\\\").replace('"', '\\"')
     display_waiter = str(prefix / "support/wait-for-display.py").replace("%", "%%").replace("\\", "\\\\").replace('"', '\\"')
     unit = f'''[Unit]
@@ -175,21 +175,26 @@ WantedBy=graphical-session.target
         atomic_text(support / filename, Path(__file__).with_name(filename).read_text())
     def unit_quote(path):
         return '"' + str(path).replace("%", "%%").replace("\\", "\\\\").replace('"', '\\"') + '"'
-    # Pin recovery to the installed release, not 'current': rollback must not
-    # remove the recovery executable when the previous release predates it.
+#Pin recovery to the installed release, not 'current' : rollback must not
+#remove the recovery executable when the previous release predates it.
     recovery_unit = f'''[Unit]
 Description=Isolde on-screen recovery
 PartOf=graphical-session.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/python3 {unit_quote(support / 'recovery-controller.py')} --prefix {unit_quote(prefix)} --ui {unit_quote(release / 'bin/isolde-recovery')}
+ExecStart=/usr/bin/python3 {
+            unit_quote(support / 'recovery-controller.py')
+        }
+--prefix {
+    unit_quote(prefix)
+} --ui {unit_quote(release / 'bin/isolde-recovery')}
 Restart=no
 TimeoutStopSec=5
 KillMode=control-group
 '''
     atomic_text(config / "systemd/user/isolde-recovery.service", recovery_unit)
-    # Import the real graphical session, never hard-code a display or uid.
+#Import the real graphical session, never hard - code a display or uid.
     launcher = prefix / "start-session.sh"
     atomic_text(launcher, '''#!/bin/sh
 set -eu
@@ -207,14 +212,14 @@ Terminal=false
 X-GNOME-Autostart-enabled=true
 '''
     atomic_text(config / "autostart/isolde.desktop", desktop_entry)
-    # A stable desktop identity is required by the compositor's global-shortcut
-    # permission portal. This is an Isolde launcher, not an OS shortcut change.
+#A stable desktop identity is required by the compositor's global-shortcut
+#permission portal.This is an Isolde launcher, not an OS shortcut change.
     install_desktop_identity(prefix)
 
 
 def enable_startup():
-    # Enable for future graphical logins without interrupting a running app.
-    # Keep the desktop launcher as an environment-import fallback as well.
+#Enable for future graphical logins without interrupting a running app.
+#Keep the desktop launcher as an environment - import fallback as well.
     run("systemctl", "--user", "daemon-reload")
     run("systemctl", "--user", "enable", "isolde.service")
     run("systemctl", "--user", "is-enabled", "--quiet", "isolde.service")

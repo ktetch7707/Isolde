@@ -1,12 +1,12 @@
 #pragma once
 
+#include <QLockFile>
 #include <QObject>
+#include <QProcess>
 #include <QString>
 #include <QStringList>
-#include <QVariantMap>
-#include <QProcess>
 #include <QTimer>
-#include <QLockFile>
+#include <QVariantMap>
 #include <functional>
 #include <memory>
 
@@ -21,20 +21,42 @@ class KodiImporter final : public QObject {
     Q_PROPERTY(bool canImport READ canImport NOTIFY changed)
     Q_PROPERTY(bool canRollback READ canRollback NOTIFY changed)
     Q_PROPERTY(bool recoveryPending READ recoveryPending NOTIFY changed)
-public:
-    explicit KodiImporter(const QString &profile, QObject *parent = nullptr);
+  public:
+    explicit KodiImporter(const QString& profile, QObject* parent = nullptr);
     ~KodiImporter() override;
 
-    bool backupAvailable() const { return m_backupAvailable; }
-    QString backupPath() const { return m_backupPath; }
-    bool importInProgress() const { return m_importInProgress; }
-    QString importStatus() const { return m_importStatus; }
-    QStringList conflicts() const { return m_conflicts; }
-    QString previewText() const { return m_previewText; }
-    bool canImport() const { return m_canImport; }
-    bool canRollback() const { return m_canRollback; }
+    bool backupAvailable() const {
+        return m_backupAvailable;
+    }
+    QString backupPath() const {
+        return m_backupPath;
+    }
+    bool importInProgress() const {
+        return m_importInProgress;
+    }
+    QString importStatus() const {
+        return m_importStatus;
+    }
+    QStringList conflicts() const {
+        return m_conflicts;
+    }
+    QString previewText() const {
+        return m_previewText;
+    }
+    bool canImport() const {
+        return m_canImport;
+    }
+    bool canRollback() const {
+        return m_canRollback;
+    }
     bool recoveryPending() const;
-    void setBackendGuard(std::function<bool()> prepare,std::function<void()> release,std::function<bool()> preparing={}){m_prepareBackend=std::move(prepare);m_releaseBackend=std::move(release);m_backendPreparing=std::move(preparing);}
+    void setBackendGuard(std::function<bool()> prepare,
+                         std::function<void()> release,
+                         std::function<bool()> preparing = {}) {
+        m_prepareBackend = std::move(prepare);
+        m_releaseBackend = std::move(release);
+        m_backendPreparing = std::move(preparing);
+    }
     void continueWhenBackendReady();
     void shutdown();
 
@@ -47,28 +69,28 @@ public:
     Q_INVOKABLE void cancel();
     Q_INVOKABLE void releasePreview();
 
-signals:
+  signals:
     void changed();
-    void backupCreated(const QString &path);
-    void importCompleted(bool success, const QString &message);
-    void rollbackCompleted(bool success, const QString &message);
+    void backupCreated(const QString& path);
+    void importCompleted(bool success, const QString& message);
+    void rollbackCompleted(bool success, const QString& message);
 
-private:
+  private:
     QString backupDir() const;
     void loadImportState();
-    void runAction(const QString &action);
+    void runAction(const QString& action);
     void finish(bool success);
     void releaseBackend();
-    bool m_valid=false;
+    bool m_valid = false;
     QProcess m_process;
     QTimer m_deadline;
     QByteArray m_output;
     QString m_action;
     QString m_deferredAction;
-    bool m_cancelled=false;
-    bool m_backendPrepared=false;
-    bool m_releaseRequested=false;
-    quint64 m_generation=0;
+    bool m_cancelled = false;
+    bool m_backendPrepared = false;
+    bool m_releaseRequested = false;
+    quint64 m_generation = 0;
     std::unique_ptr<QLockFile> m_lock;
     std::function<bool()> m_prepareBackend;
     std::function<void()> m_releaseBackend;

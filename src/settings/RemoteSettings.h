@@ -15,8 +15,8 @@ class RemoteSettings final : public QObject {
     Q_PROPERTY(QString cecStatus READ cecStatus NOTIFY changed)
     Q_PROPERTY(QString powerAction READ powerAction NOTIFY changed)
 
-public:
-    explicit RemoteSettings(QObject *parent = nullptr);
+  public:
+    explicit RemoteSettings(QObject* parent = nullptr);
 
     [[nodiscard]] QString profile() const;
     [[nodiscard]] bool setupMode() const;
@@ -34,19 +34,19 @@ public:
     Q_INVOKABLE bool sendTvPowerCommand();
     Q_INVOKABLE bool turnTvOn();
     Q_INVOKABLE bool putTvInStandby();
-    Q_INVOKABLE void recordTestInput(const QString &inputName);
+    Q_INVOKABLE void recordTestInput(const QString& inputName);
     Q_INVOKABLE void reset();
     void setCecEnabledForTests(bool enabled);
 
-signals:
+  signals:
     void changed();
 
-private:
+  private:
     void load();
     void save() const;
-    static QString cleanProfile(const QString &profile);
-    static QString cleanPowerAction(const QString &action);
-    bool runCecCommand(const QString &command);
+    static QString cleanProfile(const QString& profile);
+    static QString cleanPowerAction(const QString& action);
+    bool runCecCommand(const QString& command);
 
     QString m_profile = QStringLiteral("simple");
     bool m_setupMode = false;
