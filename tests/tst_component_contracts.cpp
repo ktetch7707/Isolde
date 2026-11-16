@@ -68,8 +68,9 @@ void ComponentContractTests::validatesContracts() {
 
 void ComponentContractTests::guideActionsValidateIdentityAndAppearance() {
     QTemporaryDir dir;AppRegistry registry;HomeLayout home(&registry);const auto user=dir.filePath("home.json");
-    const QByteArray fixture=R"({"schemaVersion":1,"categories":[{"id":"apps","name":"Apps"}],"items":[{"kind":"action","id":"guide-entry","name":"TV Guide","symbol":"TV","size":"standard","categoryId":"apps","actions":[{"schemaVersion":1,"type":"open-guide"}]}]})";
-    writeFile(dir.filePath("defaults.json"),legacy);writeFile(user,fixture);QVERIFY(home.load(dir.filePath("defaults.json"),user));
+    writeFile(dir.filePath("defaults.json"),R"({"schemaVersion":2,"theme":{"backgroundStart":"#123456"},"components":[]})");
+    const QByteArray fixture=R"({"schemaVersion":2,"categories":[{"id":"apps","name":"Apps"}],"components":[{"kind":"action","id":"guide-entry","name":"TV Guide","symbol":"TV","size":"standard","categoryId":"apps","actions":[{"schemaVersion":1,"type":"open-guide"}]}]})";
+    writeFile(user,fixture);QVERIFY(home.load(dir.filePath("defaults.json"),user));
     QVERIFY2(home.errorString().isEmpty(),qPrintable(home.errorString()));QCOMPARE(home.items().size(),1);QCOMPARE(home.items().first().toMap().value("actions").toList().first().toMap().value("type").toString(),QString("open-guide"));QCOMPARE(readFile(user),fixture);
     QVERIFY(!ComponentSchema::action({{"type","open-guide"}}).isEmpty());
     QVERIFY(!ComponentSchema::action({{"type","tune-channel"},{"channelId","local-station"}}).isEmpty());
