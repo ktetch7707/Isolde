@@ -24,6 +24,7 @@ private slots:
 };
 
 int main(int argc, char *argv[]) {
+    QCoreApplication app(argc, argv);
     GameLibraryTests test;
     return QTest::qExec(&test, argc, argv);
 }

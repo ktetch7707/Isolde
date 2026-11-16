@@ -35,4 +35,5 @@ static const QByteArray legacy = R"({"schemaVersion":1,"theme":{"backgroundStart
 static void writeFile(const QString &path, const QByteArray &data) { QFile file(path); if (file.open(QIODevice::WriteOnly)) file.write(data); }
 static QByteArray readFile(const QString &path) { QFile file(path); if (!file.open(QIODevice::ReadOnly)) return {}; return file.readAll(); }
 
+#include <QCoreApplication>
 #endif // TST_COMPONENT_COMMON_H

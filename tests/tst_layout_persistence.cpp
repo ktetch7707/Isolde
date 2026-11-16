@@ -27,6 +27,7 @@ private slots:
 };
 
 int main(int argc, char *argv[]) {
+    QCoreApplication app(argc, argv);
     LayoutPersistenceTests test;
     return QTest::qExec(&test, argc, argv);
 }
