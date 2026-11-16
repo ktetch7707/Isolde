@@ -232,6 +232,10 @@ class HomeLayout final : public QObject {
     bool isPageId(const QString& id) const;
     QSet<QString> computeHiddenIds() const;
     bool appendItem(const QJsonValue& value, QVariantList& result, const QSet<QString>& hidden);
+    void setItemKindFields(QVariantMap& item, const QJsonObject& object);
+    void setItemLogo(QVariantMap& item, const QJsonObject& object, const QVariantList& actionList);
+    void setItemUnavailableReason(QVariantMap& item, const QJsonObject& object,
+                                  const QVariantList& actionList);
     void appendRootPage(QVariantList& result) const;
     QJsonArray m_pages;
     QString m_homePageId;

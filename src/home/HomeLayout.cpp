@@ -232,7 +232,16 @@ bool HomeLayout::appendItem(const QJsonValue& value, QVariantList& result, const
         item.insert("actionType", actionList.first().toMap().value(QStringLiteral("type")).toString());
         item.insert("actions", actionList);
     }
-    if (item.value("kind") == QStringLiteral("app")) {
+    setItemKindFields(item, object);
+    setItemLogo(item, object, actionList);
+    setItemUnavailableReason(item, object, actionList);
+    result.append(ComponentSchema::component(item, true));
+    return true;
+}
+
+void HomeLayout::setItemKindFields(QVariantMap& item, const QJsonObject& object) {
+    const auto kind = item.value("kind").toString();
+    if (kind == QStringLiteral("app")) {
         const auto appId = item.value("appId").toString();
         const auto* app = m_registry->find(appId);
         item.insert("name",
@@ -246,7 +255,7 @@ bool HomeLayout::appendItem(const QJsonValue& value, QVariantList& result, const
         item.insert("accent", tileAccent.isEmpty() ? (app ? app->accent.name() : "#64748B") : tileAccent);
         item.insert("presentationMode", app ? app->presentationMode : "native-tv");
         item.insert("networkRequirement", app ? app->networkRequirement : "none");
-    } else if (item.value("kind") == QStringLiteral("action")) {
+    } else if (kind == QStringLiteral("action")) {
         const auto section = item.value("section").toString();
         const auto symbol = item.value("symbol").toString();
         const auto accent = item.value("accent").toString();
@@ -257,6 +266,9 @@ bool HomeLayout::appendItem(const QJsonValue& value, QVariantList& result, const
         item.insert("networkRequirement",
                     networkRequirement.isEmpty() ? QStringLiteral("none") : networkRequirement);
     }
+}
+
+void HomeLayout::setItemLogo(QVariantMap& item, const QJsonObject& object, const QVariantList& actionList) {
     const auto logoFile = item.value("customLogo").toString();
     auto logo = resolveArtwork(logoFile);
     if (logoFile.isEmpty() && !actionList.isEmpty() && actionList.first().toMap().value("type") == "launch-app") {
@@ -274,6 +286,10 @@ bool HomeLayout::appendItem(const QJsonValue& value, QVariantList& result, const
         }
     }
     item.insert("logoSource", logo);
+}
+
+void HomeLayout::setItemUnavailableReason(QVariantMap& item, const QJsonObject& object,
+                                           const QVariantList& actionList) {
     auto unavailable = ComponentSchema::unavailable(
         actionList.isEmpty() ? QVariantMap() : actionList.first().toMap(), m_registry, m_collections);
     if (unavailable.isEmpty() && !actionList.isEmpty() &&
@@ -282,8 +298,6 @@ bool HomeLayout::appendItem(const QJsonValue& value, QVariantList& result, const
     if (object.value("requiredCapability") == "capture-inputs" && !m_captureInputsReady)
         unavailable = tr("HDMI capture unavailable · configure inputs in Settings");
     item.insert("unavailableReason", unavailable);
-    result.append(ComponentSchema::component(item, true));
-    return true;
 }
 
 QVariantMap HomeLayout::componentPresentation(const QVariantMap& authored) const {
