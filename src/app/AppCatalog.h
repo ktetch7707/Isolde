@@ -180,6 +180,7 @@ class AppCatalog final : public QObject {
     [[nodiscard]] bool resolveProviderInstall(const QString& id, QString& localId);
     const Entry* findEntry(const QString& id) const;
     bool saveState();
+    QString resolveFailureReason(const QString& reason);
     void setError(const QString& message);
     bool androidOperation(const Entry& entry, const QString& operation);
     QVariantList mergedEntries() const;

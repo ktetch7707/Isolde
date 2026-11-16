@@ -1471,12 +1471,16 @@ bool AppCatalog::markFailed(const QString& id, const QString& reason) {
     if (!isInstalled(id))
         return false;
     m_packageStates.insert(id, QStringLiteral("failed"));
-    const auto cleanReason = reason.trimmed();
-    m_failureReasons.insert(id, cleanReason.isEmpty() ? tr("The app failed to start.") : cleanReason);
+    m_failureReasons.insert(id, resolveFailureReason(reason));
     if (!saveState())
         return false;
     emit entriesChanged();
     return true;
+}
+
+QString AppCatalog::resolveFailureReason(const QString& reason) {
+    const auto cleanReason = reason.trimmed();
+    return cleanReason.isEmpty() ? tr("The app failed to start.") : cleanReason;
 }
 
 bool AppCatalog::saveState() {

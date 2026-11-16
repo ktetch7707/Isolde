@@ -16,6 +16,7 @@ class KodiShelves final : public QObject {
     QVariantList sections() const;
     QVariantList items() const;
     void setAvailable(bool available);
+    void invalidateAllShelves();
     void refresh();
   signals:
     void changed();

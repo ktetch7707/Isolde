@@ -15,10 +15,14 @@ QVariantList HomeLayout::studioPages() const {
         const auto page = entry.toObject();
         result.append(QVariantMap{{"id", page["id"].toString()}, {"name", page["name"].toString()}});
     }
+    appendRootPage(result);
+    return result;
+}
+
+void HomeLayout::appendRootPage(QVariantList& result) const {
     if (rootPageVisible())
         result.insert(qMin(m_rootPage.value("position").toInt(), int(result.size())),
                       QVariantMap{{"id", QString()}, {"name", rootPageName()}});
-    return result;
 }
 
 QVariantMap HomeLayout::homeAppearance() const {

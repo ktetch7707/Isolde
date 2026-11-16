@@ -145,6 +145,7 @@ class KodiMedia final : public QObject {
     }
     bool playbackCanPrevious() const;
     bool playbackCanNext() const;
+    bool canPlayAdjacent(int direction) const;
     Q_INVOKABLE bool playAdjacent(int direction);
     QString subtitleStatus() const {
         return m_subtitleStatus;

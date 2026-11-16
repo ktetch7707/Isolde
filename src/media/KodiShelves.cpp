@@ -62,9 +62,13 @@ void KodiShelves::setAvailable(bool available) {
     if (available)
         refresh();
     else
-        for (const auto& shelf : m_shelves)
-            shelf.client->invalidate("Kodi is unavailable. Open the library to reconnect.");
+        invalidateAllShelves();
     emit changed();
+}
+
+void KodiShelves::invalidateAllShelves() {
+    for (const auto& shelf : m_shelves)
+        shelf.client->invalidate("Kodi is unavailable. Open the library to reconnect.");
 }
 void KodiShelves::refresh() {
     if (!m_available)

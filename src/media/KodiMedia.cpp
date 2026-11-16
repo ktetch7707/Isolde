@@ -805,8 +805,12 @@ bool KodiMedia::playbackCanPrevious() const {
 bool KodiMedia::playbackCanNext() const {
     return adjacentScope() && m_pageStart + m_selectedIndex + 1 < m_totalMovies;
 }
+bool KodiMedia::canPlayAdjacent(int direction) const {
+    return !m_busy && (direction == -1 || direction == 1) &&
+           (direction < 0 ? playbackCanPrevious() : playbackCanNext());
+}
 bool KodiMedia::playAdjacent(int direction) {
-    if (m_busy || (direction != -1 && direction != 1) || !(direction < 0 ? playbackCanPrevious() : playbackCanNext()))
+    if (!canPlayAdjacent(direction))
         return false;
     const int target = m_pageStart + m_selectedIndex + direction;
     playbackControl("stop");
