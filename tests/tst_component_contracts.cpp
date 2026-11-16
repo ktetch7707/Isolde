@@ -64,7 +64,7 @@ void ComponentContractTests::guideActionsValidateIdentityAndAppearance() {
     QTemporaryDir dir;AppRegistry registry;HomeLayout home(&registry);const auto user=dir.filePath("home.json");
     const QByteArray fixture=R"({"schemaVersion":1,"categories":[{"id":"apps","name":"Apps"}],"items":[{"kind":"action","id":"guide-entry","name":"TV Guide","symbol":"TV","size":"standard","categoryId":"apps","actions":[{"schemaVersion":1,"type":"open-guide"}]}]})";
     writeFile(user,fixture);QVERIFY(home.load(QFINDTESTDATA("../config/default-home-layout.json"),user));
-    QVERIFY2(home.errorString().isEmpty(),qPrintable(home.errorString()));QCOMPARE(home.items().size(),1);QCOMPARE(home.items().first().toMap().value("actions").toArray().first().toMap().value("type").toString(),QString("open-guide"));QCOMPARE(readFile(user),fixture);
+    QVERIFY2(home.errorString().isEmpty(),qPrintable(home.errorString()));QCOMPARE(home.items().size(),1);QCOMPARE(home.items().first().toMap().value("actions").toList().first().toMap().value("type").toString(),QString("open-guide"));QCOMPARE(readFile(user),fixture);
     QVERIFY(!ComponentSchema::action({{"type","open-guide"}}).isEmpty());
     QVERIFY(!ComponentSchema::action({{"type","tune-channel"},{"channelId","local-station"}}).isEmpty());
     QVERIFY(ComponentSchema::action({{"type","tune-channel"},{"channelId","../other"}}).isEmpty());
