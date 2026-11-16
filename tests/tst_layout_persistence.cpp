@@ -311,7 +311,7 @@ void LayoutPersistenceTests::starterPageUpdatesPreserveDesignAndRollback() {
     int updatedButtons=0;for(const auto &value:after["components"].toArray()){
         const auto item=value.toObject();if(item["id"]=="music" || item["id"]=="games" || item["id"]=="guide"){
             ++updatedButtons;
-            QCOMPARE(item["componentType"].toString(),QString("button"));QCOMPARE(item["source"].toObject()["kind"].toString(),QString("button"));            QCOMPARE(item["actions"].toList().first().toObject()["type"].toString(),QString("open-page"));
+            QCOMPARE(item["componentType"].toString(),QString("button"));QCOMPARE(item["source"].toObject()["kind"].toString(),QString("button"));            QCOMPARE(item["actions"].toArray().first().toObject()["type"].toString(),QString("open-page"));
         }
     }
     QCOMPARE(updatedButtons,3);
