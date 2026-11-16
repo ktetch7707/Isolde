@@ -257,6 +257,9 @@ class HomeLayout final : public QObject {
     bool isValidWallpaperImage(const QByteArray& data) const;
     bool isValidComponentItem(const QJsonObject& item, const QSet<QString>& ids, const QSet<QString>& categoryIds,
                               const QJsonObject& normalized);
+    bool isValidComponentKind(const QString& kind);
+    bool isValidComponentActionType(const QJsonObject& item, const QString& kind);
+    bool isValidComponentOpacity(const QJsonObject& item);
     QJsonArray m_pages;
     QString m_homePageId;
     QJsonObject m_rootPage;
