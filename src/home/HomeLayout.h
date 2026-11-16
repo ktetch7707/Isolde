@@ -263,6 +263,11 @@ class HomeLayout final : public QObject {
     bool isValidPageEntry(const QJsonArray& pages, const QJsonValue& entry,
                            QSet<QString>& pageIds, QJsonArray& pagesOut) const;
     bool isValidRootPageName(const QString& name) const;
+    bool validRootPageKeys(const QJsonObject& rootPage) const;
+    bool isValidRootPagePositionValue(const QVariant& position) const;
+    bool isValidRootPagePositionRange(const QVariant& position, const QJsonArray& pages) const;
+    bool isValidRootPageVisibility(const QJsonObject& rootPage, const QJsonObject& object) const;
+    bool isValidRootPageCount(const QJsonObject& rootPage, const QJsonArray& pages) const;
     bool validateActionTileParams(const QString& cleanName, const QString& cleanActionType,
                                    const QString& cleanTarget, const QString& cleanOpenWith) const;
     bool isValidActionTileParams(const QString& cleanName, const QString& cleanActionType,
@@ -272,6 +277,14 @@ class HomeLayout final : public QObject {
     bool isValidOpenWith(const QString& cleanOpenWith) const;
     bool categoryIdExists(const QString& categoryId) const;
     QString generateActionTileId(const QString& cleanName) const;
+    bool hasAppCollection() const;
+    bool hasExistingAppTile(const QString& appId) const;
+    QString getActionType(const QJsonObject& item) const;
+    bool isValidActionTypeForKind(const QString& kind, const QString& actionType, const QJsonObject& item) const;
+    bool isValidAppLaunchApp(const QString& kind, const QString& actionType, const QJsonObject& item) const;
+    bool isValidActionName(const QString& kind, const QJsonObject& item) const;
+    bool isValidWidgetType(const QString& kind, const QJsonObject& item) const;
+    bool isValidActionTypeUsage(const QString& actionType, const QJsonObject& item) const;
     bool hasAppCollection() const;
     bool hasExistingAppTile(const QString& appId) const;
     QJsonArray m_pages;

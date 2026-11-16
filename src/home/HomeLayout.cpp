@@ -1103,17 +1103,58 @@ bool HomeLayout::validateRootPage(const QJsonObject& object, const QJsonObject& 
 
 bool HomeLayout::isValidRootPage(const QJsonObject& object, const QJsonObject& rootPage, const QJsonArray& pages) const {
     bool valid = !m_owner && object["rootPage"].isObject();
-    for (auto it = rootPage.begin(); it != rootPage.end(); ++it)
-        if (!QStringList{"name", "visible", "position"}.contains(it.key()))
-            valid = false;
-    const auto position = rootPage.value("position");
-    const auto name = rootPage.value("name").toString();
-    if (!isValidRootPageName(name) || !rootPage.value("visible").isBool() || !position.isDouble() ||
-        position.toDouble() != position.toInt() || position.toInt() < 0 || position.toInt() > pages.size() ||
-        (!rootPage.value("visible").toBool() && homePageFromObject(object).isEmpty()) ||
-        pages.size() + (rootPage.value("visible").toBool() ? 1 : 0) > 64)
+    if (!validRootPageKeys(rootPage))
+        valid = false;
+    if (!isValidRootPagePosition(object, rootPage, pages))
         valid = false;
     return valid;
+}
+
+bool HomeLayout::validRootPageKeys(const QJsonObject& rootPage) const {
+    for (auto it = rootPage.begin(); it != rootPage.end(); ++it)
+        if (!QStringList{"name", "visible", "position"}.contains(it.key()))
+            return false;
+    return true;
+}
+
+bool HomeLayout::isValidRootPagePosition(const QJsonObject& object, const QJsonObject& rootPage, const QJsonArray& pages) const {
+    const auto position = rootPage.value("position");
+    const auto name = rootPage.value("name").toString();
+    if (!isValidRootPagePositionName(name))
+        return false;
+    if (!rootPage.value("visible").isBool())
+        return false;
+    if (!isValidRootPagePositionValue(position))
+        return false;
+    if (!isValidRootPagePositionRange(position, pages))
+        return false;
+    if (!isValidRootPageVisibility(rootPage, object))
+        return false;
+    if (!isValidRootPageCount(rootPage, pages))
+        return false;
+    return true;
+}
+
+bool HomeLayout::isValidRootPagePositionName(const QString& name) const {
+    return !name.trimmed().isEmpty() && name.size() <= 80 && !name.contains(QChar::Null);
+}
+
+bool HomeLayout::isValidRootPagePositionValue(const QVariant& position) const {
+    return position.isDouble() && position.toDouble() == position.toInt();
+}
+
+bool HomeLayout::isValidRootPagePositionRange(const QVariant& position, const QJsonArray& pages) const {
+    return position.toInt() >= 0 && position.toInt() <= pages.size();
+}
+
+bool HomeLayout::isValidRootPageVisibility(const QJsonObject& rootPage, const QJsonObject& object) const {
+    if (!rootPage.value("visible").toBool())
+        return !homePageFromObject(object).isEmpty();
+    return true;
+}
+
+bool HomeLayout::isValidRootPageCount(const QJsonObject& rootPage, const QJsonArray& pages) const {
+    return pages.size() + (rootPage.value("visible").toBool() ? 1 : 0) <= 64;
 }
 
 bool HomeLayout::isValidRootPageName(const QString& name) const {
@@ -1217,20 +1258,44 @@ bool HomeLayout::isValidComponentKind(const QString& kind) {
 }
 
 bool HomeLayout::isValidComponentActionType(const QJsonObject& item, const QString& kind) {
-    const auto actionType = [&item]() {
-        if (item.contains("actions") && item["actions"].isArray() && !item["actions"].toArray().isEmpty())
-            return item["actions"].toArray().first().toObject().value("type").toString();
-        return QString();
-    }();
-    if (kind == "app" && actionType == QStringLiteral("launch-app") && item.value("appId").toString().isEmpty())
-        return false;
-    if (kind == "action" && item.value("name").toString().trimmed().isEmpty())
-        return false;
-    if (kind == "widget" && item.value("widgetType").toString().isEmpty())
-        return false;
-    if (!actionType.isEmpty() && normalizedActionForItem(item).isEmpty())
+    const auto actionType = getActionType(item);
+    if (!isValidActionTypeForKind(kind, actionType, item))
         return false;
     return true;
+}
+
+QString HomeLayout::getActionType(const QJsonObject& item) const {
+    if (item.contains("actions") && item["actions"].isArray() && !item["actions"].toArray().isEmpty())
+        return item["actions"].toArray().first().toObject().value("type").toString();
+    return QString();
+}
+
+bool HomeLayout::isValidActionTypeForKind(const QString& kind, const QString& actionType, const QJsonObject& item) const {
+    if (!isValidAppLaunchApp(kind, actionType, item))
+        return false;
+    if (!isValidActionName(kind, item))
+        return false;
+    if (!isValidWidgetType(kind, item))
+        return false;
+    if (!isValidActionTypeUsage(actionType, item))
+        return false;
+    return true;
+}
+
+bool HomeLayout::isValidAppLaunchApp(const QString& kind, const QString& actionType, const QJsonObject& item) const {
+    return !(kind == "app" && actionType == QStringLiteral("launch-app") && item.value("appId").toString().isEmpty());
+}
+
+bool HomeLayout::isValidActionName(const QString& kind, const QJsonObject& item) const {
+    return !(kind == "action" && item.value("name").toString().trimmed().isEmpty());
+}
+
+bool HomeLayout::isValidWidgetType(const QString& kind, const QJsonObject& item) const {
+    return !(kind == "widget" && item.value("widgetType").toString().isEmpty());
+}
+
+bool HomeLayout::isValidActionTypeUsage(const QString& actionType, const QJsonObject& item) const {
+    return actionType.isEmpty() || !normalizedActionForItem(item).isEmpty();
 }
 
 bool HomeLayout::isValidComponentOpacity(const QJsonObject& item) {
