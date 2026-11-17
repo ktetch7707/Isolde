@@ -183,6 +183,63 @@ class StudioSession final : public QObject
                       const QString& strategy,
                       const QString& pageId = {},
                       const QVariantMap& options = {});
+    bool
+    validatePlacementProposalInputs(const QString& strategy, const QVariantMap& options);
+    bool
+    resolvePlacementDestination(const QJsonObject& document, QJsonArray& entries, const QString& id,
+                                const QVariantMap& options, const QString& pageId, QString& category,
+                                QString& parent, QString& sourceCategory, QString& sourceParent,
+                                bool& sections, QJsonObject& composition);
+    bool
+    findPlacementTarget(const QJsonArray& entries, const QString& id, int& selectedIndex, QVariantMap& origin);
+    bool
+    validateCollidersNotLocked(const QJsonArray& entries, const QList<int>& colliders);
+    bool
+    findPageLayout(const QJsonObject& document, const QString& pageId, QJsonObject& layout);
+    bool
+    validatePlacementParent(const QJsonArray& entries, const QString& parent, const QString& id,
+                            bool& categoryCleared);
+    bool
+    validatePlacementCategory(const QJsonObject& document, const QString& category, bool sections,
+                              const QString& parent, bool& categoryValid);
+    QList<int>
+    findPlacementColliders(const QJsonArray& entries, const QString& id, const QVariantMap& placement,
+                           const QString& parent, const QString& category, bool sections,
+                           bool overlapEnabled);
+    bool
+    handlePlacementCancelStrategy(const QList<int>& colliders);
+    bool
+    handlePlacementSwapStrategy(const QJsonArray& entries, QJsonArray& entriesOut, const QString& id,
+                                const QList<int>& colliders, const QVariantMap& origin,
+                                const QString& sourceCategory, const QString& sourceParent,
+                                QString& category, QString& parent);
+    bool
+    handlePlacementShiftStrategy(const QJsonArray& entries, QJsonArray& entriesOut, const QString& id,
+                                 const QList<int>& colliders, const QVariantMap& placement,
+                                 const QVariantMap& origin, const QString& parent, const QString& category,
+                                 int cols, int rows, int& attempts, bool& affectedLimit, bool sections);
+    bool
+    handlePlacementShiftStrategy(const QJsonArray& entries, QJsonArray& entriesOut, const QString& id,
+                                 const QList<int>& colliders, const QVariantMap& placement,
+                                 const QVariantMap& origin, const QString& parent, const QString& category,
+                                 int cols, int rows, int& attempts, bool& affectedLimit, bool sections);
+    QList<int>
+    findCollidersForTarget(const QJsonArray& entries, int index, const QVariantMap& target,
+                           const QString& parent, const QString& category, bool sections,
+                           const QSet<int>& fixed);
+    QList<QPair<int, int>>
+    generateSortedCells(int cols, int rows, const QVariantMap& placement, int originalX, int originalY);
+    bool
+    shouldSkipShiftCell(bool blocked, int pass, const QList<int>& displaced);
+    bool
+    tryShiftCell(QJsonArray& workingEntries, int index, const QVariantMap& target,
+                 const QJsonArray& originalEntries, const QString& parent, const QString& category,
+                 bool sections, int cols, int rows, QSet<int>& fixed, QList<int>& pending,
+                 std::function<bool(QList<int>)>& solve, int& localAttempts, bool& affectedLimit);
+    int
+    selectedIndex(const QJsonArray& entries, const QString& id);
+    QVariantList
+    collectPlacementChanges(const QJsonArray& entries, const QJsonArray& originalEntries, int selected);
     Q_INVOKABLE QVariantMap
     additionProposal(const QString& type,
                      const QVariantMap& placement,
