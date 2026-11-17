@@ -31,4 +31,6 @@ bool
 validateKodiPvrOwner(const QVariantMap& v, QString* error);
 bool
 validateLocalChannel(const QVariantMap& v, QString* error);
+bool
+validateLocalChannelMediaKinds(const QVariantMap& v, QString* error);
 } // namespace GuideRules

@@ -631,6 +631,14 @@ GuideRules::validateLocalChannel(const QVariantMap& v, QString* error)
         return reject(error,
                       "Invalid local channel definition. Check its version, name, number, clock, sequencing, timezone "
                       "and rules.");
+    if (!validateLocalChannelMediaKinds(v, error))
+        return v;
+    return true;
+}
+
+bool
+GuideRules::validateLocalChannelMediaKinds(const QVariantMap& v, QString* error)
+{
     if (v.contains("mediaKinds"))
     {
         if (v.value("mediaKinds").metaType().id() != QMetaType::QVariantList ||
