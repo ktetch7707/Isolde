@@ -12,11 +12,14 @@
 #include "DesignSystem.h"
 #include "app/AppRegistry.h"
 
-/// Validates a source policy document: bounded duration, known mode, unique
-/// page/slot ids, known event types, boolean flags and optional detected
-/// source/appliance sub-maps.
-bool
-ComponentSchema::validSourcePolicy(const QVariantMap& value)
+/** Validates a source policy document.
+ * @brief Validates a source policy document: bounded duration, known mode, unique page/slot ids, known event types, boolean flags and optional detected source/appliance sub-maps.
+ * @details Iterates every field in the policy map and dispatches to the appropriate field validator. Ensures schemaVersion and duration are valid numbers, mode is one of off/compact/widget, pages/slots are unique safe ids, events/types are known media event kinds, boolean flags are actually booleans, and optional detected source / appliance sub-maps pass their own validation.
+ * @why Source policies define how Isolde interprets incoming media events; invalid policies could cause incorrect source detection or unbounded data, so they must be validated before storage.
+ * @param value The source policy document to validate.
+ * @return true if the document is valid, false otherwise.
+ */
+bool ComponentSchema::validSourcePolicy(const QVariantMap& value)
 {
     for (auto it = value.cbegin(); it != value.cend(); ++it)
     {
@@ -26,9 +29,15 @@ ComponentSchema::validSourcePolicy(const QVariantMap& value)
     return true;
 }
 
-/// Dispatches a source policy field key to its field-specific validator.
-bool
-ComponentSchema::validSourcePolicyField(const QString& key, const QVariant& v)
+/** Dispatches a source policy field key to its field-specific validator.
+ * @brief Dispatches a source policy field key to its field-specific validator.
+ * @details Routes each key in the source policy map to the appropriate field-specific validator based on the key name.
+ * @why Centralizes field dispatch logic so new fields can be added in one place.
+ * @param key The field name to dispatch.
+ * @param v The variant value to validate.
+ * @return true if the field is valid, false otherwise.
+ */
+bool ComponentSchema::validSourcePolicyField(const QString& key, const QVariant& v)
 {
     if (key == "schemaVersion" || key == "duration")
         return validSourcePolicyNumeric(v, key);
@@ -48,25 +57,37 @@ ComponentSchema::validSourcePolicyField(const QString& key, const QVariant& v)
     return false;
 }
 
-/// Validates a detected source field (map wrapper).
-bool
-ComponentSchema::validSourcePolicyDetectedSourceField(const QVariant& v)
+/** Validates a detected source field (map wrapper).
+ * @brief Validates a detected source field (map wrapper).
+ * @details Checks that the variant is a QVariantMap and delegates to validSourcePolicyDetectedSource for full validation of id, type, and containment fields.
+ * @why Detected sources represent physical media inputs; invalid identities could cause incorrect source mapping.
+ * @param v The variant value to validate.
+ * @return true if the value is a valid detected source map, false otherwise.
+ */
+bool ComponentSchema::validSourcePolicyDetectedSourceField(const QVariant& v)
 {
     if (v.metaType().id() != QMetaType::QVariantMap)
         return false;
     return validSourcePolicyDetectedSource(v.toMap());
 }
 
-/// Validates an appliance field (map wrapper).
-bool
-ComponentSchema::validSourcePolicyApplianceField(const QVariant& v)
+/** Validates an appliance field (map wrapper).
+ * @brief Validates an appliance field (map wrapper).
+ * @details Checks that the variant holds a QVariantMap and delegates to validSourcePolicyAppliance for full validation of id, type, and distribution mode fields.
+ * @why Appliance definitions map physical devices to Isolde; invalid maps would cause incorrect device handling.
+ * @param v The variant value to validate.
+ * @return true if the value is a valid appliance map, false otherwise.
+ */
+bool ComponentSchema::validSourcePolicyApplianceField(const QVariant& v)
 {
     if (v.metaType().id() != QMetaType::QVariantMap)
         return false;
     return validSourcePolicyAppliance(v.toMap());
 }
 
-/// Validates a numeric source policy field (schemaVersion or duration).
+/**
+ * Validates a numeric source policy field (schemaVersion or duration).
+ */
 bool
 ComponentSchema::validSourcePolicyNumeric(const QVariant& value, const QString& key)
 {
@@ -82,7 +103,9 @@ ComponentSchema::validSourcePolicyNumeric(const QVariant& value, const QString& 
     return n != 0 && (n >= 5 && n <= 60);
 }
 
-/// Validates the source policy mode field ("off", "compact" or "widget").
+/**
+ * Validates the source policy mode field ("off", "compact" or "widget").
+ */
 bool
 ComponentSchema::validSourcePolicyMode(const QVariant& value)
 {
@@ -90,7 +113,9 @@ ComponentSchema::validSourcePolicyMode(const QVariant& value)
            QStringList{"off", "compact", "widget"}.contains(value.toString());
 }
 
-/// Validates a source policy page or slot id list: unique safe ids.
+/**
+ * Validates a source policy page or slot id list: unique safe ids.
+ */
 bool
 ComponentSchema::validSourcePolicyIdList(const QVariant& value, const QString& key)
 {
@@ -111,7 +136,9 @@ ComponentSchema::validSourcePolicyIdList(const QVariant& value, const QString& k
     return true;
 }
 
-/// Validates a source policy event type list: known media event kinds.
+/**
+ * Validates a source policy event type list: known media event kinds.
+ */
 bool
 ComponentSchema::validSourcePolicyEventTypeList(const QVariant& value, const QString& key)
 {
@@ -132,16 +159,26 @@ ComponentSchema::validSourcePolicyEventTypeList(const QVariant& value, const QSt
     return true;
 }
 
-/// Validates a source policy boolean flag field.
-bool
-ComponentSchema::validSourcePolicyBool(const QVariant& value)
+/** Validates a source policy boolean flag field.
+ * @brief Validates a source policy boolean flag field.
+ * @details Checks that the variant holds a QMetaType::Bool value.
+ * @why Boolean flags in source policies control behavior; a non-boolean value would be misinterpreted.
+ * @param value The variant value to validate.
+ * @return true if the value is a boolean, false otherwise.
+ */
+bool ComponentSchema::validSourcePolicyBool(const QVariant& value)
 {
     return value.metaType().id() == QMetaType::Bool;
 }
 
-/// Validates a detected source sub-map (id, type, containment).
-bool
-ComponentSchema::validSourcePolicyDetectedSource(const QVariantMap& value)
+/** Validates a detected source sub-map (id, type, containment).
+ * @brief Validates a detected source sub-map: id, type, containment.
+ * @details Checks that the value is a QVariantMap, contains id (safeId), type (one of movie-disc/game-disc/media-folder/file-source), and optional containment fields.
+ * @why Detected sources represent physical media inputs; invalid identities could cause incorrect source mapping.
+ * @param value The variant map to validate.
+ * @return true if the detected source sub-map is valid, false otherwise.
+ */
+bool ComponentSchema::validSourcePolicyDetectedSource(const QVariantMap& value)
 {
     if (!s.contains(QStringLiteral("id")) || !safeId(s.value(QStringLiteral("id")).toString()))
         return false;
@@ -168,9 +205,14 @@ ComponentSchema::validSourcePolicyDetectedSource(const QVariantMap& value)
     return true;
 }
 
-/// Validates an appliance sub-map (id, type, distribution mode).
-bool
-ComponentSchema::validSourcePolicyAppliance(const QVariantMap& value)
+/** Validates an appliance sub-map (id, type, distribution mode).
+ * @brief Validates an appliance sub-map: id, type, distribution mode.
+ * @details Checks that the value is a QVariantMap, contains id (safeId), type (one of whiteware/AV appliance/climate appliance), and optional distributionMode and requiresSetup fields.
+ * @why Appliance definitions map physical devices to Isolde; invalid maps would cause incorrect device handling.
+ * @param value The variant map to validate.
+ * @return true if the appliance sub-map is valid, false otherwise.
+ */
+bool ComponentSchema::validSourcePolicyAppliance(const QVariantMap& value)
 {
     if (!a.contains(QStringLiteral("id")) || !safeId(a.value(QStringLiteral("id")).toString()))
         return false;
@@ -282,8 +324,10 @@ constexpr int MaxHeaderControls = 4;
 // Min/MaxSidebarWidth, Min/MaxSectionHeight, Min/MaxDesignHeight are declared
 // in ComponentSchema.h (shared with HomeLayout).
 } // namespace
-/// Validates a safe component identity: starts with alphanumeric, bounded
-/// length, rejects "." and "..".
+/**
+ * Validates a safe component identity: starts with alphanumeric, bounded
+ * length, rejects "." and "..".
+ */
 bool
 ComponentSchema::safeId(const QString& id)
 {
@@ -313,7 +357,9 @@ ComponentSchema::validChildLayout(const QVariantMap& value)
     return validChildLayoutModeConsistency(value);
 }
 
-/// Validates child layout keys only (known key set).
+/**
+ * Validates child layout keys only (known key set).
+ */
 bool
 ComponentSchema::validChildLayoutKeys(const QVariantMap& value)
 {
@@ -325,7 +371,9 @@ ComponentSchema::validChildLayoutKeys(const QVariantMap& value)
     return true;
 }
 
-/// Validates child layout schemaVersion (numeric 1).
+/**
+ * Validates child layout schemaVersion (numeric 1).
+ */
 bool
 ComponentSchema::validChildLayoutVersion(const QVariantMap& value)
 {
@@ -334,14 +382,18 @@ ComponentSchema::validChildLayoutVersion(const QVariantMap& value)
            value.value("schemaVersion").toDouble() == 1;
 }
 
-/// Validates child layout mode ("grid", "row" or "column").
+/**
+ * Validates child layout mode ("grid", "row" or "column").
+ */
 bool
 ComponentSchema::validChildLayoutMode(const QVariantMap& value)
 {
     return QStringList{"grid", "row", "column"}.contains(value.value("mode").toString());
 }
 
-/// Validates a child layout dimension field (columns, rows, gap or padding).
+/**
+ * Validates a child layout dimension field (columns, rows, gap or padding).
+ */
 bool
 ComponentSchema::validChildLayoutDimension(const QVariantMap& value, const QString& key)
 {
@@ -350,7 +402,9 @@ ComponentSchema::validChildLayoutDimension(const QVariantMap& value, const QStri
     return validChildLayoutDimensionRange(value, key);
 }
 
-/// Validates child layout dimension type (not string or bool).
+/**
+ * Validates child layout dimension type (not string or bool).
+ */
 bool
 ComponentSchema::validChildLayoutDimensionType(const QVariantMap& value, const QString& key)
 {
@@ -358,7 +412,9 @@ ComponentSchema::validChildLayoutDimensionType(const QVariantMap& value, const Q
            value[key].metaType().id() != QMetaType::Bool;
 }
 
-/// Validates child layout dimension range (bounded to grid limits).
+/**
+ * Validates child layout dimension range (bounded to grid limits).
+ */
 bool
 ComponentSchema::validChildLayoutDimensionRange(const QVariantMap& value, const QString& key)
 {
@@ -373,14 +429,18 @@ ComponentSchema::validChildLayoutDimensionRange(const QVariantMap& value, const 
     return !(key == "columns" || key == "rows") || std::floor(number) == number;
 }
 
-/// Validates child layout wrap field (boolean or absent).
+/**
+ * Validates child layout wrap field (boolean or absent).
+ */
 bool
 ComponentSchema::validChildLayoutWrap(const QVariantMap& value)
 {
     return !value.contains("wrap") || value["wrap"].metaType().id() == QMetaType::Bool;
 }
 
-/// Validates child layout visibleColumns field (row mode only).
+/**
+ * Validates child layout visibleColumns field (row mode only).
+ */
 bool
 ComponentSchema::validChildLayoutVisibleColumns(const QVariantMap& value)
 {
@@ -393,7 +453,9 @@ ComponentSchema::validChildLayoutVisibleColumns(const QVariantMap& value)
            n.toInt() >= MinChildColumns && n.toInt() <= value["columns"].toInt();
 }
 
-/// Validates child layout mode/columns/rows consistency.
+/**
+ * Validates child layout mode/columns/rows consistency.
+ */
 bool
 ComponentSchema::validChildLayoutModeConsistency(const QVariantMap& value)
 {
@@ -1278,8 +1340,10 @@ ComponentSchema::validSettingsNavigation(const QVariantMap& value)
     return seen == categoryIds && seenRoutes == routes;
 }
 
-/// Validates settings navigation schemaVersion (numeric 1).
-/// Validates settings navigation categories list (exact set of 10 categories).
+/**
+ * Validates settings navigation schemaVersion (numeric 1).
+ * Validates settings navigation categories list (exact set of 10 categories).
+ */
 bool
 ComponentSchema::validSettingsNavigationCategories(const QVariantMap& value)
 {
@@ -1290,8 +1354,10 @@ ComponentSchema::validSettingsNavigationCategories(const QVariantMap& value)
            value.value("categories").metaType().id() == QMetaType::QVariantList;
 }
 
-/// Validates a single settings navigation category (id, name, description,
-/// rows or route).
+/**
+ * Validates a single settings navigation category (id, name, description,
+ * rows or route).
+ */
 bool
 ComponentSchema::validSettingsNavigationCategory(const QVariantMap& category, QSet<QString>& seen,
                                                  QSet<QString>& seenRoutes)
@@ -1341,7 +1407,9 @@ ComponentSchema::validSettingsNavigationCategory(const QVariantMap& category, QS
     return true;
 }
 
-/// Validates a settings navigation row (name, description, unique route).
+/**
+ * Validates a settings navigation row (name, description, unique route).
+ */
 bool
 ComponentSchema::validSettingsNavigationRow(const QVariantMap& row, QSet<QString>& seenRoutes)
 {
@@ -1354,7 +1422,9 @@ ComponentSchema::validSettingsNavigationRow(const QVariantMap& row, QSet<QString
     return true;
 }
 
-/// Validates a settings navigation label (non-empty, bounded size).
+/**
+ * Validates a settings navigation label (non-empty, bounded size).
+ */
 bool
 ComponentSchema::validSettingsNavigationLabel(const QVariant& label, int limit)
 {
@@ -1426,8 +1496,10 @@ ComponentSchema::validCompositionScrolling(const QVariantMap& value)
            validCompositionMarginGap(value);
 }
 
-/// Validates composition keys only (known key set).
-/// Validates composition header keys only.
+/**
+ * Validates composition keys only (known key set).
+ * Validates composition header keys only.
+ */
 bool
 ComponentSchema::validCompositionHeaderKeys(const QVariantMap& header)
 {
@@ -1465,7 +1537,9 @@ ComponentSchema::validCompositionHeaderKeys(const QVariantMap& header)
     return true;
 }
 
-/// Validates settingsCategoryOrder (exact category set, unique).
+/**
+ * Validates settingsCategoryOrder (exact category set, unique).
+ */
 bool
 ComponentSchema::validCompositionSettingsCategoryOrder(const QVariantMap& value)
 {
@@ -1485,7 +1559,9 @@ ComponentSchema::validCompositionSettingsCategoryOrder(const QVariantMap& value)
     return true;
 }
 
-/// Validates captureInputArtwork (bounded artwork map).
+/**
+ * Validates captureInputArtwork (bounded artwork map).
+ */
 bool
 ComponentSchema::validCompositionCaptureInputArtwork(const QVariantMap& value)
 {
@@ -1501,7 +1577,9 @@ ComponentSchema::validCompositionCaptureInputArtwork(const QVariantMap& value)
     return true;
 }
 
-/// Validates appGallery (bounded gallery presentation map).
+/**
+ * Validates appGallery (bounded gallery presentation map).
+ */
 bool
 ComponentSchema::validCompositionAppGallery(const QVariantMap& value)
 {
@@ -1612,8 +1690,10 @@ ComponentSchema::validCompositionAppGalleryFavoriteIds(const QVariant& val)
     return true;
 }
 
-/// Validates composition header map with geometry bounds.
-/// Validates composition header map with geometry bounds.
+/**
+ * Validates composition header map with geometry bounds.
+ * Validates composition header map with geometry bounds.
+ */
 bool
 ComponentSchema::validCompositionHeader(const QVariantMap& header, const QVariantMap& value)
 {
@@ -1627,7 +1707,9 @@ ComponentSchema::validCompositionHeader(const QVariantMap& header, const QVarian
     return validCompositionHeaderGeometry(header, value);
 }
 
-/// Validates composition header field (typed bounds by field name).
+/**
+ * Validates composition header field (typed bounds by field name).
+ */
 bool
 ComponentSchema::validCompositionHeaderField(const QString& key, const QVariant& entry)
 {

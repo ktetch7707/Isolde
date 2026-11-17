@@ -114,6 +114,18 @@ KodiMedia::~KodiMedia()
     m_busy = false;
     releaseSocket();
 }
+/** Releases the Kodi JSON-RPC socket connection.
+ * @brief Releases the Kodi JSON-RPC socket connection.
+ * @details Closes the active socket, resets the descriptor, and stops the timeout timer.
+ * @why Frees the network socket and prevents resource leaks when the guide is no longer needed.
+ * @return none
+ */
+/** Frees the Kodi JSON-RPC socket connection.
+ * @brief Releases the Kodi JSON-RPC socket connection.
+ * @details Closes the active socket, resets the descriptor, and stops the timeout timer.
+ * @why Frees the network socket and prevents resource leaks when the guide is no longer needed.
+ * @return none
+ */
 void
 KodiMedia::releaseSocket()
 {
