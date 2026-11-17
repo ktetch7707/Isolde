@@ -409,11 +409,31 @@ class HomeLayout final : public QObject
     bool
     validateStudioStylePresets(const QJsonArray& presets);
     bool
+    validateStudioDesktop(const QJsonObject& desktop);
+    bool
+    validateStudioThemeGroups(const QJsonArray& groups);
+    bool
+    validateStudioSchemes(const QJsonArray& schemes);
+    bool
+    validateStudioStylePresets(const QJsonArray& presets);
+    bool
     validateStudioTrialDurations(const QJsonArray& trials);
+    bool
+    validateStudioMenuWidth(const QJsonValue& value);
+    bool
+    validateStudioSectionHeight(const QJsonValue& value);
     bool
     validateStudioAppPicker(const QJsonObject& picker);
     bool
     validateStudioWidgetSpans(const QJsonObject& spans);
+    bool
+    validateStudioHeaderDefaults(const QJsonObject& defaults);
+    bool
+    validateStudioSettings(const QJsonObject& object);
+    bool
+    validateDesktopStringKeys(const QJsonObject& obj, const QStringList& keys);
+    bool
+    validateDesktopNumericKeys(const QJsonObject& obj, const QStringList& keys);
     void
     appendSourceChoicesForType(QVariantList& choices, const QString& type) const;
     void

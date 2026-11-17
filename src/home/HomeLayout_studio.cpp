@@ -30,37 +30,14 @@ HomeLayout::studioOptions() const
     m_optionsBytes = bytes;
     m_optionsCache.clear();
     const auto object = QJsonDocument::fromJson(bytes).object();
-    if (!validateStudioAppIconStyles(object.value("appIconStyles").toObject()))
-        return {};
-    if (!validateStudioArtworkCleanup(object.value("artworkCleanup").toObject()))
-        return {};
-    if (!validateStudioReferenceViewport(object.value("referenceViewport").toObject()))
-        return {};
-    if (object.contains("responsiveDefaults") &&
-        !DesignSystem::validResponsive(object["responsiveDefaults"].toObject().toVariantMap()))
-        return {};
-    if (object["schemaVersion"].toInt() != 1 || !object["defaultGrid"].isObject() ||
-        !ComponentSchema::validGrid(object["defaultGrid"].toObject().toVariantMap()) || !object["gridModes"].isArray())
-        return {};
-    if (!object["appearance"].isObject() || !readableStudioAppearance(object["appearance"].toObject().toVariantMap()))
+    if (!validateStudioSettings(object))
         return {};
     auto guide = object.contains("guide") ? ComponentSchema::guideOptions(object["guide"].toObject().toVariantMap())
                                           : QVariantMap();
     if (object.contains("guide") && guide.isEmpty())
         return {};
-    if (object.contains("headerDefaults"))
-    {
-        const auto defaults = object["headerDefaults"].toObject();
-        if (defaults.size() != 2 || !defaults.contains("navigation") || !defaults.contains("identity"))
-            return {};
-        for (const auto& mode : QStringList{"navigation", "identity"})
-            if (!defaults[mode].isObject() ||
-                !ComponentSchema::validComposition({{"schemaVersion", 1},
-                                                    {"headerMode", mode},
-                                                    {"showClock", true},
-                                                    {"header", defaults[mode].toObject().toVariantMap()}}))
-                return {};
-    }
+    if (!validateStudioHeaderDefaults(object.value("headerDefaults").toObject()))
+        return {};
     if (!validateStudioAppPicker(object.value("appPicker").toObject()))
         return {};
     if (!validateStudioDesktop(object.value("desktop").toObject()))
@@ -73,21 +50,9 @@ HomeLayout::studioOptions() const
         return {};
     if (!validateStudioTrialDurations(object["trialDurations"].toArray()))
         return {};
-    if (trials.size() != 3)
+    if (!validateStudioMenuWidth(object["menuWidth"]))
         return {};
-    for (int i = 0; i < trials.size(); ++i)
-    {
-        const auto trial = trials[i].toObject();
-        const int seconds = QList<int>{30, 60, 300}[i];
-        if (trial.size() != 2 || !trial["label"].isString() || trial["label"].toString().trimmed().isEmpty() ||
-            trial["label"].toString().size() > 40 || !trial["seconds"].isDouble() ||
-            trial["seconds"].toDouble() != seconds)
-            return {};
-    }
-    if (!object["menuWidth"].isDouble() || object["menuWidth"].toDouble() < 200 || object["menuWidth"].toDouble() > 480)
-        return {};
-    if (!object["sectionHeight"].isDouble() || object["sectionHeight"].toDouble() < 60 ||
-        object["sectionHeight"].toDouble() > 800)
+    if (!validateStudioSectionHeight(object["sectionHeight"]))
         return {};
     if (!validateStudioWidgetSpans(object.value("widgetSpans").toObject()))
         return {};
@@ -651,13 +616,27 @@ HomeLayout::validateStudioDesktop(const QJsonObject& desktop)
 {
     if (desktop.size() != 8)
         return false;
-    for (const auto& key : QStringList{"title", "returnLabel", "returnShortcut"})
-        if (!desktop[key].isString() || desktop[key].toString().trimmed().isEmpty() ||
-            desktop[key].toString().size() > 80 || desktop[key].toString().contains(QChar::Null))
+    if (!validateDesktopStringKeys(desktop, QStringList{"title", "returnLabel", "returnShortcut"}))
+        return false;
+    if (!validateDesktopNumericKeys(desktop, QStringList{"width", "height", "margin", "radius", "labelSize"}))
+        return false;
+    return true;
+}
+bool
+HomeLayout::validateDesktopStringKeys(const QJsonObject& obj, const QStringList& keys)
+{
+    for (const auto& key : keys)
+        if (!obj[key].isString() || obj[key].toString().trimmed().isEmpty() ||
+            obj[key].toString().size() > 80 || obj[key].toString().contains(QChar::Null))
             return false;
-    for (const auto& key : QStringList{"width", "height", "margin", "radius", "labelSize"})
+    return true;
+}
+bool
+HomeLayout::validateDesktopNumericKeys(const QJsonObject& obj, const QStringList& keys)
+{
+    for (const auto& key : keys)
     {
-        const auto value = desktop[key];
+        const auto value = obj[key];
         const auto n = value.toDouble(-1);
         const int low = key == "width"       ? 240
                         : key == "height"    ? 80
@@ -750,6 +729,41 @@ HomeLayout::validateStudioTrialDurations(const QJsonArray& trials)
 }
 
 bool
+HomeLayout::validateStudioHeaderDefaults(const QJsonObject& defaults)
+{
+    if (defaults.size() != 2 || !defaults.contains("navigation") || !defaults.contains("identity"))
+        return false;
+    for (const auto& mode : QStringList{"navigation", "identity"})
+        if (!defaults[mode].isObject() ||
+            !ComponentSchema::validComposition({{"schemaVersion", 1},
+                                                {"headerMode", mode},
+                                                {"showClock", true},
+                                                {"header", defaults[mode].toObject().toVariantMap()}}))
+            return false;
+    return true;
+}
+
+bool
+HomeLayout::validateStudioSettings(const QJsonObject& object)
+{
+    if (!validateStudioAppIconStyles(object.value("appIconStyles").toObject()))
+        return false;
+    if (!validateStudioArtworkCleanup(object.value("artworkCleanup").toObject()))
+        return false;
+    if (!validateStudioReferenceViewport(object.value("referenceViewport").toObject()))
+        return false;
+    if (object.contains("responsiveDefaults") &&
+        !DesignSystem::validResponsive(object["responsiveDefaults"].toObject().toVariantMap()))
+        return false;
+    if (object["schemaVersion"].toInt() != 1 || !object["defaultGrid"].isObject() ||
+        !ComponentSchema::validGrid(object["defaultGrid"].toObject().toVariantMap()) || !object["gridModes"].isArray())
+        return false;
+    if (!object["appearance"].isObject() || !readableStudioAppearance(object["appearance"].toObject().toVariantMap()))
+        return false;
+    return true;
+}
+
+bool
 HomeLayout::validateStudioAppPicker(const QJsonObject& picker)
 {
     const QMap<QString, QPair<int, int>> bounds{{"columns", {2, 6}},
@@ -787,4 +801,16 @@ HomeLayout::validateStudioWidgetSpans(const QJsonObject& spans)
             return false;
     }
     return true;
+}
+
+bool
+HomeLayout::validateStudioMenuWidth(const QJsonValue& value)
+{
+    return value.isDouble() && value.toDouble() >= 200 && value.toDouble() <= 480;
+}
+
+bool
+HomeLayout::validateStudioSectionHeight(const QJsonValue& value)
+{
+    return value.isDouble() && value.toDouble() >= 60 && value.toDouble() <= 800;
 }
