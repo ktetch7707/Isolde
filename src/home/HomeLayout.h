@@ -410,6 +410,10 @@ class HomeLayout final : public QObject
     validateStudioStylePresets(const QJsonArray& presets);
     bool
     validateStudioTrialDurations(const QJsonArray& trials);
+    bool
+    validateStudioAppPicker(const QJsonObject& picker);
+    bool
+    validateStudioWidgetSpans(const QJsonObject& spans);
     void
     appendSourceChoicesForType(QVariantList& choices, const QString& type) const;
     void

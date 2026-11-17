@@ -61,30 +61,8 @@ HomeLayout::studioOptions() const
                                                     {"header", defaults[mode].toObject().toVariantMap()}}))
                 return {};
     }
-    if (object.contains("appPicker"))
-    {
-        const auto picker = object["appPicker"].toObject();
-        const QMap<QString, QPair<int, int>> bounds{{"columns", {2, 6}},
-                                                    {"cardHeight", {96, 240}},
-                                                    {"gap", {0, 32}},
-                                                    {"radius", {0, 40}},
-                                                    {"margin", {8, 48}},
-                                                    {"labelSize", {14, 28}},
-                                                    {"logoSize", {24, 96}}};
-        if (picker.size() != bounds.size())
-            return {};
-        for (auto it = bounds.cbegin(); it != bounds.cend(); ++it)
-        {
-            const auto value = picker[it.key()];
-            const auto n = value.toDouble(-1);
-            if (!value.isDouble() || !std::isfinite(n) || std::floor(n) != n || n < it.value().first ||
-                n > it.value().second)
-                return {};
-        }
-        if (picker["cardHeight"].toInt() <
-            picker["logoSize"].toInt() + 2 * picker["labelSize"].toInt() + 2 * picker["gap"].toInt())
-            return {};
-    }
+    if (!validateStudioAppPicker(object.value("appPicker").toObject()))
+        return {};
     if (!validateStudioDesktop(object.value("desktop").toObject()))
         return {};
     if (!validateStudioThemeGroups(simple["themeGroups"].toArray()))
@@ -111,14 +89,8 @@ HomeLayout::studioOptions() const
     if (!object["sectionHeight"].isDouble() || object["sectionHeight"].toDouble() < 60 ||
         object["sectionHeight"].toDouble() > 800)
         return {};
-    for (const auto& type : QStringList{"clock", "text"})
-    {
-        const auto span = object["widgetSpans"].toObject()[type].toObject().toVariantMap();
-        if (span.size() != 2 ||
-            !ComponentSchema::validPlacement(
-                {{"x", 0}, {"y", 0}, {"width", span.value("width")}, {"height", span.value("height")}}, 16, 10))
-            return {};
-    }
+    if (!validateStudioWidgetSpans(object.value("widgetSpans").toObject()))
+        return {};
     const auto group = ComponentSchema::component(object["groupPreset"].toObject().toVariantMap(), true);
     if (group.isEmpty() || group.value("componentType") != "container")
         return {};
@@ -772,6 +744,46 @@ HomeLayout::validateStudioTrialDurations(const QJsonArray& trials)
         if (trial.size() != 2 || !trial["label"].isString() || trial["label"].toString().trimmed().isEmpty() ||
             trial["label"].toString().size() > 40 || !trial["seconds"].isDouble() ||
             trial["seconds"].toDouble() != seconds)
+            return false;
+    }
+    return true;
+}
+
+bool
+HomeLayout::validateStudioAppPicker(const QJsonObject& picker)
+{
+    const QMap<QString, QPair<int, int>> bounds{{"columns", {2, 6}},
+                                                {"cardHeight", {96, 240}},
+                                                {"gap", {0, 32}},
+                                                {"radius", {0, 40}},
+                                                {"margin", {8, 48}},
+                                                {"labelSize", {14, 28}},
+                                                {"logoSize", {24, 96}}};
+    if (picker.size() != bounds.size())
+        return false;
+    for (auto it = bounds.cbegin(); it != bounds.cend(); ++it)
+    {
+        const auto value = picker[it.key()];
+        const auto n = value.toDouble(-1);
+        if (!value.isDouble() || !std::isfinite(n) || std::floor(n) != n || n < it.value().first ||
+            n > it.value().second)
+            return false;
+    }
+    if (picker["cardHeight"].toInt() <
+        picker["logoSize"].toInt() + 2 * picker["labelSize"].toInt() + 2 * picker["gap"].toInt())
+        return false;
+    return true;
+}
+
+bool
+HomeLayout::validateStudioWidgetSpans(const QJsonObject& spans)
+{
+    for (const auto& type : QStringList{"clock", "text"})
+    {
+        const auto span = spans[type].toObject().toVariantMap();
+        if (span.size() != 2 ||
+            !ComponentSchema::validPlacement(
+                {{"x", 0}, {"y", 0}, {"width", span.value("width")}, {"height", span.value("height")}}, 16, 10))
             return false;
     }
     return true;
