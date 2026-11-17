@@ -1323,11 +1323,8 @@ GuideController::previewFeed(const QString& instance,
                              const QString& directUrl,
                              const QString& directName)
 {
-    if (!ComponentSchema::safeId(instance) || instance == "kodi-pvr")
+    if (!validateFeedInputs(instance, directUrl, directName))
         return fail(tr("Choose a unique source ID containing letters, numbers, dots, underscores or hyphens."));
-    if (!directUrl.isEmpty() && (!GuideFeeds::streamUrl(directUrl) || directName.trimmed().isEmpty() ||
-                                 directName.size() > 160 || directName.contains('\n') || directName.contains('\r')))
-        return fail(tr("Choose a station name and compatible stream URL without credentials or player options."));
     m_sourcePreviewReady = false;
     m_sourcePreview.clear();
     m_feedListings.clear();
@@ -1395,6 +1392,17 @@ GuideController::previewFeed(const QString& instance,
                 emit changed();
             }
         });
+}
+bool
+GuideController::validateFeedInputs(const QString& instance, const QString& directUrl,
+                                    const QString& directName)
+{
+    if (!ComponentSchema::safeId(instance) || instance == "kodi-pvr")
+        return false;
+    if (!directUrl.isEmpty() && (!GuideFeeds::streamUrl(directUrl) || directName.trimmed().isEmpty() ||
+                                 directName.size() > 160 || directName.contains('\n') || directName.contains('\r')))
+        return false;
+    return true;
 }
 bool
 GuideController::setSourceEpg(int index, const QString& epgId)

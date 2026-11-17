@@ -223,6 +223,8 @@ class GuideController final : public QObject
     void
     finalizeFeedLoad(QVariantMap& result, QVariantList& entries, QVariantList& sourcePreview,
                      QVariantMap& feedListings, bool& sourcePreviewReady, qint64& snapshotBytes);
+    bool
+    validateFeedInputs(const QString& instance, const QString& directUrl, const QString& directName);
     Q_INVOKABLE bool
     setSourceEpg(int index, const QString& epgId);
     Q_INVOKABLE bool
