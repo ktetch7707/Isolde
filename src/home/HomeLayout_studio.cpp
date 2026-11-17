@@ -296,7 +296,7 @@ HomeLayout::studioOptions() const
                          "detected-sources",
                          "source-notice"}
                  .contains(it.key()) ||
-            ComponentSchema::component(it.value().toObject().toVariantMap(), true).isEmpty())
+             ComponentSchema::component(it.value().toObject().toVariantMap(), true).isEmpty())
             return {};
     if (object.contains("shapeChoices"))
     {
@@ -481,6 +481,18 @@ HomeLayout::studioAppearance() const
 bool
 HomeLayout::applyTheme(const QVariantMap& theme, bool includeSuggestedArtwork)
 {
+    const auto presentation = prepareThemePresentation(theme);
+    QString startColor, endColor;
+    double roundness = -1.0, tileOpacity = 1.0;
+    if (!validateThemeColors(theme, startColor, endColor, roundness, tileOpacity))
+        return false;
+    applyThemeArtwork(theme, tileOpacity, includeSuggestedArtwork);
+    return commitTheme(theme, startColor, endColor, roundness, presentation);
+}
+
+QVariantMap
+HomeLayout::prepareThemePresentation(const QVariantMap& theme)
+{
     auto presentation = appearanceDefaults();
     if (m_appearance.contains("surfaceThemes"))
         presentation["surfaceThemes"] = m_appearance["surfaceThemes"];
@@ -493,33 +505,32 @@ HomeLayout::applyTheme(const QVariantMap& theme, bool includeSuggestedArtwork)
         presentation["surfaceThemes"] = theme["surfaceThemes"];
     if (theme.contains("sourcePolicy"))
         presentation["sourcePolicy"] = theme["sourcePolicy"];
-    if (!normalizeAppearance(presentation))
-        return false;
-    const QColor startColor(theme.value(QStringLiteral("backgroundStart")).toString());
-    const QColor endColor(theme.value(QStringLiteral("backgroundEnd")).toString());
-    const auto roundness = theme.contains(QStringLiteral("tileRoundness"))
-                               ? theme.value(QStringLiteral("tileRoundness")).toDouble()
-                               : -1.0;
-    const auto tileOpacity =
-        theme.contains(QStringLiteral("tileOpacity")) ? theme.value(QStringLiteral("tileOpacity")).toDouble() : 1.0;
-    if (!startColor.isValid() || !endColor.isValid() || !qIsFinite(roundness) || !qIsFinite(tileOpacity) ||
+    return presentation;
+}
+
+bool
+HomeLayout::validateThemeColors(const QVariantMap& theme, QString& startColor, QString& endColor,
+                                double& roundness, double& tileOpacity)
+{
+    startColor = theme.value(QStringLiteral("backgroundStart")).toString();
+    endColor = theme.value(QStringLiteral("backgroundEnd")).toString();
+    roundness = theme.contains(QStringLiteral("tileRoundness"))
+                    ? theme.value(QStringLiteral("tileRoundness")).toDouble()
+                    : -1.0;
+    tileOpacity = theme.contains(QStringLiteral("tileOpacity"))
+                      ? theme.value(QStringLiteral("tileOpacity")).toDouble()
+                      : 1.0;
+    QColor start(startColor), endColorObj(endColor);
+    if (!start.isValid() || !endColorObj.isValid() || !qIsFinite(roundness) || !qIsFinite(tileOpacity) ||
         roundness < 0.0 || roundness > 1.0 || tileOpacity < 0.2 || tileOpacity > 1.0)
         return false;
-    const auto previousStart = m_backgroundStart;
-    const auto previousEnd = m_backgroundEnd;
-    const auto previousRoundness = m_tileRoundness;
+    return true;
+}
+
+void
+HomeLayout::applyThemeArtwork(const QVariantMap& theme, double tileOpacity, bool includeSuggestedArtwork)
+{
     const auto previousItems = m_items;
-    const auto previousAppearance = m_appearance;
-    const auto previousKeys = m_themeKeys;
-    for (auto it = presentation.cbegin(); it != presentation.cend(); ++it)
-        m_themeKeys.insert(it.key());
-    m_themeKeys.insert("backgroundStart");
-    m_themeKeys.insert("backgroundEnd");
-    m_themeKeys.insert("tileRoundness");
-    m_appearance = presentation;
-    m_backgroundStart = startColor.name();
-    m_backgroundEnd = endColor.name();
-    m_tileRoundness = roundness;
     const auto suggestions = theme.value(QStringLiteral("suggestedArtwork")).toMap();
     for (qsizetype i = 0; i < m_items.size(); ++i)
     {
@@ -549,6 +560,30 @@ HomeLayout::applyTheme(const QVariantMap& theme, bool includeSuggestedArtwork)
         }
         m_items.replace(i, item);
     }
+    Q_UNUSED(previousItems);
+}
+
+bool
+HomeLayout::commitTheme(const QVariantMap& theme, const QString& startColor, const QString& endColor,
+                        double roundness, const QVariantMap& presentation)
+{
+    const auto previousStart = m_backgroundStart;
+    const auto previousEnd = m_backgroundEnd;
+    const auto previousRoundness = m_tileRoundness;
+    const auto previousItems = m_items;
+    const auto previousAppearance = m_appearance;
+    const auto previousKeys = m_themeKeys;
+    if (!normalizeAppearance(presentation))
+        return false;
+    for (auto it = presentation.cbegin(); it != presentation.cend(); ++it)
+        m_themeKeys.insert(it.key());
+    m_themeKeys.insert("backgroundStart");
+    m_themeKeys.insert("backgroundEnd");
+    m_themeKeys.insert("tileRoundness");
+    m_appearance = presentation;
+    m_backgroundStart = startColor;
+    m_backgroundEnd = endColor;
+    m_tileRoundness = roundness;
     QString validationError;
     if (!validateStudioDocument(documentData(), &validationError, m_defaultTheme) || !save())
     {

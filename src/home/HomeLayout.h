@@ -147,6 +147,16 @@ class HomeLayout final : public QObject
     setTileRoundness(double roundness);
     Q_INVOKABLE bool
     applyTheme(const QVariantMap& theme, bool includeSuggestedArtwork = false);
+    QVariantMap
+    prepareThemePresentation(const QVariantMap& theme);
+    bool
+    validateThemeColors(const QVariantMap& theme, QString& startColor, QString& endColor,
+                        double& roundness, double& tileOpacity);
+    void
+    applyThemeArtwork(const QVariantMap& theme, double tileOpacity, bool includeSuggestedArtwork);
+    bool
+    commitTheme(const QVariantMap& theme, const QString& startColor, const QString& endColor,
+                double roundness, const QVariantMap& presentation);
     Q_INVOKABLE bool
     resetToDefaults();
     [[nodiscard]] QVariantList
