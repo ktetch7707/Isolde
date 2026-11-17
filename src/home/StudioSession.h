@@ -326,16 +326,50 @@ class StudioSession final : public QObject
     executeRenameDuplicatePage(const QString& operation, const QVariantMap& a, const QString& pageId,
                                QJsonObject document, QJsonArray pages, QJsonObject rootMeta);
     bool
+    validatePageExists(const QVariantMap& a, const QJsonObject& document, const QJsonArray& pages, QString& id,
+                       int& index, QJsonObject& rootMetaLocal);
+    bool
+    validatePageName(const QVariantMap& a, QString& name);
+    bool
+    renamePageRoot(QJsonObject& rootMetaLocal, const QString& name);
+    bool
+    renamePageEntry(QJsonArray& pages, int index, const QString& name);
+    QString
+    collectPageOrder(const QVariantMap& a);
+    bool
     duplicatePage(const QVariantMap& a, QJsonObject document, QJsonArray pages, QJsonObject rootMeta,
                   QStringList& order, int index, const QString& id);
+    QString
+    remapDuplicateIdentity(const QString& old, QHash<QString, QString>& copiedIds, QSet<QString>& allocated);
+    void
+    remapLayoutIds(QJsonObject& layout, QHash<QString, QString>& copiedIds, QSet<QString>& allocated);
+    void
+    remapComponentReferences(QJsonArray& components, const QHash<QString, QString>& copiedIds);
+    void
+    remapNavigationTabs(QJsonObject& composition, QHash<QString, QString>& copiedIds, QSet<QString>& allocated);
+    QString
+    allocateCopyPageId(QSet<QString>& allocated);
     bool
-    executeReorderPage(const QVariantMap& a, QJsonObject document, QJsonArray pages);
+    executeRemovePage(const QVariantMap& a, QJsonObject document, QJsonArray pages, QJsonObject rootMeta);
+    bool
+    validateRemovePagePreconditions(const QVariantMap& a, const QJsonObject& document, const QJsonArray& pages,
+                                    const QString& id, int& index, bool& remap, QString& replacement,
+                                    QJsonObject& rootMetaLocal);
+    QJsonObject
+    repairPageReferences(const QJsonObject& document, const QString& id, bool remap,
+                         const QString& replacement, int& links, bool& invalidOverride);
+    QJsonValue
+    repairPageValue(const QJsonValue& value, const QString& id, bool remap, const QString& replacement,
+                    int& links, bool& invalidOverride);
+    QJsonObject
+    repairPageObject(QJsonObject object, const QString& id, bool remap, const QString& replacement, int& links,
+                     bool& invalidOverride);
+    void
+    normalizePageLayouts(QJsonObject& document, QJsonArray& pages);
     int
     findPageIndex(const QJsonArray& pages, const QString& id);
     void
     storePageOrder(QStringList& order, QJsonArray& pages, QJsonObject& rootMeta);
-    bool
-    executeRemovePage(const QVariantMap& a, QJsonObject document, QJsonArray pages, QJsonObject rootMeta);
     bool
     executeSetHomePage(const QVariantMap& a);
     bool
@@ -350,14 +384,47 @@ class StudioSession final : public QObject
     executePageAssignSection(const QVariantMap& a, QJsonObject& document, HomeLayout& worker);
     bool
     executePageNavigation(const QVariantMap& a, QJsonObject& document, HomeLayout& worker);
+    int
+    findTabIndex(const QJsonArray& tabs, const QString& id);
+    bool
+    handleNavigationAdd(QJsonArray& tabs, const QVariantMap& a);
+    bool
+    handleNavigationRemove(QJsonArray& tabs, int index);
+    bool
+    handleNavigationMove(QJsonArray& tabs, int index, const QVariantMap& a);
+    bool
+    handleNavigationPatch(QJsonArray& tabs, int index, const QVariantMap& a);
+    void
+    updateInitialTab(QJsonObject& composition, const QJsonArray& tabs);
+    bool
+    isTabPresent(const QJsonArray& tabs, const QString& tabId);
     bool
     executePagePatch(const QVariantMap& a, QJsonObject& document, HomeLayout& worker);
     bool
     executePageScrolling(const QVariantMap& a, QJsonObject& document, HomeLayout& worker);
     bool
     executePageSetApps(const QVariantMap& a, QJsonObject& document, HomeLayout& worker);
+    int
+    findAppBarIndex(const QJsonArray& entries, const QString& id);
+    QSet<QString>
+    computeRemovedIds(const QJsonArray& entries, const QString& id);
+    bool
+    validateRemovedUnlocked(const QJsonArray& entries, const QSet<QString>& removed);
+    bool
+    validateSelectedApps(const QVariantMap& a, bool all, const QJsonArray& previous, QSet<QString>& seen);
+    QJsonObject
+    buildAppMembership(const QJsonArray& entries, int rootIndex, bool all, const QVariantList& selected);
+    QJsonArray
+    filterAndUpdateComponents(const QJsonArray& entries, const QSet<QString>& removed, const QString& id,
+                              const QJsonObject& membership);
     bool
     executePagePatchComponent(const QVariantMap& a, QJsonObject& document, HomeLayout& worker);
+    QSet<QString>
+    resolvePatchTargets(const QVariantMap& a);
+    bool
+    validatePatchValues(const QVariantMap& values);
+    bool
+    applyPatchToComponent(QJsonObject& item, const QVariantMap& values, QString& error);
     bool
     executePageSection(const QVariantMap& a, QJsonObject& document, HomeLayout& worker);
     bool
@@ -365,7 +432,32 @@ class StudioSession final : public QObject
     bool
     executePageArrange(const QVariantMap& a, QJsonObject& document, HomeLayout& worker);
     bool
+    validateArrangeSelection(const QVariantMap& a, QString& mode, QList<int>& indices);
+    QSet<QString>
+    collectArrangeIds(const QVariantList& selection);
+    bool
+    findArrangeTargets(const QJsonArray& entries, const QSet<QString>& ids, QList<int>& indices,
+                       QString& parent, QString& category, int& low, int& high, int& total,
+                       const QString& axis, const QString& span);
+    void
+    applyArrangePositions(QJsonArray& entries, const QList<int>& indices, const QString& mode,
+                          const QString& axis, const QString& span, int low, int high, int total);
+    bool
     executePageGroup(const QVariantMap& a, QJsonObject& document, HomeLayout& worker);
+    bool
+    validateGroupSelection(const QVariantList& selection, QSet<QString>& ids);
+    bool
+    findGroupTargets(const QJsonArray& entries, const QSet<QString>& ids, QString& parent, QString& category,
+                     int& left, int& top, int& right, int& bottom, int& found);
+    bool
+    checkGroupBoundsOverlap(const QJsonArray& entries, const QSet<QString>& ids, const QVariantMap& bounds,
+                            const QString& parent, const QString& category);
+    QJsonObject
+    createGroupObject(const QJsonArray& entries, const QJsonObject& document, const QVariantMap& bounds,
+                      const QString& parent, const QString& category, const QString& identity);
+    QJsonArray
+    buildGroupedResult(const QJsonArray& entries, const QSet<QString>& ids, const QJsonObject& group,
+                       const QVariantMap& bounds, const QString& parent, const QString& category);
     bool
     executePageUngroup(const QVariantMap& a, QJsonObject& document, HomeLayout& worker);
     bool
@@ -376,7 +468,21 @@ class StudioSession final : public QObject
     bool
     executePagePlace(const QVariantMap& a, QJsonObject& document, HomeLayout& worker);
     bool
+    validatePlacementChange(const QVariantMap& change, const QSet<QString>& touched);
+    QJsonObject
+    applyPlacementChange(QJsonObject entry, const QVariantMap& change, const HomeLayout& worker);
+    bool
+    checkCategoryEligible(const QVariantMap& change, QJsonObject& entry, const HomeLayout& worker);
+    bool
+    checkPlacementLocked(const QJsonObject& entry, const QVariantMap& change, const HomeLayout& worker);
+    bool
     executePageInsertRelative(const QVariantMap& a, QJsonObject& document, HomeLayout& worker);
+    bool
+    findInsertionGroup(const QVariantMap& a, const QJsonArray& entries, QString& parent, QJsonObject& group,
+                       int& selected, QString& axis, QString& span);
+    bool
+    applyInsertionOrder(QJsonArray& entries, const QList<int>& order, const QList<int>& gaps,
+                        const QString& axis, const QString& span, int from, int to, bool before);
     bool
     executePageOrderRelative(const QVariantMap& a, QJsonObject& document, HomeLayout& worker);
     bool
@@ -389,6 +495,14 @@ class StudioSession final : public QObject
     executePageRemoveItem(const QVariantMap& a, QJsonObject& document, HomeLayout& worker);
     bool
     executePageDuplicateItem(const QVariantMap& a, QJsonObject& document, HomeLayout& worker);
+    QJsonObject
+    findComponentToDuplicate(const QJsonArray& entries, const QString& id);
+    bool
+    findFreePlacement(QVariantMap& shape, const QJsonArray& entries, const QJsonObject& composition,
+                      const QJsonArray& categories, const QString& parent, const QString& category, bool sections);
+    QHash<QString, QString>
+    remapDuplicateIds(const QJsonArray& entries, const QHash<QString, QString>& remap, QSet<QString>& allocated,
+                      const QString& id);
     bool
     executePageReorderItem(const QVariantMap& a, QJsonObject& document, HomeLayout& worker);
     bool

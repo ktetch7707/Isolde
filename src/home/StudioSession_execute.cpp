@@ -506,49 +506,29 @@ bool
 StudioSession::executeRenameDuplicatePage(const QString& operation, const QVariantMap& a, const QString& pageId,
                                           QJsonObject document, QJsonArray pages, QJsonObject rootMeta)
 {
-    auto rootMetaLocal = document["rootPage"].toObject();
-    if (rootMetaLocal.isEmpty())
-        rootMetaLocal = {{"name", m_model->rootPageName()}, {"visible", true}, {"position", 0}};
-    const QString id = a.value("id").toString();
-    const int index = findPageIndex(pages, id);
-    if ((id.isEmpty() && !rootMetaLocal.value("visible").toBool()) || (!id.isEmpty() && index < 0))
-    {
-        setError(tr("This page no longer exists."));
+    QJsonObject rootMetaLocal;
+    QString id;
+    int index = -1;
+    if (!validatePageExists(a, document, pages, id, index, rootMetaLocal))
         return false;
-    }
-    QStringList order;
-    for (const auto& entry : m_model->studioPages())
-        order.append(entry.toMap()["id"].toString());
-    const auto storeOrder = [&]
-    {
-        QJsonArray sorted;
-        for (const auto& key : order)
-            if (!key.isEmpty())
-                for (const auto& entry : pages)
-                    if (entry.toObject()["id"] == key)
-                        sorted.append(entry);
-        pages = sorted;
-        rootMetaLocal["position"] = qMax(0, int(order.indexOf(QString())));
-    };
-    const auto name = a.value("name").toString().trimmed();
-    if (name.isEmpty() || name.size() > 80 || name.contains(QChar::Null))
-    {
-        setError(tr("Use a page name of 1–80 characters."));
+    QString name;
+    if (!validatePageName(a, name))
         return false;
-    }
     if (operation == "renamePage")
     {
         if (id.isEmpty())
-            rootMetaLocal["name"] = name;
-        else
         {
-            auto entry = pages[index].toObject();
-            entry["name"] = name;
-            pages[index] = entry;
+            if (!renamePageRoot(rootMetaLocal, name))
+                return false;
         }
+        else if (!renamePageEntry(pages, index, name))
+            return false;
+        QStringList order = collectPageOrder(a);
+        storePageOrder(order, pages, rootMetaLocal);
     }
     else
     {
+        QStringList order = collectPageOrder(a);
         if (order.size() >= 64)
         {
             setError(tr("Up to 64 pages are supported per profile."));
@@ -556,30 +536,66 @@ StudioSession::executeRenameDuplicatePage(const QString& operation, const QVaria
         }
         if (!duplicatePage(a, document, pages, rootMetaLocal, order, index, id))
             return false;
+        storePageOrder(order, pages, rootMetaLocal);
     }
-    storeOrder();
     document["pages"] = pages;
     document["rootPage"] = rootMetaLocal;
-    const auto normalizeComponents = [](QJsonObject layout)
-    {
-        const auto key =
-            layout.value("schemaVersion").toInt() == 1 ? QStringLiteral("items") : QStringLiteral("components");
-        auto components = layout.value(key).toArray();
-        for (int i = 0; i < components.size(); ++i)
-            components[i] = QJsonObject::fromVariantMap(
-                ComponentSchema::component(components[i].toObject().toVariantMap(), true));
-        layout[key] = components;
-        return layout;
-    };
-    document = normalizeComponents(document);
-    for (int i = 0; i < pages.size(); ++i)
-    {
-        auto entry = pages[i].toObject();
-        entry["layout"] = normalizeComponents(entry["layout"].toObject());
-        pages[i] = entry;
-    }
-    document["pages"] = pages;
+    normalizePageLayouts(document, pages);
     return pushEdit(QJsonDocument(document).toJson());
+}
+
+bool
+StudioSession::validatePageExists(const QVariantMap& a, const QJsonObject& document, const QJsonArray& pages,
+                                  QString& id, int& index, QJsonObject& rootMetaLocal)
+{
+    rootMetaLocal = document["rootPage"].toObject();
+    if (rootMetaLocal.isEmpty())
+        rootMetaLocal = {{"name", m_model->rootPageName()}, {"visible", true}, {"position", 0}};
+    id = a.value("id").toString();
+    index = findPageIndex(pages, id);
+    if ((id.isEmpty() && !rootMetaLocal.value("visible").toBool()) || (!id.isEmpty() && index < 0))
+    {
+        setError(tr("This page no longer exists."));
+        return false;
+    }
+    return true;
+}
+
+bool
+StudioSession::validatePageName(const QVariantMap& a, QString& name)
+{
+    name = a.value("name").toString().trimmed();
+    if (name.isEmpty() || name.size() > 80 || name.contains(QChar::Null))
+    {
+        setError(tr("Use a page name of 1–80 characters."));
+        return false;
+    }
+    return true;
+}
+
+bool
+StudioSession::renamePageRoot(QJsonObject& rootMetaLocal, const QString& name)
+{
+    rootMetaLocal["name"] = name;
+    return true;
+}
+
+bool
+StudioSession::renamePageEntry(QJsonArray& pages, int index, const QString& name)
+{
+    auto entry = pages[index].toObject();
+    entry["name"] = name;
+    pages[index] = entry;
+    return true;
+}
+
+QString
+StudioSession::collectPageOrder(const QVariantMap& /*a*/)
+{
+    QStringList order;
+    for (const auto& entry : m_model->studioPages())
+        order.append(entry.toMap()["id"].toString());
+    return order;
 }
 
 bool
@@ -595,39 +611,67 @@ StudioSession::duplicatePage(const QVariantMap& a, QJsonObject document, QJsonAr
     layout.remove("studioAppearance");
     QHash<QString, QString> copiedIds;
     QSet<QString> allocated;
+    remapLayoutIds(layout, copiedIds, allocated);
     auto composition = layout["composition"].toObject();
-    const auto remapIdentity = [&](const QString& old) -> QString
-    {
-        if (copiedIds.contains(old))
-            return copiedIds[old];
-        auto fresh = allocateId(old);
-        if (fresh.isEmpty())
-            return {};
-        const auto base = fresh;
-        int suffix = 2;
-        while (allocated.contains(fresh))
-            fresh = base + QString::number(suffix++);
-        if (!ComponentSchema::safeId(fresh))
-            return {};
-        copiedIds[old] = fresh;
-        allocated.insert(fresh);
-        return fresh;
-    };
+    remapNavigationTabs(composition, copiedIds, allocated);
+    const auto initial = composition.value("initialTab").toString();
+    if (copiedIds.contains(initial))
+        composition["initialTab"] = copiedIds[initial];
+    layout["composition"] = composition;
+    auto copyId = allocateCopyPageId(allocated);
+    if (copyId.isEmpty())
+        return false;
+    pages.append(QJsonObject{{"id", copyId}, {"name", name}, {"layout", layout}});
+    order.insert(order.indexOf(id) + 1, copyId);
+    return true;
+}
+
+QString
+StudioSession::remapDuplicateIdentity(const QString& old, QHash<QString, QString>& copiedIds,
+                                      QSet<QString>& allocated)
+{
+    if (copiedIds.contains(old))
+        return copiedIds[old];
+    auto fresh = allocateId(old);
+    if (fresh.isEmpty())
+        return {};
+    const auto base = fresh;
+    int suffix = 2;
+    while (allocated.contains(fresh))
+        fresh = base + QString::number(suffix++);
+    if (!ComponentSchema::safeId(fresh))
+        return {};
+    copiedIds[old] = fresh;
+    allocated.insert(fresh);
+    return fresh;
+}
+
+void
+StudioSession::remapLayoutIds(QJsonObject& layout, QHash<QString, QString>& copiedIds, QSet<QString>& allocated)
+{
     for (const auto& key : QStringList{"categories", "components"})
     {
         auto values = layout[key].toArray();
         for (int i = 0; i < values.size(); ++i)
         {
             auto entry = values[i].toObject();
-            const auto fresh = remapIdentity(entry["id"].toString());
+            const auto fresh = remapDuplicateIdentity(entry["id"].toString(), copiedIds, allocated);
             if (fresh.isEmpty())
-                return false;
+                return;
             entry["id"] = fresh;
             values[i] = entry;
         }
         layout[key] = values;
     }
     auto components = layout["components"].toArray();
+    remapComponentReferences(components, copiedIds);
+    layout["components"] = components;
+}
+
+void
+StudioSession::remapComponentReferences(QJsonArray& components,
+                                        const QHash<QString, QString>& copiedIds)
+{
     for (int i = 0; i < components.size(); ++i)
     {
         auto item = components[i].toObject();
@@ -639,14 +683,19 @@ StudioSession::duplicatePage(const QVariantMap& a, QJsonObject document, QJsonAr
         }
         components[i] = item;
     }
-    layout["components"] = components;
+}
+
+void
+StudioSession::remapNavigationTabs(QJsonObject& composition, QHash<QString, QString>& copiedIds,
+                                   QSet<QString>& allocated)
+{
     auto tabs = composition.value("navigation").toArray();
     for (int i = 0; i < tabs.size(); ++i)
     {
         auto tab = tabs[i].toObject();
-        const auto old = tab["id"].toString(), fresh = remapIdentity(old);
+        const auto old = tab["id"].toString(), fresh = remapDuplicateIdentity(old, copiedIds, allocated);
         if (fresh.isEmpty())
-            return false;
+            return;
         tab["id"] = fresh;
         auto sections = tab.value("sections").toArray();
         for (int j = 0; j < sections.size(); ++j)
@@ -656,15 +705,15 @@ StudioSession::duplicatePage(const QVariantMap& a, QJsonObject document, QJsonAr
             tab["sections"] = sections;
         tabs[i] = tab;
     }
-    if (composition.contains("navigation"))
-        composition["navigation"] = tabs;
-    const auto initial = composition.value("initialTab").toString();
-    if (copiedIds.contains(initial))
-        composition["initialTab"] = copiedIds[initial];
-    layout["composition"] = composition;
+    composition["navigation"] = tabs;
+}
+
+QString
+StudioSession::allocateCopyPageId(QSet<QString>& allocated)
+{
     auto copyId = allocateId("page");
     if (copyId.isEmpty())
-        return false;
+        return {};
     const auto copyBase = copyId;
     int copySuffix = 2;
     while (allocated.contains(copyId))
@@ -672,11 +721,9 @@ StudioSession::duplicatePage(const QVariantMap& a, QJsonObject document, QJsonAr
     if (!ComponentSchema::safeId(copyId))
     {
         setError(tr("The duplicated page identity exceeds its limit."));
-        return false;
+        return {};
     }
-    pages.append(QJsonObject{{"id", copyId}, {"name", name}, {"layout", layout}});
-    order.insert(order.indexOf(id) + 1, copyId);
-    return true;
+    return copyId;
 }
 
 bool
@@ -752,14 +799,39 @@ StudioSession::storePageOrder(QStringList& order, QJsonArray& pages, QJsonObject
 bool
 StudioSession::executeRemovePage(const QVariantMap& a, QJsonObject document, QJsonArray pages, QJsonObject rootMeta)
 {
-    auto rootMetaLocal = document["rootPage"].toObject();
+    QJsonObject rootMetaLocal;
+    QString id, replacement;
+    int index = -1;
+    bool remap = false;
+    if (!validateRemovePagePreconditions(a, document, pages, id, index, remap, replacement, rootMetaLocal))
+        return false;
+    pages.removeAt(index);
+    document["pages"] = pages;
+    int links = 0;
+    bool invalidOverride = false;
+    document = repairPageReferences(document, id, remap, replacement, links, invalidOverride);
+    if ((links && !remap) || invalidOverride)
+    {
+        setError(tr("%1 incoming links require a named replacement page before deletion.").arg(links));
+        return false;
+    }
+    pages = document["pages"].toArray();
+    orderRemovePage(id, pages);
+    normalizePageLayouts(document, pages);
+    document["rootPage"] = rootMetaLocal;
+    return pushEdit(QJsonDocument(document).toJson());
+}
+
+bool
+StudioSession::validateRemovePagePreconditions(const QVariantMap& a, const QJsonObject& document,
+                                               const QJsonArray& pages, QString& id, int& index, bool& remap,
+                                               QString& replacement, QJsonObject& rootMetaLocal)
+{
+    rootMetaLocal = document["rootPage"].toObject();
     if (rootMetaLocal.isEmpty())
         rootMetaLocal = {{"name", m_model->rootPageName()}, {"visible", true}, {"position", 0}};
-    const QString id = a.value("id").toString();
-    int index = -1;
-    for (int i = 0; i < pages.size(); ++i)
-        if (pages[i].toObject()["id"] == id)
-            index = i;
+    id = a.value("id").toString();
+    index = findPageIndex(pages, id);
     if (index < 0)
     {
         setError(tr("This page no longer exists."));
@@ -770,8 +842,8 @@ StudioSession::executeRemovePage(const QVariantMap& a, QJsonObject document, QJs
         setError(tr("Set another page as Home before deleting this page."));
         return false;
     }
-    const bool remap = a.contains("replacementPageId");
-    const QString replacement = a.value("replacementPageId").toString();
+    remap = a.contains("replacementPageId");
+    replacement = a.value("replacementPageId").toString();
     bool validReplacement = replacement.isEmpty() ? rootMetaLocal.value("visible").toBool() : false;
     for (const auto& entry : pages)
         if (entry.toObject()["id"] == replacement)
@@ -781,64 +853,71 @@ StudioSession::executeRemovePage(const QVariantMap& a, QJsonObject document, QJs
         setError(tr("Choose another existing page for incoming links."));
         return false;
     }
-    pages.removeAt(index);
-    document["pages"] = pages;
-    int links = 0;
-    bool invalidOverride = false;
-    std::function<QJsonValue(QJsonValue)> repair = [&](QJsonValue value) -> QJsonValue
+    return true;
+}
+
+QJsonObject
+StudioSession::repairPageReferences(const QJsonObject& document, const QString& id, bool remap,
+                                    const QString& replacement, int& links, bool& invalidOverride)
+{
+    return repairPageValue(document, id, remap, replacement, links, invalidOverride).toObject();
+}
+
+QJsonValue
+StudioSession::repairPageValue(const QJsonValue& value, const QString& id, bool remap,
+                               const QString& replacement, int& links, bool& invalidOverride)
+{
+    if (value.isArray())
     {
-        if (value.isArray())
+        auto values = value.toArray();
+        for (int i = 0; i < values.size(); ++i)
+            values[i] = repairPageValue(values[i], id, remap, replacement, links, invalidOverride);
+        return values;
+    }
+    if (!value.isObject())
+        return value;
+    return repairPageObject(value.toObject(), id, remap, replacement, links, invalidOverride);
+}
+
+QJsonObject
+StudioSession::repairPageObject(QJsonObject object, const QString& id, bool remap, const QString& replacement,
+                                int& links, bool& invalidOverride)
+{
+    if (!id.isEmpty() && object.value("type") == "open-page" && object.value("pageId") == id)
+    {
+        ++links;
+        if (remap)
         {
-            auto values = value.toArray();
-            for (int i = 0; i < values.size(); ++i)
-                values[i] = repair(values[i]);
-            return values;
+            object["type"] = replacement.isEmpty() ? "root-page" : "open-page";
+            if (replacement.isEmpty())
+                object.remove("pageId");
+            else
+                object["pageId"] = replacement;
         }
-        if (!value.isObject())
-            return value;
-        auto object = value.toObject();
-        if ((!id.isEmpty() && object.value("type") == "open-page" && object.value("pageId") == id))
+        return object;
+    }
+    for (auto it = object.begin(); it != object.end(); ++it)
+    {
+        if (!id.isEmpty() && QStringList{"moviePage", "showsPage"}.contains(it.key()) && it.value() == id)
         {
             ++links;
             if (remap)
             {
-                object["type"] = replacement.isEmpty() ? "root-page" : "open-page";
                 if (replacement.isEmpty())
-                    object.remove("pageId");
+                    invalidOverride = true;
                 else
-                    object["pageId"] = replacement;
+                    it.value() = replacement;
             }
         }
         else
-        {
-            for (auto it = object.begin(); it != object.end(); ++it)
-            {
-                if (!id.isEmpty() && QStringList{"moviePage", "showsPage"}.contains(it.key()) &&
-                    it.value() == id)
-                {
-                    ++links;
-                    if (remap)
-                    {
-                        if (replacement.isEmpty())
-                            invalidOverride = true;
-                        else
-                            it.value() = replacement;
-                    }
-                }
-                else
-                    it.value() = repair(it.value());
-            }
-        }
-        return object;
-    };
-    document = repair(document).toObject();
-    if ((links && !remap) || invalidOverride)
-    {
-        setError(tr("%1 incoming links require a named replacement page before deletion.").arg(links));
-        return false;
+            it.value() = repairPageValue(it.value(), id, remap, replacement, links, invalidOverride);
     }
-    pages = document["pages"].toArray();
-    orderRemovePage(id, pages);
+    return object;
+}
+
+void
+StudioSession::normalizePageLayouts(QJsonObject& document, QJsonArray& pages)
+{
     const auto normalizeComponents = [](QJsonObject layout)
     {
         const auto key =
@@ -857,9 +936,6 @@ StudioSession::executeRemovePage(const QVariantMap& a, QJsonObject document, QJs
         entry["layout"] = normalizeComponents(entry["layout"].toObject());
         pages[i] = entry;
     }
-    document["pages"] = pages;
-    document["rootPage"] = rootMetaLocal;
-    return pushEdit(QJsonDocument(document).toJson());
 }
 
 void
@@ -963,86 +1039,118 @@ StudioSession::executePageNavigation(const QVariantMap& a, QJsonObject& document
     auto tabs = composition["navigation"].toArray();
     const auto kind = a.value("kind").toString();
     const auto id = a.value("id").toString();
-    int index = -1;
-    for (int i = 0; i < tabs.size(); ++i)
-        if (tabs[i].toObject()["id"] == id)
-            index = i;
+    const int index = findTabIndex(tabs, id);
+    bool ok = false;
     if (kind == "add")
-    {
-        if (tabs.size() >= 64)
-        {
-            setError(tr("Use at most 64 navigation tabs."));
-            return false;
-        }
-        const auto identity = allocateId("tab");
-        if (identity.isEmpty())
-            return false;
-        tabs.append(QJsonObject{{"id", identity}, {"name", a.value("name").toString()}});
-    }
+        ok = handleNavigationAdd(tabs, a);
+    else if (index < 0)
+        setError(tr("Choose an existing navigation tab."));
+    else if (kind == "remove")
+        ok = handleNavigationRemove(tabs, index);
+    else if (kind == "move")
+        ok = handleNavigationMove(tabs, index, a);
+    else if (kind == "patch")
+        ok = handleNavigationPatch(tabs, index, a);
     else
-    {
-        if (index < 0)
-        {
-            setError(tr("Choose an existing navigation tab."));
-            return false;
-        }
-        if (kind == "remove")
-            tabs.removeAt(index);
-        else if (kind == "move")
-        {
-            const int offset = a.value("offset").toInt(), target = index + offset;
-            if ((offset != 1 && offset != -1) || target < 0 || target >= tabs.size())
-            {
-                setError(tr("The tab is already at that edge."));
-                return false;
-            }
-            const QJsonValue entry = tabs.at(index);
-            tabs.removeAt(index);
-            tabs.insert(target, entry);
-        }
-        else if (kind == "patch")
-        {
-            auto tab = tabs[index].toObject();
-            const auto values = a.value("value").toMap();
-            if (values.contains("action") && !validNewAction(values.value("action").toMap()))
-                return false;
-            for (auto it = values.cbegin(); it != values.cend(); ++it)
-            {
-                if (!QStringList{"name", "action", "sections"}.contains(it.key()))
-                {
-                    setError(tr("Unsupported navigation property."));
-                    return false;
-                }
-                if (it.value().isNull() || (it.key() == "action" && it.value().toMap().isEmpty()))
-                    tab.remove(it.key());
-                else
-                    tab[it.key()] = QJsonValue::fromVariant(it.value());
-            }
-            tabs[index] = tab;
-        }
-        else
-        {
-            setError(tr("Choose a supported navigation operation."));
-            return false;
-        }
-    }
+        setError(tr("Choose a supported navigation operation."));
+    if (!ok)
+        return false;
     composition["navigation"] = tabs;
-    if (composition.contains("initialTab"))
-    {
-        bool present = false;
-        for (const auto& tab : tabs)
-            if (tab.toObject()["id"] == composition["initialTab"])
-                present = true;
-        if (!present)
-        {
-            if (tabs.isEmpty())
-                composition.remove("initialTab");
-            else
-                composition["initialTab"] = tabs.first().toObject()["id"];
-        }
-    }
+    updateInitialTab(composition, tabs);
     document["composition"] = composition;
     return worker.loadDocument(QJsonDocument(document).toJson(), false);
+}
+
+int
+StudioSession::findTabIndex(const QJsonArray& tabs, const QString& id)
+{
+    for (int i = 0; i < tabs.size(); ++i)
+        if (tabs[i].toObject()["id"] == id)
+            return i;
+    return -1;
+}
+
+bool
+StudioSession::handleNavigationAdd(QJsonArray& tabs, const QVariantMap& a)
+{
+    if (tabs.size() >= 64)
+    {
+        setError(tr("Use at most 64 navigation tabs."));
+        return false;
+    }
+    const auto identity = allocateId("tab");
+    if (identity.isEmpty())
+        return false;
+    tabs.append(QJsonObject{{"id", identity}, {"name", a.value("name").toString()}});
+    return true;
+}
+
+bool
+StudioSession::handleNavigationRemove(QJsonArray& tabs, int index)
+{
+    tabs.removeAt(index);
+    return true;
+}
+
+bool
+StudioSession::handleNavigationMove(QJsonArray& tabs, int index, const QVariantMap& a)
+{
+    const int offset = a.value("offset").toInt(), target = index + offset;
+    if ((offset != 1 && offset != -1) || target < 0 || target >= tabs.size())
+    {
+        setError(tr("The tab is already at that edge."));
+        return false;
+    }
+    const QJsonValue entry = tabs.at(index);
+    tabs.removeAt(index);
+    tabs.insert(target, entry);
+    return true;
+}
+
+bool
+StudioSession::handleNavigationPatch(QJsonArray& tabs, int index, const QVariantMap& a)
+{
+    auto tab = tabs[index].toObject();
+    const auto values = a.value("value").toMap();
+    if (values.contains("action") && !validNewAction(values.value("action").toMap()))
+        return false;
+    for (auto it = values.cbegin(); it != values.cend(); ++it)
+    {
+        if (!QStringList{"name", "action", "sections"}.contains(it.key()))
+        {
+            setError(tr("Unsupported navigation property."));
+            return false;
+        }
+        if (it.value().isNull() || (it.key() == "action" && it.value().toMap().isEmpty()))
+            tab.remove(it.key());
+        else
+            tab[it.key()] = QJsonValue::fromVariant(it.value());
+    }
+    tabs[index] = tab;
+    return true;
+}
+
+void
+StudioSession::updateInitialTab(QJsonObject& composition, const QJsonArray& tabs)
+{
+    if (!composition.contains("initialTab"))
+        return;
+    if (!isTabPresent(tabs, composition["initialTab"].toString()))
+    {
+        if (tabs.isEmpty())
+            composition.remove("initialTab");
+        else
+            composition["initialTab"] = tabs.first().toObject()["id"];
+    }
+}
+
+bool
+StudioSession::isTabPresent(const QJsonArray& tabs, const QString& tabId)
+{
+    for (const auto& tab : tabs)
+        if (tab.toObject()["id"] == tabId)
+            return true;
+    return false;
 }
 
 bool
@@ -1118,37 +1226,71 @@ StudioSession::executePageSetApps(const QVariantMap& a, QJsonObject& document, H
     }
     auto entries = document["components"].toArray();
     const auto id = a.value("id").toString();
-    int rootIndex = -1;
-    QSet<QString> removed;
-    for (int i = 0; i < entries.size(); ++i)
-        if (entries[i].toObject()["id"] == id && entries[i].toObject()["family"] == "app-bar")
-            rootIndex = i;
+    const int rootIndex = findAppBarIndex(entries, id);
     if (rootIndex < 0 || ComponentSchema::positionLocked(entries, id))
     {
         setError(tr("Choose an unlocked app bar."));
         return false;
     }
-    removed.insert(id);
+    const auto removed = computeRemovedIds(entries, id);
+    if (!validateRemovedUnlocked(entries, removed))
+        return false;
+    const bool all = a.value("mode") == "all";
+    const auto selected = a.value("apps").toList();
+    QSet<QString> seen;
+    const auto previous = entries[rootIndex].toObject()["appCollection"].toObject()["ids"].toArray();
+    if (!validateSelectedApps(a, all, previous, seen))
+        return false;
+    Q_UNUSED(seen);
+    const auto membership = buildAppMembership(entries, rootIndex, all, selected);
+    const auto result = filterAndUpdateComponents(entries, removed, id, membership);
+    document["components"] = result;
+    return worker.loadDocument(QJsonDocument(document).toJson(), false);
+}
+
+int
+StudioSession::findAppBarIndex(const QJsonArray& entries, const QString& id)
+{
+    for (int i = 0; i < entries.size(); ++i)
+        if (entries[i].toObject()["id"] == id && entries[i].toObject()["family"] == "app-bar")
+            return i;
+    return -1;
+}
+
+QSet<QString>
+StudioSession::computeRemovedIds(const QJsonArray& entries, const QString& id)
+{
+    QSet<QString> removed{id};
     for (int depth = 0; depth < 4; ++depth)
         for (const auto& entry : entries)
             if (removed.contains(entry.toObject()["parentId"].toString()))
                 removed.insert(entry.toObject()["id"].toString());
     removed.remove(id);
+    return removed;
+}
+
+bool
+StudioSession::validateRemovedUnlocked(const QJsonArray& entries, const QSet<QString>& removed)
+{
     for (const auto& entry : entries)
         if (removed.contains(entry.toObject()["id"].toString()) && entry.toObject().value("locked").toBool())
         {
             setError(tr("Unlock the app bar's contents before replacing them."));
             return false;
         }
-    const bool all = a.value("mode") == "all";
+    return true;
+}
+
+bool
+StudioSession::validateSelectedApps(const QVariantMap& a, bool all, const QJsonArray& previous,
+                                    QSet<QString>& seen)
+{
     const auto selected = a.value("apps").toList();
     if (!all && (a.value("apps").metaType().id() != QMetaType::QVariantList || selected.size() > 128))
     {
         setError(tr("Choose up to 128 apps."));
         return false;
     }
-    const auto previous = entries[rootIndex].toObject()["appCollection"].toObject()["ids"].toArray();
-    QSet<QString> seen;
     for (const auto& value : selected)
     {
         const auto appId = value.toString();
@@ -1163,7 +1305,13 @@ StudioSession::executePageSetApps(const QVariantMap& a, QJsonObject& document, H
         }
         seen.insert(appId);
     }
-    QJsonArray result;
+    return true;
+}
+
+QJsonObject
+StudioSession::buildAppMembership(const QJsonArray& entries, int rootIndex, bool all,
+                                  const QVariantList& selected)
+{
     QJsonObject membership{{"mode", all ? "all" : "selected"},
                            {"ids", all ? QJsonArray{} : QJsonArray::fromVariantList(selected)}};
     const auto group = entries[rootIndex].toObject()["appCollection"].toObject()["section"];
@@ -1172,6 +1320,14 @@ StudioSession::executePageSetApps(const QVariantMap& a, QJsonObject& document, H
     const auto showStore = entries[rootIndex].toObject()["appCollection"].toObject()["showStore"];
     if (showStore.isBool())
         membership["showStore"] = showStore;
+    return membership;
+}
+
+QJsonArray
+StudioSession::filterAndUpdateComponents(const QJsonArray& entries, const QSet<QString>& removed, const QString& id,
+                                         const QJsonObject& membership)
+{
+    QJsonArray result;
     for (const auto& entry : entries)
         if (!removed.contains(entry.toObject()["id"].toString()))
         {
@@ -1180,32 +1336,92 @@ StudioSession::executePageSetApps(const QVariantMap& a, QJsonObject& document, H
                 item["appCollection"] = membership;
             result.append(item);
         }
-    document["components"] = result;
-    return worker.loadDocument(QJsonDocument(document).toJson(), false);
+    return result;
 }
 
 bool
 StudioSession::executePagePatchComponent(const QVariantMap& a, QJsonObject& document, HomeLayout& worker)
 {
+    const auto targets = resolvePatchTargets(a);
+    if (targets.isEmpty())
+        return false;
+    const auto values = a.value("value").toMap();
+    if (!validatePatchValues(values))
+        return false;
+    if (values.contains("action") && !validNewAction(values.value("action").toMap()))
+        return false;
+    auto entries = document["components"].toArray();
+    int found = 0;
+    for (int i = 0; i < entries.size(); ++i)
+    {
+        auto item = entries[i].toObject();
+        if (!targets.contains(item["id"].toString()))
+            continue;
+        ++found;
+        QString error;
+        if (!applyPatchToComponent(item, values, error))
+        {
+            setError(error);
+            return false;
+        }
+        if (values.contains("action") &&
+            (item["componentType"] == "launcher" || item["componentType"] == "media-shelf"))
+        {
+            item["kind"] = "widget";
+            item["widgetType"] = "button";
+            item["componentType"] = "button";
+            item.remove("appId");
+        }
+        QString canonicalError;
+        const auto canonical = ComponentSchema::component(item.toVariantMap(), true, &canonicalError);
+        if (canonical.isEmpty())
+        {
+            setError(canonicalError);
+            return false;
+        }
+        entries[i] = QJsonObject::fromVariantMap(canonical);
+    }
+    if (found != targets.size())
+    {
+        setError(tr("A selected component no longer exists."));
+        return false;
+    }
+    document["components"] = entries;
+    return worker.loadDocument(QJsonDocument(document).toJson(), false);
+}
+
+QSet<QString>
+StudioSession::resolvePatchTargets(const QVariantMap& a)
+{
     auto ids = a.value("ids").toList();
     const auto id = a.value("id").toString();
     if (ids.isEmpty() && !id.isEmpty())
         ids.append(id);
-    const auto values = a.value("value").toMap();
     QSet<QString> targets;
-    if (ids.isEmpty() || ids.size() > 32 || values.isEmpty())
+    if (ids.isEmpty() || ids.size() > 32)
     {
         setError(tr("Choose 1–32 components and a property to edit."));
-        return false;
+        return {};
     }
     for (const auto& value : ids)
     {
         if (value.metaType().id() != QMetaType::QString || targets.contains(value.toString()))
         {
             setError(tr("Choose distinct component identities."));
-            return false;
+            return {};
         }
         targets.insert(value.toString());
+    }
+    return targets;
+}
+
+bool
+StudioSession::validatePatchValues(const QVariantMap& values)
+{
+    if (values.isEmpty())
+    {
+        setError(tr("Choose 1–32 components and a property to edit."));
+        return false;
     }
     for (auto it = values.cbegin(); it != values.cend(); ++it)
         if (!QStringList{"name",
@@ -1226,68 +1442,41 @@ StudioSession::executePagePatchComponent(const QVariantMap& a, QJsonObject& docu
             setError(tr("Unsupported inspector property."));
             return false;
         }
-    if (values.contains("action") && !validNewAction(values.value("action").toMap()))
-        return false;
-    auto entries = document["components"].toArray();
-    int found = 0;
-    for (int i = 0; i < entries.size(); ++i)
+    return true;
+}
+
+bool
+StudioSession::applyPatchToComponent(QJsonObject& item, const QVariantMap& values, QString& error)
+{
+    for (auto it = values.cbegin(); it != values.cend(); ++it)
     {
-        auto item = entries[i].toObject();
-        if (!targets.contains(item["id"].toString()))
-            continue;
-        ++found;
-        for (auto it = values.cbegin(); it != values.cend(); ++it)
+        const auto key = it.key();
+        if (key == "presentation" || key == "accessibility")
         {
-            const auto key = it.key();
-            if (key == "presentation" || key == "accessibility")
+            if (it.value().metaType().id() != QMetaType::QVariantMap)
             {
-                if (it.value().metaType().id() != QMetaType::QVariantMap)
-                {
-                    setError(tr("Choose valid property values."));
-                    return false;
-                }
-                auto nested = item[key].toObject();
-                const auto changes = it.value().toMap();
-                for (auto v = changes.cbegin(); v != changes.cend(); ++v)
-                {
-                    if (v.value().isNull())
-                        nested.remove(v.key());
-                    else
-                        nested[v.key()] = QJsonValue::fromVariant(v.value());
-                }
-                item[key] = nested;
+                error = tr("Choose valid property values.");
+                return false;
             }
-            else if (it.value().isNull() ||
-                     (key == "action" && it.value().metaType().id() == QMetaType::QVariantMap &&
-                      it.value().toMap().isEmpty()))
-                item.remove(key);
-            else
-                item[key] = QJsonValue::fromVariant(it.value());
+            auto nested = item[key].toObject();
+            const auto changes = it.value().toMap();
+            for (auto v = changes.cbegin(); v != changes.cend(); ++v)
+            {
+                if (v.value().isNull())
+                    nested.remove(v.key());
+                else
+                    nested[v.key()] = QJsonValue::fromVariant(v.value());
+            }
+            item[key] = nested;
         }
-        if (values.contains("action") &&
-            (item["componentType"] == "launcher" || item["componentType"] == "media-shelf"))
-        {
-            item["kind"] = "widget";
-            item["widgetType"] = "button";
-            item["componentType"] = "button";
-            item.remove("appId");
-        }
-        QString error;
-        const auto canonical = ComponentSchema::component(item.toVariantMap(), true, &error);
-        if (canonical.isEmpty())
-        {
-            setError(error);
-            return false;
-        }
-        entries[i] = QJsonObject::fromVariantMap(canonical);
+        else if (it.value().isNull() ||
+                 (key == "action" && it.value().metaType().id() == QMetaType::QVariantMap &&
+                  it.value().toMap().isEmpty()))
+            item.remove(key);
+        else
+            item[key] = QJsonValue::fromVariant(it.value());
     }
-    if (found != targets.size())
-    {
-        setError(tr("A selected component no longer exists."));
-        return false;
-    }
-    document["components"] = entries;
-    return worker.loadDocument(QJsonDocument(document).toJson(), false);
+    return true;
 }
 
 bool
@@ -1324,8 +1513,29 @@ StudioSession::executePageBrand(const QVariantMap& a, QJsonObject& /*document*/,
 bool
 StudioSession::executePageArrange(const QVariantMap& a, QJsonObject& document, HomeLayout& worker)
 {
+    QString mode;
+    QList<int> indices;
+    if (!validateArrangeSelection(a, mode, indices))
+        return false;
+    auto entries = document["components"].toArray();
     const auto selection = a.value("ids").toList();
-    const auto mode = a.value("mode").toString();
+    const auto ids = collectArrangeIds(selection);
+    const bool horizontal = QStringList{"left", "center-x", "right", "distribute-x"}.contains(mode);
+    const QString axis = horizontal ? "x" : "y", span = horizontal ? "width" : "height";
+    QString parent, category;
+    int low = 16, high = 0, total = 0;
+    if (!findArrangeTargets(entries, ids, indices, parent, category, low, high, total, axis, span))
+        return false;
+    applyArrangePositions(entries, indices, mode, axis, span, low, high, total);
+    document["components"] = entries;
+    return worker.loadDocument(QJsonDocument(document).toJson(), false);
+}
+
+bool
+StudioSession::validateArrangeSelection(const QVariantMap& a, QString& mode, QList<int>& /*indices*/)
+{
+    const auto selection = a.value("ids").toList();
+    mode = a.value("mode").toString();
     if (selection.size() < 2 || selection.size() > 32 ||
         !QStringList{"left", "center-x", "right", "top", "center-y", "bottom", "distribute-x", "distribute-y"}
              .contains(mode))
@@ -1333,23 +1543,31 @@ StudioSession::executePageArrange(const QVariantMap& a, QJsonObject& document, H
         setError(tr("Choose an alignment and between 2 and 32 components."));
         return false;
     }
-    auto entries = document["components"].toArray();
-    QList<int> indices;
+    return true;
+}
+
+QSet<QString>
+StudioSession::collectArrangeIds(const QVariantList& selection)
+{
     QSet<QString> ids;
-    QString parent, category;
-    int low = 16, high = 0, total = 0;
-    const bool horizontal = QStringList{"left", "center-x", "right", "distribute-x"}.contains(mode);
-    const QString axis = horizontal ? "x" : "y", span = horizontal ? "width" : "height";
     for (const auto& value : selection)
     {
         const auto identity = value.toString();
         if (value.metaType().id() != QMetaType::QString || ids.contains(identity))
         {
             setError(tr("Choose distinct component identities."));
-            return false;
+            return {};
         }
         ids.insert(identity);
     }
+    return ids;
+}
+
+bool
+StudioSession::findArrangeTargets(const QJsonArray& entries, const QSet<QString>& ids, QList<int>& indices,
+                                  QString& parent, QString& category, int& low, int& high, int& total,
+                                  const QString& axis, const QString& span)
+{
     for (int i = 0; i < entries.size(); ++i)
     {
         const auto item = entries[i].toObject();
@@ -1381,6 +1599,13 @@ StudioSession::executePageArrange(const QVariantMap& a, QJsonObject& document, H
         setError(tr("A selected component no longer exists."));
         return false;
     }
+    return true;
+}
+
+void
+StudioSession::applyArrangePositions(QJsonArray& entries, const QList<int>& indices, const QString& mode,
+                                     const QString& axis, const QString& span, int low, int high, int total)
+{
     const bool distribute = mode.startsWith("distribute");
     int gap = 0;
     if (distribute)
@@ -1389,7 +1614,7 @@ StudioSession::executePageArrange(const QVariantMap& a, QJsonObject& document, H
         if (space < 0 || space % (indices.size() - 1))
         {
             setError(tr("Equal spacing requires whole cells. Adjust the outer positions first."));
-            return false;
+            return;
         }
         gap = space / (indices.size() - 1);
         std::stable_sort(indices.begin(),
@@ -1418,7 +1643,7 @@ StudioSession::executePageArrange(const QVariantMap& a, QJsonObject& document, H
             {
                 setError(
                     tr("Center alignment falls between grid cells. Adjust the sizes or outer positions first."));
-                return false;
+                return;
             }
             position = (low + high - size) / 2;
         }
@@ -1428,8 +1653,6 @@ StudioSession::executePageArrange(const QVariantMap& a, QJsonObject& document, H
         item["placement"] = p;
         entries[index] = item;
     }
-    document["components"] = entries;
-    return worker.loadDocument(QJsonDocument(document).toJson(), false);
 }
 
 bool
@@ -1437,6 +1660,29 @@ StudioSession::executePageGroup(const QVariantMap& a, QJsonObject& document, Hom
 {
     const auto selection = a.value("ids").toList();
     QSet<QString> ids;
+    if (!validateGroupSelection(selection, ids))
+        return false;
+    auto entries = document["components"].toArray();
+    QString parent, category;
+    int left = 16, top = 10, right = 0, bottom = 0, found = 0;
+    if (!findGroupTargets(entries, ids, parent, category, left, top, right, bottom, found))
+        return false;
+    const QVariantMap bounds{{"x", left}, {"y", top}, {"width", right - left}, {"height", bottom - top}};
+    if (!checkGroupBoundsOverlap(entries, ids, bounds, parent, category))
+        return false;
+    const auto prototype = componentPrototype("container");
+    if (prototype.isEmpty())
+        return false;
+    const auto identity = prototype.value("root").toMap()["id"].toString();
+    const auto group = createGroupObject(entries, document, bounds, parent, category, identity);
+    const auto result = buildGroupedResult(entries, ids, group, bounds, parent, category);
+    document["components"] = result;
+    return worker.loadDocument(QJsonDocument(document).toJson(), false);
+}
+
+bool
+StudioSession::validateGroupSelection(const QVariantList& selection, QSet<QString>& ids)
+{
     if (selection.size() < 2 || selection.size() > 32)
     {
         setError(tr("Select between 2 and 32 components to group."));
@@ -1451,10 +1697,14 @@ StudioSession::executePageGroup(const QVariantMap& a, QJsonObject& document, Hom
         }
         ids.insert(value.toString());
     }
-    auto entries = document["components"].toArray();
-    QString parent, category;
+    return true;
+}
+
+bool
+StudioSession::findGroupTargets(const QJsonArray& entries, const QSet<QString>& ids, QString& parent,
+                                QString& category, int& left, int& top, int& right, int& bottom, int& found)
+{
     bool first = true;
-    int left = 16, top = 10, right = 0, bottom = 0, found = 0;
     for (const auto& value : entries)
     {
         const auto item = value.toObject();
@@ -1488,7 +1738,14 @@ StudioSession::executePageGroup(const QVariantMap& a, QJsonObject& document, Hom
         setError(tr("A selected component no longer exists."));
         return false;
     }
-    const QVariantMap bounds{{"x", left}, {"y", top}, {"width", right - left}, {"height", bottom - top}};
+    return true;
+}
+
+bool
+StudioSession::checkGroupBoundsOverlap(const QJsonArray& entries, const QSet<QString>& ids,
+                                       const QVariantMap& bounds, const QString& parent,
+                                       const QString& category)
+{
     for (const auto& value : entries)
     {
         const auto item = value.toObject();
@@ -1501,11 +1758,16 @@ StudioSession::executePageGroup(const QVariantMap& a, QJsonObject& document, Hom
             return false;
         }
     }
+    return true;
+}
+
+QJsonObject
+StudioSession::createGroupObject(const QJsonArray& entries, const QJsonObject& document, const QVariantMap& bounds,
+                                 const QString& parent, const QString& category, const QString& identity)
+{
+    Q_UNUSED(entries);
     const auto prototype = componentPrototype("container");
-    if (prototype.isEmpty())
-        return false;
     auto group = QJsonObject::fromVariantMap(prototype.value("root").toMap());
-    const auto identity = group["id"].toString();
     group["placement"] = QJsonObject::fromVariantMap(bounds);
     if (!parent.isEmpty())
         group["parentId"] = parent;
@@ -1513,8 +1775,8 @@ StudioSession::executePageGroup(const QVariantMap& a, QJsonObject& document, Hom
         group["categoryId"] = category;
     auto presentation = group["presentation"].toObject();
     auto layout = presentation["layout"].toObject();
-    layout["columns"] = right - left;
-    layout["rows"] = bottom - top;
+    layout["columns"] = bounds.value("width").toInt();
+    layout["rows"] = bounds.value("height").toInt();
     layout["padding"] = 0;
     layout["gap"] = ComponentSchema::componentGrid(entries,
                                                    document["composition"].toObject().toVariantMap(),
@@ -1526,6 +1788,14 @@ StudioSession::executePageGroup(const QVariantMap& a, QJsonObject& document, Hom
     presentation["layout"] = layout;
     presentation["showHeading"] = false;
     group["presentation"] = presentation;
+    group["id"] = identity;
+    return group;
+}
+
+QJsonArray
+StudioSession::buildGroupedResult(const QJsonArray& entries, const QSet<QString>& ids, const QJsonObject& group,
+                                  const QVariantMap& bounds, const QString& parent, const QString& category)
+{
     QJsonArray result;
     bool inserted = false;
     for (const auto& value : entries)
@@ -1539,16 +1809,15 @@ StudioSession::executePageGroup(const QVariantMap& a, QJsonObject& document, Hom
                 inserted = true;
             }
             auto placement = item["placement"].toObject();
-            placement["x"] = placement["x"].toInt() - left;
-            placement["y"] = placement["y"].toInt() - top;
+            placement["x"] = placement["x"].toInt() - bounds.value("x").toInt();
+            placement["y"] = placement["y"].toInt() - bounds.value("y").toInt();
             item["placement"] = placement;
-            item["parentId"] = identity;
+            item["parentId"] = group["id"].toString();
             item.remove("categoryId");
         }
         result.append(item);
     }
-    document["components"] = result;
-    return worker.loadDocument(QJsonDocument(document).toJson(), false);
+    return result;
 }
 
 bool
@@ -1699,74 +1968,24 @@ StudioSession::executePagePlace(const QVariantMap& a, QJsonObject& document, Hom
     {
         const auto change = value.toMap();
         const auto target = change.value("id").toString();
-        bool found = false;
+        if (!validatePlacementChange(change))
+        {
+            return false;
+        }
         if (touched.contains(target))
         {
             setError(QStringLiteral("Duplicate placement identity."));
             return false;
         }
+        bool found = false;
         for (int i = 0; i < entries.size(); ++i)
         {
             auto entry = entries[i].toObject();
             if (entry["id"] != target)
                 continue;
-            if (change.contains("parentId") && change.value("parentId").metaType().id() != QMetaType::QString)
-            {
-                setError(tr("Choose a named destination group."));
-                return false;
-            }
-            const auto parent = change.value("parentId", entry.value("parentId").toString()).toString();
-            if (!parent.isEmpty() && ComponentSchema::positionLocked(worker.m_items, parent))
-            {
-                setError(tr("Choose an unlocked destination group."));
-                return false;
-            }
-            if (change.contains("categoryId") && change.value("categoryId").metaType().id() != QMetaType::QString)
-            {
-                setError(tr("Choose a named destination section."));
-                return false;
-            }
-            if (change.contains("categoryId") &&
-                entry.value("categoryId").toString() != change.value("categoryId").toString())
-            {
-                const auto destination = change.value("categoryId").toString();
-                bool eligible = destination.isEmpty();
-                for (const auto& value : worker.m_categories)
-                {
-                    const auto category = value.toObject();
-                    if (category["id"] == destination)
-                        eligible = category["presentation"].toObject().value("variant") != "library";
-                }
-                if ((!destination.isEmpty() && worker.grid().value("mode") != "sections") || !eligible)
-                {
-                    setError(tr("Choose an existing component section in a scrolling layout."));
-                    return false;
-                }
-            }
-            if (ComponentSchema::positionLocked(worker.m_items, target) &&
-                (entry["placement"].toObject() != QJsonObject::fromVariantMap(change.value("placement").toMap()) ||
-                 parent != entry.value("parentId").toString() ||
-                 (change.contains("categoryId") &&
-                  entry.value("categoryId").toString() != change.value("categoryId").toString())))
-            {
-                setError(tr("Unlock the component and its containing groups before moving or resizing it."));
-                return false;
-            }
-            entry["placement"] = QJsonObject::fromVariantMap(change.value("placement").toMap());
-            if (change.contains("categoryId"))
-            {
-                const auto category = change.value("categoryId").toString();
-                if (category.isEmpty())
-                    entry.remove("categoryId");
-                else
-                    entry["categoryId"] = category;
-            }
-            if (parent.isEmpty())
-                entry.remove("parentId");
-            else
-                entry["parentId"] = parent;
-            entries[i] = entry;
+            entries[i] = applyPlacementChange(entry, change, worker);
             found = true;
+            break;
         }
         if (!found)
         {
@@ -1780,6 +1999,98 @@ StudioSession::executePagePlace(const QVariantMap& a, QJsonObject& document, Hom
 }
 
 bool
+StudioSession::validatePlacementChange(const QVariantMap& change, const QSet<QString>& touched)
+{
+    const auto target = change.value("id").toString();
+    if (target.isEmpty() || touched.contains(target))
+        return false;
+    if (change.contains("parentId") && change.value("parentId").metaType().id() != QMetaType::QString)
+    {
+        setError(tr("Choose a named destination group."));
+        return false;
+    }
+    if (change.contains("categoryId") && change.value("categoryId").metaType().id() != QMetaType::QString)
+    {
+        setError(tr("Choose a named destination section."));
+        return false;
+    }
+    return true;
+}
+
+QJsonObject
+StudioSession::applyPlacementChange(QJsonObject entry, const QVariantMap& change, const HomeLayout& worker)
+{
+    const auto target = entry["id"].toString();
+    const auto parent = change.value("parentId", entry.value("parentId").toString()).toString();
+    if (!parent.isEmpty() && ComponentSchema::positionLocked(worker.m_items, parent))
+    {
+        setError(tr("Choose an unlocked destination group."));
+        return entry;
+    }
+    if (change.contains("categoryId") && !checkCategoryEligible(change, entry, worker))
+        return entry;
+    if (!checkPlacementLocked(entry, change, worker))
+        return entry;
+    entry["placement"] = QJsonObject::fromVariantMap(change.value("placement").toMap());
+    if (change.contains("categoryId"))
+    {
+        const auto category = change.value("categoryId").toString();
+        if (category.isEmpty())
+            entry.remove("categoryId");
+        else
+            entry["categoryId"] = category;
+    }
+    if (parent.isEmpty())
+        entry.remove("parentId");
+    else
+        entry["parentId"] = parent;
+    return entry;
+}
+
+bool
+StudioSession::checkCategoryEligible(const QVariantMap& change, QJsonObject& entry, const HomeLayout& worker)
+{
+    const auto destination = change.value("categoryId").toString();
+    bool eligible = destination.isEmpty();
+    for (const auto& value : worker.m_categories)
+    {
+        const auto category = value.toObject();
+        if (category["id"] == destination)
+            eligible = category["presentation"].toObject().value("variant") != "library";
+    }
+    if ((!destination.isEmpty() && worker.grid().value("mode") != "sections") || !eligible)
+    {
+        setError(tr("Choose an existing component section in a scrolling layout."));
+        return false;
+    }
+    if (entry.value("categoryId").toString() != destination)
+    {
+        if (destination.isEmpty())
+            entry.remove("categoryId");
+        else
+            entry["categoryId"] = destination;
+    }
+    return true;
+}
+
+bool
+StudioSession::checkPlacementLocked(const QJsonObject& entry, const QVariantMap& change, const HomeLayout& worker)
+{
+    const auto target = entry["id"].toString();
+    const auto parent = change.value("parentId", entry.value("parentId").toString()).toString();
+    if (ComponentSchema::positionLocked(worker.m_items, target) &&
+        (entry["placement"].toObject() != QJsonObject::fromVariantMap(change.value("placement").toMap()) ||
+         parent != entry.value("parentId").toString() ||
+         (change.contains("categoryId") &&
+          entry.value("categoryId").toString() != change.value("categoryId").toString())))
+    {
+        setError(tr("Unlock the component and its containing groups before moving or resizing it."));
+        return false;
+    }
+    return true;
+}
+
+bool
 StudioSession::executePageInsertRelative(const QVariantMap& a, QJsonObject& document, HomeLayout& worker)
 {
     const auto relative = a.value("relativeId").toString();
@@ -1790,27 +2101,14 @@ StudioSession::executePageInsertRelative(const QVariantMap& a, QJsonObject& docu
         return false;
     }
     auto entries = document["components"].toArray();
-    QString parent;
-    int selected = -1;
-    for (int i = 0; i < entries.size(); ++i)
-        if (entries[i].toObject()["id"] == id)
-        {
-            selected = i;
-            parent = entries[i].toObject()["parentId"].toString();
-        }
+    QString parent, axis, span;
     QJsonObject group;
-    for (const auto& entry : entries)
-        if (entry.toObject()["id"] == parent)
-            group = entry.toObject();
+    int selected = -1;
+    if (!findInsertionGroup(a, entries, parent, group, selected, axis, span))
+        return false;
     const auto layout = group["presentation"].toObject()["layout"].toObject();
     const auto mode = layout["mode"].toString();
-    if (selected < 0 || parent.isEmpty() || group["componentType"] != "container" ||
-        group.contains("appCollection") || (mode != "row" && mode != "column"))
-    {
-        setError(tr("Choose an item in an editable row or column."));
-        return false;
-    }
-    const QString axis = mode == "row" ? "x" : "y", span = mode == "row" ? "width" : "height";
+    Q_UNUSED(mode);
     QList<int> order;
     for (int i = 0; i < entries.size(); ++i)
         if (entries[i].toObject()["parentId"] == parent)
@@ -1847,14 +2145,55 @@ StudioSession::executePageInsertRelative(const QVariantMap& a, QJsonObject& docu
         setError(tr("Choose an insertion target in the same group."));
         return false;
     }
+    if (!applyInsertionOrder(entries, order, gaps, axis, span, from, to, a.value("before").toBool()))
+        return false;
+    document["components"] = entries;
+    return worker.loadDocument(QJsonDocument(document).toJson(), false);
+}
+
+bool
+StudioSession::findInsertionGroup(const QVariantMap& a, const QJsonArray& entries, QString& parent,
+                                  QJsonObject& group, int& selected, QString& axis, QString& span)
+{
+    Q_UNUSED(a);
+    const auto id = a.value("id").toString();
+    for (int i = 0; i < entries.size(); ++i)
+        if (entries[i].toObject()["id"] == id)
+        {
+            selected = i;
+            parent = entries[i].toObject()["parentId"].toString();
+        }
+    if (selected < 0 || parent.isEmpty())
+        return false;
+    for (const auto& entry : entries)
+        if (entry.toObject()["id"] == parent)
+            group = entry.toObject();
+    const auto layout = group["presentation"].toObject()["layout"].toObject();
+    const auto mode = layout["mode"].toString();
+    if (group["componentType"] != "container" || group.contains("appCollection") ||
+        (mode != "row" && mode != "column"))
+    {
+        setError(tr("Choose an item in an editable row or column."));
+        return false;
+    }
+    axis = mode == "row" ? "x" : "y";
+    span = mode == "row" ? "width" : "height";
+    return true;
+}
+
+bool
+StudioSession::applyInsertionOrder(QJsonArray& entries, const QList<int>& order, const QList<int>& gaps,
+                                   const QString& axis, const QString& span, int from, int to, bool before)
+{
     int cursor = entries[order.first()].toObject()["placement"].toObject()[axis].toInt();
-    const int moving = order.takeAt(from);
+    QList<int> mutableOrder = order;
+    const int moving = mutableOrder.takeAt(from);
     if (from < to)
         --to;
-    order.insert(to + (a.value("before").toBool() ? 0 : 1), moving);
-    for (int i = 0; i < order.size(); ++i)
+    mutableOrder.insert(to + (before ? 0 : 1), moving);
+    for (int i = 0; i < mutableOrder.size(); ++i)
     {
-        auto node = entries[order[i]].toObject(), p = node["placement"].toObject();
+        auto node = entries[mutableOrder[i]].toObject(), p = node["placement"].toObject();
         if (p[axis].toInt() != cursor && ComponentSchema::positionLocked(entries, node["id"].toString()))
         {
             setError(tr("A locked component blocks this insertion."));
@@ -1862,11 +2201,10 @@ StudioSession::executePageInsertRelative(const QVariantMap& a, QJsonObject& docu
         }
         p[axis] = cursor;
         node["placement"] = p;
-        entries[order[i]] = node;
+        entries[mutableOrder[i]] = node;
         cursor += p[span].toInt() + (i < gaps.size() ? gaps[i] : 0);
     }
-    document["components"] = entries;
-    return worker.loadDocument(QJsonDocument(document).toJson(), false);
+    return true;
 }
 
 bool
@@ -2052,10 +2390,7 @@ StudioSession::executePageDuplicateItem(const QVariantMap& a, QJsonObject& docum
 {
     const auto id = a.value("id").toString();
     auto entries = document["components"].toArray();
-    QJsonObject copy;
-    for (const auto& entry : entries)
-        if (entry.toObject()["id"] == id)
-            copy = entry.toObject();
+    const auto copy = findComponentToDuplicate(entries, id);
     if (copy.isEmpty())
     {
         setError(tr("Choose an existing component to duplicate."));
@@ -2064,62 +2399,113 @@ StudioSession::executePageDuplicateItem(const QVariantMap& a, QJsonObject& docum
     const auto identity = allocateId(id + "-copy");
     if (identity.isEmpty())
         return false;
-    copy["id"] = identity;
+    auto copyObj = copy;
+    copyObj["id"] = identity;
     if (worker.m_composition.contains("grid"))
     {
-        auto shape = copy["placement"].toObject().toVariantMap();
+        auto shape = copyObj["placement"].toObject().toVariantMap();
         if (shape.isEmpty())
             shape = {{"x", 0}, {"y", 0}, {"width", 1}, {"height", 1}};
-        const auto category = copy.value("categoryId").toString(), parent = copy.value("parentId").toString();
+        const auto category = copyObj.value("categoryId").toString(), parent = copyObj.value("parentId").toString();
         const bool sections = worker.grid().value("mode") == "sections";
         if (!parent.isEmpty() && ComponentSchema::positionLocked(entries, parent))
         {
             setError(tr("Unlock the containing group before adding a duplicate."));
             return false;
         }
-        const auto grid =
-            ComponentSchema::componentGrid(entries, worker.m_composition, worker.m_categories, parent, category);
-        bool free = false;
-        for (int row = 0; row < grid["rows"].toInt() && !free; ++row)
-            for (int col = 0; col < grid["columns"].toInt() && !free; ++col)
-            {
-                shape["x"] = col;
-                shape["y"] = row;
-                if (!ComponentSchema::validPlacement(shape, grid["columns"].toInt(), grid["rows"].toInt()))
-                    continue;
-                free = true;
-                for (const auto& entry : entries)
-                {
-                    const auto item = entry.toObject();
-                    if (item.value("parentId").toString() == parent &&
-                        (!sections || !parent.isEmpty() || item.value("categoryId").toString() == category) &&
-                        item.contains("placement") &&
-                        ComponentSchema::placementsOverlap(item["placement"].toObject().toVariantMap(), shape))
-                    {
-                        free = false;
-                        break;
-                    }
-                }
-            }
-        if (!free)
+        const auto grid = ComponentSchema::componentGrid(entries, worker.m_composition, worker.m_categories, parent,
+                                                         category);
+        if (!findFreePlacement(shape, entries, worker.m_composition, worker.m_categories, parent, category, sections))
         {
             setError(tr("There is no free region for the duplicate. Nothing changed."));
             return false;
         }
-        copy["placement"] = QJsonObject::fromVariantMap(shape);
+        copyObj["placement"] = QJsonObject::fromVariantMap(shape);
     }
     QHash<QString, QString> remap{{id, identity}};
     QSet<QString> allocated{identity};
+    const auto fullRemap = remapDuplicateIds(entries, remap, allocated, id);
+    if (fullRemap.isEmpty())
+        return false;
+    QJsonArray copies;
+    copies.append(copyObj);
+    for (const auto& entry : entries)
+    {
+        auto item = entry.toObject();
+        const auto child = item["id"].toString();
+        if (child == id || !fullRemap.contains(child))
+            continue;
+        item["id"] = fullRemap.value(child);
+        item["parentId"] = fullRemap.value(item["parentId"].toString());
+        copies.append(item);
+    }
+    for (const auto& entry : copies)
+        entries.append(entry);
+    document["components"] = entries;
+    return worker.loadDocument(QJsonDocument(document).toJson(), false);
+}
+
+QJsonObject
+StudioSession::findComponentToDuplicate(const QJsonArray& entries, const QString& id)
+{
+    for (const auto& entry : entries)
+        if (entry.toObject()["id"] == id)
+            return entry.toObject();
+    return {};
+}
+
+bool
+StudioSession::findFreePlacement(QVariantMap& shape, const QJsonArray& entries, const QJsonObject& composition,
+                                 const QJsonArray& categories, const QString& parent, const QString& category,
+                                 bool sections)
+{
+    const auto grid =
+        ComponentSchema::componentGrid(entries, composition, categories, parent, category);
+    for (int row = 0; row < grid["rows"].toInt(); ++row)
+    {
+        for (int col = 0; col < grid["columns"].toInt(); ++col)
+        {
+            shape["x"] = col;
+            shape["y"] = row;
+            if (!ComponentSchema::validPlacement(shape, grid["columns"].toInt(), grid["rows"].toInt()))
+                continue;
+            bool free = true;
+            for (const auto& entry : entries)
+            {
+                const auto item = entry.toObject();
+                if (item.value("parentId").toString() == parent &&
+                    (!sections || !parent.isEmpty() || item.value("categoryId").toString() == category) &&
+                    item.contains("placement") &&
+                    ComponentSchema::placementsOverlap(item["placement"].toObject().toVariantMap(), shape))
+                {
+                    free = false;
+                    break;
+                }
+            }
+            if (free)
+                return true;
+        }
+    }
+    return false;
+}
+
+QHash<QString, QString>
+StudioSession::remapDuplicateIds(const QJsonArray& entries, const QHash<QString, QString>& remap,
+                                 QSet<QString>& allocated, const QString& /*id*/)
+{
+    QHash<QString, QString> fullRemap = remap;
     for (int depth = 0; depth < 4; ++depth)
+    {
+        bool changed = false;
         for (const auto& entry : entries)
         {
             const auto item = entry.toObject();
             const auto child = item["id"].toString();
-            if (remap.contains(child) || !remap.contains(item["parentId"].toString()))
+            if (fullRemap.contains(child) || !fullRemap.contains(item["parentId"].toString()))
                 continue;
             auto fresh = allocateId(child + "-copy");
             if (fresh.isEmpty())
-                return false;
+                return {};
             const auto base = fresh;
             int suffix = 2;
             while (allocated.contains(fresh))
@@ -2127,27 +2513,16 @@ StudioSession::executePageDuplicateItem(const QVariantMap& a, QJsonObject& docum
             if (!ComponentSchema::safeId(fresh))
             {
                 setError(tr("The copied identity exceeds its limit."));
-                return false;
+                return {};
             }
             allocated.insert(fresh);
-            remap[child] = fresh;
+            fullRemap[child] = fresh;
+            changed = true;
         }
-    QJsonArray copies;
-    copies.append(copy);
-    for (const auto& entry : entries)
-    {
-        auto item = entry.toObject();
-        const auto child = item["id"].toString();
-        if (child == id || !remap.contains(child))
-            continue;
-        item["id"] = remap[child];
-        item["parentId"] = remap[item["parentId"].toString()];
-        copies.append(item);
+        if (!changed)
+            break;
     }
-    for (const auto& entry : copies)
-        entries.append(entry);
-    document["components"] = entries;
-    return worker.loadDocument(QJsonDocument(document).toJson(), false);
+    return fullRemap;
 }
 
 bool
