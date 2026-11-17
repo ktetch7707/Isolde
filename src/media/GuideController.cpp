@@ -1392,34 +1392,19 @@ GuideController::previewFeed(const QString& instance,
         m_sourceRevisions[channel.value("id").toString()] = channel.value("revision");
     }
     const auto refreshed = m_sourceRefreshed;
+    QByteArray playlist, xml;
+    if (directUrl.isEmpty())
+    {
+        if (!readFeedFile(playlistPath, 4 * 1024 * 1024, playlist))
+            return fail(tr("Cannot read a bounded local playlist file."));
+    }
+    else
+        playlist = "#EXTM3U\n#EXTINF:-1," + directName.toUtf8() + "\n" + directUrl.toUtf8() + "\n";
+    if (!xmltvPath.isEmpty() && !readFeedFile(xmltvPath, 16 * 1024 * 1024, xml))
+        return fail(tr("Cannot read a bounded local XMLTV file. Cached listings were preserved."));
     return submit(
-        [instance, playlistPath, xmltvPath, directUrl, directName, refreshed](GuideStore& store)
+        [instance, playlistPath, xmltvPath, directUrl, directName, refreshed, playlist, xml](GuideStore& store)
         {
-            const auto read = [](const QString& path, qint64 maximum, QByteArray& bytes)
-            {
-                for (const auto c : path)
-                    if (c.unicode() < 32 || c.unicode() == 127)
-                        return false;
-                if (!QDir::isAbsolutePath(path) || QFileInfo(path).isSymLink() || !QFileInfo(path).isFile())
-                    return false;
-                QFile file(path);
-                if (!file.open(QIODevice::ReadOnly) || file.size() > maximum)
-                    return false;
-                bytes = file.read(maximum + 1);
-                return bytes.size() <= maximum && file.atEnd();
-            };
-            QByteArray playlist, xml;
-            if (directUrl.isEmpty())
-            {
-                if (!read(playlistPath, 4 * 1024 * 1024, playlist))
-                    return QVariantMap{{"ok", false}, {"error", "Cannot read a bounded local playlist file."}};
-            }
-            else
-                playlist = "#EXTM3U\n#EXTINF:-1," + directName.toUtf8() + "\n" + directUrl.toUtf8() + "\n";
-            if (!xmltvPath.isEmpty() && !read(xmltvPath, 16 * 1024 * 1024, xml))
-                return QVariantMap{
-                    {"ok", false},
-                    {"error", "Cannot read a bounded local XMLTV file. Cached listings were preserved."}};
             auto result = GuideFeeds::parse(playlist,
                                             xml,
                                             instance,
@@ -1430,44 +1415,16 @@ GuideController::previewFeed(const QString& instance,
                                             });
             if (!result.value("ok").toBool())
                 return result;
-            auto entries = result.value("entries").toList();
+            QVariantList entries = result.value("entries").toList();
             const auto listings = result.value("listings").toMap();
             QSet<int> used;
             for (const auto& v : store.channels())
                 used.insert(v.toMap().value("number").toInt());
-            for (auto& v : entries)
-            {
-                auto entry = v.toMap();
-                auto definition = entry.value("definition").toMap();
-                const auto old = store.channel(definition.value("id").toString());
-                int number = old.isEmpty() ? definition.value("number").toInt() : old.value("number").toInt();
-                if (old.isEmpty() && used.contains(number))
-                {
-                    number = 1;
-                    while (used.contains(number) && number < 99999)
-                        ++number;
-                }
-                if (!old.isEmpty())
-                {
-                    auto source = definition.value("source").toMap();
-                    const auto epg = old.value("source").toMap().value("epgId").toString();
-                    if (!epg.isEmpty() && !xml.isEmpty() && !listings.contains(epg))
-                        return QVariantMap{{"ok", false},
-                                           {"error",
-                                            "A previously mapped XMLTV channel is missing from this refresh. Cached "
-                                            "listings were preserved. Review a complete source file before retrying."}};
-                    source["epgId"] = epg;
-                    definition["source"] = source;
-                    entry["programs"] = listings.value(epg, QVariantList{});
-                }
-                definition["number"] = number;
-                used.insert(number);
-                QString error;
-                if (ComponentSchema::guideChannel(definition, &error).isEmpty())
-                    return QVariantMap{{"ok", false}, {"error", error}};
-                entry["definition"] = definition;
-                v = entry;
-            }
+            if (!processFeedEntries(entries, listings, used, store))
+                return QVariantMap{{"ok", false},
+                                   {"error",
+                                    "A previously mapped XMLTV channel is missing from this refresh. Cached "
+                                    "listings were preserved. Review a complete source file before retrying."}};
             if (QJsonDocument::fromVariant(entries).toJson(QJsonDocument::Compact).size() > 4 * 1024 * 1024)
                 return QVariantMap{{"ok", false},
                                    {"error",
@@ -1480,9 +1437,10 @@ GuideController::previewFeed(const QString& instance,
         {
             if (result.value("ok").toBool())
             {
-                m_sourcePreview = result.value("entries").toList();
-                m_feedListings = result.value("listings").toMap();
-                m_sourcePreviewReady = true;
+                QVariantList entries = result.value("entries").toList();
+                QVariantMap listings = result.value("listings").toMap();
+                finalizeFeedLoad(result, entries, m_sourcePreview, m_feedListings, m_sourcePreviewReady,
+                                 m_snapshotBytes);
                 m_status =
                     tr("Review station numbers and EPG mappings. Refresh is manual; browsing makes no network "
                        "requests. No listings still permits live tuning.");
@@ -2029,5 +1987,65 @@ GuideController::finalizePvrLoad(int& page, int& sourceIndex, bool& sourcePrevie
                            if (m_valid && m_reading && generation == m_catalogGeneration)
                                requestPage();
                        });
+}
+bool
+GuideController::readFeedFile(const QString& path, qint64 maximum, QByteArray& bytes)
+{
+    for (const auto c : path)
+        if (c.unicode() < 32 || c.unicode() == 127)
+            return false;
+    if (!QDir::isAbsolutePath(path) || QFileInfo(path).isSymLink() || !QFileInfo(path).isFile())
+        return false;
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly) || file.size() > maximum)
+        return false;
+    bytes = file.read(maximum + 1);
+    return bytes.size() <= maximum && file.atEnd();
+}
+bool
+GuideController::processFeedEntries(QVariantList& entries, const QVariantMap& listings, QSet<int>& used,
+                                    GuideStore& store)
+{
+    for (auto& v : entries)
+    {
+        auto entry = v.toMap();
+        auto definition = entry.value("definition").toMap();
+        const auto old = store.channel(definition.value("id").toString());
+        int number = old.isEmpty() ? definition.value("number").toInt() : old.value("number").toInt();
+        if (old.isEmpty() && used.contains(number))
+        {
+            number = 1;
+            while (used.contains(number) && number < 99999)
+                ++number;
+        }
+        if (!old.isEmpty())
+        {
+            auto source = definition.value("source").toMap();
+            const auto epg = old.value("source").toMap().value("epgId").toString();
+            if (!epg.isEmpty() && listings.contains(epg))
+            {
+                source["epgId"] = epg;
+                definition["source"] = source;
+                entry["programs"] = listings.value(epg, QVariantList{});
+            }
+        }
+        definition["number"] = number;
+        used.insert(number);
+        QString error;
+        if (ComponentSchema::guideChannel(definition, &error).isEmpty())
+            return false;
+        entry["definition"] = definition;
+        v = entry;
+    }
+    return true;
+}
+void
+GuideController::finalizeFeedLoad(QVariantMap& result, QVariantList& entries, QVariantList& sourcePreview,
+                                  QVariantMap& feedListings, bool& sourcePreviewReady, qint64& snapshotBytes)
+{
+    sourcePreview = entries;
+    feedListings = result.value("listings").toMap();
+    sourcePreviewReady = true;
+    Q_UNUSED(snapshotBytes);
 }
 #include "GuideController.moc"

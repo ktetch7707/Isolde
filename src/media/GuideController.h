@@ -216,6 +216,13 @@ class GuideController final : public QObject
                 const QString& xmltvPath,
                 const QString& directUrl = QString(),
                 const QString& directName = QString());
+    bool
+    readFeedFile(const QString& path, qint64 maximum, QByteArray& bytes);
+    bool
+    processFeedEntries(QVariantList& entries, const QVariantMap& listings, QSet<int>& used, GuideStore& store);
+    void
+    finalizeFeedLoad(QVariantMap& result, QVariantList& entries, QVariantList& sourcePreview,
+                     QVariantMap& feedListings, bool& sourcePreviewReady, qint64& snapshotBytes);
     Q_INVOKABLE bool
     setSourceEpg(int index, const QString& epgId);
     Q_INVOKABLE bool
