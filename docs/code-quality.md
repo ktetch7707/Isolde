@@ -69,13 +69,58 @@ For GCC/Clang, the `isolde_core` target is compiled with:
 
 Formatting is **already handled separately** by Microsoft clang-format (`.clang-format` at repo root). No clang-format job is included in CI — formatting is enforced through the existing `.clang-format` configuration and editor integration (`.vscode/settings.json` with `editor.formatOnSave`).
 
+## Doxygen documentation enforcement (`Doxyfile`, `tools/documentation-check.py`)
+
+| Check | Requirement | Severity |
+|-------|-------------|----------|
+| Class doxygen comment | Every class/struct must have a `/** ... */` block before its declaration explaining its purpose | **Error** (CI-failing) |
+| Function doxygen comment | Every function definition must have `/** ... */` with `@brief` (purpose), `@details` (how it works), and usage context | **Error** (CI-failing) |
+| No inline doxygen at call sites | Doxygen blocks must not appear immediately before function call expressions | **Error** (CI-failing) |
+| No useless comments | Filler comments (e.g. "TODO", "fixme", "hack") without substance are flagged | Warning |
+
+### Required doxygen structure
+
+**Class:**
+```cpp
+/**
+ * @brief One-line purpose of the class.
+ *
+ * @details Multi-paragraph explanation of what the class owns, its lifetime
+ *          responsibilities, and how it interacts with other components.
+ */
+class GameLibrary { ... };
+```
+
+**Function:**
+```cpp
+/**
+ * @brief One-line purpose of the function.
+ *
+ * @details How the function works internally, including any preconditions,
+ *          postconditions, side effects, and thread-safety guarantees.
+ *
+ * @param name Description of parameter `name`.
+ * @return Description of the return value.
+ */
+bool loadGame(const QString& id);
+```
+
+Run: `python tools/documentation-check.py src`
+
+### What is NOT allowed
+
+- Doxygen blocks placed immediately before a function **call** (call site)
+- Comments that only restate the obvious (e.g. `// increment i`)
+- `/** */` blocks with no substantive content (empty `@brief`, no `@details`)
+
 ## Local Usage
 
 ### Prerequisites
 
-- Python 3 (for lizard and class-size checker)
+- Python 3 (for lizard, class-size checker, documentation checker)
 - clang-tidy (from LLVM, e.g. `C:\Program Files\LLVM\bin\clang-tidy.exe`)
 - CMake and Qt6 (for build + clang-tidy compilation database)
+- doxygen (for documentation generation / CI only)
 
 ### Run all checks
 
@@ -87,6 +132,9 @@ python tools/lizard-check.ps1
 
 # Class-size
 python tools/class-size-check.py src
+
+# Documentation
+python tools/documentation-check.py src
 
 # clang-tidy (requires build directory with compile_commands.json)
 cmake -S . -B build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
@@ -102,11 +150,15 @@ python3 -m lizard src -l cpp -C 10 -L 60 -a 5
 # Class-size
 python3 tools/class-size-check.py src
 
+# Documentation
+python3 tools/documentation-check.py src
+
 # clang-tidy (requires build directory)
 cmake -S . -B build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 cmake --build build -j$(nproc)
 clang-tidy -p build --config-file .clang-tidy src
 ```
+
 
 ## CI Enforcement
 
@@ -117,7 +169,9 @@ GitHub Actions (`.github/workflows/code-quality.yml`) runs on every push and pul
 3. Runs clang-tidy
 4. Runs Lizard
 5. Runs the class-size checker
-6. Fails the pull request if any check fails
+6. Runs the class-size checker
+7. Runs the documentation checker
+8. Fails the pull request if any check fails
 
 No clang-format job is included — formatting is handled separately.
 
