@@ -330,23 +330,24 @@ class StudioSession final : public QObject
                        int& index, QJsonObject& rootMetaLocal);
 
     // Reuse operation dispatch for previewReuse() — each helper handles one reuse command.
-    QVariantMap
-    handleReuseResponsive(const QVariantMap& a, QJsonObject document, QJsonObject layout);
-    QVariantMap
+    bool
+    handleReuseResponsive(const QVariantMap& a, QJsonObject document, QJsonObject layout,
+                          const QJsonArray& selected, QVariantList& impact, const QString& pageId);
+    bool
     handleReuseSave(const QVariantMap& a, QJsonObject document, QJsonObject layout,
-                    const QJsonArray& selected, const QString& kind, QJsonObject library);
-    QVariantMap
+                    const QJsonArray& selected, QVariantList& impact, const QString& pageId);
+    bool
     handleReuseEditStyle(const QVariantMap& a, QJsonObject document, QJsonObject layout,
-                         const QJsonArray& selected, QJsonObject library);
-    QVariantMap
+                         const QJsonArray& selected, QVariantList& impact, const QString& pageId);
+    bool
     handleReuseInsert(const QVariantMap& a, QJsonObject document, QJsonObject layout,
-                      const QJsonArray& selected, QJsonObject library);
-    QVariantMap
+                      const QJsonArray& selected, QVariantList& impact, const QString& pageId);
+    bool
     handleReuseEditAll(const QVariantMap& a, QJsonObject document, QJsonObject layout,
-                       const QJsonArray& selected, QJsonObject library);
-    QVariantMap
+                       const QJsonArray& selected, QVariantList& impact, const QString& pageId);
+    bool
     handleReuseAppearanceEdit(const QVariantMap& a, QJsonObject document, QJsonObject layout,
-                              const QJsonArray& selected, QJsonObject library);
+                              const QJsonArray& selected, QVariantList& impact, const QString& pageId);
                        int& index, QJsonObject& rootMetaLocal);
     bool
     validatePageName(const QVariantMap& a, QString& name);
@@ -552,6 +553,29 @@ class StudioSession final : public QObject
     bool
     finalizePageOperation(QJsonObject& root, QJsonObject& document, QJsonArray& pages, int pageIndex,
                           const QString& operation, const QVariantMap& a, QJsonObject& result);
+
+    // Reuse operation dispatch for previewReuse() — each helper handles one reuse command.
+    bool
+    handleReuseResponsive(const QVariantMap& a, QJsonObject document, QJsonObject layout,
+                          const QJsonArray& selected, QVariantList& impact, const QString& pageId);
+    bool
+    handleReuseSave(const QVariantMap& a, QJsonObject document, QJsonObject layout,
+                    const QJsonArray& selected, QVariantList& impact, const QString& pageId);
+    bool
+    handleReuseEditStyle(const QVariantMap& a, QJsonObject document, QJsonObject layout,
+                         const QJsonArray& selected, QVariantList& impact, const QString& pageId);
+    bool
+    handleReuseInsert(const QVariantMap& a, QJsonObject document, QJsonObject layout,
+                      const QJsonArray& selected, QVariantList& impact, const QString& pageId);
+    bool
+    handleReuseEditAll(const QVariantMap& a, QJsonObject document, QJsonObject layout,
+                       const QJsonArray& selected, QVariantList& impact, const QString& pageId);
+    bool
+    handleReuseAppearanceEdit(const QVariantMap& a, QJsonObject document, QJsonObject layout,
+                              const QJsonArray& selected, QVariantList& impact, const QString& pageId);
+    bool
+    findFreePlacement(QJsonObject& destination, QJsonObject layout, const QJsonArray& allNodes,
+                      const QJsonObject& definition);
 
     QByteArray m_committed;
     QByteArray m_draft;
