@@ -1,5 +1,8 @@
 #include "home/StudioSession.h"
 
+static bool
+appendArtworkChoice(QVariantList& result, QSet<QString>& paths, const QString& path);
+
 QVariantList
 StudioSession::artworkChoices() const
 {
@@ -7,21 +10,6 @@ StudioSession::artworkChoices() const
     if (!currentProfile())
         return result;
     QSet<QString> paths;
-    const auto append = [&](const QString& path)
-    {
-        if (result.size() >= 256 || paths.contains(path))
-            return;
-        QImageReader reader(path);
-        const auto size = reader.size();
-        if (!size.isValid() || size.width() > 16384 || size.height() > 16384 ||
-            qint64(size.width()) * size.height() > 32 * 1024 * 1024)
-            return;
-        paths.insert(path);
-        result.append(QVariantMap{{"name", QFileInfo(path).completeBaseName()},
-                                  {"source", QUrl::fromLocalFile(path).toString()},
-                                  {"width", size.width()},
-                                  {"height", size.height()}});
-    };
     const auto directory = QFileInfo(m_profilePath).absolutePath();
     const QStringList roots{QDir(directory).filePath("artwork"),
                             QDir(QFileInfo(m_live->m_defaultPath).absolutePath()).filePath("skins"),
@@ -35,12 +23,30 @@ StudioSession::artworkChoices() const
             const auto path = files.next(), canonical = QFileInfo(path).canonicalFilePath(),
                        base = QFileInfo(root).canonicalFilePath();
             if (!canonical.isEmpty() && !base.isEmpty() && !QDir(base).relativeFilePath(canonical).startsWith("../"))
-                append(canonical);
+                appendArtworkChoice(result, paths, canonical);
         }
     }
     for (const auto& path : m_stagedAssets)
-        append(path);
+        appendArtworkChoice(result, paths, path);
     return result;
+}
+
+static bool
+appendArtworkChoice(QVariantList& result, QSet<QString>& paths, const QString& path)
+{
+    if (result.size() >= 256 || paths.contains(path))
+        return false;
+    QImageReader reader(path);
+    const auto size = reader.size();
+    if (!size.isValid() || size.width() > 16384 || size.height() > 16384 ||
+        qint64(size.width()) * size.height() > 32 * 1024 * 1024)
+        return false;
+    paths.insert(path);
+    result.append(QVariantMap{{"name", QFileInfo(path).completeBaseName()},
+                              {"source", QUrl::fromLocalFile(path).toString()},
+                              {"width", size.width()},
+                              {"height", size.height()}});
+    return true;
 }
 
 QVariantMap
