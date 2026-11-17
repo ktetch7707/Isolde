@@ -443,47 +443,8 @@ StudioSession::handleReuseEditAll(const QVariantMap& a, QJsonObject document, QJ
     for (const auto& entry : document["pages"].toArray())
         for (const auto& node : entry.toObject()["layout"].toObject()["components"].toArray())
             allNodes.append(node);
-    for (const auto& id : pages)
-    {
-        auto target = page(document, id);
-        auto values = target["components"].toArray();
-        QJsonArray replaced;
-        QSet<QString> descendants;
-        for (const auto& value : values)
-        {
-            const auto node = value.toObject();
-            if (node["linkedDesign"] != link)
-                continue;
-            const auto parent = node["parentId"].toString();
-            bool child = false;
-            for (const auto& possible : values)
-                if (possible.toObject()["id"] == parent && possible.toObject()["linkedDesign"] == link)
-                    child = true;
-            if (child)
-                continue;
-            const auto old = subtree(values, node["id"].toString());
-            for (const auto& item : old)
-                descendants.insert(item.toObject()["id"].toString());
-            const auto replacement = instantiate(definition, allNodes, node, link);
-            for (const auto& item : replacement)
-            {
-                replaced.append(item);
-                allNodes.append(item);
-            }
-            impact.append(QVariantMap{{"page", id},
-                                      {"id", node["id"].toString()},
-                                      {"name", node["name"].toString()},
-                                      {"change", tr("Edit linked instance")}});
-        }
-        QJsonArray result;
-        for (const auto& value : values)
-            if (!descendants.contains(value.toObject()["id"].toString()))
-                result.append(value);
-        for (const auto& value : replaced)
-            result.append(value);
-        target["components"] = result;
-        store(document, id, target);
-    }
+    if (!updateLinkedInstances(document, library, allNodes, link, definition, impact))
+        return false;
     return true;
 }
 
@@ -520,68 +481,8 @@ StudioSession::handleReuseAppearanceEdit(const QVariantMap& a, QJsonObject docum
         }
         else
         {
-            if (node["id"] != id)
-                continue;
-            auto appearance = node["presentation"].toObject();
-            if (operation == "useStyle")
-            {
-                if (styleDefinition.isEmpty())
-                {
-                    setError(tr("Choose an existing shared style."));
-                    return false;
-                }
-                const auto visual = DesignSystem::styleProperties(appearance.toVariantMap());
-                for (auto it = visual.cbegin(); it != visual.cend(); ++it)
-                    appearance.remove(it.key());
-                appearance["styleId"] = a.value("libraryId").toString();
-            }
-            else if (operation == "resetOverrides")
-            {
-                if (!appearance.contains("styleId"))
-                {
-                    setError(tr("This component has no shared style."));
-                    return false;
-                }
-                const auto visual = DesignSystem::styleProperties(appearance.toVariantMap());
-                for (auto it = visual.cbegin(); it != visual.cend(); ++it)
-                    appearance.remove(it.key());
-            }
-            else if (operation == "detachStyle")
-            {
-                appearance = QJsonObject::fromVariantMap(
-                    DesignSystem::presentation(appearance.toVariantMap(), library.toVariantMap()));
-            }
-            else if (operation == "pasteAppearance")
-            {
-                if (source.isEmpty())
-                {
-                    setError(tr("The copied appearance is no longer available."));
-                    return false;
-                }
-                const auto visual = DesignSystem::styleProperties(DesignSystem::presentation(
-                    source[0].toObject()["presentation"].toObject().toVariantMap(), library.toVariantMap()));
-                const auto previous = DesignSystem::styleProperties(appearance.toVariantMap());
-                for (auto it = previous.cbegin(); it != previous.cend(); ++it)
-                    appearance.remove(it.key());
-                appearance.remove("styleId");
-                for (auto it = visual.cbegin(); it != visual.cend(); ++it)
-                    appearance[it.key()] = QJsonValue::fromVariant(it.value());
-            }
-            else
-            {
-                setError(tr("Unknown reusable-design operation."));
+            if (!applyAppearanceEditToNode(node, a, library, styleDefinition, source))
                 return false;
-            }
-            if (!ComponentSchema::validPresentation(appearance.toVariantMap(),
-                                                    node["componentType"] == "library",
-                                                    node["componentType"] == "container"))
-            {
-                setError(
-                    tr("This appearance contains properties incompatible with the destination. No "
-                       "properties were discarded."));
-                return false;
-            }
-            node["presentation"] = appearance;
         }
         layout["components"].toArray()[i] = node;
         changed = true;
@@ -628,8 +529,60 @@ StudioSession::findFreePlacement(QJsonObject& destination, QJsonObject layout, c
             if (!collision)
             {
                 destination["placement"] = QJsonObject::fromVariantMap(proposed);
-                return true;
+    return true;
+}
+
+bool
+StudioSession::updateLinkedInstances(QJsonObject document, QJsonObject library, const QJsonArray& allNodes,
+                                     const QString& link, const QJsonObject& definition,
+                                     QVariantList& impact)
+{
+    QStringList pages{QString()};
+    for (const auto& entry : document["pages"].toArray())
+        pages.append(entry.toObject()["id"].toString());
+    for (const auto& id : pages)
+    {
+        auto target = page(document, id);
+        auto values = target["components"].toArray();
+        QJsonArray replaced;
+        QSet<QString> descendants;
+        for (const auto& value : values)
+        {
+            const auto node = value.toObject();
+            if (node["linkedDesign"] != link)
+                continue;
+            const auto parent = node["parentId"].toString();
+            bool child = false;
+            for (const auto& possible : values)
+                if (possible.toObject()["id"] == parent && possible.toObject()["linkedDesign"] == link)
+                    child = true;
+            if (child)
+                continue;
+            const auto old = subtree(values, node["id"].toString());
+            for (const auto& item : old)
+                descendants.insert(item.toObject()["id"].toString());
+            const auto replacement = instantiate(definition, allNodes, node, link);
+            for (const auto& item : replacement)
+            {
+                replaced.append(item);
+                allNodes.append(item);
             }
+            impact.append(QVariantMap{{"page", id},
+                                      {"id", node["id"].toString()},
+                                      {"name", node["name"].toString()},
+                                      {"change", tr("Edit linked instance")}});
+        }
+        QJsonArray result;
+        for (const auto& value : values)
+            if (!descendants.contains(value.toObject()["id"].toString()))
+                result.append(value);
+        for (const auto& value : replaced)
+            result.append(value);
+        target["components"] = result;
+        store(document, id, target);
+    }
+    return true;
+}
         }
     }
     return false;
@@ -650,6 +603,77 @@ StudioSession::resolveInsertDestination(QJsonObject& destination, QVariantMap a,
     for (const auto& key : {"placement", "parentId", "categoryId"})
         if (a.contains(key))
             destination[key] = QJsonValue::fromVariant(a[key]);
+    return true;
+}
+
+bool
+StudioSession::applyAppearanceEditToNode(QJsonObject& node, const QVariantMap& a, const QJsonObject& library,
+                                         const QJsonObject& styleDefinition, const QJsonArray& source)
+{
+    const auto id = node["id"].toString();
+    const auto operation = a.value("operation").toString();
+    if (node["id"] != a.value("id").toString())
+        return true;
+    auto appearance = node["presentation"].toObject();
+    if (operation == "useStyle")
+    {
+        if (styleDefinition.isEmpty())
+        {
+            setError(tr("Choose an existing shared style."));
+            return false;
+        }
+        const auto visual = DesignSystem::styleProperties(appearance.toVariantMap());
+        for (auto it = visual.cbegin(); it != visual.cend(); ++it)
+            appearance.remove(it.key());
+        appearance["styleId"] = a.value("libraryId").toString();
+    }
+    else if (operation == "resetOverrides")
+    {
+        if (!appearance.contains("styleId"))
+        {
+            setError(tr("This component has no shared style."));
+            return false;
+        }
+        const auto visual = DesignSystem::styleProperties(appearance.toVariantMap());
+        for (auto it = visual.cbegin(); it != visual.cend(); ++it)
+            appearance.remove(it.key());
+    }
+    else if (operation == "detachStyle")
+    {
+        appearance = QJsonObject::fromVariantMap(
+            DesignSystem::presentation(appearance.toVariantMap(), library.toVariantMap()));
+    }
+    else if (operation == "pasteAppearance")
+    {
+        if (source.isEmpty())
+        {
+            setError(tr("The copied appearance is no longer available."));
+            return false;
+        }
+        const auto visual = DesignSystem::styleProperties(DesignSystem::presentation(
+            source[0].toObject()["presentation"].toObject().toVariantMap(), library.toVariantMap()));
+        const auto previous = DesignSystem::styleProperties(appearance.toVariantMap());
+        for (auto it = previous.cbegin(); it != previous.cend(); ++it)
+            appearance.remove(it.key());
+        appearance.remove("styleId");
+        for (auto it = visual.cbegin(); it != visual.cend(); ++it)
+            appearance[it.key()] = QJsonValue::fromVariant(it.value());
+    }
+    else
+    {
+        setError(tr("Unknown reusable-design operation."));
+        return false;
+    }
+    if (!ComponentSchema::validPresentation(appearance.toVariantMap(),
+                                            node["componentType"] == "library",
+                                            node["componentType"] == "container"))
+    {
+        setError(
+            tr("This appearance contains properties incompatible with the destination. No "
+               "properties were discarded."));
+        return false;
+    }
+    node["presentation"] = appearance;
     return true;
 }
 

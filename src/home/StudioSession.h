@@ -580,6 +580,12 @@ class StudioSession final : public QObject
     resolveInsertDestination(QJsonObject& destination, QVariantMap a, QJsonObject layout);
     QJsonObject
     findComponentDefinition(const QJsonObject& library, const QString& libraryId);
+    bool
+    updateLinkedInstances(QJsonObject document, QJsonObject library, QJsonArray allNodes,
+                          const QString& link, const QJsonObject& definition, QVariantList& impact);
+    bool
+    applyAppearanceEditToNode(QJsonObject& node, const QVariantMap& a, const QJsonObject& library,
+                              const QJsonObject& styleDefinition, const QJsonArray& source);
 
     QByteArray m_committed;
     QByteArray m_draft;
