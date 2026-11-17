@@ -14,4 +14,15 @@ matchesChannel(const QVariantMap& definition, const QVariantMap& metadata);
 // returned rule applies until nextUtc; callers never cross that boundary.
 QVariantMap
 calendarWindow(const QVariantMap& definition, qint64 utc);
+// Channel definition validation helpers.
+bool
+validateChannelSchedule(const QVariantMap& v, QString* error);
+bool
+validateChannelGroups(const QVariantMap& v, QString* error);
+bool
+validateGuideFeedOwner(const QVariantMap& v, QString* error);
+bool
+validateKodiPvrOwner(const QVariantMap& v, QString* error);
+bool
+validateLocalChannel(const QVariantMap& v, QString* error);
 } // namespace GuideRules

@@ -230,67 +230,8 @@ ComponentSchema::guideChannel(const QVariantMap& v, QString* error)
 {
     if (QJsonDocument::fromVariant(v).toJson(QJsonDocument::Compact).size() > 131072)
         return reject(error, "Channel definitions must fit within 128 KiB.");
-    if (v.contains("schedule"))
-    {
-        const auto policy = v.value("schedule").toMap();
-        if (v.value("schedule").metaType().id() != QMetaType::QVariantMap ||
-            !keys(policy, {"blocks", "cooldownSeconds", "fillerRule", "bumperRule"}) ||
-            (policy.contains("cooldownSeconds") && !integer(policy.value("cooldownSeconds"), 0, 7 * 86400)))
-            return reject(error, "Invalid bounded channel scheduling policy.");
-        for (const auto& key : QStringList{"fillerRule", "bumperRule"})
-            if (policy.contains(key) && (policy.value(key).metaType().id() != QMetaType::QVariantMap ||
-                                         guideRule(policy.value(key).toMap()).isEmpty()))
-                return reject(error, "Choose valid filler and bumper rules.");
-        if (policy.contains("blocks"))
-        {
-            if (policy.value("blocks").metaType().id() != QMetaType::QVariantList ||
-                policy.value("blocks").toList().size() > 32)
-                return reject(error, "Choose at most 32 calendar blocks.");
-            const auto blocks = policy.value("blocks").toList();
-            for (int i = 0; i < blocks.size(); ++i)
-            {
-                const auto b = blocks[i].toMap();
-                if (blocks[i].metaType().id() != QMetaType::QVariantMap ||
-                    !keys(b, {"name", "days", "startMinute", "endMinute", "fromDate", "toDate", "rule"}) ||
-                    !text(b.value("name"), 80) || !integer(b.value("startMinute"), 0, 1439) ||
-                    !integer(b.value("endMinute"), 1, 1440) ||
-                    b.value("startMinute").toInt() >= b.value("endMinute").toInt() ||
-                    b.value("days").metaType().id() != QMetaType::QVariantList || b.value("days").toList().isEmpty() ||
-                    b.value("days").toList().size() > 7 || b.value("rule").metaType().id() != QMetaType::QVariantMap ||
-                    guideRule(b.value("rule").toMap()).isEmpty())
-                    return reject(error, "Calendar blocks need a name, weekdays, increasing times and matching rules.");
-                QSet<int> days;
-                for (const auto& day : b.value("days").toList())
-                {
-                    if (!integer(day, 1, 7) || days.contains(day.toInt()))
-                        return reject(error, "Choose unique weekdays, Monday 1 through Sunday 7.");
-                    days.insert(day.toInt());
-                }
-                for (const auto& key : QStringList{"fromDate", "toDate"})
-                    if (b.contains(key) &&
-                        (!text(b.value(key), 10) ||
-                         QDate::fromString(b.value(key).toString(), Qt::ISODate).toString(Qt::ISODate) !=
-                             b.value(key).toString()))
-                        return reject(error, "Use calendar dates in YYYY-MM-DD form.");
-                if (b.contains("fromDate") && b.contains("toDate") &&
-                    b.value("fromDate").toString() > b.value("toDate").toString())
-                    return reject(error, "The last calendar date precedes the first.");
-                for (int j = 0; j < i; ++j)
-                {
-                    const auto other = blocks[j].toMap();
-                    bool shared = false;
-                    for (const auto& day : other.value("days").toList())
-                        shared |= days.contains(day.toInt());
-                    if (shared && b.value("startMinute").toInt() < other.value("endMinute").toInt() &&
-                        b.value("endMinute").toInt() > other.value("startMinute").toInt() &&
-                        b.value("fromDate", "0001-01-01").toString() <=
-                            other.value("toDate", "9999-12-31").toString() &&
-                        other.value("fromDate", "0001-01-01").toString() <= b.value("toDate", "9999-12-31").toString())
-                        return reject(error, "Calendar blocks overlap. Choose different times, days or dates.");
-                }
-            }
-        }
-    }
+    if (v.contains("schedule") && !validateChannelSchedule(v, error))
+        return v;
     if (v.contains("description") && !text(v.value("description"), 512, true))
         return reject(error, "Use a plain-text channel description of at most 512 characters.");
     if (v.contains("logo") &&
@@ -298,86 +239,16 @@ ComponentSchema::guideChannel(const QVariantMap& v, QString* error)
          !QRegularExpression("^artwork/logo-[0-9a-f]{64}\\.(png|jpg)$").match(v.value("logo").toString()).hasMatch()))
         return reject(error, "Choose managed content-addressed station artwork.");
     if (v.contains("presentation") && (v.value("presentation").metaType().id() != QMetaType::QVariantMap ||
-                                       !validPresentation(v.value("presentation").toMap())))
+                                        !validPresentation(v.value("presentation").toMap())))
         return reject(error, "Invalid shared station presentation.");
     if (v.contains("sourceEnabled") && v.value("sourceEnabled").metaType().id() != QMetaType::Bool)
         return reject(error, "Source enablement must be an explicit boolean.");
-    if (v.contains("groups"))
-    {
-        if (v.value("groups").metaType().id() != QMetaType::QVariantList || v.value("groups").toList().size() > 32)
-            return reject(error, "Choose at most 32 channel groups.");
-        QSet<QString> groups;
-        for (const auto& group : v.value("groups").toList())
-        {
-            if (!text(group, 80) || group.toString() != group.toString().trimmed() || group.toString().contains(',') ||
-                groups.contains(group.toString().toCaseFolded()))
-                return reject(error, "Use unique group names of at most 80 characters without commas.");
-            groups.insert(group.toString().toCaseFolded());
-        }
-    }
-    if (v.value("owner") == "guide-feed")
-    {
-        const auto source = v.value("source").toMap();
-        if (!keys(v,
-                  {"schemaVersion",
-                   "id",
-                   "name",
-                   "number",
-                   "description",
-                   "groups",
-                   "logo",
-                   "presentation",
-                   "owner",
-                   "source",
-                   "sourceAvailable",
-                   "sourceEnabled",
-                   "refreshedUtc"}) ||
-            !integer(v.value("schemaVersion"), 1, 1) || !safeId(v.value("id").toString()) ||
-            !text(v.value("name"), 160) || !integer(v.value("number"), 1, 99999) ||
-            !keys(source, {"instance", "stationId", "epgId", "url", "number"}) ||
-            !safeId(source.value("instance").toString()) || !text(source.value("stationId"), 160) ||
-            !text(source.value("epgId"), 160, true) || !GuideFeeds::streamUrl(source.value("url").toString()) ||
-            !integer(source.value("number"), 1, 99999) ||
-            v.value("id") !=
-                GuideFeeds::identity(source.value("instance").toString(), source.value("stationId").toString()) ||
-            v.value("sourceAvailable").metaType().id() != QMetaType::Bool ||
-            !integer(v.value("refreshedUtc"), 0, 253402214400LL))
-            return reject(error, "Invalid stream station identity or URL. Credentials and player options are refused.");
-        if (error)
-            error->clear();
+    if (v.contains("groups") && !validateChannelGroups(v, error))
         return v;
-    }
-    if (v.value("owner") == "kodi-pvr")
-    {
-        const auto source = v.value("source").toMap();
-        if (!keys(v,
-                  {"schemaVersion",
-                   "id",
-                   "name",
-                   "number",
-                   "description",
-                   "groups",
-                   "logo",
-                   "presentation",
-                   "owner",
-                   "source",
-                   "sourceAvailable",
-                   "sourceEnabled",
-                   "refreshedUtc"}) ||
-            !integer(v.value("schemaVersion"), 1, 1) || !safeId(v.value("id").toString()) ||
-            !text(v.value("name"), 160) || !integer(v.value("number"), 1, 99999) ||
-            !keys(source, {"instance", "channelId", "clientId", "uniqueId", "number"}) ||
-            !safeId(source.value("instance").toString()) || !integer(source.value("channelId"), 1, 2147483647) ||
-            !integer(source.value("clientId"), -2147483648LL, 2147483647) ||
-            !integer(source.value("uniqueId"), -2147483648LL, 2147483647) ||
-            !integer(source.value("number"), 0, 99999) ||
-            v.value("sourceAvailable").metaType().id() != QMetaType::Bool ||
-            !integer(v.value("refreshedUtc"), 0, 253402214400LL))
-            return reject(error, "Invalid Kodi PVR channel identity or capabilities.");
-        if (error)
-            error->clear();
+    if (v.value("owner") == "guide-feed" && !validateGuideFeedOwner(v, error))
         return v;
-    }
+    if (v.value("owner") == "kodi-pvr" && !validateKodiPvrOwner(v, error))
+        return v;
     if ((v.contains("horizonDays") && !integer(v.value("horizonDays"), 1, 31)) ||
         (v.contains("retentionDays") && !integer(v.value("retentionDays"), 0, 7)))
         return reject(error, "Choose a 1–31 day schedule horizon and 0–7 days of retained history.");
@@ -385,51 +256,8 @@ ComponentSchema::guideChannel(const QVariantMap& v, QString* error)
         (!integer(v.value("clockOffsetSeconds"), -31 * 86400, 31 * 86400) ||
          (v.value("clock") != "real-time" && v.value("clockOffsetSeconds").toLongLong() != 0)))
         return reject(error, "Only real-time local channels support a broadcast offset, bounded to 31 days.");
-    if (!keys(v,
-              {"schemaVersion",
-               "id",
-               "name",
-               "number",
-               "description",
-               "groups",
-               "logo",
-               "presentation",
-               "clock",
-               "sequence",
-               "seed",
-               "timezone",
-               "rule",
-               "mediaKinds",
-               "horizonDays",
-               "retentionDays",
-               "clockOffsetSeconds",
-               "schedule"}) ||
-        !integer(v.value("schemaVersion"), 1, 1) || !text(v.value("id"), 160) || !safeId(v.value("id").toString()) ||
-        !text(v.value("name"), 160) || !integer(v.value("number"), 1, 99999) ||
-        !QStringList{"real-time", "pause-when-off"}.contains(v.value("clock").toString()) ||
-        !QStringList{"episode-order", "seeded-shuffle", "rotation", "next-unwatched"}.contains(
-            v.value("sequence").toString()) ||
-        !integer(v.value("seed"), 0, 2147483647) || !text(v.value("timezone"), 128) ||
-        !QTimeZone(v.value("timezone").toString().toUtf8()).isValid() ||
-        v.value("rule").metaType().id() != QMetaType::QVariantMap || guideRule(v.value("rule").toMap()).isEmpty())
-        return reject(error,
-                      "Invalid local channel definition. Check its version, name, number, clock, sequencing, timezone "
-                      "and rules.");
-    if (v.contains("mediaKinds"))
-    {
-        if (v.value("mediaKinds").metaType().id() != QMetaType::QVariantList ||
-            v.value("mediaKinds").toList().isEmpty() || v.value("mediaKinds").toList().size() > 4)
-            return reject(error, "Choose one to four local media types.");
-        QSet<QString> kinds;
-        for (const auto& kind : v.value("mediaKinds").toList())
-        {
-            if (kind.metaType().id() != QMetaType::QString ||
-                !QStringList{"movie", "episode", "musicvideo", "song"}.contains(kind.toString()) ||
-                kinds.contains(kind.toString()))
-                return reject(error, "Invalid or duplicate local media type.");
-            kinds.insert(kind.toString());
-        }
-    }
+    if (!validateLocalChannel(v, error))
+        return v;
     if (error)
         error->clear();
     return v;
@@ -579,4 +407,210 @@ GuideRules::matches(const QVariantMap& rule, const QVariantMap& metadata)
                 found |= value.compare(v.toString(), Qt::CaseInsensitive) == 0;
     }
     return op == "is-not" || op == "does-not-contain" ? !found : found;
+}
+
+bool
+GuideRules::validateChannelSchedule(const QVariantMap& v, QString* error)
+{
+    const auto policy = v.value("schedule").toMap();
+    if (v.value("schedule").metaType().id() != QMetaType::QVariantMap ||
+        !keys(policy, {"blocks", "cooldownSeconds", "fillerRule", "bumperRule"}) ||
+        (policy.contains("cooldownSeconds") && !integer(policy.value("cooldownSeconds"), 0, 7 * 86400)))
+    {
+        return reject(error, "Invalid bounded channel scheduling policy.");
+    }
+    for (const auto& key : QStringList{"fillerRule", "bumperRule"})
+        if (policy.contains(key) && (policy.value(key).metaType().id() != QMetaType::QVariantMap ||
+                                     guideRule(policy.value(key).toMap()).isEmpty()))
+            return reject(error, "Choose valid filler and bumper rules.");
+    if (!policy.contains("blocks"))
+        return true;
+    if (policy.value("blocks").metaType().id() != QMetaType::QVariantList ||
+        policy.value("blocks").toList().size() > 32)
+        return reject(error, "Choose at most 32 calendar blocks.");
+    const auto blocks = policy.value("blocks").toList();
+    for (int i = 0; i < blocks.size(); ++i)
+    {
+        const auto b = blocks[i].toMap();
+        if (blocks[i].metaType().id() != QMetaType::QVariantMap ||
+            !keys(b, {"name", "days", "startMinute", "endMinute", "fromDate", "toDate", "rule"}) ||
+            !text(b.value("name"), 80) || !integer(b.value("startMinute"), 0, 1439) ||
+            !integer(b.value("endMinute"), 1, 1440) ||
+            b.value("startMinute").toInt() >= b.value("endMinute").toInt() ||
+            b.value("days").metaType().id() != QMetaType::QVariantList || b.value("days").toList().isEmpty() ||
+            b.value("days").toList().size() > 7 || b.value("rule").metaType().id() != QMetaType::QVariantMap ||
+            guideRule(b.value("rule").toMap()).isEmpty())
+            return reject(error, "Calendar blocks need a name, weekdays, increasing times and matching rules.");
+        QSet<int> days;
+        for (const auto& day : b.value("days").toList())
+        {
+            if (!integer(day, 1, 7) || days.contains(day.toInt()))
+                return reject(error, "Choose unique weekdays, Monday 1 through Sunday 7.");
+            days.insert(day.toInt());
+        }
+        for (const auto& key : QStringList{"fromDate", "toDate"})
+            if (b.contains(key) &&
+                (!text(b.value(key), 10) ||
+                 QDate::fromString(b.value(key).toString(), Qt::ISODate).toString(Qt::ISODate) !=
+                     b.value(key).toString()))
+                return reject(error, "Use calendar dates in YYYY-MM-DD form.");
+        if (b.contains("fromDate") && b.contains("toDate") &&
+            b.value("fromDate").toString() > b.value("toDate").toString())
+            return reject(error, "The last calendar date precedes the first.");
+        for (int j = 0; j < i; ++j)
+        {
+            const auto other = blocks[j].toMap();
+            bool shared = false;
+            for (const auto& day : other.value("days").toList())
+                shared |= days.contains(day.toInt());
+            if (shared && b.value("startMinute").toInt() < other.value("endMinute").toInt() &&
+                b.value("endMinute").toInt() > other.value("startMinute").toInt() &&
+                b.value("fromDate", "0001-01-01").toString() <=
+                    other.value("toDate", "9999-12-31").toString() &&
+                other.value("fromDate", "0001-01-01").toString() <= b.value("toDate", "9999-12-31").toString())
+                return reject(error, "Calendar blocks overlap. Choose different times, days or dates.");
+        }
+    }
+    return true;
+}
+
+bool
+GuideRules::validateChannelGroups(const QVariantMap& v, QString* error)
+{
+    if (v.value("groups").metaType().id() != QMetaType::QVariantList || v.value("groups").toList().size() > 32)
+        return reject(error, "Choose at most 32 channel groups.");
+    QSet<QString> groups;
+    for (const auto& group : v.value("groups").toList())
+    {
+        if (!text(group, 80) || group.toString() != group.toString().trimmed() || group.toString().contains(',') ||
+            groups.contains(group.toString().toCaseFolded()))
+            return reject(error, "Use unique group names of at most 80 characters without commas.");
+        groups.insert(group.toString().toCaseFolded());
+    }
+    return true;
+}
+
+bool
+GuideRules::validateGuideFeedOwner(const QVariantMap& v, QString* error)
+{
+    const auto source = v.value("source").toMap();
+    if (!keys(v,
+              {"schemaVersion",
+               "id",
+               "name",
+               "number",
+               "description",
+               "groups",
+               "logo",
+               "presentation",
+               "owner",
+               "source",
+               "sourceAvailable",
+               "sourceEnabled",
+               "refreshedUtc"}) ||
+        !integer(v.value("schemaVersion"), 1, 1) || !safeId(v.value("id").toString()) ||
+        !text(v.value("name"), 160) || !integer(v.value("number"), 1, 99999) ||
+        !keys(source, {"instance", "stationId", "epgId", "url", "number"}) ||
+        !safeId(source.value("instance").toString()) || !text(source.value("stationId"), 160) ||
+        !text(source.value("epgId"), 160, true) || !GuideFeeds::streamUrl(source.value("url").toString()) ||
+        !integer(source.value("number"), 1, 99999) ||
+        v.value("id") !=
+            GuideFeeds::identity(source.value("instance").toString(), source.value("stationId").toString()) ||
+        v.value("sourceAvailable").metaType().id() != QMetaType::Bool ||
+        !integer(v.value("refreshedUtc"), 0, 253402214400LL))
+        return reject(error, "Invalid stream station identity or URL. Credentials and player options are refused.");
+    if (error)
+        error->clear();
+    return true;
+}
+
+bool
+GuideRules::validateKodiPvrOwner(const QVariantMap& v, QString* error)
+{
+    const auto source = v.value("source").toMap();
+    if (!keys(v,
+              {"schemaVersion",
+               "id",
+               "name",
+               "number",
+               "description",
+               "groups",
+               "logo",
+               "presentation",
+               "owner",
+               "source",
+               "sourceAvailable",
+               "sourceEnabled",
+               "refreshedUtc"}) ||
+        !integer(v.value("schemaVersion"), 1, 1) || !safeId(v.value("id").toString()) ||
+        !text(v.value("name"), 160) || !integer(v.value("number"), 1, 99999) ||
+        !keys(source, {"instance", "channelId", "clientId", "uniqueId", "number"}) ||
+        !safeId(source.value("instance").toString()) || !integer(source.value("channelId"), 1, 2147483647) ||
+        !integer(source.value("clientId"), -2147483648LL, 2147483647) ||
+        !integer(source.value("uniqueId"), -2147483648LL, 2147483647) ||
+        !integer(source.value("number"), 0, 99999) ||
+        v.value("sourceAvailable").metaType().id() != QMetaType::Bool ||
+        !integer(v.value("refreshedUtc"), 0, 253402214400LL))
+        return reject(error, "Invalid Kodi PVR channel identity or capabilities.");
+    if (error)
+        error->clear();
+    return true;
+}
+
+bool
+GuideRules::validateLocalChannel(const QVariantMap& v, QString* error)
+{
+    if ((v.contains("horizonDays") && !integer(v.value("horizonDays"), 1, 31)) ||
+        (v.contains("retentionDays") && !integer(v.value("retentionDays"), 0, 7)))
+        return reject(error, "Choose a 1–31 day schedule horizon and 0–7 days of retained history.");
+    if (v.contains("clockOffsetSeconds") &&
+        (!integer(v.value("clockOffsetSeconds"), -31 * 86400, 31 * 86400) ||
+         (v.value("clock") != "real-time" && v.value("clockOffsetSeconds").toLongLong() != 0)))
+        return reject(error, "Only real-time local channels support a broadcast offset, bounded to 31 days.");
+    if (!keys(v,
+              {"schemaVersion",
+               "id",
+               "name",
+               "number",
+               "description",
+               "groups",
+               "logo",
+               "presentation",
+               "clock",
+               "sequence",
+               "seed",
+               "timezone",
+               "rule",
+               "mediaKinds",
+               "horizonDays",
+               "retentionDays",
+               "clockOffsetSeconds",
+               "schedule"}) ||
+        !integer(v.value("schemaVersion"), 1, 1) || !text(v.value("id"), 160) || !safeId(v.value("id").toString()) ||
+        !text(v.value("name"), 160) || !integer(v.value("number"), 1, 99999) ||
+        !QStringList{"real-time", "pause-when-off"}.contains(v.value("clock").toString()) ||
+        !QStringList{"episode-order", "seeded-shuffle", "rotation", "next-unwatched"}.contains(
+            v.value("sequence").toString()) ||
+        !integer(v.value("seed"), 0, 2147483647) || !text(v.value("timezone"), 128) ||
+        !QTimeZone(v.value("timezone").toString().toUtf8()).isValid() ||
+        v.value("rule").metaType().id() != QMetaType::QVariantMap || guideRule(v.value("rule").toMap()).isEmpty())
+        return reject(error,
+                      "Invalid local channel definition. Check its version, name, number, clock, sequencing, timezone "
+                      "and rules.");
+    if (v.contains("mediaKinds"))
+    {
+        if (v.value("mediaKinds").metaType().id() != QMetaType::QVariantList ||
+            v.value("mediaKinds").toList().isEmpty() || v.value("mediaKinds").toList().size() > 4)
+            return reject(error, "Choose one to four local media types.");
+        QSet<QString> kinds;
+        for (const auto& kind : v.value("mediaKinds").toList())
+        {
+            if (kind.metaType().id() != QMetaType::QString ||
+                !QStringList{"movie", "episode", "musicvideo", "song"}.contains(kind.toString()) ||
+                kinds.contains(kind.toString()))
+                return reject(error, "Invalid or duplicate local media type.");
+            kinds.insert(kind.toString());
+        }
+    }
+    return true;
 }
