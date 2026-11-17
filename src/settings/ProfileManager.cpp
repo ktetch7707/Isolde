@@ -31,21 +31,27 @@ isValidPolicyEntry(const QString& key, const QVariant& value)
 {
     if (key == "editingAllowed" || key == "installsAllowed")
         return value.metaType().id() == QMetaType::Bool;
-    if (key == "restrictedDestinations") {
-        if (value.metaType().id() != QMetaType::QVariantList &&
-            value.metaType().id() != QMetaType::QStringList)
-            return false;
-        if (value.metaType().id() == QMetaType::QVariantList)
-            for (const auto& id : value.toList())
-                if (id.metaType().id() != QMetaType::QString)
-                    return false;
-        const auto ids = value.toStringList();
-        if (ids.size() > 64)
-            return false;
-        for (const auto& id : ids)
-            if (!ComponentSchema::safeId(id) || id == "settings")
+    if (key == "restrictedDestinations")
+        return isValidRestrictedDestinations(value);
+    return true;
+}
+
+static bool
+isValidRestrictedDestinations(const QVariant& value)
+{
+    if (value.metaType().id() != QMetaType::QVariantList &&
+        value.metaType().id() != QMetaType::QStringList)
+        return false;
+    if (value.metaType().id() == QMetaType::QVariantList)
+        for (const auto& id : value.toList())
+            if (id.metaType().id() != QMetaType::QString)
                 return false;
-    }
+    const auto ids = value.toStringList();
+    if (ids.size() > 64)
+        return false;
+    for (const auto& id : ids)
+        if (!ComponentSchema::safeId(id) || id == "settings")
+            return false;
     return true;
 }
 QVariantMap

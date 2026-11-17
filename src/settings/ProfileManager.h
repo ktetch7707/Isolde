@@ -78,3 +78,5 @@ class ProfileManager final : public QObject
 
 bool
 isValidPolicyEntry(const QString& key, const QVariant& value);
+bool
+isValidRestrictedDestinations(const QVariant& value);
