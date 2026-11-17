@@ -110,12 +110,8 @@ AppVpn::load()
 bool
 AppVpn::setRoute(const QString& app, const QString& uuid)
 {
-    if (m_invalidRules || busy() || !safeApp(app) || (!uuid.isEmpty() && !safeUuid(uuid)))
-    {
-        m_error = tr("Choose a valid app and saved VPN location. Invalid saved rules must be repaired first.");
-        emit changed();
+    if (!validateAppVpnParams(app, uuid))
         return false;
-    }
     bool known = uuid.isEmpty();
     for (const auto& entry : m_connections)
         if (entry.toMap()["uuid"] == uuid)
@@ -137,6 +133,22 @@ AppVpn::setRoute(const QString& app, const QString& uuid)
         emit changed();
         return false;
     }
+    return writeAppVpnRoutes(next);
+}
+bool
+AppVpn::validateAppVpnParams(const QString& app, const QString& uuid)
+{
+    if (m_invalidRules || busy() || !safeApp(app) || (!uuid.isEmpty() && !safeUuid(uuid)))
+    {
+        m_error = tr("Choose a valid app and saved VPN location. Invalid saved rules must be repaired first.");
+        emit changed();
+        return false;
+    }
+    return true;
+}
+bool
+AppVpn::writeAppVpnRoutes(const QVariantMap& next)
+{
     const auto directory = QFileInfo(m_path).absoluteDir();
     QFileInfo ancestor(directory.absolutePath());
     while (!ancestor.exists() && ancestor.absolutePath() != ancestor.absoluteFilePath())

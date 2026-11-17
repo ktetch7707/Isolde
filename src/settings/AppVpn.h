@@ -69,6 +69,10 @@ class AppVpn final : public QObject
     safeApp(const QString& id);
     static bool
     safeUuid(const QString& id);
+    bool
+    validateAppVpnParams(const QString& app, const QString& uuid);
+    bool
+    writeAppVpnRoutes(const QVariantMap& next);
     QString m_path, m_profile, m_helper, m_app, m_verifiedApp, m_error;
     QVariantMap m_routes;
     QVariantList m_connections;
