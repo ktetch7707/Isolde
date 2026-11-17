@@ -17,6 +17,14 @@
 #include <QStandardPaths>
 #include <algorithm>
 
+static bool
+isVisibleSource(const QVariantMap& source, const QVariantMap& decision)
+{
+    return source.value("compatibleHandler").toBool() &&
+           !decision.value("hidden").toBool() &&
+           !decision.value("permanent").toBool();
+}
+
 namespace
 {
 
@@ -348,8 +356,7 @@ SourceManager::refresh()
         }
         m_seen.insert(id);
         const auto decision = m_decisions.value(id).toMap();
-        if (source.value("compatibleHandler").toBool() && !decision.value("hidden").toBool() &&
-            !decision.value("permanent").toBool())
+        if (isVisibleSource(source, decision))
             visible.append(value);
     }
     for (const auto& id : m_events.keys())
