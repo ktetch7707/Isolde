@@ -298,28 +298,12 @@ ComponentSchema::guideChannel(const QVariantMap& v, QString* error)
         return v;
     if (v.contains("description") && !text(v.value("description"), 512, true))
         return reject(error, "Use a plain-text channel description of at most 512 characters.");
-    if (v.contains("logo") &&
-        (v.value("logo").metaType().id() != QMetaType::QString ||
-         !QRegularExpression("^artwork/logo-[0-9a-f]{64}\\.(png|jpg)$").match(v.value("logo").toString()).hasMatch()))
-        return reject(error, "Choose managed content-addressed station artwork.");
-    if (v.contains("presentation") && (v.value("presentation").metaType().id() != QMetaType::QVariantMap ||
-                                        !validPresentation(v.value("presentation").toMap())))
-        return reject(error, "Invalid shared station presentation.");
-    if (v.contains("sourceEnabled") && v.value("sourceEnabled").metaType().id() != QMetaType::Bool)
-        return reject(error, "Source enablement must be an explicit boolean.");
-    if (v.contains("groups") && !validateChannelGroups(v, error))
+    if (!validateChannelBasics(v, error))
         return v;
-    if (v.value("owner") == "guide-feed" && !validateGuideFeedOwner(v, error))
+    if (!validateChannelOwner(v, error))
         return v;
-    if (v.value("owner") == "kodi-pvr" && !validateKodiPvrOwner(v, error))
+    if (!validateChannelTiming(v, error))
         return v;
-    if ((v.contains("horizonDays") && !integer(v.value("horizonDays"), 1, 31)) ||
-        (v.contains("retentionDays") && !integer(v.value("retentionDays"), 0, 7)))
-        return reject(error, "Choose a 1–31 day schedule horizon and 0–7 days of retained history.");
-    if (v.contains("clockOffsetSeconds") &&
-        (!integer(v.value("clockOffsetSeconds"), -31 * 86400, 31 * 86400) ||
-         (v.value("clock") != "real-time" && v.value("clockOffsetSeconds").toLongLong() != 0)))
-        return reject(error, "Only real-time local channels support a broadcast offset, bounded to 31 days.");
     if (!validateLocalChannel(v, error))
         return v;
     if (error)
@@ -650,5 +634,46 @@ GuideRules::validateLocalChannelMediaKinds(const QVariantMap& v, QString* error)
             !QStringList{"movie", "episode", "musicvideo", "song"}.contains(kind.toString()))
             return reject(error, "Invalid or duplicate local media type.");
     }
+    return true;
+}
+
+
+bool
+GuideRules::validateChannelBasics(const QVariantMap& v, QString* error)
+{
+    if (v.contains("logo") &&
+        (v.value("logo").metaType().id() != QMetaType::QString ||
+         !QRegularExpression("^artwork/logo-[0-9a-f]{64}\\.(png|jpg)$").match(v.value("logo").toString()).hasMatch()))
+        return reject(error, "Choose managed content-addressed station artwork.");
+    if (v.contains("presentation") && (v.value("presentation").metaType().id() != QMetaType::QVariantMap ||
+                                       !validPresentation(v.value("presentation").toMap())))
+        return reject(error, "Invalid shared station presentation.");
+    if (v.contains("sourceEnabled") && v.value("sourceEnabled").metaType().id() != QMetaType::Bool)
+        return reject(error, "Source enablement must be an explicit boolean.");
+    if (v.contains("groups") && !validateChannelGroups(v, error))
+        return false;
+    return true;
+}
+
+bool
+GuideRules::validateChannelOwner(const QVariantMap& v, QString* error)
+{
+    if (v.value("owner") == "guide-feed" && !validateGuideFeedOwner(v, error))
+        return false;
+    if (v.value("owner") == "kodi-pvr" && !validateKodiPvrOwner(v, error))
+        return false;
+    return true;
+}
+
+bool
+GuideRules::validateChannelTiming(const QVariantMap& v, QString* error)
+{
+    if ((v.contains("horizonDays") && !integer(v.value("horizonDays"), 1, 31)) ||
+        (v.contains("retentionDays") && !integer(v.value("retentionDays"), 0, 7)))
+        return reject(error, "Choose a 1–31 day schedule horizon and 0–7 days of retained history.");
+    if (v.contains("clockOffsetSeconds") &&
+        (!integer(v.value("clockOffsetSeconds"), -31 * 86400, 31 * 86400) ||
+         (v.value("clock") != "real-time" && v.value("clockOffsetSeconds").toLongLong() != 0)))
+        return reject(error, "Only real-time local channels support a broadcast offset, bounded to 31 days.");
     return true;
 }

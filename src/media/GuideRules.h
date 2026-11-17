@@ -33,4 +33,10 @@ bool
 validateLocalChannel(const QVariantMap& v, QString* error);
 bool
 validateLocalChannelMediaKinds(const QVariantMap& v, QString* error);
+bool
+validateChannelBasics(const QVariantMap& v, QString* error);
+bool
+validateChannelOwner(const QVariantMap& v, QString* error);
+bool
+validateChannelTiming(const QVariantMap& v, QString* error);
 } // namespace GuideRules
