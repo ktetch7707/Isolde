@@ -35,6 +35,62 @@ supportedProviderRoute(int providerId)
         return false;
     }
 }
+
+static bool
+providerUrl(int providerId, QString& host, QString& path, QString& parameter)
+{
+    switch (providerId)
+    {
+    case 8:
+        host = QStringLiteral("www.netflix.com");
+        path = QStringLiteral("/search");
+        parameter = QStringLiteral("q");
+        break;
+    case 9:
+        host = QStringLiteral("www.primevideo.com");
+        path = QStringLiteral("/search/ref=atv_nb_sr");
+        parameter = QStringLiteral("phrase");
+        break;
+    case 15:
+        host = QStringLiteral("www.hulu.com");
+        path = QStringLiteral("/search");
+        parameter = QStringLiteral("q");
+        break;
+    case 283:
+        host = QStringLiteral("www.crunchyroll.com");
+        path = QStringLiteral("/search");
+        parameter = QStringLiteral("q");
+        break;
+    case 337:
+        host = QStringLiteral("www.disneyplus.com");
+        path = QStringLiteral("/search");
+        parameter = QStringLiteral("q");
+        break;
+    case 350:
+        host = QStringLiteral("tv.apple.com");
+        path = QStringLiteral("/search");
+        parameter = QStringLiteral("term");
+        break;
+    case 386:
+        host = QStringLiteral("www.peacocktv.com");
+        path = QStringLiteral("/search");
+        parameter = QStringLiteral("q");
+        break;
+    case 531:
+        host = QStringLiteral("www.paramountplus.com");
+        path = QStringLiteral("/search/");
+        parameter = QStringLiteral("query");
+        break;
+    case 1899:
+        host = QStringLiteral("www.max.com");
+        path = QStringLiteral("/search");
+        parameter = QStringLiteral("q");
+        break;
+    default:
+        return false;
+    }
+    return true;
+}
 } // namespace
 
 OnlineDiscovery::OnlineDiscovery(SearchSettings* settings,
@@ -410,56 +466,8 @@ OnlineDiscovery::providerLaunchUrl(int providerId) const
         QString host;
         QString path;
         QString parameter;
-        switch (providerId)
-        {
-        case 8:
-            host = QStringLiteral("www.netflix.com");
-            path = QStringLiteral("/search");
-            parameter = QStringLiteral("q");
-            break;
-        case 9:
-            host = QStringLiteral("www.primevideo.com");
-            path = QStringLiteral("/search/ref=atv_nb_sr");
-            parameter = QStringLiteral("phrase");
-            break;
-        case 15:
-            host = QStringLiteral("www.hulu.com");
-            path = QStringLiteral("/search");
-            parameter = QStringLiteral("q");
-            break;
-        case 283:
-            host = QStringLiteral("www.crunchyroll.com");
-            path = QStringLiteral("/search");
-            parameter = QStringLiteral("q");
-            break;
-        case 337:
-            host = QStringLiteral("www.disneyplus.com");
-            path = QStringLiteral("/search");
-            parameter = QStringLiteral("q");
-            break;
-        case 350:
-            host = QStringLiteral("tv.apple.com");
-            path = QStringLiteral("/search");
-            parameter = QStringLiteral("term");
-            break;
-        case 386:
-            host = QStringLiteral("www.peacocktv.com");
-            path = QStringLiteral("/search");
-            parameter = QStringLiteral("q");
-            break;
-        case 531:
-            host = QStringLiteral("www.paramountplus.com");
-            path = QStringLiteral("/search/");
-            parameter = QStringLiteral("query");
-            break;
-        case 1899:
-            host = QStringLiteral("www.max.com");
-            path = QStringLiteral("/search");
-            parameter = QStringLiteral("q");
-            break;
-        default:
+        if (!providerUrl(providerId, host, path, parameter))
             return {};
-        }
 
         QUrl url;
         url.setScheme(QStringLiteral("https"));
