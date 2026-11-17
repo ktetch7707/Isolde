@@ -328,6 +328,26 @@ class StudioSession final : public QObject
     bool
     validatePageExists(const QVariantMap& a, const QJsonObject& document, const QJsonArray& pages, QString& id,
                        int& index, QJsonObject& rootMetaLocal);
+
+    // Reuse operation dispatch for previewReuse() — each helper handles one reuse command.
+    QVariantMap
+    handleReuseResponsive(const QVariantMap& a, QJsonObject document, QJsonObject layout);
+    QVariantMap
+    handleReuseSave(const QVariantMap& a, QJsonObject document, QJsonObject layout,
+                    const QJsonArray& selected, const QString& kind, QJsonObject library);
+    QVariantMap
+    handleReuseEditStyle(const QVariantMap& a, QJsonObject document, QJsonObject layout,
+                         const QJsonArray& selected, QJsonObject library);
+    QVariantMap
+    handleReuseInsert(const QVariantMap& a, QJsonObject document, QJsonObject layout,
+                      const QJsonArray& selected, QJsonObject library);
+    QVariantMap
+    handleReuseEditAll(const QVariantMap& a, QJsonObject document, QJsonObject layout,
+                       const QJsonArray& selected, QJsonObject library);
+    QVariantMap
+    handleReuseAppearanceEdit(const QVariantMap& a, QJsonObject document, QJsonObject layout,
+                              const QJsonArray& selected, QJsonObject library);
+                       int& index, QJsonObject& rootMetaLocal);
     bool
     validatePageName(const QVariantMap& a, QString& name);
     bool
