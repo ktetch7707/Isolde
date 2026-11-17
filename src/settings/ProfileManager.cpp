@@ -21,30 +21,30 @@ validPolicy(const QVariant& value)
         return false;
     const auto policy = value.toMap();
     for (auto it = policy.begin(); it != policy.end(); ++it)
-    {
-        if (it.key() == "editingAllowed" || it.key() == "installsAllowed")
-        {
-            if (it.value().metaType().id() != QMetaType::Bool)
-                return false;
-        }
-        else if (it.key() == "restrictedDestinations")
-        {
-            if (it.value().metaType().id() != QMetaType::QVariantList &&
-                it.value().metaType().id() != QMetaType::QStringList)
-                return false;
-            if (it.value().metaType().id() == QMetaType::QVariantList)
-                for (const auto& id : it.value().toList())
-                    if (id.metaType().id() != QMetaType::QString)
-                        return false;
-            const auto ids = it.value().toStringList();
-            if (ids.size() > 64)
-                return false;
-            for (const auto& id : ids)
-                if (!ComponentSchema::safeId(id) || id == "settings")
-                    return false;
-        }
-        else
+        if (!isValidPolicyEntry(it.key(), it.value()))
             return false;
+    return true;
+}
+
+static bool
+isValidPolicyEntry(const QString& key, const QVariant& value)
+{
+    if (key == "editingAllowed" || key == "installsAllowed")
+        return value.metaType().id() == QMetaType::Bool;
+    if (key == "restrictedDestinations") {
+        if (value.metaType().id() != QMetaType::QVariantList &&
+            value.metaType().id() != QMetaType::QStringList)
+            return false;
+        if (value.metaType().id() == QMetaType::QVariantList)
+            for (const auto& id : value.toList())
+                if (id.metaType().id() != QMetaType::QString)
+                    return false;
+        const auto ids = value.toStringList();
+        if (ids.size() > 64)
+            return false;
+        for (const auto& id : ids)
+            if (!ComponentSchema::safeId(id) || id == "settings")
+                return false;
     }
     return true;
 }
