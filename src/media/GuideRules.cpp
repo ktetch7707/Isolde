@@ -76,8 +76,72 @@ validRule(const QVariantMap& v, int depth, int& count)
         for (const auto& child : children)
             if (child.metaType().id() != QMetaType::QVariantMap || !validRule(child.toMap(), depth + 1, count))
                 return false;
-        return true;
+    return true;
+}
+
+bool
+GuideRules::validateChannelScheduleBlocks(const QVariantList& blocks, QString* error)
+{
+    if (blocks.metaType().id() != QMetaType::QVariantList || blocks.size() > 32)
+        return reject(error, "Choose at most 32 calendar blocks.");
+    QList<QVariantMap> parsed;
+    for (const auto& block : blocks)
+    {
+        const auto b = block.toMap();
+        if (block.metaType().id() != QMetaType::QVariantMap ||
+            !keys(b, {"name", "days", "startMinute", "endMinute", "fromDate", "toDate", "rule"}) ||
+            !text(b.value("name"), 80) || !integer(b.value("startMinute"), 0, 1439) ||
+            !integer(b.value("endMinute"), 1, 1440) ||
+            b.value("startMinute").toInt() >= b.value("endMinute").toInt() ||
+            b.value("days").metaType().id() != QMetaType::QVariantList || b.value("days").toList().isEmpty() ||
+            b.value("days").toList().size() > 7 || b.value("rule").metaType().id() != QMetaType::QVariantMap ||
+            guideRule(b.value("rule").toMap()).isEmpty())
+            return reject(error, "Calendar blocks need a name, weekdays, increasing times and matching rules.");
+        QSet<int> days;
+        for (const auto& day : b.value("days").toList())
+        {
+            if (!integer(day, 1, 7) || days.contains(day.toInt()))
+                return reject(error, "Choose unique weekdays, Monday 1 through Sunday 7.");
+            days.insert(day.toInt());
+        }
+        for (const auto& key : QStringList{"fromDate", "toDate"})
+            if (b.contains(key) &&
+                (!text(b.value(key), 10) ||
+                 QDate::fromString(b.value(key).toString(), Qt::ISODate).toString(Qt::ISODate) !=
+                     b.value(key).toString()))
+                return reject(error, "Use calendar dates in YYYY-MM-DD form.");
+        if (b.contains("fromDate") && b.contains("toDate") &&
+            b.value("fromDate").toString() > b.value("toDate").toString())
+            return reject(error, "The last calendar date precedes the first.");
+        parsed.append(b);
     }
+    for (int i = 0; i < parsed.size(); ++i)
+    {
+        const auto bi = parsed[i];
+        const auto daysI = bi.value("days").toList();
+        QSet<int> daysSetI;
+        for (const auto& day : daysI)
+            daysSetI.insert(day.toInt());
+        for (int j = 0; j < i; ++j)
+        {
+            const auto bj = parsed[j];
+            QSet<int> daysSetJ;
+            for (const auto& day : bj.value("days").toList())
+                daysSetJ.insert(day.toInt());
+            bool shared = false;
+            for (const auto& day : daysI)
+                if (daysSetJ.contains(day.toInt()))
+                    shared = true;
+            if (shared && bi.value("startMinute").toInt() < bj.value("endMinute").toInt() &&
+                bi.value("endMinute").toInt() > bj.value("startMinute").toInt() &&
+                bi.value("fromDate", "0001-01-01").toString() <=
+                    bj.value("toDate", "9999-12-31").toString() &&
+                bj.value("fromDate", "0001-01-01").toString() <= bi.value("toDate", "9999-12-31").toString())
+                return reject(error, "Calendar blocks overlap. Choose different times, days or dates.");
+        }
+    }
+    return true;
+}
     if (!keys(v, {"field", "op", "value"}) || !text(v.value("field"), 32) || !text(v.value("op"), 32))
         return false;
     const auto field = v.value("field").toString();
@@ -380,8 +444,18 @@ GuideRules::matches(const QVariantMap& rule, const QVariantMap& metadata)
         {
             for (const auto& v : expected.toList())
                 if (n == v.toDouble())
-                    return true;
-        }
+    return true;
+}
+
+bool
+GuideRules::validateSchedulePolicy(const QVariantMap& policy, QString* error)
+{
+    if (policy.metaType().id() != QMetaType::QVariantMap ||
+        !keys(policy, {"blocks", "cooldownSeconds", "fillerRule", "bumperRule"}) ||
+        (policy.contains("cooldownSeconds") && !integer(policy.value("cooldownSeconds"), 0, 7 * 86400)))
+        return reject(error, "Invalid bounded channel scheduling policy.");
+    return true;
+}
         return false;
     }
     QStringList values;
@@ -413,64 +487,16 @@ bool
 GuideRules::validateChannelSchedule(const QVariantMap& v, QString* error)
 {
     const auto policy = v.value("schedule").toMap();
-    if (v.value("schedule").metaType().id() != QMetaType::QVariantMap ||
-        !keys(policy, {"blocks", "cooldownSeconds", "fillerRule", "bumperRule"}) ||
-        (policy.contains("cooldownSeconds") && !integer(policy.value("cooldownSeconds"), 0, 7 * 86400)))
-    {
-        return reject(error, "Invalid bounded channel scheduling policy.");
-    }
+    if (!validateSchedulePolicy(policy, error))
+        return false;
     for (const auto& key : QStringList{"fillerRule", "bumperRule"})
         if (policy.contains(key) && (policy.value(key).metaType().id() != QMetaType::QVariantMap ||
                                      guideRule(policy.value(key).toMap()).isEmpty()))
             return reject(error, "Choose valid filler and bumper rules.");
     if (!policy.contains("blocks"))
         return true;
-    if (policy.value("blocks").metaType().id() != QMetaType::QVariantList ||
-        policy.value("blocks").toList().size() > 32)
-        return reject(error, "Choose at most 32 calendar blocks.");
-    const auto blocks = policy.value("blocks").toList();
-    for (int i = 0; i < blocks.size(); ++i)
-    {
-        const auto b = blocks[i].toMap();
-        if (blocks[i].metaType().id() != QMetaType::QVariantMap ||
-            !keys(b, {"name", "days", "startMinute", "endMinute", "fromDate", "toDate", "rule"}) ||
-            !text(b.value("name"), 80) || !integer(b.value("startMinute"), 0, 1439) ||
-            !integer(b.value("endMinute"), 1, 1440) ||
-            b.value("startMinute").toInt() >= b.value("endMinute").toInt() ||
-            b.value("days").metaType().id() != QMetaType::QVariantList || b.value("days").toList().isEmpty() ||
-            b.value("days").toList().size() > 7 || b.value("rule").metaType().id() != QMetaType::QVariantMap ||
-            guideRule(b.value("rule").toMap()).isEmpty())
-            return reject(error, "Calendar blocks need a name, weekdays, increasing times and matching rules.");
-        QSet<int> days;
-        for (const auto& day : b.value("days").toList())
-        {
-            if (!integer(day, 1, 7) || days.contains(day.toInt()))
-                return reject(error, "Choose unique weekdays, Monday 1 through Sunday 7.");
-            days.insert(day.toInt());
-        }
-        for (const auto& key : QStringList{"fromDate", "toDate"})
-            if (b.contains(key) &&
-                (!text(b.value(key), 10) ||
-                 QDate::fromString(b.value(key).toString(), Qt::ISODate).toString(Qt::ISODate) !=
-                     b.value(key).toString()))
-                return reject(error, "Use calendar dates in YYYY-MM-DD form.");
-        if (b.contains("fromDate") && b.contains("toDate") &&
-            b.value("fromDate").toString() > b.value("toDate").toString())
-            return reject(error, "The last calendar date precedes the first.");
-        for (int j = 0; j < i; ++j)
-        {
-            const auto other = blocks[j].toMap();
-            bool shared = false;
-            for (const auto& day : other.value("days").toList())
-                shared |= days.contains(day.toInt());
-            if (shared && b.value("startMinute").toInt() < other.value("endMinute").toInt() &&
-                b.value("endMinute").toInt() > other.value("startMinute").toInt() &&
-                b.value("fromDate", "0001-01-01").toString() <=
-                    other.value("toDate", "9999-12-31").toString() &&
-                other.value("fromDate", "0001-01-01").toString() <= b.value("toDate", "9999-12-31").toString())
-                return reject(error, "Calendar blocks overlap. Choose different times, days or dates.");
-        }
-    }
+    if (!validateChannelScheduleBlocks(policy.value("blocks").toList(), error))
+        return false;
     return true;
 }
 

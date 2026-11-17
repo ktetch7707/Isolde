@@ -18,6 +18,10 @@ calendarWindow(const QVariantMap& definition, qint64 utc);
 bool
 validateChannelSchedule(const QVariantMap& v, QString* error);
 bool
+validateChannelScheduleBlocks(const QVariantList& blocks, QString* error);
+bool
+validateSchedulePolicy(const QVariantMap& policy, QString* error);
+bool
 validateChannelGroups(const QVariantMap& v, QString* error);
 bool
 validateGuideFeedOwner(const QVariantMap& v, QString* error);
