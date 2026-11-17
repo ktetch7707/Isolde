@@ -26,6 +26,12 @@ hasDevice(const QVariantList& devices, const QString& id)
     return false;
 }
 
+static bool
+isCaptureConfigReady(const QString& captureDeviceId, const QString& serialPortName, const QStringList& serialPortNames)
+{
+    return !captureDeviceId.isEmpty() && !serialPortName.isEmpty() && serialPortNames.contains(serialPortName);
+}
+
 QSettings
 captureSettings()
 {
@@ -951,14 +957,8 @@ CaptureController::switchInput(int input)
     };
     if (input < 1 || input > 8)
         return fail("Choose an HDMI input from 1 to 8.");
-    if (m_captureDeviceId.isEmpty())
-    {
-        return fail("Choose the HDMI capture card before switching inputs.");
-    }
-    if (m_serialPortName.isEmpty() || !m_serialPortNames.contains(m_serialPortName))
-    {
-        return fail("Connect and choose the RS-232 switch port before switching inputs.");
-    }
+    if (!isCaptureConfigReady(m_captureDeviceId, m_serialPortName, m_serialPortNames))
+        return fail("Choose the capture card and RS-232 switch port before switching inputs.");
     QString commandError;
     const auto command = commandForInput(m_commandTemplate, input, &commandError);
     if (command.isEmpty())
