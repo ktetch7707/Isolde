@@ -31,8 +31,11 @@ saveEmulatorSettings(const QString& root, const QVariantMap& value, QString* err
 bool
 importFirmwareWithSetup(
     const QString& root, const QVariantMap& setup, const QString& firmware, QVariantMap& value, QString* error);
-bool
-importFirmwareWithoutSetup(const QString& root,
+    bool
+    validateFirmwareFile(const QString& root, const QString& firmware, const QString& id,
+                         const QString& existingFirmware, QString* error);
+    bool
+    importFirmwareWithoutSetup(const QString& root,
                            const QVariantMap& setup,
                            const QString& firmware,
                            const QString& id,

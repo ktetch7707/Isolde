@@ -670,11 +670,11 @@ GameEmulators::importFirmwareWithSetup(
 
 bool
 GameEmulators::importFirmwareWithoutSetup(const QString& root,
-                                          const QVariantMap& setup,
-                                          const QString& firmware,
-                                          const QString& id,
-                                          QVariantMap& value,
-                                          QString* error)
+                                           const QVariantMap& setup,
+                                           const QString& firmware,
+                                           const QString& id,
+                                           QVariantMap& value,
+                                           QString* error)
 {
     if (!firmware.isEmpty())
     {
@@ -683,38 +683,15 @@ GameEmulators::importFirmwareWithoutSetup(const QString& root,
             *error = "This runtime does not require imported firmware.";
             return false;
         }
-        if (!(id == "retroarch-psx" ? prunePsxFirmware(root, value.value("firmware").toString(), error)
-                                    : pruneFirmware(root, value.value("firmware").toString(), error)))
+        if (!validateFirmwareFile(root, firmware, id, value.value("firmware").toString(), error))
             return false;
-        const QFileInfo source(firmware);
-        const auto grant = MediaGrants::validate(source.absolutePath());
-        if (!grant.isEmpty() || !source.isFile() || !source.isReadable() || source.canonicalFilePath() != firmware ||
-            (id == "retroarch-psx"
-                 ? source.size() != 512 * 1024
-                 : (id == "vita3k" ? source.size() != 4 * 1024 * 1024
-                                   : (source.size() != 4 * 1024 * 1024 && source.size() != 8 * 1024 * 1024))))
-        {
-            if (id == "retroarch-psx")
-            {
-                *error = "Choose your readable 512 KiB PlayStation firmware inside a game source folder.";
-                return false;
-            }
-            if (id == "vita3k")
-            {
-                *error = "Choose your readable 4 MiB PS Vita firmware file inside a game source folder.";
-                return false;
-            }
-            *error = id == "xemu" || id == "xenia"
-                         ? "Choose your readable 4 or 8 MiB Xbox firmware file inside a game source folder."
-                         : "Choose your readable 4 or 8 MiB PS2 firmware file inside a game source folder.";
-            return false;
-        }
         QFile file(firmware);
         if (!file.open(QIODevice::ReadOnly))
         {
             *error = "Cannot read selected firmware.";
             return false;
         }
+        const QFileInfo source(firmware);
         const auto bytes = file.read(8 * 1024 * 1024 + 1);
         if (bytes.size() != source.size() ||
             (id == "retroarch-psx" ? !psxFirmware(bytes) : (!bytes.contains("ROMDIR") || !bytes.contains("ROMVER"))))
@@ -772,6 +749,27 @@ GameEmulators::setupAssetReady(const QString& profile, const QString& id, QStrin
     if (file.error() != QFile::NoError || QString::fromLatin1(hash.result().toHex()) + ".bin" != name)
     {
         *error = "Firmware changed. Import it again before playing.";
+        return false;
+    }
+    return true;
+}
+
+bool
+GameEmulators::validateFirmwareFile(const QString& root, const QString& firmware, const QString& id,
+                                    const QString& existingFirmware, QString* error)
+{
+    Q_UNUSED(root);
+    Q_UNUSED(existingFirmware);
+    QFileInfo source(firmware);
+    if (!source.isFile() || !source.isReadable())
+    {
+        *error = "Cannot read selected firmware.";
+        return false;
+    }
+    const auto grant = MediaGrants::validate(source.absolutePath());
+    if (!grant.isEmpty())
+    {
+        *error = "Choose firmware inside a game source folder.";
         return false;
     }
     return true;
