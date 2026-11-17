@@ -639,20 +639,16 @@ GuideRules::validateLocalChannel(const QVariantMap& v, QString* error)
 bool
 GuideRules::validateLocalChannelMediaKinds(const QVariantMap& v, QString* error)
 {
-    if (v.contains("mediaKinds"))
+    if (!v.contains("mediaKinds"))
+        return true;
+    const auto kinds = v.value("mediaKinds").toList();
+    if (kinds.isEmpty() || kinds.size() > 4)
+        return reject(error, "Choose one to four local media types.");
+    for (const auto& kind : kinds)
     {
-        if (v.value("mediaKinds").metaType().id() != QMetaType::QVariantList ||
-            v.value("mediaKinds").toList().isEmpty() || v.value("mediaKinds").toList().size() > 4)
-            return reject(error, "Choose one to four local media types.");
-        QSet<QString> kinds;
-        for (const auto& kind : v.value("mediaKinds").toList())
-        {
-            if (kind.metaType().id() != QMetaType::QString ||
-                !QStringList{"movie", "episode", "musicvideo", "song"}.contains(kind.toString()) ||
-                kinds.contains(kind.toString()))
-                return reject(error, "Invalid or duplicate local media type.");
-            kinds.insert(kind.toString());
-        }
+        if (kind.metaType().id() != QMetaType::QString ||
+            !QStringList{"movie", "episode", "musicvideo", "song"}.contains(kind.toString()))
+            return reject(error, "Invalid or duplicate local media type.");
     }
     return true;
 }

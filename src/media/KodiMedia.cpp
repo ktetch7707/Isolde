@@ -120,23 +120,33 @@ KodiMedia::~KodiMedia()
  * @why Frees the network socket and prevents resource leaks when the guide is no longer needed.
  * @return none
  */
-/** Frees the Kodi JSON-RPC socket connection.
- * @brief Releases the Kodi JSON-RPC socket connection.
- * @details Closes the active socket, resets the descriptor, and stops the timeout timer.
- * @why Frees the network socket and prevents resource leaks when the guide is no longer needed.
- * @return none
- */
 void
 KodiMedia::releaseSocket()
 {
     m_timeout.stop();
     m_socket.abort();
-#ifdef Q_OS_LINUX
+    #ifdef Q_OS_LINUX
     if (m_descriptor >= 0)
         ::close(m_descriptor);
-#endif
+    #endif
     m_descriptor = -1;
 }
+/** Handles a failed operation on the Kodi media bridge.
+ * @brief Handles a failed operation on the Kodi media bridge.
+ * @details Rolls back any in-progress state, clears pending media, aborts the socket, and emits error/playback signals.
+ * @why Ensures a failed Kodi operation leaves the catalog in a consistent state without leaving partial data.
+ * @param message Human-readable failure message to surface to the user.
+ * @param forceDisconnect If true, force-disconnects the socket even during active maintenance windows.
+ * @return none
+ */
+/** Handles a failed operation on the Kodi media bridge.
+ * @brief Handles a failed operation on the Kodi media bridge.
+ * @details Rolls back any in-progress state, clears pending media, aborts the socket, and emits error/playback signals.
+ * @why Ensures a failed Kodi operation leaves the catalog in a consistent state without leaving partial data behind.
+ * @param message Human-readable failure message to surface to the user.
+ * @param forceDisconnect If true, force-disconnects the socket even during active maintenance windows.
+ * @return none
+ */
 void
 KodiMedia::fail(const QString& message, bool forceDisconnect)
 {
@@ -179,6 +189,14 @@ KodiMedia::fail(const QString& message, bool forceDisconnect)
         emit quitReply(false);
 }
 
+/** Handles a source preview failure during channel import.
+ * @brief Handles a failed source preview during Kodi media bridge import.
+ * @details Clears source preview state, releases the socket, and emits changed signal when not force-disconnecting.
+ * @why Prevents stale source preview state from persisting after a failed preview operation.
+ * @param message Human-readable failure message describing why the source preview failed.
+ * @param forceDisconnect If true, forces socket disconnection even during active maintenance stages.
+ * @return true if the failure was handled (preview state cleared), false otherwise.
+ */
 bool
 KodiMedia::failSourcePreview(const QString& message, bool forceDisconnect)
 {
@@ -196,6 +214,14 @@ KodiMedia::failSourcePreview(const QString& message, bool forceDisconnect)
     return false;
 }
 
+/** Handles playback option failures during Kodi media import.
+ * @brief Handles a failed playback options operation during Kodi media bridge import.
+ * @details Clears playback options state, releases the socket, and emits changed signal when not force-disconnecting.
+ * @why Prevents stale playback option state from persisting after a failed playback options operation.
+ * @param message Human-readable failure message describing why playback options failed.
+ * @param forceDisconnect If true, forces socket disconnection even during active maintenance stages.
+ * @return true if the failure was handled (playback options state cleared), false otherwise.
+ */
 bool
 KodiMedia::failPlaybackOptions(const QString& message, bool forceDisconnect)
 {
@@ -210,6 +236,14 @@ KodiMedia::failPlaybackOptions(const QString& message, bool forceDisconnect)
     return false;
 }
 
+/** Handles a subtitle playback option failure during Kodi media import.
+ * @brief Handles a failed subtitle playback option operation during Kodi media bridge import.
+ * @details Clears subtitle status, releases the socket, and emits changed signal when not force-disconnecting.
+ * @why Prevents stale subtitle state from persisting after a failed subtitle operation.
+ * @param message Human-readable failure message describing why the subtitle operation failed.
+ * @param forceDisconnect If true, forces socket disconnection even during active maintenance stages.
+ * @return true if the failure was handled (subtitle state cleared), false otherwise.
+ */
 bool
 KodiMedia::failSubtitle(const QString& message, bool forceDisconnect)
 {
@@ -224,6 +258,13 @@ KodiMedia::failSubtitle(const QString& message, bool forceDisconnect)
     return false;
 }
 
+/** Handles a playlist operation failure during Kodi media import.
+ * @brief Handles a failed playlist operation during Kodi media bridge import.
+ * @details Updates the playlist status message to indicate the operation could not be confirmed.
+ * @why Prevents stale playlist state from persisting after a failed playlist operation.
+ * @param message Human-readable failure message describing why the playlist operation failed.
+ * @return none
+ */
 void
 KodiMedia::failPlaylist(const QString& message)
 {
@@ -232,6 +273,13 @@ KodiMedia::failPlaylist(const QString& message)
             "Playlist operation could not be confirmed. Refresh the saved-playlist list before retrying. " + message;
 }
 
+/** Handles a scan failure during Kodi media import.
+ * @brief Handles a failed scan operation during Kodi media bridge import.
+ * @details Updates the scan status message to indicate the scan is unavailable.
+ * @why Prevents stale scan state from persisting after a failed scan operation.
+ * @param message Human-readable failure message describing why the scan failed.
+ * @return none
+ */
 void
 KodiMedia::failScan(const QString& message)
 {
@@ -239,6 +287,12 @@ KodiMedia::failScan(const QString& message)
         m_scanStatus = "Scan status unavailable. " + message;
 }
 
+/** Restores history state for a Kodi media guide channel.
+ * @brief Restores history state for a Kodi media guide channel.
+ * @details Restores the movies list from app openings history, sets total movies and page count, restores history selection, and clamps selected index.
+ * @why Ensures the history channel reflects previously opened apps and maintains the correct selected index within bounds.
+ * @return none
+ */
 void
 KodiMedia::failRestoreHistory()
 {
@@ -250,6 +304,12 @@ KodiMedia::failRestoreHistory()
         m_selectedIndex = qBound(-1, m_selectedIndex, qMax(-1, int(m_movies.size()) - 1));
     }
 }
+/** Quits the Kodi media bridge if idle.
+ * @brief Quits the Kodi media bridge if idle.
+ * @details If not busy, increments generation, marks busy, sets stage to quit (4), and requests quit via Kodi bridge.
+ * @why Allows the media bridge to exit cleanly when no operation is in progress.
+ * @return none
+ */
 void
 KodiMedia::quitIfIdle()
 {
@@ -317,11 +377,23 @@ KodiMedia::beginRead(int start)
     emit changed();
     request("JSONRPC.Version");
 }
+/** Checks if navigation is allowed.
+ * @brief Checks if navigation is allowed.
+ * @details Returns true if not retired, not playback active, and not busy (or in stage 0 or 1).
+ * @why Prevents navigation actions during active operations or retired states.
+ * @return true if navigation is allowed, false otherwise.
+ */
 bool
 KodiMedia::canNavigate() const
 {
     return !m_retired && !m_playbackActive && (!m_busy || m_stage == 0 || m_stage == 1);
 }
+/** Returns the browse title for the current media kind.
+ * @brief Returns the browse title for the current media kind.
+ * @details Dispatches to the appropriate browse title helper based on media kind: playlists, playlist view, history, music, channels, manual, movies/shows, seasons, episodes, or default.
+ * @why Provides a human-readable title for the current media browsing context.
+ * @return Human-readable browse title string.
+ */
 QString
 KodiMedia::browseTitle() const
 {
@@ -350,24 +422,48 @@ KodiMedia::browseTitle() const
     return browseTitleDefault();
 }
 
+/** Returns the browse title for playlists media kind.
+ * @brief Returns the browse title for playlists media kind.
+ * @details Returns the literal string "Kodi video playlists".
+ * @why Provides a title for the playlists media kind context.
+ * @return Human-readable title string.
+ */
 QString
 KodiMedia::browseTitlePlaylists() const
 {
     return "Kodi video playlists";
 }
 
+/** Returns the browse title for playlist view.
+ * @brief Returns the browse title for playlist view.
+ * @details Returns a formatted string combining "Kodi playlist ·" with the current view value.
+ * @why Provides a title for the playlist view context.
+ * @return Human-readable title string.
+ */
 QString
 KodiMedia::browseTitlePlaylistView() const
 {
     return "Kodi playlist · " + m_viewValue;
 }
 
+/** Returns the browse title for history media kind.
+ * @brief Returns the browse title for history media kind.
+ * @details Returns the literal string "Recently viewed".
+ * @why Provides a title for the history media kind context.
+ * @return Human-readable title string.
+ */
 QString
 KodiMedia::browseTitleHistory() const
 {
     return "Recently viewed";
 }
 
+/** Returns the browse title for music media kind.
+ * @brief Returns the browse title for music media kind.
+ * @details Returns "Music · Albums" for albums media kind, or the show title if available, otherwise "Music · Tracks".
+ * @why Provides a title for the music media kind context.
+ * @return Human-readable title string.
+ */
 QString
 KodiMedia::browseTitleMusic() const
 {
@@ -376,18 +472,36 @@ KodiMedia::browseTitleMusic() const
     return m_showTitle.isEmpty() ? "Music · Tracks" : m_showTitle;
 }
 
+/** Returns the browse title for channels media kind.
+ * @brief Returns the browse title for channels media kind.
+ * @details Returns the literal string "TV Guide".
+ * @why Provides a title for the channels media kind context.
+ * @return Human-readable title string.
+ */
 QString
 KodiMedia::browseTitleChannels() const
 {
     return "TV Guide";
 }
 
+/** Returns the browse title for manual media kind.
+ * @brief Returns the browse title for manual media kind.
+ * @details Returns the current view value string.
+ * @why Provides a title for the manual media kind context.
+ * @return Human-readable title string.
+ */
 QString
 KodiMedia::browseTitleManual() const
 {
     return m_viewValue;
 }
 
+/** Returns the browse title for movies/shows media kind.
+ * @brief Returns the browse title for movies/shows media kind.
+ * @details Returns "Movies" for movies media kind, otherwise "Shows".
+ * @why Provides a title for the movies/shows media kind context.
+ * @return Human-readable title string.
+ */
 QString
 KodiMedia::browseTitleMoviesShows() const
 {
@@ -396,12 +510,24 @@ KodiMedia::browseTitleMoviesShows() const
     return "Shows";
 }
 
+/** Returns the browse title for seasons media kind.
+ * @brief Returns the browse title for seasons media kind.
+ * @details Returns the show title followed by " · Seasons".
+ * @why Provides a title for the seasons media kind context.
+ * @return Human-readable title string.
+ */
 QString
 KodiMedia::browseTitleSeasons() const
 {
     return m_showTitle + " · Seasons";
 }
 
+/** Returns the browse title for episodes media kind.
+ * @brief Returns the browse title for episodes media kind.
+ * @details Returns "Search Results · Episodes" for search view kind, "Continue Watching · Episodes" for continue view kind, "Recently Watched · Episodes" for watched view kind, or "Recently Added · Episodes" otherwise.
+ * @why Provides a title for the episodes media kind context.
+ * @return Human-readable title string.
+ */
 QString
 KodiMedia::browseTitleEpisodes() const
 {
@@ -412,16 +538,35 @@ KodiMedia::browseTitleEpisodes() const
                                      : "Recently Added · Episodes";
 }
 
+/** Returns the browse title for default media kind.
+ * @brief Returns the browse title for default media kind.
+ * @details Returns the show title followed by " · Specials" for season 0, otherwise " · Season N".
+ * @why Provides a title for the default media kind context.
+ * @return Human-readable title string.
+ */
 QString
 KodiMedia::browseTitleDefault() const
 {
     return m_showTitle + (m_season == 0 ? " · Specials" : " · Season " + QString::number(m_season));
 }
+/** Returns the current browse state.
+ * @brief Returns the current browse state.
+ * @details Returns a BrowseState struct containing mediaKind, viewKind, viewValue, showTitle, showId, season, pageStart, and selectedIndex.
+ * @why Captures the current browsing state for save/restore operations.
+ * @return BrowseState struct with current browse state.
+ */
 KodiMedia::BrowseState
 KodiMedia::browseState() const
 {
     return {m_mediaKind, m_viewKind, m_viewValue, m_showTitle, m_showId, m_season, m_pageStart, m_selectedIndex};
 }
+/** Restores browse state from a saved BrowseState.
+ * @brief Restores browse state from a saved BrowseState.
+ * @details Resets pending fields, sets mediaKind/viewKind/viewValue/showTitle/showId/season/selectedIndex from the state, then begins reading at the saved page start.
+ * @why Restores the browsing state after navigation or restoration from cache.
+ * @param state The BrowseState to restore.
+ * @return none
+ */
 void
 KodiMedia::restoreBrowse(const BrowseState& state)
 {
@@ -437,6 +582,13 @@ KodiMedia::restoreBrowse(const BrowseState& state)
     m_selectedIndex = state.selected;
     beginRead(state.start);
 }
+/** Selects an index in the current browse list.
+ * @brief Selects an index in the current browse list.
+ * @details Clamps the index to valid range and updates m_selectedIndex if changed, emitting changed signal.
+ * @why Allows selection of a specific media item in the current browse context.
+ * @param index The index to select.
+ * @return none
+ */
 void
 KodiMedia::selectIndex(int index)
 {
@@ -446,6 +598,13 @@ KodiMedia::selectIndex(int index)
     m_selectedIndex = index;
     emit changed();
 }
+/** Opens a library view for the given kind.
+ * @brief Opens a library view for the given kind.
+ * @details If navigation is allowed and kind is movies/shows, clears pending state and restores browse to the library kind with view "all".
+ * @why Opens a library view for browsing movies or shows content.
+ * @param kind The library kind to open ("movies" or "shows").
+ * @return none
+ */
 void
 KodiMedia::openLibrary(const QString& kind)
 {
@@ -464,14 +623,27 @@ KodiMedia::openLibrary(const QString& kind)
     m_pendingMovie = 0;
     restoreBrowse({kind, "all", {}, {}, -1, -1, 0, 0});
 }
-bool
-KodiMedia::validPlaylistName(const QString& name)
+/** Handles a playlist operation failure during Kodi media import.
+ * @brief Handles a failed playlist operation during Kodi media bridge import.
+ * @details Updates the playlist status message to indicate the operation could not be confirmed.
+ * @why Prevents stale playlist state from persisting after a failed playlist operation.
+ * @param message Human-readable failure message describing why the playlist operation failed.
+ * @return none
+ */
+void
+KodiMedia::failPlaylist(const QString& message)
 {
     if (name.isEmpty() || name.size() > 128 || name.contains(QRegularExpression("[/\\\\:%\\x00-\\x1f]")))
         return false;
     return name.endsWith(".xsp", Qt::CaseInsensitive) || name.endsWith(".m3u", Qt::CaseInsensitive) ||
            name.endsWith(".m3u8", Qt::CaseInsensitive);
 }
+/** Opens playlists media kind.
+ * @brief Opens playlists media kind.
+ * @details If navigation is allowed, clears history and pending state, then restores browse to playlists view.
+ * @why Opens the playlists media kind for browsing available playlists.
+ * @return none
+ */
 void
 KodiMedia::openPlaylists()
 {
@@ -483,6 +655,13 @@ KodiMedia::openPlaylists()
     m_pendingDirectId = 0;
     restoreBrowse({"playlists", "all", {}, {}, -1, -1, 0, 0});
 }
+/** Opens history media kind.
+ * @brief Opens history media kind.
+ * @details If history count is valid and navigation is allowed, clears history and pending state, then restores browse to history/watched view.
+ * @why Opens the history media kind for browsing recently viewed items.
+ * @param count The history count limit.
+ * @return none
+ */
 void
 KodiMedia::openHistory(int count)
 {
@@ -497,11 +676,25 @@ KodiMedia::openHistory(int count)
     restoreBrowse({"history", "watched", {}, {}, -1, -1, 0, selected});
 }
 
+/** Validates history count.
+ * @brief Validates history count.
+ * @details Checks that count is between 1 and 50 inclusive.
+ * @why Ensures history count is within acceptable bounds.
+ * @param count The history count to validate.
+ * @return true if count is valid, false otherwise.
+ */
 bool
 validateHistoryCount(int count)
 {
     return count >= 1 && count <= 50;
 }
+/** Sets app openings from a list of items.
+ * @brief Sets app openings from a list of items.
+ * @details Validates each item and builds accepted list of app openings with valid identities.
+ * @why Processes app opening events from Kodi and stores them for history tracking.
+ * @param items The list of app opening items.
+ * @return none
+ */
 void
 KodiMedia::setAppOpenings(const QVariantList& items)
 {
@@ -525,6 +718,15 @@ KodiMedia::setAppOpenings(const QVariantList& items)
     }
     m_appOpenings = accepted;
 }
+/** Opens a view for the given kind and view.
+ * @brief Opens a view for the given kind and view.
+ * @details Validates the view, clears history and pending state, then restores browse to the given kind/view/value.
+ * @why Opens a media browsing view for the given kind and view.
+ * @param kind The media kind to open.
+ * @param view The view type.
+ * @param value The view value.
+ * @return none
+ */
 void
 KodiMedia::openView(const QString& kind, const QString& view, const QString& value)
 {
@@ -544,6 +746,15 @@ KodiMedia::openView(const QString& kind, const QString& view, const QString& val
                    0});
 }
 
+/** Validates an open view operation.
+ * @brief Validates an open view operation.
+ * @details Checks navigation, kind, view, playlist, albums/channels, history, episodes, value length, and tag/genre validity.
+ * @why Ensures view opening requests are valid before processing.
+ * @param kind The media kind.
+ * @param view The view type.
+ * @param value The view value.
+ * @return true if the view operation is valid, false otherwise.
+ */
 bool
 KodiMedia::openViewValid(const QString& kind, const QString& view, const QString& value)
 {
@@ -558,24 +769,53 @@ KodiMedia::openViewValid(const QString& kind, const QString& view, const QString
            openViewValidTagGenre(value, view);
 }
 
+/** Checks if navigation is allowed for open view operations.
+ * @brief Checks if navigation is allowed for open view operations.
+ * @details Delegates to canNavigate().
+ * @why Delegates navigation check to shared canNavigate function.
+ * @return true if navigation is allowed, false otherwise.
+ */
 bool
 KodiMedia::openViewCanNavigate() const
 {
     return canNavigate();
 }
 
+/** Validates open view kind.
+ * @brief Validates open view kind.
+ * @details Checks that kind is one of movies, shows, episodes, history, albums, channels.
+ * @why Ensures valid media kind for open view operations.
+ * @param kind The media kind to validate.
+ * @return true if kind is valid, false otherwise.
+ */
 bool
 KodiMedia::openViewValidKind(const QString& kind)
 {
     return QStringList{"movies", "shows", "episodes", "history", "albums", "channels"}.contains(kind);
 }
 
+/** Validates open view view type.
+ * @brief Validates open view view type.
+ * @details Checks that view is one of all, recent, watched, continue, search, tag, genre, playlist.
+ * @why Ensures valid view type for open view operations.
+ * @param view The view type to validate.
+ * @return true if view is valid, false otherwise.
+ */
 bool
 KodiMedia::openViewValidView(const QString& view)
 {
     return QStringList{"all", "recent", "watched", "continue", "search", "tag", "genre", "playlist"}.contains(view);
 }
 
+/** Validates open view playlist.
+ * @brief Validates open view playlist.
+ * @details If view is playlist, checks that kind is movies/shows and value is valid playlist name.
+ * @why Ensures playlist view kind is valid for movies/shows media kinds.
+ * @param kind The media kind.
+ * @param view The view type.
+ * @param value The view value.
+ * @return true if playlist view is valid, false otherwise.
+ */
 bool
 KodiMedia::openViewValidPlaylist(const QString& kind, const QString& view, const QString& value)
 {
@@ -584,6 +824,15 @@ KodiMedia::openViewValidPlaylist(const QString& kind, const QString& view, const
     return QStringList{"movies", "shows"}.contains(kind) && validPlaylistName(value);
 }
 
+/** Validates open view albums/channels.
+ * @brief Validates open view albums/channels.
+ * @details If kind is albums/channels, checks that view is all and value is empty.
+ * @why Ensures albums/channels media kinds use all view with empty value.
+ * @param kind The media kind.
+ * @param view The view type.
+ * @param value The view value.
+ * @return true if albums/channels view is valid, false otherwise.
+ */
 bool
 KodiMedia::openViewValidAlbumsChannels(const QString& kind, const QString& view, const QString& value)
 {
@@ -592,6 +841,15 @@ KodiMedia::openViewValidAlbumsChannels(const QString& kind, const QString& view,
     return view == "all" && value.isEmpty();
 }
 
+/** Validates open view history.
+ * @brief Validates open view history.
+ * @details If kind is history, checks that view is watched and value is empty.
+ * @why Ensures history media kind uses watched view with empty value.
+ * @param kind The media kind.
+ * @param view The view type.
+ * @param value The view value.
+ * @return true if history view is valid, false otherwise.
+ */
 bool
 KodiMedia::openViewValidHistory(const QString& kind, const QString& view, const QString& value)
 {
@@ -600,6 +858,14 @@ KodiMedia::openViewValidHistory(const QString& kind, const QString& view, const 
     return view == "watched" && value.isEmpty();
 }
 
+/** Validates open view episodes.
+ * @brief Validates open view episodes.
+ * @details If kind is episodes, checks that view is search.
+ * @why Ensures episodes media kind uses search view.
+ * @param kind The media kind.
+ * @param view The view type.
+ * @return true if episodes view is valid, false otherwise.
+ */
 bool
 KodiMedia::openViewValidEpisodes(const QString& kind, const QString& view)
 {
@@ -608,12 +874,27 @@ KodiMedia::openViewValidEpisodes(const QString& kind, const QString& view)
     return view == "search";
 }
 
+/** Validates open view value length.
+ * @brief Validates open view value length.
+ * @details Checks that value trimmed size is at most 160 characters.
+ * @why Ensures view value is within length limits.
+ * @param value The view value to validate.
+ * @return true if value length is valid, false otherwise.
+ */
 bool
 KodiMedia::openViewValidValueLength(const QString& value)
 {
     return value.trimmed().size() <= 160;
 }
 
+/** Validates open view tag/genre.
+ * @brief Validates open view tag/genre.
+ * @details If view is tag/genre, checks that value trimmed is not empty.
+ * @why Ensures tag/genre views have a non-empty value.
+ * @param value The view value.
+ * @param view The view type.
+ * @return true if tag/genre view is valid, false otherwise.
+ */
 bool
 KodiMedia::openViewValidTagGenre(const QString& value, const QString& view)
 {
@@ -621,6 +902,15 @@ KodiMedia::openViewValidTagGenre(const QString& value, const QString& view)
         return true;
     return !value.trimmed().isEmpty();
 }
+/** Opens show search result.
+ * @brief Opens show search result.
+ * @details Validates query, TV show ID, and page start, then restores browse to shows/search view.
+ * @why Opens show search results for browsing show episodes.
+ * @param query The search query.
+ * @param tvShowId The TV show ID.
+ * @param pageStart The page start index.
+ * @return none
+ */
 void
 KodiMedia::openShowResult(const QString& query, int tvShowId, int pageStart)
 {
@@ -641,6 +931,24 @@ KodiMedia::openShowResult(const QString& query, int tvShowId, int pageStart)
     m_pendingShow = tvShowId;
     beginRead(pageStart);
 }
+/** Plays media by kind and ID.
+ * @brief Plays media by kind and ID.
+ * @details Validates kind (movie/episode/song/channel) and ID, then initiates playback via Kodi bridge.
+ * @why Initiates playback of a specific media item in Kodi.
+ * @param kind The media kind (movie, episode, song, channel).
+ * @param id The media ID.
+ * @param resume Whether to resume playback.
+ * @return none
+ */
+/** Plays media item by kind, ID, and resume flag.
+ * @brief Plays media item by kind, ID, and resume flag.
+ * @details Validates kind (movie/episode/song/channel) and ID, then initiates playback via Kodi bridge. If busy, queues the play for after library read finishes.
+ * @why Initiates playback of a specific media item in Kodi with resume support.
+ * @param kind The media kind (movie, episode, song, channel).
+ * @param id The media ID.
+ * @param resume Whether to resume playback.
+ * @return none
+ */
 void
 KodiMedia::playMedia(const QString& kind, int id, bool resume)
 {
@@ -663,6 +971,13 @@ KodiMedia::playMedia(const QString& kind, int id, bool resume)
     }
     playLibraryItem(kind, id, resume, false);
 }
+/** Activates media item at index.
+ * @brief Activates media item at index.
+ * @details Validates index, then plays selected item, activates album/show season, or plays selected depending on view kind.
+ * @why Activates a media item for playback from the current browse context.
+ * @param index The index of the item to activate.
+ * @return none
+ */
 void
 KodiMedia::activate(int index)
 {
@@ -686,12 +1001,26 @@ KodiMedia::activate(int index)
         playSelected(true);
 }
 
+/** Checks if activation can proceed at index.
+ * @brief Checks if activation can proceed at index.
+ * @details Returns true if not busy, connected, not playback active, and index is valid.
+ * @why Ensures activation only proceeds when bridge is ready and index is valid.
+ * @param index The index to check.
+ * @return true if activation can proceed, false otherwise.
+ */
 bool
 KodiMedia::activateCanProceed(int index)
 {
     return !m_busy && m_connected && !m_playbackActive && index >= 0 && index < m_movies.size();
 }
 
+/** Activates album media item.
+ * @brief Activates album media item.
+ * @details Restores browse to songs/album view with album ID and title.
+ * @why Activates album for browsing songs in the album.
+ * @param item The album item map.
+ * @return none
+ */
 void
 KodiMedia::activateAlbum(const QVariantMap& item)
 {
@@ -702,6 +1031,13 @@ KodiMedia::activateAlbum(const QVariantMap& item)
     restoreBrowse({"songs", "album", QString::number(album), item.value("title").toString(), -1, -1, 0, 0});
 }
 
+/** Activates show season media item.
+ * @brief Activates show season media item.
+ * @details Restores browse to seasons/episodes view with show ID and season.
+ * @why Activates show season for browsing episodes in the season.
+ * @param item The item map with show/season info.
+ * @return none
+ */
 void
 KodiMedia::activateShowSeason(const QVariantMap& item)
 {
@@ -728,6 +1064,12 @@ KodiMedia::activateShowSeason(const QVariantMap& item)
     next.start = next.selected = 0;
     restoreBrowse(next);
 }
+/** Goes back in browse history.
+ * @brief Goes back in browse history.
+ * @details Restores last browsed state from history stack.
+ * @why Allows user to navigate back to previous browse state.
+ * @return true if navigation went back, false otherwise.
+ */
 bool
 KodiMedia::goBack()
 {
@@ -739,6 +1081,20 @@ KodiMedia::goBack()
     restoreBrowse(m_history.takeLast());
     return true;
 }
+/** Plays selected item.
+ * @brief Plays selected item.
+ * @details Plays the media item at selected index based on media kind and view kind.
+ * @why Plays the currently selected media item in Kodi.
+ * @param resume Whether to resume playback.
+ * @return none
+ */
+/** Plays selected item.
+ * @brief Plays selected item.
+ * @details Plays the media item at selected index based on media kind and view kind.
+ * @why Plays the currently selected media item in Kodi.
+ * @param resume Whether to resume playback.
+ * @return none
+ */
 void
 KodiMedia::playSelected(bool resume)
 {
@@ -756,6 +1112,12 @@ KodiMedia::playSelected(bool resume)
     else if (m_mediaKind == "channels")
         playLibraryItem("channel", item.value("channelid").toInt(), false);
 }
+/** Goes to next page.
+ * @brief Goes to next page.
+ * @details If not busy, not playback active, and has next page, resets selected index and loads next page.
+ * @why Allows user to navigate to next page of browse results.
+ * @return none
+ */
 void
 KodiMedia::nextPage()
 {
@@ -765,6 +1127,12 @@ KodiMedia::nextPage()
         loadPage(m_pageStart + 50);
     }
 }
+/** Goes to previous page.
+ * @brief Goes to previous page.
+ * @details If not busy, not playback active, connected, and page start > 0, resets selected index and loads previous page.
+ * @why Allows user to navigate to previous page of browse results.
+ * @return none
+ */
 void
 KodiMedia::previousPage()
 {
@@ -774,6 +1142,20 @@ KodiMedia::previousPage()
         loadPage(qMax(0, m_pageStart - 50));
     }
 }
+/** Loads page at given start index.
+ * @brief Loads page at given start index.
+ * @details Loads page data for current view kind into browse results.
+ * @why Loads a page of media items for browsing.
+ * @param start The page start index.
+ * @return none
+ */
+/** Loads page at given start index.
+ * @brief Loads page at given start index.
+ * @details Loads page data for current view kind into browse results.
+ * @why Loads a page of media items for browsing.
+ * @param start The page start index.
+ * @return none
+ */
 void
 KodiMedia::loadPage(int start)
 {
@@ -819,6 +1201,14 @@ KodiMedia::loadPage(int start)
     request(method, params);
 }
 
+/** Loads page method fields.
+ * @brief Loads page method fields.
+ * @details Sets method and fields based on media kind for Kodi API request.
+ * @param mediaKind The media kind.
+ * @param method Output method string.
+ * @param fields Output fields array.
+ * @return Method string.
+ */
 QString
 KodiMedia::loadPageMethodFields(const QString& mediaKind, QString& method, QJsonArray& fields)
 {
@@ -857,6 +1247,13 @@ KodiMedia::loadPageMethodFields(const QString& mediaKind, QString& method, QJson
     return method;
 }
 
+/** Loads page history fields.
+ * @brief Loads page history fields.
+ * @details Appends lastplayed field if media kind is history.
+ * @param mediaKind The media kind.
+ * @param fields Output fields array.
+ * @return none
+ */
 void
 KodiMedia::loadPageHistoryFields(const QString& mediaKind, QJsonArray& fields)
 {
@@ -864,6 +1261,13 @@ KodiMedia::loadPageHistoryFields(const QString& mediaKind, QJsonArray& fields)
         fields.append("lastplayed");
 }
 
+/** Loads page sort method.
+ * @brief Loads page sort method.
+ * @details Returns sort method based on media kind and view kind.
+ * @param mediaKind The media kind.
+ * @param viewKind The view kind.
+ * @return Sort method string.
+ */
 QString
 KodiMedia::loadPageSort(const QString& mediaKind, const QString& viewKind)
 {
@@ -878,6 +1282,12 @@ KodiMedia::loadPageSort(const QString& mediaKind, const QString& viewKind)
     return "title";
 }
 
+/** Loads page sort order.
+ * @brief Loads page sort order.
+ * @details Returns sort order based on view kind.
+ * @param viewKind The view kind.
+ * @return Sort order string.
+ */
 QString
 KodiMedia::loadPageSortOrder(const QString& viewKind)
 {
@@ -886,12 +1296,26 @@ KodiMedia::loadPageSortOrder(const QString& viewKind)
     return "ascending";
 }
 
+/** Loads page limit.
+ * @brief Loads page limit.
+ * @details Returns page limit based on media kind (history limit or 50).
+ * @param mediaKind The media kind.
+ * @return Page limit integer.
+ */
 int
 KodiMedia::loadPageLimit(const QString& mediaKind)
 {
     return mediaKind == "history" ? m_historyLimit : 50;
 }
 
+/** Loads page view filter.
+ * @brief Loads page view filter.
+ * @details Inserts filter parameters based on view kind into params object.
+ * @param viewKind The view kind.
+ * @param viewValue The view value.
+ * @param params Output parameters object.
+ * @return none
+ */
 void
 KodiMedia::loadPageViewFilter(const QString& viewKind, const QString& viewValue, QJsonObject& params)
 {
@@ -906,6 +1330,14 @@ KodiMedia::loadPageViewFilter(const QString& viewKind, const QString& viewValue,
                                   {"value", viewValue}});
 }
 
+/** Loads page TV show ID parameter.
+ * @brief Loads page TV show ID parameter.
+ * @details Adds tvshowid parameter for seasons/episodes media kinds.
+ * @param mediaKind The media kind.
+ * @param showId The TV show ID.
+ * @param params Output parameters object.
+ * @return none
+ */
 void
 KodiMedia::loadPageTvShowId(const QString& mediaKind, int showId, QJsonObject& params)
 {
@@ -913,6 +1345,14 @@ KodiMedia::loadPageTvShowId(const QString& mediaKind, int showId, QJsonObject& p
         params["tvshowid"] = showId;
 }
 
+/** Loads page season parameter.
+ * @brief Loads page season parameter.
+ * @details Adds season parameter for episodes media kind.
+ * @param mediaKind The media kind.
+ * @param season The season number.
+ * @param params Output parameters object.
+ * @return none
+ */
 void
 KodiMedia::loadPageSeason(const QString& mediaKind, int season, QJsonObject& params)
 {
@@ -920,6 +1360,14 @@ KodiMedia::loadPageSeason(const QString& mediaKind, int season, QJsonObject& par
         params["season"] = season;
 }
 
+/** Loads page album ID parameter.
+ * @brief Loads page album ID parameter.
+ * @details Adds albumid parameter for songs media kind.
+ * @param mediaKind The media kind.
+ * @param viewValue The view value (album ID).
+ * @param params Output parameters object.
+ * @return none
+ */
 void
 KodiMedia::loadPageAlbumId(const QString& mediaKind, const QString& viewValue, QJsonObject& params)
 {
@@ -927,6 +1375,13 @@ KodiMedia::loadPageAlbumId(const QString& mediaKind, const QString& viewValue, Q
         params.insert("filter", QJsonObject{{"albumid", viewValue.toInt()}});
 }
 
+/** Loads page channels parameter.
+ * @brief Loads page channels parameter.
+ * @details Adds channelgroupid parameter for channels media kind.
+ * @param mediaKind The media kind.
+ * @param params Output parameters object.
+ * @return none
+ */
 void
 KodiMedia::loadPageChannels(const QString& mediaKind, QJsonObject& params)
 {
@@ -936,6 +1391,18 @@ KodiMedia::loadPageChannels(const QString& mediaKind, QJsonObject& params)
         params.insert("channelgroupid", "alltv");
     }
 }
+/** Loads manual page.
+ * @brief Loads manual page.
+ * @details Loads manual page data at given start index.
+ * @param start The page start index.
+ * @return none
+ */
+/** Loads manual page.
+ * @brief Loads manual page.
+ * @details Loads manual page data at given start index.
+ * @param start The page start index.
+ * @return none
+ */
 void
 KodiMedia::loadManualPage(int start)
 {
@@ -955,6 +1422,11 @@ KodiMedia::loadManualPage(int start)
     emit changed();
     loadNextManualMovie();
 }
+/** Loads next manual movie.
+ * @brief Loads next manual movie.
+ * @details Loads next manual movie data from member list.
+ * @return none
+ */
 void
 KodiMedia::loadNextManualMovie()
 {
@@ -972,6 +1444,11 @@ KodiMedia::loadNextManualMovie()
                     : QJsonArray{"title", "year", "plot", "runtime", "resume", "playcount", "art"}}});
 }
 
+/** Finishes manual page loading.
+ * @brief Finishes manual page loading.
+ * @details Finalizes manual page load, sets movies list, emits changed signal.
+ * @return none
+ */
 void
 KodiMedia::finishManualPage()
 {
@@ -993,6 +1470,11 @@ KodiMedia::finishManualPage()
     finishManualPendingShow();
 }
 
+/** Finishes manual pending movie.
+ * @brief Finishes manual pending movie.
+ * @details Plays pending movie if it is in the movies list, otherwise shows error message.
+ * @return none
+ */
 void
 KodiMedia::finishManualPendingMovie()
 {
@@ -1020,6 +1502,11 @@ KodiMedia::finishManualPendingMovie()
                        });
 }
 
+/** Finishes manual pending show.
+ * @brief Finishes manual pending show.
+ * @details Activates pending show if it is in the movies list, otherwise shows error message.
+ * @return none
+ */
 void
 KodiMedia::finishManualPendingShow()
 {
@@ -1047,6 +1534,13 @@ KodiMedia::finishManualPendingShow()
                            emit changed();
                        });
 }
+/** Sets view kind and value.
+ * @brief Sets view kind and value.
+ * @details Validates view, clears pending state, updates view kind/value, restores browse.
+ * @param kind The view kind.
+ * @param value The view value.
+ * @return none
+ */
 void
 KodiMedia::setView(const QString& kind, const QString& value)
 {
@@ -1093,6 +1587,12 @@ KodiMedia::setViewViewValue(const QString& kind, const QString& text)
     return text;
 }
 
+/** Sets view shows to episodes.
+ * @brief Sets view shows to episodes.
+ * @details Converts shows media kind to episodes media kind for continue/recent/watched view kinds.
+ * @param kind The view kind.
+ * @return none
+ */
 void
 KodiMedia::setViewShowsToEpisodes(const QString& kind)
 {
@@ -1109,6 +1609,20 @@ KodiMedia::setViewShowsToEpisodes(const QString& kind)
         }
     }
 }
+/** Plays movie by ID.
+ * @brief Plays movie by ID.
+ * @details Plays movie with given ID if media kind is movies.
+ * @param movieId The movie ID.
+ * @param resume Whether to resume playback.
+ * @return none
+ */
+/** Plays movie by ID.
+ * @brief Plays movie by ID.
+ * @details Plays movie with given ID if media kind is movies.
+ * @param movieId The movie ID.
+ * @param resume Whether to resume playback.
+ * @return none
+ */
 void
 KodiMedia::playMovie(int movieId, bool resume)
 {
@@ -1116,6 +1630,24 @@ KodiMedia::playMovie(int movieId, bool resume)
         return;
     playLibraryItem("movie", movieId, resume);
 }
+/** Plays library item by kind, ID, resume flag.
+ * @brief Plays library item by kind, ID, resume flag.
+ * @details Plays library item via Kodi bridge with optional resume parameter.
+ * @param kind The media kind.
+ * @param id The media ID.
+ * @param resume Whether to resume playback.
+ * @param requireListed Whether item must be listed.
+ * @return none
+ */
+/** Plays library item by kind, ID, resume flag.
+ * @brief Plays library item by kind, ID, resume flag.
+ * @details Plays library item via Kodi bridge with optional resume parameter.
+ * @param kind The media kind.
+ * @param id The media ID.
+ * @param resume Whether to resume playback.
+ * @param requireListed Whether item must be listed.
+ * @return none
+ */
 void
 KodiMedia::playLibraryItem(const QString& kind, int id, bool resume, bool requireListed)
 {
@@ -1146,6 +1678,14 @@ KodiMedia::playLibraryItem(const QString& kind, int id, bool resume, bool requir
                                 : "Isolde.PlayEpisode",
             {{kind + "id", id}, {"resume", (kind == "song" || kind == "channel") ? false : resume}});
 }
+/** Plays scheduled item by kind, ID, offset seconds.
+ * @brief Plays scheduled item by kind, ID, offset seconds.
+ * @details Plays scheduled item via Kodi bridge with offset seconds.
+ * @param kind The media kind.
+ * @param id The media ID.
+ * @param offsetSeconds The offset seconds.
+ * @return true if play scheduled successfully, false otherwise.
+ */
 bool
 KodiMedia::playScheduled(const QString& kind, int id, int offsetSeconds)
 {
@@ -1171,6 +1711,18 @@ KodiMedia::playScheduled(const QString& kind, int id, int offsetSeconds)
     request("Isolde.PlayScheduled", {{"mediaType", kind}, {"mediaId", id}, {"offsetSeconds", offsetSeconds}});
     return m_playbackActive;
 }
+/** Plays guide stream by URL.
+ * @brief Plays guide stream by URL.
+ * @details Plays guide stream via Kodi bridge.
+ * @param url The stream URL.
+ * @return true if play scheduled successfully, false otherwise.
+ */
+/** Plays guide stream by URL.
+ * @brief Plays guide stream by URL.
+ * @details Plays guide stream via Kodi bridge.
+ * @param url The stream URL.
+ * @return true if play scheduled successfully, false otherwise.
+ */
 bool
 KodiMedia::playGuideStream(const QString& url)
 {
@@ -1193,6 +1745,14 @@ KodiMedia::playGuideStream(const QString& url)
     request("Isolde.PlayGuideStream", {{"url", url}});
     return m_playbackActive;
 }
+/** Plays PVR item by ID, client ID, unique ID.
+ * @brief Plays PVR item by ID, client ID, unique ID.
+ * @details Plays PVR item via Kodi bridge.
+ * @param id The item ID.
+ * @param clientId The client ID.
+ * @param uniqueId The unique ID.
+ * @return true if play scheduled successfully, false otherwise.
+ */
 bool
 KodiMedia::playPvr(int id, int clientId, int uniqueId)
 {
@@ -1216,6 +1776,11 @@ KodiMedia::playPvr(int id, int clientId, int uniqueId)
             {{"channelid", id}, {"resume", false}, {"clientid", clientId}, {"uniqueid", uniqueId}});
     return m_playbackActive;
 }
+/** Handles presentation failure.
+ * @brief Handles presentation failure.
+ * @details Sets presentation error and playback status, stops playback control.
+ * @return none
+ */
 void
 KodiMedia::presentationFailed()
 {
@@ -1228,6 +1793,18 @@ KodiMedia::presentationFailed()
     playbackControl("stop");
     emit changed();
 }
+/** Controls playback.
+ * @brief Controls playback.
+ * @details Controls playback based on action.
+ * @param action The playback control action.
+ * @return none
+ */
+/** Controls playback.
+ * @brief Controls playback.
+ * @details Controls playback based on action.
+ * @param action The playback control action.
+ * @return none
+ */
 void
 KodiMedia::playbackControl(const QString& action)
 {
@@ -1263,6 +1840,17 @@ KodiMedia::playbackControl(const QString& action)
     m_stage = 7;
     request("Isolde.PlaybackControl", {{"action", action}});
 }
+/** Checks if adjacent scope is active.
+ * @brief Checks if adjacent scope is active.
+ * @details Checks if adjacent scope conditions are met for playback control.
+ * @return true if adjacent scope is active, false otherwise.
+ */
+/** Checks if adjacent scope is active.
+ * @brief Checks if adjacent scope is active.
+ * @details Returns true if playback is active, not scheduled playback, connected, not a manual/history view kind, playing kind is movie/episode/song, and selected index is valid and matches playing item.
+ * @why Determines if adjacent navigation is possible within current playback context.
+ * @return true if adjacent scope is active, false otherwise.
+ */
 bool
 KodiMedia::adjacentScope() const
 {
@@ -1274,11 +1862,33 @@ KodiMedia::adjacentScope() const
     const auto item = m_movies[m_selectedIndex].toMap();
     return item.value("mediaType").toString() == m_playingKind && item.value("mediaId").toInt() == m_playingId;
 }
+/** Checks if playback can go previous.
+ * @brief Checks if playback can go previous.
+ * @details Returns true if adjacent scope and page start + selected index > 0.
+ * @return true if playback can go previous, false otherwise.
+ */
 bool
 KodiMedia::playbackCanPrevious() const
 {
     return adjacentScope() && m_pageStart + m_selectedIndex > 0;
 }
+/** Checks if playback can go next.
+ * @brief Checks if playback can go next.
+ * @details Returns true if adjacent scope and page start + selected index + 1 < total movies.
+ * @return true if playback can go next, false otherwise.
+ */
+/** Checks if playback can go next.
+ * @brief Checks if playback can go next.
+ * @details Returns true if adjacent scope and page start + selected index + 1 < total movies.
+ * @why Determines if playback can navigate to next item.
+ * @return true if playback can go next, false otherwise.
+ */
+/** Checks if playback can go next.
+ * @brief Checks if playback can go next.
+ * @details Returns true if adjacent scope and page start + selected index + 1 < total movies.
+ * @why Determines if playback can navigate to next item.
+ * @return true if playback can go next, false otherwise.
+ */
 bool
 KodiMedia::playbackCanNext() const
 {
