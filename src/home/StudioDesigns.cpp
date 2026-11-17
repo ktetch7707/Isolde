@@ -18,6 +18,12 @@
 #include "StudioSession.h"
 #include "ThemeColors.h"
 #include "app/AppRegistry.h"
+
+static bool
+isValidDesignDirectory(const QString& directory, const QString& path)
+{
+    return !directory.isEmpty() && QFileInfo(path).isDir();
+}
 namespace
 {
 constexpr qint64 PackageLimit = 64 * 1024 * 1024;
@@ -803,7 +809,7 @@ StudioSession::browseDesignFiles(const QString& directory, int page) const
         return {};
     auto path = directory.isEmpty() ? QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation)
                                     : localPath(directory);
-    if (directory.isEmpty() && !QFileInfo(path).isDir())
+    if (!isValidDesignDirectory(directory, path))
         path = QDir::homePath();
     const QFileInfo folder(path);
     if (!folder.isDir() || folder.isSymLink() || folder.canonicalFilePath() != folder.absoluteFilePath())
