@@ -392,6 +392,24 @@ class HomeLayout final : public QObject
     validateSurfaceColors(QVariantMap values);
     bool
     validateFocusColor(QVariantMap values);
+    bool
+    validateStudioAppIconStyles(const QJsonObject& styles);
+    bool
+    validateStudioArtworkCleanup(const QJsonObject& cleanup);
+    bool
+    validateStudioReferenceViewport(const QJsonObject& viewport);
+    bool
+    validateStudioColorPicker(const QJsonObject& picker);
+    bool
+    validateStudioDesktop(const QJsonObject& desktop);
+    bool
+    validateStudioThemeGroups(const QJsonArray& groups);
+    bool
+    validateStudioSchemes(const QJsonArray& schemes);
+    bool
+    validateStudioStylePresets(const QJsonArray& presets);
+    bool
+    validateStudioTrialDurations(const QJsonArray& trials);
     void
     appendSourceChoicesForType(QVariantList& choices, const QString& type) const;
     void

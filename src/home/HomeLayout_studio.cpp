@@ -30,44 +30,12 @@ HomeLayout::studioOptions() const
     m_optionsBytes = bytes;
     m_optionsCache.clear();
     const auto object = QJsonDocument::fromJson(bytes).object();
-    if (object.contains("appIconStyles"))
-    {
-        const auto styles = object["appIconStyles"].toObject();
-        if (styles.size() != 3)
-            return {};
-        for (const auto& name : QStringList{"signature", "tiles", "rail"})
-            if (!styles[name].isObject() || !ComponentSchema::validPresentation(styles[name].toObject().toVariantMap()))
-                return {};
-    }
-    if (object.contains("artworkCleanup"))
-    {
-        const auto surfaces = object["artworkCleanup"].toObject()["previewSurfaces"].toArray();
-        if (surfaces.size() != 3)
-            return {};
-        for (const auto& value : surfaces)
-        {
-            const auto item = value.toObject();
-            const QColor colour(item["colour"].toString());
-            if (item.size() != 2 || item["name"].toString().isEmpty() || item["name"].toString().size() > 40 ||
-                !colour.isValid() || colour.alpha() != 255)
-                return {};
-        }
-    }
-    if (object.contains("referenceViewport"))
-    {
-        const auto viewport = object["referenceViewport"].toObject();
-        if (viewport.size() != 2)
-            return {};
-        const QMap<QString, QPair<int, int>> bounds{{"width", {640, 3840}}, {"height", {360, 2160}}};
-        for (auto it = bounds.cbegin(); it != bounds.cend(); ++it)
-        {
-            const auto value = viewport[it.key()];
-            const double number = value.toDouble(-1);
-            if (!value.isDouble() || !std::isfinite(number) || std::floor(number) != number ||
-                number < it.value().first || number > it.value().second)
-                return {};
-        }
-    }
+    if (!validateStudioAppIconStyles(object.value("appIconStyles").toObject()))
+        return {};
+    if (!validateStudioArtworkCleanup(object.value("artworkCleanup").toObject()))
+        return {};
+    if (!validateStudioReferenceViewport(object.value("referenceViewport").toObject()))
+        return {};
     if (object.contains("responsiveDefaults") &&
         !DesignSystem::validResponsive(object["responsiveDefaults"].toObject().toVariantMap()))
         return {};
@@ -117,86 +85,16 @@ HomeLayout::studioOptions() const
             picker["logoSize"].toInt() + 2 * picker["labelSize"].toInt() + 2 * picker["gap"].toInt())
             return {};
     }
-    const auto desktop = object["desktop"].toObject();
-    if (desktop.size() != 8)
+    if (!validateStudioDesktop(object.value("desktop").toObject()))
         return {};
-    for (const auto& key : QStringList{"title", "returnLabel", "returnShortcut"})
-        if (!desktop[key].isString() || desktop[key].toString().trimmed().isEmpty() ||
-            desktop[key].toString().size() > 80 || desktop[key].toString().contains(QChar::Null))
-            return {};
-    for (const auto& key : QStringList{"width", "height", "margin", "radius", "labelSize"})
-    {
-        const auto value = desktop[key];
-        const auto n = value.toDouble(-1);
-        const int low = key == "width"       ? 240
-                        : key == "height"    ? 80
-                        : key == "labelSize" ? 14
-                                             : 0,
-                  high = key == "width"       ? 600
-                         : key == "height"    ? 240
-                         : key == "labelSize" ? 40
-                                              : 100;
-        if (!value.isDouble() || !std::isfinite(n) || n < low || n > high || std::floor(n) != n)
-            return {};
-    }
-    if (object.contains("colorPicker"))
-    {
-        const auto picker = object["colorPicker"].toObject();
-        if (picker.size() != 1 || !picker["presets"].isArray() || picker["presets"].toArray().isEmpty() ||
-            picker["presets"].toArray().size() > 8)
-            return {};
-        for (const auto& entry : picker["presets"].toArray())
-        {
-            const auto swatch = entry.toObject();
-            const QColor color(swatch["value"].toString());
-            if (swatch.size() != 2 || !swatch["name"].isString() || swatch["name"].toString().isEmpty() ||
-                swatch["name"].toString().size() > 40 || !swatch["value"].isString() || !color.isValid() ||
-                color.alpha() != 255)
-                return {};
-        }
-    }
-    const auto simple = object["simpleStudio"].toObject();
-    const auto groups = simple["themeGroups"].toArray();
-    if (groups.size() != 5 || simple["schemes"].toArray().isEmpty() || simple["schemes"].toArray().size() > 32)
+    if (!validateStudioThemeGroups(simple["themeGroups"].toArray()))
         return {};
-    QSet<QString> seenGroups;
-    for (const auto& value : groups)
-    {
-        const auto group = value.toObject();
-        const auto id = group["id"].toString();
-        if (!ThemeColors::roles().contains(id) || seenGroups.contains(id) || group["label"].toString().isEmpty())
-            return {};
-        seenGroups.insert(id);
-        QStringList keys;
-        for (const auto& role : group["roles"].toArray())
-        {
-            const auto row = role.toObject();
-            if (row["label"].toString().isEmpty())
-                return {};
-            keys.append(row["key"].toString());
-        }
-        auto expected = ThemeColors::roles().value(id);
-        keys.sort();
-        expected.sort();
-        if (keys != expected)
-            return {};
-    }
-    for (const auto& value : simple["schemes"].toArray())
-    {
-        const auto scheme = value.toObject();
-        if (scheme["name"].toString().trimmed().isEmpty() || scheme["name"].toString().size() > 80 ||
-            !ThemeColors::valid(
-                QVariantMap{{"schemaVersion", 1}, {"colors", scheme["colors"].toObject().toVariantMap()}}))
-            return {};
-    }
-    for (const auto& value : simple["stylePresets"].toArray())
-    {
-        const auto preset = value.toObject();
-        if (preset["name"].toString().isEmpty() ||
-            !ComponentSchema::validPresentation(preset["presentation"].toObject().toVariantMap()))
-            return {};
-    }
-    const auto trials = object["trialDurations"].toArray();
+    if (!validateStudioSchemes(simple["schemes"].toArray()))
+        return {};
+    if (!validateStudioStylePresets(simple["stylePresets"].toArray()))
+        return {};
+    if (!validateStudioTrialDurations(object["trialDurations"].toArray()))
+        return {};
     if (trials.size() != 3)
         return {};
     for (int i = 0; i < trials.size(); ++i)
@@ -710,5 +608,171 @@ HomeLayout::applyStudioDraft(const QByteArray& draft, const QString& focusCompon
     }
     emit layoutChanged();
     setError({});
+    return true;
+}
+
+bool
+HomeLayout::validateStudioAppIconStyles(const QJsonObject& styles)
+{
+    if (styles.size() != 3)
+        return false;
+    for (const auto& name : QStringList{"signature", "tiles", "rail"})
+        if (!styles[name].isObject() || !ComponentSchema::validPresentation(styles[name].toObject().toVariantMap()))
+            return false;
+    return true;
+}
+
+bool
+HomeLayout::validateStudioArtworkCleanup(const QJsonObject& cleanup)
+{
+    const auto surfaces = cleanup.value("previewSurfaces").toArray();
+    if (surfaces.size() != 3)
+        return false;
+    for (const auto& value : surfaces)
+    {
+        const auto item = value.toObject();
+        const QColor colour(item["colour"].toString());
+        if (item.size() != 2 || item["name"].toString().isEmpty() || item["name"].toString().size() > 40 ||
+            !colour.isValid() || colour.alpha() != 255)
+            return false;
+    }
+    return true;
+}
+
+bool
+HomeLayout::validateStudioReferenceViewport(const QJsonObject& viewport)
+{
+    if (viewport.size() != 2)
+        return false;
+    const QMap<QString, QPair<int, int>> bounds{{"width", {640, 3840}}, {"height", {360, 2160}}};
+    for (auto it = bounds.cbegin(); it != bounds.cend(); ++it)
+    {
+        const auto value = viewport[it.key()];
+        const double number = value.toDouble(-1);
+        if (!value.isDouble() || !std::isfinite(number) || std::floor(number) != number ||
+            number < it.value().first || number > it.value().second)
+            return false;
+    }
+    return true;
+}
+
+bool
+HomeLayout::validateStudioColorPicker(const QJsonObject& picker)
+{
+    if (picker.size() != 1 || !picker["presets"].isArray() || picker["presets"].toArray().isEmpty() ||
+        picker["presets"].toArray().size() > 8)
+        return false;
+    for (const auto& entry : picker["presets"].toArray())
+    {
+        const auto swatch = entry.toObject();
+        const QColor color(swatch["value"].toString());
+        if (swatch.size() != 2 || !swatch["name"].isString() || swatch["name"].toString().isEmpty() ||
+            swatch["name"].toString().size() > 40 || !swatch["value"].isString() || !color.isValid() ||
+            color.alpha() != 255)
+            return false;
+    }
+    return true;
+}
+
+bool
+HomeLayout::validateStudioDesktop(const QJsonObject& desktop)
+{
+    if (desktop.size() != 8)
+        return false;
+    for (const auto& key : QStringList{"title", "returnLabel", "returnShortcut"})
+        if (!desktop[key].isString() || desktop[key].toString().trimmed().isEmpty() ||
+            desktop[key].toString().size() > 80 || desktop[key].toString().contains(QChar::Null))
+            return false;
+    for (const auto& key : QStringList{"width", "height", "margin", "radius", "labelSize"})
+    {
+        const auto value = desktop[key];
+        const auto n = value.toDouble(-1);
+        const int low = key == "width"       ? 240
+                        : key == "height"    ? 80
+                        : key == "labelSize" ? 14
+                                             : 0,
+                  high = key == "width"       ? 600
+                         : key == "height"    ? 240
+                         : key == "labelSize" ? 40
+                                              : 100;
+        if (!value.isDouble() || !std::isfinite(n) || n < low || n > high || std::floor(n) != n)
+            return false;
+    }
+    return true;
+}
+
+bool
+HomeLayout::validateStudioThemeGroups(const QJsonArray& groups)
+{
+    if (groups.size() != 5)
+        return false;
+    QSet<QString> seenGroups;
+    for (const auto& value : groups)
+    {
+        const auto group = value.toObject();
+        const auto id = group["id"].toString();
+        if (!ThemeColors::roles().contains(id) || seenGroups.contains(id) || group["label"].toString().isEmpty())
+            return false;
+        seenGroups.insert(id);
+        QStringList keys;
+        for (const auto& role : group["roles"].toArray())
+        {
+            const auto row = role.toObject();
+            if (row["label"].toString().isEmpty())
+                return false;
+            keys.append(row["key"].toString());
+        }
+        auto expected = ThemeColors::roles().value(id);
+        keys.sort();
+        expected.sort();
+        if (keys != expected)
+            return false;
+    }
+    return true;
+}
+
+bool
+HomeLayout::validateStudioSchemes(const QJsonArray& schemes)
+{
+    if (schemes.isEmpty() || schemes.size() > 32)
+        return false;
+    for (const auto& value : schemes)
+    {
+        const auto scheme = value.toObject();
+        if (scheme["name"].toString().trimmed().isEmpty() || scheme["name"].toString().size() > 80 ||
+            !ThemeColors::valid(
+                QVariantMap{{"schemaVersion", 1}, {"colors", scheme["colors"].toObject().toVariantMap()}}))
+            return false;
+    }
+    return true;
+}
+
+bool
+HomeLayout::validateStudioStylePresets(const QJsonArray& presets)
+{
+    for (const auto& value : presets)
+    {
+        const auto preset = value.toObject();
+        if (preset["name"].toString().isEmpty() ||
+            !ComponentSchema::validPresentation(preset["presentation"].toObject().toVariantMap()))
+            return false;
+    }
+    return true;
+}
+
+bool
+HomeLayout::validateStudioTrialDurations(const QJsonArray& trials)
+{
+    if (trials.size() != 3)
+        return false;
+    for (int i = 0; i < trials.size(); ++i)
+    {
+        const auto trial = trials[i].toObject();
+        const int seconds = QList<int>{30, 60, 300}[i];
+        if (trial.size() != 2 || !trial["label"].isString() || trial["label"].toString().trimmed().isEmpty() ||
+            trial["label"].toString().size() > 40 || !trial["seconds"].isDouble() ||
+            trial["seconds"].toDouble() != seconds)
+            return false;
+    }
     return true;
 }
