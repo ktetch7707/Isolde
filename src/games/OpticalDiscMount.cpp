@@ -8,6 +8,12 @@
 #include <QDir>
 #include <QStorageInfo>
 
+static bool
+isValidOpticalDevice(const QString& device)
+{
+    return QRegularExpression("^/dev/sr[0-9]{1,3}$").match(device).hasMatch();
+}
+
 bool
 OpticalDiscMount::mountReadOnly(const QString& device, QString* error)
 {
@@ -132,7 +138,7 @@ OpticalDiscMount::ejectUsing(const QString& device, bool mounted, const DbusCall
 {
     if (error)
         error->clear();
-    if (!QRegularExpression("^/dev/sr[0-9]{1,3}$").match(device).hasMatch())
+    if (!isValidOpticalDevice(device))
     {
         if (error)
             *error = "Invalid optical device.";
