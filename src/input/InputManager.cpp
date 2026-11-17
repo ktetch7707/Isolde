@@ -154,40 +154,24 @@ InputManager::defaultCommandForKey(int key)
 QString
 InputManager::labelForCommand(Command command) const
 {
-    switch (command)
-    {
-    case NavigateUp:
-        return QStringLiteral("Up");
-    case NavigateDown:
-        return QStringLiteral("Down");
-    case NavigateLeft:
-        return QStringLiteral("Left");
-    case NavigateRight:
-        return QStringLiteral("Right");
-    case Confirm:
-        return QStringLiteral("OK / Select");
-    case Back:
-        return QStringLiteral("Back");
-    case Home:
-        return QStringLiteral("Home");
-    case VolumeUp:
-        return QStringLiteral("Volume +");
-    case VolumeDown:
-        return QStringLiteral("Volume -");
-    case Mute:
-        return QStringLiteral("Mute");
-    case Power:
-        return QStringLiteral("Power");
-    case PlayPause:
-        return QStringLiteral("Play / Pause");
-    case Menu:
-        return QStringLiteral("Menu");
-    case Search:
-        return QStringLiteral("Search");
-    case None:
-        return QStringLiteral("Unknown input");
-    }
-    return QStringLiteral("Unknown input");
+    static const QMap<Command, QString> labels{
+        {NavigateUp, QStringLiteral("Up")},
+        {NavigateDown, QStringLiteral("Down")},
+        {NavigateLeft, QStringLiteral("Left")},
+        {NavigateRight, QStringLiteral("Right")},
+        {Confirm, QStringLiteral("OK / Select")},
+        {Back, QStringLiteral("Back")},
+        {Home, QStringLiteral("Home")},
+        {VolumeUp, QStringLiteral("Volume +")},
+        {VolumeDown, QStringLiteral("Volume -")},
+        {Mute, QStringLiteral("Mute")},
+        {Power, QStringLiteral("Power")},
+        {PlayPause, QStringLiteral("Play / Pause")},
+        {Menu, QStringLiteral("Menu")},
+        {Search, QStringLiteral("Search")},
+        {None, QStringLiteral("Unknown input")},
+    };
+    return labels.value(command, QStringLiteral("Unknown input"));
 }
 
 namespace
