@@ -92,15 +92,26 @@ class ActionDispatcher final : public QObject
     bool
     dispatchSingleAction(const QVariantMap& value, const QString& originId);
     bool
+    validateAndPreflightSingleAction(const QVariantMap& input, const QString& originId, QString& error,
+                                     QVariantMap& value);
+    bool
+    checkDestinationRestriction(const QVariantMap& value, QString& error);
+    bool
+    checkServiceRestriction(const QVariantMap& value, QString& error);
+    bool
     handleLaunchGame(const QVariantMap& value, const QString& originId);
     bool
     handleNavigationAction(const QVariantMap& value, const QString& originId);
     bool
     handleOpenPage(const QVariantMap& value, const QString& originId);
     bool
+    handleRootPage(const QVariantMap& value, const QString& originId);
+    bool
     handleMediaAction(const QVariantMap& value, const QString& originId);
     bool
     handleOpenCollection(const QVariantMap& value, const QString& originId);
+    bool
+    handleTuneChannel(const QVariantMap& value, const QString& originId);
     void
     clearGuidePlayback();
     AppRegistry* m_apps;

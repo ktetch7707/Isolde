@@ -356,143 +356,7 @@ ActionDispatcher::dispatch(const QVariantMap& input, const QString& originId)
             const auto previous = m_origin;
             m_origin = originId;
             QScopedValueRollback<bool> dispatching(m_dispatching, true);
-            bool accepted = false;
-            if (type == "root-page")
-            {
-                if (m_layout && m_layout->rootPageVisible())
-                {
-                    emit pageRequested(QString(), originId);
-                    accepted = true;
-                }
-                else
-                    emit rejected("This page was removed. Repair its link in Skin Studio.");
-            }
-            else if (type == "open-page")
-            {
-                const auto id = map.value("pageId").toString();
-                if (m_layout && m_layout->pageModel(id))
-                {
-                    emit pageRequested(id, originId);
-                    accepted = true;
-                }
-                else
-                    emit rejected("This page was removed. Open Settings → Home → Pages to repair its link.");
-            }
-            else if (type == "open-guide")
-            {
-                emit guideRequested(
-                    originId, map.value("presentation").toMap(), map.value("focusChannelId").toString());
-                accepted = true;
-            }
-            else if (type == "tune-channel")
-            {
-                if (!m_guide)
-                    emit rejected("The guide is unavailable for this profile.");
-                else
-                    accepted = m_guide->tune(map.value("channelId").toString(), originId);
-            }
-            else if (type == "app-drawer" || type == "open-apps")
-            {
-                emit allAppsRequested(originId);
-                if (type == "app-drawer")
-                    emit drawerRequested();
-                accepted = true;
-            }
-            else if (type == "open-search")
-            {
-                emit searchRequested(originId);
-                accepted = true;
-            }
-            else if (type == "launch-app")
-                accepted = launchApp(map.value("appId").toString());
-            else if (type == "launch-game")
-            {
-                const auto gameId = map.value("gameId").toString();
-                auto resolved =
-                    m_games ? m_games->resolveLaunch(gameId, map.value("editionId").toString()) : QVariantMap();
-                if (!resolved.isEmpty())
-                {
-                    m_pendingGameId = gameId;
-                    m_pendingGameProfile = qApp->property("isoldeProfile").toString();
-                    m_pendingSteamGame = resolved.value("type") == "steam-game";
-                    m_pendingSteamIdentity = resolved.value("steamAppId").toString();
-                    m_pendingSteamObserved = false;
-                }
-                if (resolved.isEmpty())
-                    emit rejected(m_games ? m_games->errorString() : tr("Games is unavailable for this profile."));
-                else if (resolved.value("type") == "launch-app")
-                    accepted = launchApp(resolved.value("appId").toString());
-                else if (resolved.value("type") == "steam-game")
-                    accepted = m_sessions->launchSteamGame(resolved.value("steamAppId").toString());
-                else
-                {
-                    const auto root = resolved.take("sourceRoot").toString();
-                    accepted = m_sessions->launchGameFile(resolved, root);
-                }
-                if (!accepted)
-                {
-                    m_pendingGameId.clear();
-                    m_pendingGameProfile.clear();
-                    m_pendingSteamIdentity.clear();
-                    m_pendingSteamGame = false;
-                    m_pendingSteamObserved = false;
-                }
-            }
-            else if (type == "settings")
-            {
-                accepted = launchApp("settings");
-                if (accepted)
-                    emit settingsRequested(map.value("section").toInt());
-            }
-            else if (type == "open-collection" || type == "play-movie" || type == "open-show")
-            {
-                if (m_service->frontend() == "kodi")
-                    accepted = launchApp("kodi");
-                else
-                {
-                    emit libraryRequested(type == "play-movie");
-                    const auto id = map.value("collectionId").toString();
-                    if (type == "play-movie")
-                        m_media->playCollectionMovie(id, map.value("movieId").toInt());
-                    else if (type == "open-show")
-                        m_media->openCollectionShow(id, map.value("tvShowId").toInt());
-                    else
-                        m_media->openCollection(id);
-                    accepted = true;
-                }
-            }
-            else if (type == "switch-input")
-            {
-                const auto inputNum = map.value("input").toInt();
-                if (!m_capture)
-                    emit rejected("Capture input support is not installed.");
-                else if (!m_capture->canSwitchInput(inputNum))
-                    emit rejected(m_capture->switchStatus());
-                else
-                {
-                    emit captureSessionRequested(inputNum, originId);
-                    accepted = true;
-                }
-            }
-            else if (type == "desktop-mode")
-            {
-                emit desktopRequested(originId);
-                accepted = true;
-            }
-            else if (type == "wait")
-            {
-                const auto ms = map.value("duration").toInt();
-                if (ms > 0)
-                {
-                    QEventLoop loop;
-                    QTimer::singleShot(ms, &loop, SLOT(quit()));
-                    loop.exec(QEventLoop::ExcludeUserInputEvents);
-                }
-                accepted = true;
-            }
-            else
-                accepted = m_sessions->launchAction(map);
-            if (!accepted)
+            if (!dispatchSingleAction(map, originId))
             {
                 m_origin = previous;
                 return anyAccepted;
@@ -503,50 +367,9 @@ ActionDispatcher::dispatch(const QVariantMap& input, const QString& originId)
     }
 
     QString error;
-    const auto value = ComponentSchema::action(input, &error);
-    if (value.isEmpty())
-    {
-        emit rejected(error);
+    QVariantMap value;
+    if (!validateAndPreflightSingleAction(input, originId, error, value))
         return false;
-    }
-    error = ComponentSchema::unavailable(value, m_apps, m_media->collections());
-    if (!error.isEmpty())
-    {
-        emit rejected(error);
-        return false;
-    }
-    if (m_sessions->hasActiveSession() || m_media->playbackActive())
-    {
-        emit rejected("Return to Home before starting another action.");
-        return false;
-    }
-
-    if (!originId.isEmpty() && !ComponentSchema::safeId(originId))
-    {
-        emit rejected("Invalid origin.");
-        return false;
-    }
-    const auto type = value.value("type").toString();
-    const auto destination = type == "open-page" ? value.value("pageId").toString() : value.value("appId").toString();
-    if ((type == "open-page" && m_layout && !m_layout->pageAllowed(destination)) ||
-        (type != "open-page" && !destination.isEmpty() && !ProfileManager::allows("destination", destination)))
-    {
-        emit rejected(tr("This destination is restricted in this profile. Settings > Profiles provides recovery."));
-        return false;
-    }
-    if (m_service->switching() &&
-        (type == "open-collection" || type == "play-movie" || type == "open-show" ||
-         (type == "launch-app" && (value.value("appId") == "movies" || value.value("appId") == "shows"))))
-    {
-        emit rejected("Kodi is changing frontend. Try again when it finishes.");
-        return false;
-    }
-    if ((type == "open-collection" || type == "play-movie" || type == "open-show") && m_service->frontend() != "kodi" &&
-        m_media->busy())
-    {
-        emit rejected("The library is busy. Try again when the current operation finishes.");
-        return false;
-    }
     const auto previous = m_origin;
     m_origin = originId;
     QScopedValueRollback<bool> dispatching(m_dispatching, true);
@@ -737,15 +560,7 @@ ActionDispatcher::handleNavigationAction(const QVariantMap& value, const QString
 {
     const auto type = value.value("type").toString();
     if (type == "root-page")
-    {
-        if (m_layout && m_layout->rootPageVisible())
-        {
-            emit pageRequested(QString(), originId);
-            return true;
-        }
-        emit rejected("This page was removed. Repair its link in Skin Studio.");
-        return false;
-    }
+        return handleRootPage(value, originId);
     if (type == "open-page")
         return handleOpenPage(value, originId);
     if (type == "open-guide")
@@ -761,14 +576,7 @@ ActionDispatcher::handleMediaAction(const QVariantMap& value, const QString& ori
 {
     const auto type = value.value("type").toString();
     if (type == "tune-channel")
-    {
-        if (!m_guide)
-        {
-            emit rejected("The guide is unavailable for this profile.");
-            return false;
-        }
-        return m_guide->tune(value.value("channelId").toString(), originId);
-    }
+        return handleTuneChannel(value, originId);
     if (type == "open-collection" || type == "play-movie" || type == "open-show")
         return handleOpenCollection(value, originId);
     return false;
@@ -800,5 +608,101 @@ ActionDispatcher::handleOpenCollection(const QVariantMap& value, const QString& 
         m_media->openCollectionShow(id, value.value("tvShowId").toInt());
     else
         m_media->openCollection(id);
+    return true;
+}
+
+bool
+ActionDispatcher::validateAndPreflightSingleAction(const QVariantMap& input, const QString& originId,
+                                                    QString& error, QVariantMap& value)
+{
+    value = ComponentSchema::action(input, &error);
+    if (value.isEmpty())
+    {
+        emit rejected(error);
+        return false;
+    }
+    error = ComponentSchema::unavailable(value, m_apps, m_media->collections());
+    if (!error.isEmpty())
+    {
+        emit rejected(error);
+        return false;
+    }
+    if (m_sessions->hasActiveSession() || m_media->playbackActive())
+    {
+        emit rejected("Return to Home before starting another action.");
+        return false;
+    }
+    if (!originId.isEmpty() && !ComponentSchema::safeId(originId))
+    {
+        emit rejected("Invalid origin.");
+        return false;
+    }
+    if (!checkDestinationRestriction(value, error))
+    {
+        emit rejected(error);
+        return false;
+    }
+    if (!checkServiceRestriction(value, error))
+    {
+        emit rejected(error);
+        return false;
+    }
+    return true;
+}
+
+bool
+ActionDispatcher::handleRootPage(const QVariantMap& value, const QString& originId)
+{
+    if (m_layout && m_layout->rootPageVisible())
+    {
+        emit pageRequested(QString(), originId);
+        return true;
+    }
+    emit rejected("This page was removed. Repair its link in Skin Studio.");
+    return false;
+}
+
+bool
+ActionDispatcher::handleTuneChannel(const QVariantMap& value, const QString& originId)
+{
+    if (!m_guide)
+    {
+        emit rejected("The guide is unavailable for this profile.");
+        return false;
+    }
+    return m_guide->tune(value.value("channelId").toString(), originId);
+}
+
+bool
+ActionDispatcher::checkDestinationRestriction(const QVariantMap& value, QString& error)
+{
+    const auto type = value.value("type").toString();
+    const auto destination = type == "open-page" ? value.value("pageId").toString() : value.value("appId").toString();
+    if ((type == "open-page" && m_layout && !m_layout->pageAllowed(destination)) ||
+        (type != "open-page" && !destination.isEmpty() && !ProfileManager::allows("destination", destination)))
+    {
+        error = tr("This destination is restricted in this profile. Settings > Profiles provides recovery.");
+        return false;
+    }
+    return true;
+}
+
+bool
+ActionDispatcher::checkServiceRestriction(const QVariantMap& value, QString& error)
+{
+    const auto type = value.value("type").toString();
+    if (m_service->switching() &&
+        (type == "open-collection" || type == "play-movie" || type == "open-show" ||
+         (type == "launch-app" && (value.value("appId") == "movies" || value.value("appId") == "shows"))))
+    {
+        error = "Kodi is changing frontend. Try again when it finishes.";
+        return false;
+    }
+    if ((type == "open-collection" || type == "play-movie" || type == "open-show") && m_service->frontend() != "kodi" &&
+        m_media->busy())
+    {
+        error = "The library is busy. Try again when the current operation finishes.";
+        return false;
+    }
     return true;
 }
