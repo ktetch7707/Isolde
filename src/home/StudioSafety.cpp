@@ -18,6 +18,14 @@
 #include <QUuid>
 
 namespace
+
+static bool
+canEditStudio()
+{
+    return editingPermitted() && currentProfile();
+}
+
+namespace
 {
 constexpr qint64 VersionBytes = 40 * 1024 * 1024;
 constexpr int VersionCount = 10;
@@ -566,7 +574,7 @@ bool
 StudioSession::previewDefaults(const QString& scope, const QString& pageId)
 {
     cancelPreview();
-    if (!editingPermitted() || !currentProfile())
+    if (!canEditStudio())
         return false;
     if (scope == "page")
         return previewCommand("restorePageDefaults", {}, pageId);
