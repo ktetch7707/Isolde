@@ -359,19 +359,15 @@ StudioSession::handleReuseInsert(const QVariantMap& a, QJsonObject document, QJs
     Q_UNUSED(selected);
     Q_UNUSED(pageId);
     QJsonObject library = document["composition"].toObject()["designLibrary"].toObject();
-    QJsonObject definition;
-    for (const auto& value : library["components"].toArray())
-        if (value.toObject()["id"] == a.value("libraryId").toString())
-            definition = value.toObject();
+    const auto definition = findComponentDefinition(library, a.value("libraryId").toString());
     if (definition.isEmpty())
     {
         setError(tr("Choose an existing saved component."));
         return false;
     }
     QJsonObject destination;
-    for (const auto& key : {"placement", "parentId", "categoryId"})
-        if (a.contains(key))
-            destination[key] = QJsonValue::fromVariant(a[key]);
+    if (!resolveInsertDestination(destination, a, layout))
+        return false;
     const auto allNodes = document["components"].toArray();
     for (const auto& entry : document["pages"].toArray())
         for (const auto& node : entry.toObject()["layout"].toObject()["components"].toArray())
@@ -637,5 +633,23 @@ StudioSession::findFreePlacement(QJsonObject& destination, QJsonObject layout, c
         }
     }
     return false;
+}
+
+QJsonObject
+StudioSession::findComponentDefinition(const QJsonObject& library, const QString& libraryId)
+{
+    for (const auto& value : library["components"].toArray())
+        if (value.toObject()["id"] == libraryId)
+            return value.toObject();
+    return {};
+}
+
+bool
+StudioSession::resolveInsertDestination(QJsonObject& destination, QVariantMap a, QJsonObject layout)
+{
+    for (const auto& key : {"placement", "parentId", "categoryId"})
+        if (a.contains(key))
+            destination[key] = QJsonValue::fromVariant(a[key]);
+    return true;
 }
 

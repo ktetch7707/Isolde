@@ -576,6 +576,10 @@ class StudioSession final : public QObject
     bool
     findFreePlacement(QJsonObject& destination, QJsonObject layout, const QJsonArray& allNodes,
                       const QJsonObject& definition);
+    bool
+    resolveInsertDestination(QJsonObject& destination, QVariantMap a, QJsonObject layout);
+    QJsonObject
+    findComponentDefinition(const QJsonObject& library, const QString& libraryId);
 
     QByteArray m_committed;
     QByteArray m_draft;
