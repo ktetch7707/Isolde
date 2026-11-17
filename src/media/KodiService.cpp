@@ -66,16 +66,25 @@ KodiService::capabilityInventory() const
     for (const auto& item : items)
     {
         const auto row = item.toObject();
-        const auto id = row["id"].toString();
-        if (row.size() != 4 || id.isEmpty() || id.size() > 64 || ids.contains(id) || row["name"].toString().isEmpty() ||
-            row["name"].toString().size() > 160 || row["description"].toString().isEmpty() ||
-            row["description"].toString().size() > 2048 ||
-            !QStringList{"sources", "folders", "videoscan", "musicscan", "playback", "import", "restart", "none"}
-                 .contains(row["route"].toString()))
+        if (!isValidCapabilityItem(row))
             return {};
-        ids.insert(id);
+        ids.insert(row["id"].toString());
     }
     return items.toVariantList();
+}
+
+static bool
+isValidCapabilityItem(const QJsonObject& row)
+{
+    const auto id = row["id"].toString();
+    if (row.size() != 4 || id.isEmpty() || id.size() > 64 || row["name"].toString().isEmpty() ||
+        row["name"].toString().size() > 160 || row["description"].toString().isEmpty() ||
+        row["description"].toString().size() > 2048 ||
+        !QStringList{"sources", "folders", "videoscan", "musicscan", "playback", "import", "restart", "none"}
+             .contains(row["route"].toString()))
+        return false;
+    return true;
+}
 }
 
 QVariantList
