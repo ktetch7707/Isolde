@@ -36,14 +36,22 @@ validResponsive(const QVariantMap& rule)
             return false;
         if (it.key() == "minimumWidth" || it.key() == "minimumHeight" || it.key() == "aspect")
         {
-            bool ok = false;
-            const double n = it.value().toDouble(&ok);
-            if (!ok || it.value().metaType().id() == QMetaType::QString ||
-                it.value().metaType().id() == QMetaType::Bool || !std::isfinite(n) ||
-                n < (it.key() == "aspect" ? .25 : 16) || n > (it.key() == "aspect" ? 4 : 800))
+            if (!validResponsiveValue(it.value(), it.key()))
                 return false;
         }
     }
+    return true;
+}
+
+bool
+validResponsiveValue(const QVariant& item, const QString& key)
+{
+    bool ok = false;
+    const double n = item.toDouble(&ok);
+    if (!ok || item.metaType().id() == QMetaType::QString ||
+        item.metaType().id() == QMetaType::Bool || !std::isfinite(n) ||
+        n < (key == "aspect" ? .25 : 16) || n > (key == "aspect" ? 4 : 800))
+        return false;
     return true;
 }
 bool

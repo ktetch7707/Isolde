@@ -13,6 +13,8 @@ QVariantMap
 styleProperties(const QVariantMap& value);
 bool
 validResponsive(const QVariantMap& rule);
+bool
+validResponsiveValue(const QVariant& item, const QString& key);
 QVariantMap
 presentation(const QVariantMap& authored, const QVariantMap& library);
 QVariantMap
