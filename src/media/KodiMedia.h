@@ -451,6 +451,115 @@ class KodiMedia final : public QObject
     request(const QString& method, const QJsonObject& params = {});
     void
     consume();
+    bool
+    handleErrorResponse(const QJsonObject& response);
+    bool
+    handleSourceResponse(const QJsonObject& result);
+    bool
+    validateSourceRevision(const QJsonObject& result);
+    bool
+    validatePreviewSource(const QJsonObject& result);
+    bool
+    validateSourceList(const QJsonObject& result);
+    bool
+    validateSourceRows(const QJsonArray& sources);
+    bool
+    validateScraperRows(const QJsonArray& scrapers);
+    bool
+    validateRootRows(const QJsonArray& roots);
+    void
+    applySourceResult(const QJsonObject& result, bool valid, int stage);
+    bool
+    handlePlaybackControlError();
+    bool
+    handlePlaylistOperationError();
+    bool
+    handleSubtitleLoadError();
+    bool
+    handleSourceOperationError();
+    bool
+    handlePlaybackOptionsError();
+    bool
+    handleSubtitleTracksError();
+    bool
+    handlePlaylistSaveError();
+    bool
+    handlePlaylistKindError();
+    bool
+    handleManualMovieError();
+    bool
+    handlePlaybackOptionsResponse(const QJsonObject& result);
+    bool
+    validatePlaybackOptions(const QJsonObject& result);
+    bool
+    validatePlaybackOptionRows(const QJsonArray& rows, QSet<int>& seen);
+    void
+    applyPlaybackOptionsResult(const QJsonObject& result, bool valid);
+    bool
+    handlePlaylistResponse(const QJsonObject& result);
+    void
+    handlePlaylistSavedResponse(const QJsonObject& result, int stage);
+    bool
+    validatePlaylistRows(const QJsonArray& rows, int stage);
+    void
+    applyPlaylistResult(const QJsonObject& result, int stage, bool valid);
+    bool
+    handlePlaylistSaveResponse(const QJsonObject& result);
+    bool
+    handlePlaylistRenameResponse(const QJsonObject& result);
+    bool
+    handlePlaylistDeleteResponse(const QJsonObject& result);
+    bool
+    handlePlaylistReorderResponse(const QJsonObject& result);
+    bool
+    handleSubtitleLoadResponse(const QJsonObject& result);
+    bool
+    handleSubtitleTracksResponse(const QJsonObject& result);
+    bool
+    handlePlaybackStatusResponse(const QJsonObject& result);
+    bool
+    validatePlaybackState(const QJsonObject& result);
+    void
+    applyPlaybackCommonFields(const QJsonObject& result);
+    void
+    handlePlaybackPlayingState(const QJsonObject& result, const QString& state);
+    bool
+    handlePlaybackStoppedState(const QJsonObject& result, const QString& state);
+    void
+    handleAdjacentTitle(const QJsonObject& result, const QString& state);
+    void
+    handlePlaybackEnded(const QJsonObject& result, const QString& state);
+    void
+    handleChannelSurfRequest(const QJsonObject& result);
+    void
+    flushPendingControl();
+    bool
+    handleQuitResponse(const QJsonObject& result);
+    bool
+    handleManualMovieResponse(const QJsonObject& result);
+    bool
+    handleScanResponse(const QJsonObject& result);
+    bool
+    handleVersionResponse(const QJsonObject& result);
+    bool
+    handleLibraryListResponse(const QJsonObject& result);
+    bool
+    validateLibraryPaging(const QJsonArray& entries, int total, const QJsonObject& limits);
+    bool
+    validateAndNormalizeEntries(const QJsonArray& entries, const QString& defaultType,
+                                QVariantList& normalized, QSet<QString>& ids);
+    QString
+    resolveLibraryListKey() const;
+    QString
+    resolveDefaultType() const;
+    QVariantMap
+    normalizeLibraryEntry(const QJsonValue& value, const QString& type, const QString& defaultType);
+    bool
+    processHistoryLibraryResults(QVariantList& normalized);
+    QString
+    computeLibraryStatus() const;
+    void
+    handlePendingLibraryActions();
     void
     fail(const QString& message, bool forceDisconnect = false);
     bool

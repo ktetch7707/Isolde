@@ -88,6 +88,17 @@ class StudioSession final : public QObject
     execute(const QString& operation, const QVariantMap& arguments, const QString& pageId = {});
     Q_INVOKABLE bool
     apply(const QString& focusId = {});
+    bool
+    validateApplyPreconditions();
+    bool
+    stageArtworkFiles(QStringList& created, const QString& artDirectory, bool hadArtDirectory);
+    bool
+    stageSingleArtifact(const QString& key, const QString& sourcePath, const QString& serialized,
+                        QStringList& created, const QString& profileDir);
+    bool
+    shouldKeepArtifact(const QString& key, const QString& serialized);
+    bool
+    finalizeApply(const QString& focusId, QStringList& created, const QString& artDirectory, bool hadArtDirectory);
     QVariantList
     changeSummary() const;
     QVariantList
@@ -303,6 +314,110 @@ class StudioSession final : public QObject
     validDraft(const QByteArray& data);
     void
     setError(const QString& message);
+
+    // Operation dispatch for execute() — each helper handles one edit command.
+    bool
+    executeReplaceComponent(const QVariantMap& a, const QString& pageId);
+    bool
+    executeRestorePageDefaults(const QVariantMap& a, const QString& pageId);
+    bool
+    executeStudioAppearance(const QVariantMap& a);
+    bool
+    executeRenameDuplicatePage(const QString& operation, const QVariantMap& a, const QString& pageId,
+                               QJsonObject document, QJsonArray pages, QJsonObject rootMeta);
+    bool
+    duplicatePage(const QVariantMap& a, QJsonObject document, QJsonArray pages, QJsonObject rootMeta,
+                  QStringList& order, int index, const QString& id);
+    bool
+    executeReorderPage(const QVariantMap& a, QJsonObject document, QJsonArray pages);
+    int
+    findPageIndex(const QJsonArray& pages, const QString& id);
+    void
+    storePageOrder(QStringList& order, QJsonArray& pages, QJsonObject& rootMeta);
+    bool
+    executeRemovePage(const QVariantMap& a, QJsonObject document, QJsonArray pages, QJsonObject rootMeta);
+    bool
+    executeSetHomePage(const QVariantMap& a);
+    bool
+    executeAddResolvedPlaced(const QString& operation, const QVariantMap& a, const QString& pageId);
+    bool
+    executeBatch(const QVariantMap& a, const QString& pageId);
+
+    // Page-scoped layout operation helpers.
+    bool
+    executePageRepairSource(const QVariantMap& a, QJsonObject& document, HomeLayout& worker);
+    bool
+    executePageAssignSection(const QVariantMap& a, QJsonObject& document, HomeLayout& worker);
+    bool
+    executePageNavigation(const QVariantMap& a, QJsonObject& document, HomeLayout& worker);
+    bool
+    executePagePatch(const QVariantMap& a, QJsonObject& document, HomeLayout& worker);
+    bool
+    executePageScrolling(const QVariantMap& a, QJsonObject& document, HomeLayout& worker);
+    bool
+    executePageSetApps(const QVariantMap& a, QJsonObject& document, HomeLayout& worker);
+    bool
+    executePagePatchComponent(const QVariantMap& a, QJsonObject& document, HomeLayout& worker);
+    bool
+    executePageSection(const QVariantMap& a, QJsonObject& document, HomeLayout& worker);
+    bool
+    executePageBrand(const QVariantMap& a, QJsonObject& document, HomeLayout& worker);
+    bool
+    executePageArrange(const QVariantMap& a, QJsonObject& document, HomeLayout& worker);
+    bool
+    executePageGroup(const QVariantMap& a, QJsonObject& document, HomeLayout& worker);
+    bool
+    executePageUngroup(const QVariantMap& a, QJsonObject& document, HomeLayout& worker);
+    bool
+    reparentUngroupedChildren(QJsonArray& result, const QJsonArray& entries, const QJsonObject& group,
+                              const QJsonObject& outer, const QString& parent, const QString& category);
+    bool
+    executePageChildLayout(const QVariantMap& a, QJsonObject& document, HomeLayout& worker);
+    bool
+    executePagePlace(const QVariantMap& a, QJsonObject& document, HomeLayout& worker);
+    bool
+    executePageInsertRelative(const QVariantMap& a, QJsonObject& document, HomeLayout& worker);
+    bool
+    executePageOrderRelative(const QVariantMap& a, QJsonObject& document, HomeLayout& worker);
+    bool
+    executePageConvertGrid(const QVariantMap& a, QJsonObject& document, HomeLayout& worker);
+    bool
+    executePageState(const QVariantMap& a, QJsonObject& document, HomeLayout& worker);
+    bool
+    executePageRenameItem(const QVariantMap& a, QJsonObject& document, HomeLayout& worker);
+    bool
+    executePageRemoveItem(const QVariantMap& a, QJsonObject& document, HomeLayout& worker);
+    bool
+    executePageDuplicateItem(const QVariantMap& a, QJsonObject& document, HomeLayout& worker);
+    bool
+    executePageReorderItem(const QVariantMap& a, QJsonObject& document, HomeLayout& worker);
+    bool
+    executePagePresentationItem(const QVariantMap& a, QJsonObject& document, HomeLayout& worker);
+    bool
+    executePageAppearanceItem(const QVariantMap& a, QJsonObject& document, HomeLayout& worker);
+    bool
+    executePageCompositionItem(const QVariantMap& a, QJsonObject& document, HomeLayout& worker);
+    bool
+    executePageGridItem(const QVariantMap& a, QJsonObject& document, HomeLayout& worker);
+    bool
+    executePageActionItem(const QVariantMap& a, QJsonObject& document, HomeLayout& worker);
+    bool
+    executePageAddWidget(const QVariantMap& a, QJsonObject& document, HomeLayout& worker);
+    bool
+    executePageAddPlacedItem(const QVariantMap& a, QJsonObject& document, HomeLayout& worker);
+    bool
+    executePageAddButton(QJsonObject& document, HomeLayout& worker);
+    bool
+    executePageNewPage(const QVariantMap& a, QJsonObject& document, HomeLayout& worker);
+    bool
+    executePageRenamePageTop(const QVariantMap& a, QJsonObject& document, HomeLayout& worker);
+    bool
+    executePageRemovePageTop(const QVariantMap& a, QJsonObject& document, HomeLayout& worker);
+
+    // Post-processing shared by all page-scoped operations.
+    bool
+    finalizePageOperation(QJsonObject& root, QJsonObject& document, QJsonArray& pages, int pageIndex,
+                          const QString& operation, const QVariantMap& a, QJsonObject& result);
 
     QByteArray m_committed;
     QByteArray m_draft;
