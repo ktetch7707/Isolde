@@ -21,28 +21,39 @@
 #include <algorithm>
 #include <functional>
 
-StudioSession::StudioSession(QObject* parent) : QObject(parent) {
-    connect(this, &StudioSession::changed, this, [this] {
-        if (m_live && !m_live->m_draftOnly && m_profileId == qApp->property("isoldeProfile").toString())
-            qApp->setProperty("isoldeStudioDirty", m_active && isDirty());
-        if (m_model && !m_draft.isEmpty() && m_model->documentData() != m_draft) {
-            m_model->loadDocument(m_draft, false);
-            emit m_model->layoutChanged();
-        }
-    });
+StudioSession::StudioSession(QObject* parent) : QObject(parent)
+{
+    connect(this,
+            &StudioSession::changed,
+            this,
+            [this]
+            {
+                if (m_live && !m_live->m_draftOnly && m_profileId == qApp->property("isoldeProfile").toString())
+                    qApp->setProperty("isoldeStudioDirty", m_active && isDirty());
+                if (m_model && !m_draft.isEmpty() && m_model->documentData() != m_draft)
+                {
+                    m_model->loadDocument(m_draft, false);
+                    emit m_model->layoutChanged();
+                }
+            });
 }
 
-QObject* StudioSession::model() const {
+QObject*
+StudioSession::model() const
+{
     return m_model;
 }
 
-StudioSession::~StudioSession() {
+StudioSession::~StudioSession()
+{
     invalidate();
     delete m_assetStage;
     delete m_referenceStage;
 }
 
-bool StudioSession::bind(HomeLayout* layout) {
+bool
+StudioSession::bind(HomeLayout* layout)
+{
     if (!layout || !editingPermitted())
         return false;
     m_live = layout;
@@ -67,7 +78,9 @@ bool StudioSession::bind(HomeLayout* layout) {
     return m_active;
 }
 
-void StudioSession::invalidate() {
+void
+StudioSession::invalidate()
+{
     if (m_live && !m_live->m_draftOnly && m_profileId == qApp->property("isoldeProfile").toString())
         qApp->setProperty("isoldeStudioDirty", false);
     m_active = false;
@@ -86,7 +99,8 @@ void StudioSession::invalidate() {
     m_committed.clear();
     m_undo.clear();
     m_redo.clear();
-    if (m_model) {
+    if (m_model)
+    {
         m_model->m_items = {};
         m_model->m_assetPaths.clear();
         m_model->m_animationOwners.clear();
@@ -107,14 +121,18 @@ void StudioSession::invalidate() {
     emit changed();
 }
 
-bool StudioSession::open(const QByteArray& committedDocument) {
+bool
+StudioSession::open(const QByteArray& committedDocument)
+{
     if (!validDraft(committedDocument))
         return false;
     applyCommittedDocument(committedDocument);
     return true;
 }
 
-void StudioSession::applyCommittedDocument(const QByteArray& committedDocument) {
+void
+StudioSession::applyCommittedDocument(const QByteArray& committedDocument)
+{
     m_committed = committedDocument;
     m_draft = committedDocument;
     m_undo.clear();
@@ -123,10 +141,13 @@ void StudioSession::applyCommittedDocument(const QByteArray& committedDocument) 
     emit changed();
 }
 
-bool StudioSession::pushEdit(const QByteArray& candidateDraft) {
+bool
+StudioSession::pushEdit(const QByteArray& candidateDraft)
+{
     if (!editingPermitted())
         return false;
-    if (m_committed.isEmpty()) {
+    if (m_committed.isEmpty())
+    {
         setError(QStringLiteral("Open a page before editing."));
         return false;
     }
@@ -137,7 +158,8 @@ bool StudioSession::pushEdit(const QByteArray& candidateDraft) {
     qsizetype retained = m_draft.size();
     for (const auto& entry : m_undo)
         retained += entry.size();
-    if (m_undo.size() >= kMaxUndoSteps || retained > kMaxHistoryBytes) {
+    if (m_undo.size() >= kMaxUndoSteps || retained > kMaxHistoryBytes)
+    {
         setError(QStringLiteral("History budget reached. Continue with a new history baseline or cancel this edit."));
         return false;
     }
@@ -149,7 +171,9 @@ bool StudioSession::pushEdit(const QByteArray& candidateDraft) {
     return true;
 }
 
-bool StudioSession::undo() {
+bool
+StudioSession::undo()
+{
     if (!canUndoRedo(m_undo.isEmpty(), "Nothing to undo."))
         return false;
     m_redo.push(m_draft);
@@ -159,7 +183,9 @@ bool StudioSession::undo() {
     return true;
 }
 
-bool StudioSession::redo() {
+bool
+StudioSession::redo()
+{
     if (!canUndoRedo(m_redo.isEmpty(), "Nothing to redo."))
         return false;
     m_undo.push(m_draft);
@@ -169,17 +195,22 @@ bool StudioSession::redo() {
     return true;
 }
 
-bool StudioSession::canUndoRedo(bool isEmpty, const char* message) {
+bool
+StudioSession::canUndoRedo(bool isEmpty, const char* message)
+{
     if (!editingPermitted())
         return false;
-    if (isEmpty) {
+    if (isEmpty)
+    {
         setError(QStringLiteral(message));
         return false;
     }
     return true;
 }
 
-void StudioSession::revert() {
+void
+StudioSession::revert()
+{
     cancelPreview();
     m_draft = m_committed;
     m_undo.clear();
@@ -188,7 +219,9 @@ void StudioSession::revert() {
     emit changed();
 }
 
-void StudioSession::markApplied() {
+void
+StudioSession::markApplied()
+{
     m_committed = m_draft;
     m_undo.clear();
     m_redo.clear();
@@ -196,21 +229,28 @@ void StudioSession::markApplied() {
     emit changed();
 }
 
-bool StudioSession::isDirty() const {
+bool
+StudioSession::isDirty() const
+{
     return !m_committed.isEmpty() && m_draft != m_committed;
 }
 
-QString StudioSession::allocateId(const QString& baseId) {
+QString
+StudioSession::allocateId(const QString& baseId)
+{
     QString base = baseId.trimmed();
-    if (!ComponentSchema::safeId(base)) {
+    if (!ComponentSchema::safeId(base))
+    {
         setError(
             QStringLiteral("That name cannot be used as an identity — use letters, digits, dot, dash or underscore."));
         return {};
     }
     const QJsonDocument doc = QJsonDocument::fromJson(m_draft);
     QSet<QString> taken;
-    if (doc.isObject()) {
-        const auto collect = [&taken](const QJsonObject& object) {
+    if (doc.isObject())
+    {
+        const auto collect = [&taken](const QJsonObject& object)
+        {
             for (const auto& key : {"components", "items", "pages", "categories"})
                 for (const auto& entry : object.value(key).toArray())
                     taken.insert(entry.toObject().value("id").toString());
@@ -222,7 +262,8 @@ QString StudioSession::allocateId(const QString& baseId) {
     if (!taken.contains(base))
         return base;
     const QString copyBase = base + QStringLiteral("-copy");
-    if (!ComponentSchema::safeId(copyBase)) {
+    if (!ComponentSchema::safeId(copyBase))
+    {
         setError(QStringLiteral(
             "The generated identity exceeds its length limit. Rename the component before duplicating."));
         return {};
@@ -235,9 +276,13 @@ QString StudioSession::allocateId(const QString& baseId) {
     return copyBase + QString::number(suffix);
 }
 
-namespace {
-QJsonValue canonicalValue(const QJsonValue& value) {
-    if (value.isObject()) {
+namespace
+{
+QJsonValue
+canonicalValue(const QJsonValue& value)
+{
+    if (value.isObject())
+    {
         QJsonObject sorted;
         QStringList keys;
         const auto object = value.toObject();
@@ -248,7 +293,8 @@ QJsonValue canonicalValue(const QJsonValue& value) {
             sorted.insert(key, canonicalValue(object.value(key)));
         return sorted;
     }
-    if (value.isArray()) {
+    if (value.isArray())
+    {
         QJsonArray out;
         for (const QJsonValue& entry : value.toArray())
             out.append(canonicalValue(entry));
@@ -258,17 +304,21 @@ QJsonValue canonicalValue(const QJsonValue& value) {
 }
 } // namespace
 
-bool StudioSession::canonicalize(const QByteArray& first,
-                                 const QByteArray& second,
-                                 QByteArray& firstOut,
-                                 QByteArray& secondOut) {
+bool
+StudioSession::canonicalize(const QByteArray& first,
+                            const QByteArray& second,
+                            QByteArray& firstOut,
+                            QByteArray& secondOut)
+{
     const QJsonDocument firstDoc = QJsonDocument::fromJson(first);
     const QJsonDocument secondDoc = QJsonDocument::fromJson(second);
-    if (firstDoc.isNull() || secondDoc.isNull()) {
+    if (firstDoc.isNull() || secondDoc.isNull())
+    {
         setError(QStringLiteral("Cannot compare drafts — one is not valid JSON."));
         return false;
     }
-    const auto emitDoc = [](const QJsonDocument& doc) {
+    const auto emitDoc = [](const QJsonDocument& doc)
+    {
         if (doc.isObject())
             return QJsonDocument(canonicalValue(doc.object()).toObject()).toJson(QJsonDocument::Compact);
         if (doc.isArray())
@@ -280,7 +330,9 @@ bool StudioSession::canonicalize(const QByteArray& first,
     return true;
 }
 
-bool StudioSession::isStaleAgainst(const QByteArray& currentApplied) const {
+bool
+StudioSession::isStaleAgainst(const QByteArray& currentApplied) const
+{
     if (!isDirty())
         return false;
     if (currentApplied.isEmpty())
@@ -292,51 +344,66 @@ bool StudioSession::isStaleAgainst(const QByteArray& currentApplied) const {
     return mine != theirs;
 }
 
-bool StudioSession::canonicalizeCommitted(const QByteArray& committed, const QByteArray& currentApplied,
-                                           QByteArray& mine, QByteArray& theirs) const {
+bool
+StudioSession::canonicalizeCommitted(const QByteArray& committed,
+                                     const QByteArray& currentApplied,
+                                     QByteArray& mine,
+                                     QByteArray& theirs) const
+{
     StudioSession* self = const_cast<StudioSession*>(this);
     return self->canonicalize(committed, currentApplied, mine, theirs);
 }
 
-bool StudioSession::validDraft(const QByteArray& data) {
-    if (data.isEmpty()) {
+bool
+StudioSession::validDraft(const QByteArray& data)
+{
+    if (data.isEmpty())
+    {
         setError(QStringLiteral("The draft document is empty — nothing was written."));
         return false;
     }
-    if (data.size() > kMaxDocumentBytes) {
+    if (data.size() > kMaxDocumentBytes)
+    {
         setError(QStringLiteral("The draft exceeds 4 MiB and was refused."));
         return false;
     }
     const QJsonDocument doc = QJsonDocument::fromJson(data);
-    if (doc.isNull() || !doc.isObject()) {
+    if (doc.isNull() || !doc.isObject())
+    {
         setError(QStringLiteral("The draft is not a valid layout document."));
         return false;
     }
     const QJsonObject object = doc.object();
     const int version = object.value(QStringLiteral("schemaVersion")).toInt(-1);
-    if (version != 1 && version != 2) {
+    if (version != 1 && version != 2)
+    {
         setError(QStringLiteral("Unknown layout version — draft refused."));
         return false;
     }
-    if (object.contains(version == 1 ? QStringLiteral("components") : QStringLiteral("items"))) {
+    if (object.contains(version == 1 ? QStringLiteral("components") : QStringLiteral("items")))
+    {
         setError(QStringLiteral("The draft mixes incompatible layout versions."));
         return false;
     }
     const QJsonArray components =
         object.value(version == 1 ? QStringLiteral("items") : QStringLiteral("components")).toArray();
-    if (components.size() > kMaxComponents) {
+    if (components.size() > kMaxComponents)
+    {
         setError(QStringLiteral("The draft exceeds 1024 components and was refused."));
         return false;
     }
     QString error;
-    if (!HomeLayout::validateStudioDocument(data, &error, m_live ? m_live->m_defaultTheme : QVariantMap{})) {
+    if (!HomeLayout::validateStudioDocument(data, &error, m_live ? m_live->m_defaultTheme : QVariantMap{}))
+    {
         setError(error);
         return false;
     }
     return true;
 }
 
-void StudioSession::setError(const QString& message) {
+void
+StudioSession::setError(const QString& message)
+{
     if (m_error == message)
         return;
     m_error = message;

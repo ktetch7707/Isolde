@@ -18,47 +18,64 @@
 #include <algorithm>
 #include <cmath>
 
-static QVariantMap readGalleryPresentation();
-AppCatalog::AppCatalog(AppRegistry* registry, QObject* parent) : QObject(parent), m_registry(registry) {
+static QVariantMap
+readGalleryPresentation();
+AppCatalog::AppCatalog(AppRegistry* registry, QObject* parent) : QObject(parent), m_registry(registry)
+{
     m_galleryPresentation = readGalleryPresentation();
     if (m_registry)
         connect(m_registry, &AppRegistry::appsChanged, this, &AppCatalog::entriesChanged);
-    connect(&m_network, &QNetworkAccessManager::finished, this, [this](QNetworkReply* reply) {
-        if (reply == m_downloadReply)
-            onDownloadFinished();
-    });
+    connect(&m_network,
+            &QNetworkAccessManager::finished,
+            this,
+            [this](QNetworkReply* reply)
+            {
+                if (reply == m_downloadReply)
+                    onDownloadFinished();
+            });
 }
-AppCatalog::~AppCatalog() {
-    if (m_downloadReply) {
+AppCatalog::~AppCatalog()
+{
+    if (m_downloadReply)
+    {
         auto* reply = m_downloadReply;
         m_downloadReply = nullptr;
         reply->disconnect(this);
         reply->abort();
         reply->deleteLater();
     }
-    if (m_androidProcess.state() != QProcess::NotRunning) {
+    if (m_androidProcess.state() != QProcess::NotRunning)
+    {
         m_androidProcess.terminate();
-        if (!m_androidProcess.waitForFinished(20000)) {
+        if (!m_androidProcess.waitForFinished(20000))
+        {
             m_androidProcess.kill();
             m_androidProcess.waitForFinished(3000);
         }
     }
 }
 
-static bool isSafeWebUrl(const QUrl& url) {
+static bool
+isSafeWebUrl(const QUrl& url)
+{
     return url.isValid() && (url.scheme() == QStringLiteral("https") || url.scheme() == QStringLiteral("qrc"));
 }
 
-static bool isSafeWebOrigin(const QString& text) {
+static bool
+isSafeWebOrigin(const QString& text)
+{
     const QUrl url(text.trimmed());
     return isSafeWebUrl(url) &&
            (url.scheme() == QStringLiteral("qrc") ||
             (!url.host().isEmpty() && url.path().isEmpty() && url.query().isEmpty() && url.fragment().isEmpty()));
 }
 
-static QStringList readStringArray(const QJsonArray& array) {
+static QStringList
+readStringArray(const QJsonArray& array)
+{
     QStringList result;
-    for (const auto& value : array) {
+    for (const auto& value : array)
+    {
         const auto text = value.toString().trimmed();
         if (!text.isEmpty() && !result.contains(text))
             result.append(text);
@@ -66,7 +83,9 @@ static QStringList readStringArray(const QJsonArray& array) {
     return result;
 }
 
-static bool isValidActionHandlers(const QJsonObject& appObject, const QStringList& handledActions) {
+static bool
+isValidActionHandlers(const QJsonObject& appObject, const QStringList& handledActions)
+{
     if (handledActions.isEmpty())
         return true;
     if (appObject.value(QStringLiteral("type")).toString() != QStringLiteral("desktop"))
@@ -75,7 +94,8 @@ static bool isValidActionHandlers(const QJsonObject& appObject, const QStringLis
     if (!handlersValue.isObject())
         return false;
     const auto handlers = handlersValue.toObject();
-    for (const auto& actionType : handledActions) {
+    for (const auto& actionType : handledActions)
+    {
         const auto handlerValue = handlers.value(actionType);
         if (!handlerValue.isObject())
             return false;
@@ -85,7 +105,8 @@ static bool isValidActionHandlers(const QJsonObject& appObject, const QStringLis
         const auto argumentsValue = handler.value(QStringLiteral("arguments"));
         if (!argumentsValue.isArray() || argumentsValue.toArray().isEmpty())
             return false;
-        for (const auto& argument : argumentsValue.toArray()) {
+        for (const auto& argument : argumentsValue.toArray())
+        {
             if (!argument.isString() || argument.toString().trimmed().isEmpty())
                 return false;
         }
@@ -93,7 +114,9 @@ static bool isValidActionHandlers(const QJsonObject& appObject, const QStringLis
     return true;
 }
 
-static QVariantMap readGalleryPresentation() {
+static QVariantMap
+readGalleryPresentation()
+{
     QFile file(QStringLiteral(":/config/app-gallery.json"));
     if (!file.open(QIODevice::ReadOnly))
         return defaultGalleryPresentation();
@@ -119,7 +142,9 @@ static QVariantMap readGalleryPresentation() {
     return value.toVariantMap();
 }
 
-static QVariantMap defaultGalleryPresentation() {
+static QVariantMap
+defaultGalleryPresentation()
+{
     return QVariantMap{{"schemaVersion", 1},
                        {"title", "All Apps"},
                        {"layout", "grid"},
@@ -132,7 +157,9 @@ static QVariantMap defaultGalleryPresentation() {
                        {"favoritesEnabled", true}};
 }
 
-static bool validateGalleryKeys(const QJsonObject& value, const QStringList& keys) {
+static bool
+validateGalleryKeys(const QJsonObject& value, const QStringList& keys)
+{
     if (value.size() != keys.size())
         return false;
     for (const auto& key : keys)
@@ -141,7 +168,9 @@ static bool validateGalleryKeys(const QJsonObject& value, const QStringList& key
     return true;
 }
 
-static bool validateGalleryValues(const QJsonObject& value) {
+static bool
+validateGalleryValues(const QJsonObject& value)
+{
     const auto columns = value.value("columns").toDouble(-1);
     const auto title = value.value("title").toString().trimmed();
     return value.value("schemaVersion").toInt() == 1 && !title.isEmpty() && title.size() <= 48 &&
@@ -153,9 +182,12 @@ static bool validateGalleryValues(const QJsonObject& value) {
            value.value("filterEnabled").isBool() && value.value("favoritesEnabled").isBool();
 }
 
-QVariantList AppCatalog::entries() const {
+QVariantList
+AppCatalog::entries() const
+{
     QVariantList result;
-    for (const auto& entry : m_entries) {
+    for (const auto& entry : m_entries)
+    {
         if (entry.setup.custom && entry.core.app.type == "android" && !isInstalled(entry.core.app.id))
             continue;
         result.append(
@@ -174,13 +206,13 @@ QVariantList AppCatalog::entries() const {
                         {"presentationMode", entry.core.app.presentationMode},
                         {"type", entry.core.app.type},
                         {"storeType",
-                         entry.core.app.type == "android"                                              ? "android"
+                         entry.core.app.type == "android"                                                   ? "android"
                          : (entry.core.app.type == "web" || entry.core.app.presentationMode == "web-kiosk") ? "web"
-                                                                                                  : "native"},
+                                                                                                            : "native"},
                         {"profileIsolation",
                          entry.core.app.type == "android"   ? "private-android"
                          : entry.core.app.type == "desktop" ? "private-native"
-                                                       : (entry.core.app.type == "web" ? "private-web" : "")},
+                                                            : (entry.core.app.type == "web" ? "private-web" : "")},
                         {"networkRequirement", entry.core.app.networkRequirement},
                         {"handledActions", entry.core.app.handledActions},
                         {"accent", entry.core.app.accent.name()},
@@ -195,10 +227,13 @@ QVariantList AppCatalog::entries() const {
     return result;
 }
 
-QVariantList AppCatalog::galleryEntries() const {
+QVariantList
+AppCatalog::galleryEntries() const
+{
     QVariantList result;
     QSet<QString> seen;
-    const auto append = [this, &result, &seen](const QVariantMap& app, bool registered) {
+    const auto append = [this, &result, &seen](const QVariantMap& app, bool registered)
+    {
         const auto id = app.value("id").toString();
         const auto type = app.value("type").toString();
         if (id.isEmpty() || seen.contains(id) || !QStringList{"web", "desktop", "android"}.contains(type))
@@ -227,23 +262,28 @@ QVariantList AppCatalog::galleryEntries() const {
                                   {"failureReason", m_failureReasons.value(id)},
                                   {"setupPrompt", app.value("setupPrompt").toString()}});
     };
-    if (m_registry) {
+    if (m_registry)
+    {
         for (const auto& value : m_registry->apps())
             append(value.toMap(), true);
     }
     return result;
 }
 
-void AppCatalog::setStoreProvider(StoreProvider* provider) {
+void
+AppCatalog::setStoreProvider(StoreProvider* provider)
+{
     if (m_provider == provider)
         return;
     if (m_downloadReply)
         m_downloadReply->abort();
-    if (provider && !isValidStoreProvider(provider)) {
+    if (provider && !isValidStoreProvider(provider))
+    {
         setError(tr("Unknown Store source."));
         return;
     }
-    if (m_provider) {
+    if (m_provider)
+    {
         m_provider->cancel();
         m_provider->disconnect(this);
     }
@@ -259,14 +299,20 @@ void AppCatalog::setStoreProvider(StoreProvider* provider) {
     emit entriesChanged();
 }
 
-bool AppCatalog::isValidStoreProvider(StoreProvider* provider) const {
+bool
+AppCatalog::isValidStoreProvider(StoreProvider* provider) const
+{
     return provider->providerId() == "local" || provider->providerId() == "fdroid";
 }
 
-void AppCatalog::onStoreResultsChanged() {
-    if (m_provider && (!m_provider->isOnline() || m_onlineStoreSearch)) {
+void
+AppCatalog::onStoreResultsChanged()
+{
+    if (m_provider && (!m_provider->isOnline() || m_onlineStoreSearch))
+    {
         const auto results = m_provider->results();
-        if (results.size() > 200) {
+        if (results.size() > 200)
+        {
             setError(tr("The Store returned more than 200 results. Narrow your search."));
             return;
         }
@@ -276,12 +322,15 @@ void AppCatalog::onStoreResultsChanged() {
     }
 }
 
-void AppCatalog::onStoreUpdatesChanged() {
+void
+AppCatalog::onStoreUpdatesChanged()
+{
     if (!m_onlineStoreSearch || !m_provider)
         return;
     m_availableUpdates.clear();
     const auto results = m_provider->updateResults();
-    if (results.size() > 256) {
+    if (results.size() > 256)
+    {
         setError(tr("Too many update results."));
         return;
     }
@@ -290,33 +339,42 @@ void AppCatalog::onStoreUpdatesChanged() {
     emit entriesChanged();
 }
 
-void AppCatalog::processStoreUpdateResult(const QVariant& value) {
+void
+AppCatalog::processStoreUpdateResult(const QVariant& value)
+{
     const auto result = value.toMap();
     const auto package = result.value("packageName").toString();
     const auto id =
         "fdroid-" +
         QString::fromLatin1(QCryptographicHash::hash(package.toUtf8(), QCryptographicHash::Sha256).toHex().left(24));
     const auto* entry = findEntry(id);
-    if (entry && isInstalled(id) && !m_updatesDisabled.contains(id) &&
-        result.value("compatible").toBool() && result.value("metadataVerified").toBool() &&
+    if (entry && isInstalled(id) && !m_updatesDisabled.contains(id) && result.value("compatible").toBool() &&
+        result.value("metadataVerified").toBool() &&
         result.value("versionCode").toString().toULongLong() > entry->version.toULongLong())
         m_availableUpdates.insert(id, result);
 }
 
-void AppCatalog::onStoreProviderError(const QString& error) {
+void
+AppCatalog::onStoreProviderError(const QString& error)
+{
     setError(error.left(512));
 }
 
-void AppCatalog::setOnlineStoreSearch(bool enabled) {
+void
+AppCatalog::setOnlineStoreSearch(bool enabled)
+{
     if (m_onlineStoreSearch == enabled)
         return;
     if (!busy())
         m_operationStatus.clear();
     m_onlineStoreSearch = enabled;
-    if (enabled && m_provider) {
+    if (enabled && m_provider)
+    {
         setError({});
         m_provider->requestSearch(m_storeQuery);
-    } else {
+    }
+    else
+    {
         if (m_provider)
             m_provider->cancel();
         m_providerResults.clear();
@@ -329,22 +387,29 @@ void AppCatalog::setOnlineStoreSearch(bool enabled) {
     emit entriesChanged();
 }
 
-void AppCatalog::searchStore(const QString& query) {
-    if (query.size() > 128) {
+void
+AppCatalog::searchStore(const QString& query)
+{
+    if (query.size() > 128)
+    {
         setError(tr("Use a search of at most 128 characters."));
         return;
     }
     m_storeQuery = query.trimmed();
     if (!busy())
         m_operationStatus.clear();
-    if (m_provider && (!m_provider->isOnline() || m_onlineStoreSearch)) {
+    if (m_provider && (!m_provider->isOnline() || m_onlineStoreSearch))
+    {
         setError({});
         m_provider->requestSearch(m_storeQuery);
     }
 }
 
-void AppCatalog::browseOnlineStore(const QString& query) {
-    if (query.size() > 128) {
+void
+AppCatalog::browseOnlineStore(const QString& query)
+{
+    if (query.size() > 128)
+    {
         setError(tr("Use a search of at most 128 characters."));
         return;
     }
@@ -352,30 +417,40 @@ void AppCatalog::browseOnlineStore(const QString& query) {
     beginOnlineSearch(m_storeQuery);
 }
 
-void AppCatalog::beginOnlineSearch(const QString& query) {
+void
+AppCatalog::beginOnlineSearch(const QString& query)
+{
     if (m_onlineStoreSearch)
         searchStore(query);
     else
         setOnlineStoreSearch(true);
 }
 
-void AppCatalog::changeStorePage(int direction) {
-    if (!busy() && m_onlineStoreSearch && m_provider) {
+void
+AppCatalog::changeStorePage(int direction)
+{
+    if (!busy() && m_onlineStoreSearch && m_provider)
+    {
         m_operationStatus.clear();
         setError({});
         m_provider->requestPage(direction);
     }
 }
 
-QVariantList AppCatalog::allEntries() const {
+QVariantList
+AppCatalog::allEntries() const
+{
     if (!m_onlineStoreSearch)
         return entries();
     return mergedEntries();
 }
 
-QVariantList AppCatalog::mergedEntries() const {
+QVariantList
+AppCatalog::mergedEntries() const
+{
     QVariantList result = entries();
-    for (const auto& value : m_providerResults) {
+    for (const auto& value : m_providerResults)
+    {
         const auto map = value.toMap();
         const QString id = QStringLiteral("provider:") + map.value(QStringLiteral("id")).toString();
         const auto installedId =
@@ -396,13 +471,19 @@ QVariantList AppCatalog::mergedEntries() const {
     return result;
 }
 
-QString AppCatalog::errorString() const {
+QString
+AppCatalog::errorString() const
+{
     return m_errorString;
 }
-bool AppCatalog::isInstalled(const QString& id) const {
+bool
+AppCatalog::isInstalled(const QString& id) const
+{
     return m_installedIds.contains(id);
 }
-QString AppCatalog::packageState(const QString& id) const {
+QString
+AppCatalog::packageState(const QString& id) const
+{
     if (!isInstalled(id))
         return QStringLiteral("available");
     const auto state = m_packageStates.value(id, QStringLiteral("ready"));
@@ -411,15 +492,20 @@ QString AppCatalog::packageState(const QString& id) const {
     return QStringLiteral("ready");
 }
 
-const AppCatalog::Entry* AppCatalog::findEntry(const QString& id) const {
+const AppCatalog::Entry*
+AppCatalog::findEntry(const QString& id) const
+{
     for (const auto& entry : m_entries)
         if (entry.core.app.id == id)
             return &entry;
     return nullptr;
 }
 
-bool AppCatalog::load(const QString& catalogPath, const QString& statePath, const QString& installRoot) {
-    if (busy()) {
+bool
+AppCatalog::load(const QString& catalogPath, const QString& statePath, const QString& installRoot)
+{
+    if (busy())
+    {
         setError(tr("Finish the current app operation before reloading the catalog."));
         return false;
     }
@@ -429,14 +515,16 @@ bool AppCatalog::load(const QString& catalogPath, const QString& statePath, cons
     if (!resolveStateAndInstallPaths(statePath, installRoot, profile))
         return false;
     QFile file(source);
-    if (!file.open(QIODevice::ReadOnly)) {
+    if (!file.open(QIODevice::ReadOnly))
+    {
         setError(tr("Unable to open app catalog: %1").arg(source));
         return false;
     }
     QJsonParseError parseError;
     const auto document = QJsonDocument::fromJson(file.readAll(), &parseError);
     if (parseError.error != QJsonParseError::NoError || !document.isObject() ||
-        document.object().value("schemaVersion").toInt() != 1 || !document.object().value("packages").isArray()) {
+        document.object().value("schemaVersion").toInt() != 1 || !document.object().value("packages").isArray())
+    {
         setError(tr("Invalid app catalog: %1").arg(parseError.errorString()));
         return false;
     }
@@ -463,30 +551,33 @@ bool AppCatalog::load(const QString& catalogPath, const QString& statePath, cons
     return true;
 }
 
-QString AppCatalog::resolveCatalogPath(const QString& catalogPath) const {
+QString
+AppCatalog::resolveCatalogPath(const QString& catalogPath) const
+{
     if (!catalogPath.isEmpty())
         return catalogPath;
-    const auto defaultPath =
-        QDir(QCoreApplication::applicationDirPath()).filePath("config/catalog.json");
+    const auto defaultPath = QDir(QCoreApplication::applicationDirPath()).filePath("config/catalog.json");
     if (QFile::exists(defaultPath))
         return defaultPath;
     return QStringLiteral(":/config/catalog.json");
 }
 
-bool AppCatalog::resolveStateAndInstallPaths(const QString& statePath,
-                                             const QString& installRoot,
-                                             const QString& profile) {
+bool
+AppCatalog::resolveStateAndInstallPaths(const QString& statePath, const QString& installRoot, const QString& profile)
+{
     m_statePath =
         statePath.isEmpty()
             ? QDir(QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation)).filePath("installed-apps.json")
             : statePath;
     m_installRoot = installRoot.isEmpty()
-                            ? QDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)).filePath("packages")
-                            : installRoot;
+                        ? QDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)).filePath("packages")
+                        : installRoot;
     m_legacyInstallRoot.clear();
-    if (statePath.isEmpty() && installRoot.isEmpty()) {
+    if (statePath.isEmpty() && installRoot.isEmpty())
+    {
         static const QRegularExpression uuid("^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$");
-        if (profile != "default" && !uuid.match(profile).hasMatch()) {
+        if (profile != "default" && !uuid.match(profile).hasMatch())
+        {
             setError(tr("Invalid app profile."));
             return false;
         }
@@ -497,14 +588,18 @@ bool AppCatalog::resolveStateAndInstallPaths(const QString& statePath,
     return true;
 }
 
-void AppCatalog::cleanStagingDirectories() {
+void
+AppCatalog::cleanStagingDirectories()
+{
     QDir installDirectory(m_installRoot);
     for (const auto& name :
          installDirectory.entryList({QStringLiteral(".staging-*")}, QDir::Dirs | QDir::NoDotAndDotDot))
         QDir(installDirectory.filePath(name)).removeRecursively();
 }
 
-bool AppCatalog::loadStoreOptions(const QJsonObject& options) {
+bool
+AppCatalog::loadStoreOptions(const QJsonObject& options)
+{
     if (options.isEmpty())
         return true;
     if (!validateStoreOptionKeys(options))
@@ -519,20 +614,24 @@ bool AppCatalog::loadStoreOptions(const QJsonObject& options) {
         return false;
     if (!validateStoreAppOptions(options))
         return false;
-    if (options.contains("androidContainment") && !options.value("androidContainment").isString()) {
+    if (options.contains("androidContainment") && !options.value("androidContainment").isString())
+    {
         setError(tr("Invalid Android presentation mode."));
         return false;
     }
     m_storeOptions = options.toVariantMap();
     m_androidContainment = options.value("androidContainment").toString("fullscreen"); // Legacy catalog compatibility.
-    if (m_androidContainment != "fullscreen" && m_androidContainment != "windowed") {
+    if (m_androidContainment != "fullscreen" && m_androidContainment != "windowed")
+    {
         setError(tr("Invalid Android presentation mode."));
         return false;
     }
     return true;
 }
 
-bool AppCatalog::validateStoreOptionKeys(const QJsonObject& options) {
+bool
+AppCatalog::validateStoreOptionKeys(const QJsonObject& options)
+{
     const QSet<QString> allowed{"platforms",
                                 "columns",
                                 "spacing",
@@ -545,39 +644,50 @@ bool AppCatalog::validateStoreOptionKeys(const QJsonObject& options) {
                                 "appAccent",
                                 "androidContainment"};
     for (const auto& key : options.keys())
-        if (!allowed.contains(key)) {
+        if (!allowed.contains(key))
+        {
             setError(tr("Unknown Store presentation field."));
             return false;
         }
     return true;
 }
 
-bool AppCatalog::validateStoreSizes(const QJsonObject& options) {
+bool
+AppCatalog::validateStoreSizes(const QJsonObject& options)
+{
     for (const auto& key : QStringList{"columns", "spacing", "cardHeight"})
-        if (!options.value(key).isDouble() || options.value(key).toDouble() != options.value(key).toInt()) {
+        if (!options.value(key).isDouble() || options.value(key).toDouble() != options.value(key).toInt())
+        {
             setError(tr("Store sizes must use whole numbers."));
             return false;
         }
     return true;
 }
 
-bool AppCatalog::validateStoreDetailRatio(const QJsonObject& options) {
+bool
+AppCatalog::validateStoreDetailRatio(const QJsonObject& options)
+{
     if (options.contains("detailRatio") &&
         (!options.value("detailRatio").isDouble() || options.value("detailRatio").toDouble() < 0.25 ||
-         options.value("detailRatio").toDouble() > 0.5)) {
+         options.value("detailRatio").toDouble() > 0.5))
+    {
         setError(tr("Invalid Store details size."));
         return false;
     }
     return true;
 }
 
-bool AppCatalog::validateStorePlatforms(const QJsonObject& options) {
+bool
+AppCatalog::validateStorePlatforms(const QJsonObject& options)
+{
     const auto platforms = options.value("platforms").toArray();
     if (!validateStorePlatformOptions(platforms, options))
         return false;
     QSet<QString> types;
-    for (const auto& item : platforms) {
-        if (!validateStorePlatformItem(item.toObject(), types)) {
+    for (const auto& item : platforms)
+    {
+        if (!validateStorePlatformItem(item.toObject(), types))
+        {
             return false;
         }
         types.insert(item.toObject().value("type").toString());
@@ -585,62 +695,77 @@ bool AppCatalog::validateStorePlatforms(const QJsonObject& options) {
     return true;
 }
 
-bool AppCatalog::validateStorePlatformOptions(const QJsonArray& platforms, const QJsonObject& options) {
+bool
+AppCatalog::validateStorePlatformOptions(const QJsonArray& platforms, const QJsonObject& options)
+{
     return platforms.size() == 2 && options.value("columns").toInt() >= 1 && options.value("columns").toInt() <= 4 &&
            options.value("spacing").toInt() >= 8 && options.value("spacing").toInt() <= 48 &&
            options.value("cardHeight").toInt() >= 100 && options.value("cardHeight").toInt() <= 220;
 }
 
-bool AppCatalog::validateStorePlatformItem(const QJsonObject& p, QSet<QString>& types) {
+bool
+AppCatalog::validateStorePlatformItem(const QJsonObject& p, QSet<QString>& types)
+{
     for (const auto& key : p.keys())
-        if (key != "type" && key != "label") {
+        if (key != "type" && key != "label")
+        {
             setError(tr("Unknown Store platform field."));
             return false;
         }
     const auto type = p.value("type").toString();
     if ((type != "web" && type != "android") || types.contains(type) || p.value("label").toString().isEmpty() ||
-        p.value("label").toString().size() > 40) {
+        p.value("label").toString().size() > 40)
+    {
         setError(tr("Invalid Store platforms."));
         return false;
     }
     return true;
 }
 
-bool AppCatalog::validateStoreWebOptions(const QJsonObject& options) {
+bool
+AppCatalog::validateStoreWebOptions(const QJsonObject& options)
+{
     if (options.contains("webBackend") &&
-        (options.value("webBackend") != "chromium" && options.value("webBackend") != "embedded")) {
+        (options.value("webBackend") != "chromium" && options.value("webBackend") != "embedded"))
+    {
         setError(tr("Invalid web app backend."));
         return false;
     }
     if (options.contains("webDesktopId") && !QRegularExpression("^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$")
                                                  .match(options.value("webDesktopId").toString())
-                                                 .hasMatch()) {
+                                                 .hasMatch())
+    {
         setError(tr("Invalid web browser identity."));
         return false;
     }
     return true;
 }
 
-bool AppCatalog::validateStoreAppOptions(const QJsonObject& options) {
-    if (options.contains("appAccent") && !QColor(options.value("appAccent").toString()).isValid()) {
+bool
+AppCatalog::validateStoreAppOptions(const QJsonObject& options)
+{
+    if (options.contains("appAccent") && !QColor(options.value("appAccent").toString()).isValid())
+    {
         setError(tr("Invalid Store app color."));
         return false;
     }
     for (const auto& key : QStringList{"webCategory", "appSection"})
         if (options.contains(key) &&
-            (options.value(key).toString().isEmpty() || options.value(key).toString().size() > 80)) {
+            (options.value(key).toString().isEmpty() || options.value(key).toString().size() > 80))
+        {
             setError(tr("Invalid Store app label."));
             return false;
         }
     return true;
 }
 
-bool AppCatalog::loadPackageEntries(const QJsonDocument& document,
-                                     const QDir& catalogDirectory,
-                                     QVector<Entry>& loaded) {
+bool
+AppCatalog::loadPackageEntries(const QJsonDocument& document, const QDir& catalogDirectory, QVector<Entry>& loaded)
+{
     QSet<QString> ids;
     static const QRegularExpression manifestName("^packages/[a-z0-9][a-z0-9.-]{0,79}/manifest\\.json$");
-    for (const auto& value : document.object().value("packages").toArray()) {
+    for (const auto& value : document.object().value("packages").toArray())
+    {
         Entry entry;
         if (!loadPackageEntry(value, catalogDirectory, entry))
             return false;
@@ -652,9 +777,9 @@ bool AppCatalog::loadPackageEntries(const QJsonDocument& document,
     return true;
 }
 
-bool AppCatalog::loadPackageEntry(const QJsonValue& value,
-                                   const QDir& catalogDirectory,
-                                   Entry& entry) {
+bool
+AppCatalog::loadPackageEntry(const QJsonValue& value, const QDir& catalogDirectory, Entry& entry)
+{
     static const QRegularExpression safeId(QStringLiteral("^[a-z0-9][a-z0-9.-]*$"));
     static const QRegularExpression safeDesktopId(QStringLiteral("^[A-Za-z0-9][A-Za-z0-9._-]*$"));
     static const QRegularExpression safeBusName(QStringLiteral("^[A-Za-z_][A-Za-z0-9_.-]*$"));
@@ -674,20 +799,23 @@ bool AppCatalog::loadPackageEntry(const QJsonValue& value,
                                                   QStringLiteral("open-file"),
                                                   QStringLiteral("open-url"),
                                                   QStringLiteral("open-disc")};
-    if (!value.isString() || !manifestName.match(value.toString()).hasMatch()) {
+    if (!value.isString() || !manifestName.match(value.toString()).hasMatch())
+    {
         setError(tr("Unsafe package manifest path."));
         return false;
     }
     const auto manifestPath = catalogDirectory.filePath(value.toString());
     QFile manifestFile(manifestPath);
-    if (!manifestFile.open(QIODevice::ReadOnly)) {
+    if (!manifestFile.open(QIODevice::ReadOnly))
+    {
         setError(tr("Unable to open package manifest: %1").arg(manifestPath));
         return false;
     }
     const auto manifestData = manifestFile.readAll();
     QJsonParseError manifestError;
     const auto manifestDocument = QJsonDocument::fromJson(manifestData, &manifestError);
-    if (manifestError.error != QJsonParseError::NoError || !manifestDocument.isObject()) {
+    if (manifestError.error != QJsonParseError::NoError || !manifestDocument.isObject())
+    {
         setError(tr("Invalid package manifest: %1").arg(manifestPath));
         return false;
     }
@@ -701,7 +829,8 @@ bool AppCatalog::loadPackageEntry(const QJsonValue& value,
         appObject.value("presentationMode").toString(QStringLiteral("native-tv")).trimmed();
     entry.core.app.networkRequirement =
         appObject.value("networkRequirement")
-            .toString(entry.core.app.type == QStringLiteral("web") ? QStringLiteral("internet") : QStringLiteral("none"))
+            .toString(entry.core.app.type == QStringLiteral("web") ? QStringLiteral("internet")
+                                                                   : QStringLiteral("none"))
             .trimmed();
     entry.core.app.handledActions = readStringArray(appObject.value(QStringLiteral("handledActions")).toArray());
     entry.core.app.section = appObject.value("section").toString().trimmed();
@@ -723,20 +852,25 @@ bool AppCatalog::loadPackageEntry(const QJsonValue& value,
     return true;
 }
 
-bool AppCatalog::loadStateFile(const QString& stateReadPath) {
+bool
+AppCatalog::loadStateFile(const QString& stateReadPath)
+{
     QFile state(stateReadPath);
     if (!state.exists())
         return true;
-    if (!state.open(QIODevice::ReadOnly)) {
+    if (!state.open(QIODevice::ReadOnly))
+    {
         setError(tr("Unable to open app activation state."));
         return false;
     }
-    if (state.size() > 1024 * 1024) {
+    if (state.size() > 1024 * 1024)
+    {
         setError(tr("App activation state exceeds its limit."));
         return false;
     }
     const auto stateObject = QJsonDocument::fromJson(state.readAll()).object();
-    if (stateReadPath == m_statePath) {
+    if (stateReadPath == m_statePath)
+    {
         if (!loadStateAndroidContainment(stateObject))
             return false;
         if (!loadStateUpdatePreferences(stateObject))
@@ -751,10 +885,14 @@ bool AppCatalog::loadStateFile(const QString& stateReadPath) {
     return true;
 }
 
-bool AppCatalog::loadStateAndroidContainment(const QJsonObject& stateObject) {
+bool
+AppCatalog::loadStateAndroidContainment(const QJsonObject& stateObject)
+{
     const auto presentation = stateObject.value("androidContainment");
-    if (!presentation.isUndefined()) {
-        if (!isValidAndroidContainment(presentation)) {
+    if (!presentation.isUndefined())
+    {
+        if (!isValidAndroidContainment(presentation))
+        {
             setError(tr("Invalid Android presentation preference."));
             return false;
         }
@@ -763,21 +901,28 @@ bool AppCatalog::loadStateAndroidContainment(const QJsonObject& stateObject) {
     return true;
 }
 
-bool AppCatalog::isValidAndroidContainment(const QVariant& presentation) {
+bool
+AppCatalog::isValidAndroidContainment(const QVariant& presentation)
+{
     if (!presentation.isString())
         return false;
     return presentation == "fullscreen" || presentation == "windowed";
 }
 
-bool AppCatalog::loadStateUpdatePreferences(const QJsonObject& stateObject) {
+bool
+AppCatalog::loadStateUpdatePreferences(const QJsonObject& stateObject)
+{
     const auto disabled = stateObject.value("updatesDisabled");
-    if (!disabled.isUndefined() && (!disabled.isArray() || disabled.toArray().size() > 256)) {
+    if (!disabled.isUndefined() && (!disabled.isArray() || disabled.toArray().size() > 256))
+    {
         setError(tr("Invalid update preferences."));
         return false;
     }
-    for (const auto& value : disabled.toArray()) {
+    for (const auto& value : disabled.toArray())
+    {
         const auto id = value.toString();
-        if (!QRegularExpression("^fdroid-[a-f0-9]{24}$").match(id).hasMatch()) {
+        if (!QRegularExpression("^fdroid-[a-f0-9]{24}$").match(id).hasMatch())
+        {
             setError(tr("Invalid update preference identity."));
             return false;
         }
@@ -786,42 +931,48 @@ bool AppCatalog::loadStateUpdatePreferences(const QJsonObject& stateObject) {
     return true;
 }
 
-bool AppCatalog::loadStateStoreTransaction(const QJsonObject& stateObject) {
+bool
+AppCatalog::loadStateStoreTransaction(const QJsonObject& stateObject)
+{
     const auto transaction = stateObject.value("storeTransaction");
-    if (!transaction.isUndefined() && !transaction.isString()) {
+    if (!transaction.isUndefined() && !transaction.isString())
+    {
         setError(tr("Invalid app transaction identity."));
         return false;
     }
     m_storeTransaction = transaction.toString();
-    if (!m_storeTransaction.isEmpty() &&
-        !QRegularExpression("^[a-f0-9]{32}$").match(m_storeTransaction).hasMatch()) {
+    if (!m_storeTransaction.isEmpty() && !QRegularExpression("^[a-f0-9]{32}$").match(m_storeTransaction).hasMatch())
+    {
         setError(tr("Invalid app transaction identity."));
         return false;
     }
     return true;
 }
 
-bool AppCatalog::loadStateCustomPackages(const QJsonObject& stateObject) {
+bool
+AppCatalog::loadStateCustomPackages(const QJsonObject& stateObject)
+{
     const auto custom = stateObject.value("customPackages").toObject();
-    if (custom.size() > 256) {
+    if (custom.size() > 256)
+    {
         setError(tr("Too many custom apps in this profile."));
         return false;
     }
-    for (auto it = custom.begin(); it != custom.end(); ++it) {
+    for (auto it = custom.begin(); it != custom.end(); ++it)
+    {
         if (!QRegularExpression("^(web|fdroid)-[a-f0-9]{24}$").match(it.key()).hasMatch() ||
-            !QRegularExpression("^[0-9]{1,18}(?:\\.[0-9]{1,18}){0,3}$")
-                 .match(it.value().toString())
-                 .hasMatch()) {
+            !QRegularExpression("^[0-9]{1,18}(?:\\.[0-9]{1,18}){0,3}$").match(it.value().toString()).hasMatch())
+        {
             setError(tr("Invalid custom app identity."));
             return false;
         }
-        const auto path =
-            QDir(m_installRoot).filePath(it.key() + "/" + it.value().toString() + "/manifest.json");
+        const auto path = QDir(m_installRoot).filePath(it.key() + "/" + it.value().toString() + "/manifest.json");
         QFile customFile(path);
         const auto info = QFileInfo(path), base = QFileInfo(m_installRoot);
         if (info.isSymLink() || base.isSymLink() ||
             !info.canonicalFilePath().startsWith(base.canonicalFilePath() + "/") || info.size() > 65536 ||
-            !customFile.open(QIODevice::ReadOnly)) {
+            !customFile.open(QIODevice::ReadOnly))
+        {
             setError(tr("Unable to load this profile's custom app."));
             return false;
         }
@@ -836,18 +987,22 @@ bool AppCatalog::loadStateCustomPackages(const QJsonObject& stateObject) {
     return true;
 }
 
-bool AppCatalog::loadStateInstalledApps(const QJsonObject& stateObject) {
+bool
+AppCatalog::loadStateInstalledApps(const QJsonObject& stateObject)
+{
     const auto installed = stateObject.value("installed").toArray();
     const auto packageStates = stateObject.value(QStringLiteral("packageStates")).toObject();
     const auto failureReasons = stateObject.value(QStringLiteral("failureReasons")).toObject();
-    for (const auto& value : installed) {
-        if (const auto* entry = findEntry(value.toString())) {
+    for (const auto& value : installed)
+    {
+        if (const auto* entry = findEntry(value.toString()))
+        {
             const auto installedManifest =
                 QDir(m_installRoot).filePath(entry->packageId + "/" + entry->version + "/manifest.json");
             const auto legacyManifest =
                 QDir(m_legacyInstallRoot).filePath(entry->packageId + "/" + entry->version + "/manifest.json");
-            if (QFile::exists(installedManifest) ||
-                (!m_legacyInstallRoot.isEmpty() && QFile::exists(legacyManifest))) {
+            if (QFile::exists(installedManifest) || (!m_legacyInstallRoot.isEmpty() && QFile::exists(legacyManifest)))
+            {
                 m_installedIds.insert(entry->app.id);
                 m_registry->addApp(entry->app);
                 auto restoredState =
@@ -866,8 +1021,11 @@ bool AppCatalog::loadStateInstalledApps(const QJsonObject& stateObject) {
     return true;
 }
 
-bool AppCatalog::install(const QString& id) {
-    if (!ProfileManager::allows("install")) {
+bool
+AppCatalog::install(const QString& id)
+{
+    if (!ProfileManager::allows("install"))
+    {
         setError(tr("App installation is restricted in this profile. Change it in Settings > Profiles."));
         return false;
     }
@@ -891,7 +1049,9 @@ bool AppCatalog::install(const QString& id) {
     return true;
 }
 
-bool AppCatalog::isInstallableEntry(const AppCatalogEntry* entry, const QString& id) {
+bool
+AppCatalog::isInstallableEntry(const AppCatalogEntry* entry, const QString& id)
+{
     if (!entry || isInstalled(id))
         return false;
     if (busy() && !m_committing)
@@ -899,26 +1059,31 @@ bool AppCatalog::isInstallableEntry(const AppCatalogEntry* entry, const QString&
     return true;
 }
 
-bool AppCatalog::stagePackageDirectory(const AppCatalogEntry* entry, const QString& id, bool& createdPackage) {
+bool
+AppCatalog::stagePackageDirectory(const AppCatalogEntry* entry, const QString& id, bool& createdPackage)
+{
     const auto packageDirectory = QDir(m_installRoot).filePath(entry->packageId + "/" + entry->version);
     if (QFile::exists(QDir(packageDirectory).filePath("manifest.json")))
         return true;
     QDir().mkpath(m_installRoot);
     const auto staging = QDir(m_installRoot).filePath(".staging-" + entry->packageId + "-" + entry->version);
     QDir(staging).removeRecursively();
-    if (!QDir().mkpath(staging)) {
+    if (!QDir().mkpath(staging))
+    {
         setError(tr("Unable to stage package %1.").arg(id));
         return false;
     }
     QSaveFile manifest(QDir(staging).filePath("manifest.json"));
     if (!manifest.open(QIODevice::WriteOnly) || manifest.write(entry->manifestData) != entry->manifestData.size() ||
-        !manifest.commit()) {
+        !manifest.commit())
+    {
         QDir(staging).removeRecursively();
         setError(tr("Unable to write staged package %1.").arg(id));
         return false;
     }
     QDir().mkpath(QFileInfo(packageDirectory).absolutePath());
-    if (!QDir().rename(staging, packageDirectory)) {
+    if (!QDir().rename(staging, packageDirectory))
+    {
         QDir(staging).removeRecursively();
         setError(tr("Unable to activate package %1.").arg(id));
         return false;
@@ -927,16 +1092,21 @@ bool AppCatalog::stagePackageDirectory(const AppCatalogEntry* entry, const QStri
     return true;
 }
 
-bool AppCatalog::registerAndSaveInstall(const AppCatalogEntry* entry, const QString& id, bool createdPackage) {
-    const auto rollbackPackage = [&] {
-        if (createdPackage) {
+bool
+AppCatalog::registerAndSaveInstall(const AppCatalogEntry* entry, const QString& id, bool createdPackage)
+{
+    const auto rollbackPackage = [&]
+    {
+        if (createdPackage)
+        {
             const auto packageDirectory = QDir(m_installRoot).filePath(entry->packageId + "/" + entry->version);
             if (!QDir(packageDirectory).removeRecursively())
                 setError(tr("%1 The new package could not be removed; preserve its storage and retry recovery.")
                              .arg(m_errorString));
         }
     };
-    if (!m_registry->addApp(entry->app)) {
+    if (!m_registry->addApp(entry->app))
+    {
         setError(m_registry->errorString());
         rollbackPackage();
         return false;
@@ -946,7 +1116,8 @@ bool AppCatalog::registerAndSaveInstall(const AppCatalogEntry* entry, const QStr
     m_installedIds.insert(id);
     m_packageStates.insert(id, entry->setupRequired ? QStringLiteral("needs-setup") : QStringLiteral("ready"));
     m_failureReasons.remove(id);
-    if (!saveState()) {
+    if (!saveState())
+    {
         m_installedIds.remove(id);
         m_packageStates.remove(id);
         m_failureReasons.remove(id);
@@ -959,30 +1130,35 @@ bool AppCatalog::registerAndSaveInstall(const AppCatalogEntry* entry, const QStr
     return true;
 }
 
-bool AppCatalog::customEntry(const QJsonObject& data, Entry* entry) {
+bool
+AppCatalog::customEntry(const QJsonObject& data, Entry* entry)
+{
     if (data.value("kind") == "fdroid")
         return parseFdroidEntry(data, entry);
     return parseWebEntry(data, entry);
 }
 
-bool AppCatalog::parseFdroidEntry(const QJsonObject& data, Entry* entry) {
-    const QSet<QString> fields{
-        "schemaVersion", "kind", "id", "name", "version", "packageName", "sha256", "provenance"};
+bool
+AppCatalog::parseFdroidEntry(const QJsonObject& data, Entry* entry)
+{
+    const QSet<QString> fields{"schemaVersion", "kind", "id", "name", "version", "packageName", "sha256", "provenance"};
     for (const auto& key : data.keys())
-        if (!fields.contains(key)) {
+        if (!fields.contains(key))
+        {
             setError(tr("Unknown Android package field."));
             return false;
         }
     const auto package = data.value("packageName").toString(), name = data.value("name").toString().trimmed();
     const auto id =
-        "fdroid-" + QString::fromLatin1(
-                        QCryptographicHash::hash(package.toUtf8(), QCryptographicHash::Sha256).toHex().left(24));
+        "fdroid-" +
+        QString::fromLatin1(QCryptographicHash::hash(package.toUtf8(), QCryptographicHash::Sha256).toHex().left(24));
     if (data.value("schemaVersion").toInt() != 1 || data.value("id") != id || package.size() > 200 ||
         !QRegularExpression("^[A-Za-z][A-Za-z0-9_]*(?:\\.[A-Za-z0-9_]+)+$").match(package).hasMatch() ||
         !QRegularExpression("^[0-9]{1,18}$").match(data.value("version").toString()).hasMatch() ||
         !QRegularExpression("^[a-f0-9]{64}$").match(data.value("sha256").toString()).hasMatch() || name.isEmpty() ||
         name.size() > 80 || name.contains(QRegularExpression("[\\x00-\\x1f<>]")) ||
-        data.value("provenance").toString().isEmpty() || data.value("provenance").toString().size() > 512) {
+        data.value("provenance").toString().isEmpty() || data.value("provenance").toString().size() > 512)
+    {
         setError(tr("Invalid verified Android package metadata."));
         return false;
     }
@@ -1001,14 +1177,17 @@ bool AppCatalog::parseFdroidEntry(const QJsonObject& data, Entry* entry) {
     entry->publisher = package;
     entry->provenance = data.value("provenance").toString();
     entry->manifestData = QJsonDocument(data).toJson();
-    if (!entry->app.isValid()) {
+    if (!entry->app.isValid())
+    {
         setError(tr("Invalid Android app presentation."));
         return false;
     }
     return true;
 }
 
-bool AppCatalog::parseWebEntry(const QJsonObject& data, Entry* entry) {
+bool
+AppCatalog::parseWebEntry(const QJsonObject& data, Entry* entry)
+{
     if (!validateWebEntryFields(data))
         return false;
     const auto name = data.value("name").toString().trimmed(), address = data.value("url").toString(),
@@ -1017,10 +1196,9 @@ bool AppCatalog::parseWebEntry(const QJsonObject& data, Entry* entry) {
     if (!validateWebEntryValues(data, name, url, backend))
         return false;
     const auto canonical = url.toString(QUrl::FullyEncoded);
-    const auto id = "web-" +
-                    QString::fromLatin1(QCryptographicHash::hash(canonical.toUtf8(), QCryptographicHash::Sha256)
-                                            .toHex()
-                                            .left(24));
+    const auto id =
+        "web-" +
+        QString::fromLatin1(QCryptographicHash::hash(canonical.toUtf8(), QCryptographicHash::Sha256).toHex().left(24));
     if (!validateWebEntryId(data, id))
         return false;
     const auto origin = webEntryOrigin(url);
@@ -1033,18 +1211,25 @@ bool AppCatalog::parseWebEntry(const QJsonObject& data, Entry* entry) {
     return true;
 }
 
-bool AppCatalog::validateWebEntryFields(const QJsonObject& data) {
+bool
+AppCatalog::validateWebEntryFields(const QJsonObject& data)
+{
     const QSet<QString> fields{"schemaVersion", "kind", "id", "name", "url", "backend", "version"};
     for (const auto& key : data.keys())
-        if (!fields.contains(key)) {
+        if (!fields.contains(key))
+        {
             setError(tr("Unknown custom app field."));
             return false;
         }
     return true;
 }
 
-bool AppCatalog::validateWebEntryValues(const QJsonObject& data, const QString& name, const QUrl& url,
-                                        const QString& backend) {
+bool
+AppCatalog::validateWebEntryValues(const QJsonObject& data,
+                                   const QString& name,
+                                   const QUrl& url,
+                                   const QString& backend)
+{
     return data.value("schemaVersion").toInt() == 1 && data.value("kind") == "web" &&
            data.value("version") == "1.0.0" && !name.isEmpty() && name.size() <= 80 &&
            !name.contains(QRegularExpression("[\\x00-\\x1f<>]")) && addressSizeValid(url) && url.isValid() &&
@@ -1052,19 +1237,26 @@ bool AppCatalog::validateWebEntryValues(const QJsonObject& data, const QString& 
            (backend == "chromium" || backend == "embedded");
 }
 
-bool AppCatalog::addressSizeValid(const QUrl& url) {
+bool
+AppCatalog::addressSizeValid(const QUrl& url)
+{
     return url.toString().size() <= 2048;
 }
 
-bool AppCatalog::validateWebEntryId(const QJsonObject& data, const QString& id) {
-    if (data.value("id") != id) {
+bool
+AppCatalog::validateWebEntryId(const QJsonObject& data, const QString& id)
+{
+    if (data.value("id") != id)
+    {
         setError(tr("The web app identity does not match its address."));
         return false;
     }
     return true;
 }
 
-QUrl AppCatalog::webEntryOrigin(const QUrl& url) {
+QUrl
+AppCatalog::webEntryOrigin(const QUrl& url)
+{
     QUrl origin;
     origin.setScheme(url.scheme());
     origin.setHost(url.host());
@@ -1072,8 +1264,15 @@ QUrl AppCatalog::webEntryOrigin(const QUrl& url) {
     return origin;
 }
 
-void AppCatalog::configureWebEntryApp(Entry* entry, const QString& id, const QString& name, const QString& backend,
-                                      const QString& canonical, const QUrl& origin, const QJsonObject& storeOptions) {
+void
+AppCatalog::configureWebEntryApp(Entry* entry,
+                                 const QString& id,
+                                 const QString& name,
+                                 const QString& backend,
+                                 const QString& canonical,
+                                 const QUrl& origin,
+                                 const QJsonObject& storeOptions)
+{
     entry->app.id = id;
     entry->app.name = name;
     entry->app.type = backend == "chromium" ? "desktop" : "web";
@@ -1085,9 +1284,12 @@ void AppCatalog::configureWebEntryApp(Entry* entry, const QString& id, const QSt
     entry->app.launchConfiguration = {{"url", canonical}, {"allowedOrigins", QStringList{origin.toString()}}};
 }
 
-bool AppCatalog::configureWebEntryChromium(Entry* entry, const QJsonObject& storeOptions) {
+bool
+AppCatalog::configureWebEntryChromium(Entry* entry, const QJsonObject& storeOptions)
+{
     const auto browser = storeOptions.value("webDesktopId").toString();
-    if (!QRegularExpression("^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$").match(browser).hasMatch()) {
+    if (!QRegularExpression("^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$").match(browser).hasMatch())
+    {
         setError(tr("Choose a browser in the Store configuration."));
         return false;
     }
@@ -1100,16 +1302,25 @@ bool AppCatalog::configureWebEntryChromium(Entry* entry, const QJsonObject& stor
     return true;
 }
 
-bool AppCatalog::validateWebEntryAppearance(Entry* entry, const QJsonObject& storeOptions) {
-    if (!entry->app.accent.isValid() || entry->app.section.isEmpty()) {
+bool
+AppCatalog::validateWebEntryAppearance(Entry* entry, const QJsonObject& storeOptions)
+{
+    if (!entry->app.accent.isValid() || entry->app.section.isEmpty())
+    {
         setError(tr("Configure the Store app appearance before adding a website."));
         return false;
     }
     return true;
 }
 
-void AppCatalog::finalizeWebEntry(Entry* entry, const QString& id, const QString& canonical, const QString& publisher,
-                                  const QJsonObject& storeOptions, const QJsonObject& data) {
+void
+AppCatalog::finalizeWebEntry(Entry* entry,
+                             const QString& id,
+                             const QString& canonical,
+                             const QString& publisher,
+                             const QJsonObject& storeOptions,
+                             const QJsonObject& data)
+{
     entry->packageId = id;
     entry->version = "1.0.0";
     entry->description = canonical;
@@ -1120,12 +1331,16 @@ void AppCatalog::finalizeWebEntry(Entry* entry, const QString& id, const QString
     entry->manifestData = QJsonDocument(data).toJson();
 }
 
-bool AppCatalog::installCustom(const QJsonObject& data) {
-    if (!ProfileManager::allows("install")) {
+bool
+AppCatalog::installCustom(const QJsonObject& data)
+{
+    if (!ProfileManager::allows("install"))
+    {
         setError(tr("App installation is restricted in this profile. Change it in Settings > Profiles."));
         return false;
     }
-    if (busy()) {
+    if (busy())
+    {
         setError(tr("Finish the current app operation first."));
         return false;
     }
@@ -1134,7 +1349,8 @@ bool AppCatalog::installCustom(const QJsonObject& data) {
         return false;
     if (const auto* existing = findEntry(entry.core.app.id))
         return install(existing->app.id);
-    if (m_customPackages.size() >= 256) {
+    if (m_customPackages.size() >= 256)
+    {
         setError(tr("This profile already has 256 custom apps."));
         return false;
     }
@@ -1146,45 +1362,57 @@ bool AppCatalog::installCustom(const QJsonObject& data) {
     return false;
 }
 
-bool AppCatalog::validateProviderStorage(const QString& installRoot, const QString& id,
-                                          const QString& version) {
+bool
+AppCatalog::validateProviderStorage(const QString& installRoot, const QString& id, const QString& version)
+{
     const auto directory = QDir(installRoot).filePath(id + "/" + version);
     if (QFileInfo(installRoot).canonicalFilePath() != QDir::cleanPath(QFileInfo(installRoot).absoluteFilePath()) ||
-        QFileInfo(QDir(installRoot).filePath(id)).isSymLink() || QFileInfo(directory).isSymLink()) {
+        QFileInfo(QDir(installRoot).filePath(id)).isSymLink() || QFileInfo(directory).isSymLink())
+    {
         setError(tr("Android package storage is redirected."));
         return false;
     }
     return true;
 }
 
-bool AppCatalog::writeProviderPackage(const QString& staging, const QString& directory,
-                                       const QByteArray& downloadData, const QByteArray& manifestData) {
-    if (QFileInfo(staging).exists() || !QDir().mkpath(staging)) {
+bool
+AppCatalog::writeProviderPackage(const QString& staging,
+                                 const QString& directory,
+                                 const QByteArray& downloadData,
+                                 const QByteArray& manifestData)
+{
+    if (QFileInfo(staging).exists() || !QDir().mkpath(staging))
+    {
         setError(tr("Unable to stage Android package in profile storage."));
         return false;
     }
-    const auto write = [&](const QString& name, const QByteArray& bytes) {
+    const auto write = [&](const QString& name, const QByteArray& bytes)
+    {
         QSaveFile file(QDir(staging).filePath(name));
         return file.open(QIODevice::WriteOnly) && file.write(bytes) == bytes.size() && file.commit();
     };
     if (!write("app.apk", downloadData) || !write("manifest.json", manifestData) ||
-        !QDir().mkpath(QFileInfo(directory).absolutePath()) || !QDir().rename(staging, directory)) {
+        !QDir().mkpath(QFileInfo(directory).absolutePath()) || !QDir().rename(staging, directory))
+    {
         QDir(staging).removeRecursively();
         return false;
     }
     return true;
 }
 
-bool AppCatalog::resolveProviderInstall(const QString& id, QString& localId) {
-    for (const auto& value : m_providerResults) {
+bool
+AppCatalog::resolveProviderInstall(const QString& id, QString& localId)
+{
+    for (const auto& value : m_providerResults)
+    {
         const auto result = value.toMap();
-        if ("provider:" + result.value("id").toString() == id) {
-            localId =
-                "fdroid-" +
-                QString::fromLatin1(QCryptographicHash::hash(result.value("packageName").toString().toUtf8(),
-                                                             QCryptographicHash::Sha256)
-                                        .toHex()
-                                        .left(24));
+        if ("provider:" + result.value("id").toString() == id)
+        {
+            localId = "fdroid-" +
+                      QString::fromLatin1(QCryptographicHash::hash(result.value("packageName").toString().toUtf8(),
+                                                                   QCryptographicHash::Sha256)
+                                              .toHex()
+                                              .left(24));
             if (findEntry(localId))
                 return true;
             return downloadAndInstall(result.value("storeId").toString());
@@ -1194,7 +1422,9 @@ bool AppCatalog::resolveProviderInstall(const QString& id, QString& localId) {
     return false;
 }
 
-QString AppCatalog::addWebApp(const QString& name, const QString& address, const QString& backend) {
+QString
+AppCatalog::addWebApp(const QString& name, const QString& address, const QString& backend)
+{
     const QUrl url(address.trimmed(), QUrl::StrictMode);
     const auto canonical = url.toString(QUrl::FullyEncoded);
     const auto id =
@@ -1213,18 +1443,25 @@ QString AppCatalog::addWebApp(const QString& name, const QString& address, const
                : QString();
 }
 
-bool AppCatalog::downloadAndInstall(const QString& storeId) {
-    if (!m_onlineStoreSearch || !m_provider || !m_provider->isOnline() || busy()) {
+bool
+AppCatalog::downloadAndInstall(const QString& storeId)
+{
+    if (!m_onlineStoreSearch || !m_provider || !m_provider->isOnline() || busy())
+    {
         setError(tr("Online store search is not enabled."));
         emit operationFailed(m_errorString);
         return false;
     }
     const auto results = m_providerResults;
-    const auto it = std::find_if(results.begin(), results.end(), [&](const auto& v) {
-        const auto map = v.toMap();
-        return map.value(QStringLiteral("storeId")) == storeId;
-    });
-    if (it == results.end()) {
+    const auto it = std::find_if(results.begin(),
+                                 results.end(),
+                                 [&](const auto& v)
+                                 {
+                                     const auto map = v.toMap();
+                                     return map.value(QStringLiteral("storeId")) == storeId;
+                                 });
+    if (it == results.end())
+    {
         setError(tr("App not found in store results."));
         emit operationFailed(m_errorString);
         return false;
@@ -1233,12 +1470,15 @@ bool AppCatalog::downloadAndInstall(const QString& storeId) {
     return beginDownload(result, false);
 }
 
-bool AppCatalog::beginDownload(const QVariantMap& result, bool update) {
+bool
+AppCatalog::beginDownload(const QVariantMap& result, bool update)
+{
     if (!validBeginDownloadArgs())
         return false;
     const auto storeId = result.value("storeId").toString();
     const QUrl artifactUrl = update ? QUrl(result.value("downloadUrl").toString()) : m_provider->artifactUrl(storeId);
-    if (!validateArtifactUrl(artifactUrl)) {
+    if (!validateArtifactUrl(artifactUrl))
+    {
         setError(tr("Store provides no download URL."));
         emit operationFailed(m_errorString);
         return false;
@@ -1251,16 +1491,22 @@ bool AppCatalog::beginDownload(const QVariantMap& result, bool update) {
     return startDownload(artifactUrl);
 }
 
-bool AppCatalog::validBeginDownloadArgs() const {
+bool
+AppCatalog::validBeginDownloadArgs() const
+{
     return ProfileManager::allows("install") && m_onlineStoreSearch && m_provider && !busy();
 }
 
-bool AppCatalog::validateArtifactUrl(const QUrl& artifactUrl) const {
+bool
+AppCatalog::validateArtifactUrl(const QUrl& artifactUrl) const
+{
     return artifactUrl.isValid() && artifactUrl.scheme() == "https" && !artifactUrl.host().isEmpty() &&
            artifactUrl.userInfo().isEmpty();
 }
 
-bool AppCatalog::setupDownloadState(const QVariantMap& result, const QString& storeId, bool update) {
+bool
+AppCatalog::setupDownloadState(const QVariantMap& result, const QString& storeId, bool update)
+{
     m_downloadProfile = qApp->property("isoldeProfile").toString();
     m_downloadStoreId = storeId;
     m_downloadExpectedHash =
@@ -1268,20 +1514,26 @@ bool AppCatalog::setupDownloadState(const QVariantMap& result, const QString& st
     return m_downloadExpectedHash.size() == 32;
 }
 
-bool AppCatalog::validateDownloadResult(const QVariantMap& result) {
-    if (m_downloadExpectedHash.size() != 32) {
+bool
+AppCatalog::validateDownloadResult(const QVariantMap& result)
+{
+    if (m_downloadExpectedHash.size() != 32)
+    {
         setError(tr("The Store source did not supply a verified SHA-256."));
         return false;
     }
     if (m_provider->providerId() != "fdroid" || result.value("type") != "android" ||
-        !result.value("metadataVerified").toBool() || !result.value("compatible").toBool()) {
+        !result.value("metadataVerified").toBool() || !result.value("compatible").toBool())
+    {
         setError(tr("Verified repository metadata and a compatible Android package are required."));
         return false;
     }
     return true;
 }
 
-void AppCatalog::initializeDownloadOperation(const QVariantMap& result, bool update) {
+void
+AppCatalog::initializeDownloadOperation(const QVariantMap& result, bool update)
+{
     m_downloadResult = result;
     m_operationName = result.value("name").toString();
     m_cancelRequested = false;
@@ -1290,21 +1542,29 @@ void AppCatalog::initializeDownloadOperation(const QVariantMap& result, bool upd
     m_operationStatus = update ? tr("Downloading update...") : tr("Downloading app...");
 }
 
-bool AppCatalog::startDownload(const QUrl& artifactUrl) {
+bool
+AppCatalog::startDownload(const QUrl& artifactUrl)
+{
     QNetworkRequest request(artifactUrl);
     request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
     request.setRawHeader("User-Agent", QByteArray("Isolde/") + QCoreApplication::applicationVersion().toUtf8());
     request.setTransferTimeout(120000);
     m_downloadReply = m_network.get(request);
     connect(m_downloadReply, &QNetworkReply::readyRead, this, &AppCatalog::onDownloadReadyRead);
-    connect(m_downloadReply, &QNetworkReply::downloadProgress, this, [this](qint64 received, qint64 total) {
-        if (received > 128 * 1024 * 1024 || total > 128 * 1024 * 1024) {
-            m_downloadReply->abort();
-            return;
-        }
-        m_downloadProgress = total > 0 ? tr("%1%").arg(qRound(100.0 * received / total)) : tr("%1 bytes").arg(received);
-        emit downloadProgressChanged();
-    });
+    connect(m_downloadReply,
+            &QNetworkReply::downloadProgress,
+            this,
+            [this](qint64 received, qint64 total)
+            {
+                if (received > 128 * 1024 * 1024 || total > 128 * 1024 * 1024)
+                {
+                    m_downloadReply->abort();
+                    return;
+                }
+                m_downloadProgress =
+                    total > 0 ? tr("%1%").arg(qRound(100.0 * received / total)) : tr("%1 bytes").arg(received);
+                emit downloadProgressChanged();
+            });
     m_downloadData.clear();
     emit entriesChanged();
     m_downloadProgress.clear();
@@ -1312,8 +1572,11 @@ bool AppCatalog::startDownload(const QUrl& artifactUrl) {
     return true;
 }
 
-bool AppCatalog::stageProviderArtifact(const QString& storeId, const QVariantMap& result) {
-    if (!ProfileManager::allows("install")) {
+bool
+AppCatalog::stageProviderArtifact(const QString& storeId, const QVariantMap& result)
+{
+    if (!ProfileManager::allows("install"))
+    {
         setError(tr("App installation was restricted before the download completed."));
         emit operationFailed(m_errorString);
         return false;
@@ -1343,11 +1606,15 @@ bool AppCatalog::stageProviderArtifact(const QString& storeId, const QVariantMap
     QDir().mkpath(m_installRoot);
     if (!validateProviderStorage(m_installRoot, id, entry.core.version))
         return false;
-    if (QFileInfo(directory).exists()) {
+    if (QFileInfo(directory).exists())
+    {
         if (!verifyExistingPackage(directory, entry.setup.manifestData))
             return false;
-    } else {
-        if (!writeProviderPackage(staging, directory, m_downloadData, entry.setup.manifestData)) {
+    }
+    else
+    {
+        if (!writeProviderPackage(staging, directory, m_downloadData, entry.setup.manifestData))
+        {
             QDir(staging).removeRecursively();
             setError(tr("Unable to save verified Android package."));
             return false;
@@ -1357,7 +1624,8 @@ bool AppCatalog::stageProviderArtifact(const QString& storeId, const QVariantMap
         m_pendingUpdate = entry;
     else
         m_entries.append(entry);
-    if (!androidOperation(entry, "install")) {
+    if (!androidOperation(entry, "install"))
+    {
         if (updating)
             m_pendingUpdate.reset();
         else
@@ -1368,32 +1636,41 @@ bool AppCatalog::stageProviderArtifact(const QString& storeId, const QVariantMap
     return true;
 }
 
-bool AppCatalog::canUpdateOrAddEntry(const Entry* previous, bool updating, quint64 newVersion) {
+bool
+AppCatalog::canUpdateOrAddEntry(const Entry* previous, bool updating, quint64 newVersion)
+{
     if ((previous && !updating) || (!updating && m_customPackages.size() >= 256) ||
-        (updating && newVersion <= previous->core.version.toULongLong())) {
+        (updating && newVersion <= previous->core.version.toULongLong()))
+    {
         setError(tr("App already registered, update is not newer, or profile app limit reached."));
         return false;
     }
     return true;
 }
 
-bool AppCatalog::verifyExistingPackage(const QString& directory, const QByteArray& manifestData) {
+bool
+AppCatalog::verifyExistingPackage(const QString& directory, const QByteArray& manifestData)
+{
     QFile manifestFile(directory + "/manifest.json"), apkFile(directory + "/app.apk");
     if (QFileInfo(manifestFile).isSymLink() || QFileInfo(apkFile).isSymLink() ||
         QFileInfo(manifestFile).size() > 65536 || QFileInfo(apkFile).size() > 128 * 1024 * 1024 ||
         !manifestFile.open(QIODevice::ReadOnly) || manifestFile.readAll() != manifestData ||
         !apkFile.open(QIODevice::ReadOnly) ||
-        QCryptographicHash::hash(apkFile.readAll(), QCryptographicHash::Sha256) != m_downloadExpectedHash) {
+        QCryptographicHash::hash(apkFile.readAll(), QCryptographicHash::Sha256) != m_downloadExpectedHash)
+    {
         setError(tr("Existing staged package differs from this verified update. Preserve it and retry recovery."));
         return false;
     }
     return true;
 }
 
-void AppCatalog::onDownloadFinished() {
+void
+AppCatalog::onDownloadFinished()
+{
     if (!m_downloadReply)
         return;
-    if (m_downloadReply->error() != QNetworkReply::NoError) {
+    if (m_downloadReply->error() != QNetworkReply::NoError)
+    {
         const QString error = m_cancelRequested ? tr("Download cancelled. No app was changed.")
                                                 : tr("Download failed: %1").arg(m_downloadReply->errorString());
         qWarning() << "Download error" << m_downloadReply->error() << error;
@@ -1407,7 +1684,8 @@ void AppCatalog::onDownloadFinished() {
         emit entriesChanged();
         return;
     }
-    if (m_downloadProfile != qApp->property("isoldeProfile").toString()) {
+    if (m_downloadProfile != qApp->property("isoldeProfile").toString())
+    {
         auto* reply = m_downloadReply;
         m_downloadReply = nullptr;
         reply->deleteLater();
@@ -1417,14 +1695,17 @@ void AppCatalog::onDownloadFinished() {
         return;
     }
     onDownloadReadyRead();
-    if (m_downloadReply->error() != QNetworkReply::NoError) {
+    if (m_downloadReply->error() != QNetworkReply::NoError)
+    {
         onDownloadFinished();
         return;
     }
     const QByteArray sha = m_downloadExpectedHash;
-    if (!sha.isEmpty()) {
+    if (!sha.isEmpty())
+    {
         QByteArray actual = QCryptographicHash::hash(m_downloadData, QCryptographicHash::Sha256);
-        if (actual != sha) {
+        if (actual != sha)
+        {
             setError(tr("Artifact hash mismatch. Aborting."));
             emit operationFailed(m_errorString);
             m_downloadProgress = QString();
@@ -1446,21 +1727,28 @@ void AppCatalog::onDownloadFinished() {
     emit downloadProgressChanged();
 }
 
-void AppCatalog::onDownloadReadyRead() {
+void
+AppCatalog::onDownloadReadyRead()
+{
     if (!m_downloadReply)
         return;
-    if (m_downloadData.size() + m_downloadReply->bytesAvailable() > 128 * 1024 * 1024) {
+    if (m_downloadData.size() + m_downloadReply->bytesAvailable() > 128 * 1024 * 1024)
+    {
         m_downloadReply->abort();
         return;
     }
     m_downloadData += m_downloadReply->readAll();
 }
 
-void AppCatalog::onDownloadError(QNetworkReply::NetworkError /*code*/) {
+void
+AppCatalog::onDownloadError(QNetworkReply::NetworkError /*code*/)
+{
     // Error handling is done in onDownloadFinished via the error code check.
 }
 
-bool AppCatalog::uninstall(const QString& id) {
+bool
+AppCatalog::uninstall(const QString& id)
+{
     const auto* entry = findEntry(id);
     if (!entry || !isInstalled(id))
         return false;
@@ -1474,7 +1762,8 @@ bool AppCatalog::uninstall(const QString& id) {
     m_packageStates.remove(id);
     m_failureReasons.remove(id);
     m_registry->removeApp(id);
-    if (!saveState()) {
+    if (!saveState())
+    {
         m_installedIds.insert(id);
         if (!previousState.isEmpty())
             m_packageStates.insert(id, previousState);
@@ -1484,11 +1773,13 @@ bool AppCatalog::uninstall(const QString& id) {
         return false;
     }
     QDir(QDir(m_installRoot).filePath(entry->packageId)).removeRecursively();
-    if (entry->custom) {
+    if (entry->custom)
+    {
         m_availableUpdates.remove(id);
         m_customPackages.remove(id);
         for (qsizetype i = 0; i < m_entries.size(); ++i)
-            if (m_entries[i].app.id == id) {
+            if (m_entries[i].app.id == id)
+            {
                 m_entries.removeAt(i);
                 break;
             }
@@ -1498,9 +1789,12 @@ bool AppCatalog::uninstall(const QString& id) {
     return true;
 }
 
-bool AppCatalog::androidOperation(const Entry& entry, const QString& operation) {
+bool
+AppCatalog::androidOperation(const Entry& entry, const QString& operation)
+{
     const auto helper = findAndroidHelper();
-    if (helper.isEmpty()) {
+    if (helper.isEmpty())
+    {
         setError(tr("Android support is missing. Run the Isolde installer with Android support."));
         return false;
     }
@@ -1513,7 +1807,9 @@ bool AppCatalog::androidOperation(const Entry& entry, const QString& operation) 
     return true;
 }
 
-QString AppCatalog::findAndroidHelper() const {
+QString
+AppCatalog::findAndroidHelper() const
+{
     const auto base = QCoreApplication::applicationDirPath();
     for (const auto& path : {base + "/../share/isolde/android-session.py", base + "/share/isolde/android-session.py"})
         if (QFileInfo(path).isFile())
@@ -1521,14 +1817,18 @@ QString AppCatalog::findAndroidHelper() const {
     return QString();
 }
 
-QString AppCatalog::resolveAndroidProfile() const {
+QString
+AppCatalog::resolveAndroidProfile() const
+{
     auto profile = qApp->property("isoldeProfile").toString();
     if (profile.isEmpty())
         profile = "default";
     return profile;
 }
 
-void AppCatalog::initializeAndroidOperationState(const Entry& entry, const QString& operation, const QString& profile) {
+void
+AppCatalog::initializeAndroidOperationState(const Entry& entry, const QString& operation, const QString& profile)
+{
     m_operationProfile = profile;
     m_operationName = entry.core.app.name;
     m_operationId = entry.core.app.id;
@@ -1542,35 +1842,56 @@ void AppCatalog::initializeAndroidOperationState(const Entry& entry, const QStri
     m_androidProcess.disconnect(this);
 }
 
-void AppCatalog::connectAndroidProcessSignals() {
-    connect(&m_androidProcess, &QProcess::readyReadStandardOutput, this, [this] {
-        m_operationEvents += m_androidProcess.readAllStandardOutput();
-        if (m_operationEvents.size() > 65536) {
-            cancelOperation();
-            setError(tr("Invalid Android status output."));
-            return;
-        }
-        while (m_operationEvents.contains('\n')) {
-            const auto end = m_operationEvents.indexOf('\n');
-            const auto event = QJsonDocument::fromJson(m_operationEvents.left(end)).object();
-            m_operationEvents.remove(0, end + 1);
-            androidEvent(event);
-        }
-    });
-    connect(&m_androidProcess, &QProcess::readyReadStandardError, this, [this] {
-        m_androidProcess.readAllStandardError();
-    });
-    connect(&m_androidProcess, &QProcess::errorOccurred, this, [this](QProcess::ProcessError error) {
-        if (error == QProcess::FailedToStart) {
-            m_pendingUpdate.reset();
-            m_operationId.clear();
-            setError(tr("Android could not start. Use Android setup and retry."));
-            emit entriesChanged();
-        }
-    });
-    connect(&m_androidProcess, qOverload<int, QProcess::ExitStatus>(&QProcess::finished), this,
-            [this](int code, QProcess::ExitStatus status) {
-                if (!m_operationEvents.isEmpty()) {
+void
+AppCatalog::connectAndroidProcessSignals()
+{
+    connect(&m_androidProcess,
+            &QProcess::readyReadStandardOutput,
+            this,
+            [this]
+            {
+                m_operationEvents += m_androidProcess.readAllStandardOutput();
+                if (m_operationEvents.size() > 65536)
+                {
+                    cancelOperation();
+                    setError(tr("Invalid Android status output."));
+                    return;
+                }
+                while (m_operationEvents.contains('\n'))
+                {
+                    const auto end = m_operationEvents.indexOf('\n');
+                    const auto event = QJsonDocument::fromJson(m_operationEvents.left(end)).object();
+                    m_operationEvents.remove(0, end + 1);
+                    androidEvent(event);
+                }
+            });
+    connect(&m_androidProcess,
+            &QProcess::readyReadStandardError,
+            this,
+            [this]
+            {
+                m_androidProcess.readAllStandardError();
+            });
+    connect(&m_androidProcess,
+            &QProcess::errorOccurred,
+            this,
+            [this](QProcess::ProcessError error)
+            {
+                if (error == QProcess::FailedToStart)
+                {
+                    m_pendingUpdate.reset();
+                    m_operationId.clear();
+                    setError(tr("Android could not start. Use Android setup and retry."));
+                    emit entriesChanged();
+                }
+            });
+    connect(&m_androidProcess,
+            qOverload<int, QProcess::ExitStatus>(&QProcess::finished),
+            this,
+            [this](int code, QProcess::ExitStatus status)
+            {
+                if (!m_operationEvents.isEmpty())
+                {
                     androidEvent(QJsonDocument::fromJson(m_operationEvents).object());
                     m_operationEvents.clear();
                 }
@@ -1587,7 +1908,9 @@ void AppCatalog::connectAndroidProcessSignals() {
             });
 }
 
-void AppCatalog::configureAndroidProcess(const Entry& entry, const QString& helper, const QString& profile) {
+void
+AppCatalog::configureAndroidProcess(const Entry& entry, const QString& helper, const QString& profile)
+{
     m_androidProcess.setProgram("/usr/bin/python3");
     QStringList arguments{helper,
                           "--profile",
@@ -1602,8 +1925,11 @@ void AppCatalog::configureAndroidProcess(const Entry& entry, const QString& help
     m_androidProcess.setArguments(arguments);
 }
 
-bool AppCatalog::completeSetup(const QString& id) {
-    if (!isInstalled(id)) {
+bool
+AppCatalog::completeSetup(const QString& id)
+{
+    if (!isInstalled(id))
+    {
         setError(tr("Package is not installed: %1").arg(id));
         emit operationFailed(m_errorString);
         return false;
@@ -1616,7 +1942,9 @@ bool AppCatalog::completeSetup(const QString& id) {
     return true;
 }
 
-bool AppCatalog::markFailed(const QString& id, const QString& reason) {
+bool
+AppCatalog::markFailed(const QString& id, const QString& reason)
+{
     if (!isInstalled(id))
         return false;
     m_packageStates.insert(id, QStringLiteral("failed"));
@@ -1627,12 +1955,16 @@ bool AppCatalog::markFailed(const QString& id, const QString& reason) {
     return true;
 }
 
-QString AppCatalog::resolveFailureReason(const QString& reason) {
+QString
+AppCatalog::resolveFailureReason(const QString& reason)
+{
     const auto cleanReason = reason.trimmed();
     return cleanReason.isEmpty() ? tr("The app failed to start.") : cleanReason;
 }
 
-bool AppCatalog::saveState() {
+bool
+AppCatalog::saveState()
+{
     QDir().mkpath(QFileInfo(m_statePath).absolutePath());
     auto ids = m_installedIds.values();
     std::sort(ids.begin(), ids.end());
@@ -1642,7 +1974,8 @@ bool AppCatalog::saveState() {
     QJsonObject packageStates;
     QJsonObject failureReasons;
     QJsonObject customPackages;
-    for (const auto& id : ids) {
+    for (const auto& id : ids)
+    {
         packageStates.insert(id, packageState(id));
         if (m_customPackages.contains(id))
             customPackages.insert(id, m_customPackages.value(id));
@@ -1665,7 +1998,8 @@ bool AppCatalog::saveState() {
                                                 {"storeTransaction", m_storeTransaction},
                                                 {"androidContainment", m_androidContainment}})
                           .toJson();
-    if (!file.open(QIODevice::WriteOnly) || file.write(data) != data.size() || !file.commit()) {
+    if (!file.open(QIODevice::WriteOnly) || file.write(data) != data.size() || !file.commit())
+    {
         setError(tr("Unable to save app installation state."));
         emit operationFailed(m_errorString);
         return false;
@@ -1674,7 +2008,9 @@ bool AppCatalog::saveState() {
     return true;
 }
 
-void AppCatalog::setError(const QString& message) {
+void
+AppCatalog::setError(const QString& message)
+{
     if (m_errorString == message)
         return;
     m_errorString = message;

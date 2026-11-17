@@ -10,17 +10,24 @@
 #include <QtTest/QtTest>
 #include "../src/home/HomeLayout.h"
 
-class HomeLayoutTests : public QObject {
+class HomeLayoutTests : public QObject
+{
     Q_OBJECT
 
   private slots:
-    void test_layout_creation();
-    void test_layout_items_components();
-    void test_layout_max_pages();
-    void test_layout_root_page();
+    void
+    test_layout_creation();
+    void
+    test_layout_items_components();
+    void
+    test_layout_max_pages();
+    void
+    test_layout_root_page();
 };
 
-void HomeLayoutTests::test_layout_creation() {
+void
+HomeLayoutTests::test_layout_creation()
+{
     // Create a test registry
     // Note: AppRegistry needs to be set up first
     QWidget* parent = nullptr;
@@ -31,7 +38,9 @@ void HomeLayoutTests::test_layout_creation() {
     QVERIFY(layout.rootPageVisible());
 }
 
-void HomeLayoutTests::test_layout_items_components() {
+void
+HomeLayoutTests::test_layout_items_components()
+{
     HomeLayout layout(nullptr);
 
     // Test initial items and components are empty
@@ -39,14 +48,18 @@ void HomeLayoutTests::test_layout_items_components() {
     QCOMPARE(layout.components().size(), 0);
 }
 
-void HomeLayoutTests::test_layout_max_pages() {
+void
+HomeLayoutTests::test_layout_max_pages()
+{
     HomeLayout layout(nullptr);
 
     // Test MaxPages constant
     QCOMPARE(HomeLayout::MaxPages, 64);
 }
 
-void HomeLayoutTests::test_layout_root_page() {
+void
+HomeLayoutTests::test_layout_root_page()
+{
     HomeLayout layout(nullptr);
 
     // Test root page name is empty initially

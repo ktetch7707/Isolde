@@ -12,7 +12,8 @@ class AudioSettings;
 class GameLibrary;
 class GuideController;
 
-class ActionDispatcher final : public QObject {
+class ActionDispatcher final : public QObject
+{
     Q_OBJECT
     Q_PROPERTY(bool guideTransitionPending READ guideTransitionPending NOTIFY guidePlaybackChanged)
   public:
@@ -23,44 +24,73 @@ class ActionDispatcher final : public QObject {
                      AppCatalog* catalog = nullptr,
                      CaptureController* capture = nullptr,
                      QObject* parent = nullptr);
-    Q_INVOKABLE bool dispatch(const QVariantMap& action, const QString& originId = {});
-    Q_INVOKABLE bool dispatchEditorAction(const QVariantMap& action);
-    Q_INVOKABLE QString currentOrigin() const {
+    Q_INVOKABLE bool
+    dispatch(const QVariantMap& action, const QString& originId = {});
+    Q_INVOKABLE bool
+    dispatchEditorAction(const QVariantMap& action);
+    Q_INVOKABLE QString
+    currentOrigin() const
+    {
         return m_origin;
     }
-    void setAudioSettings(AudioSettings* audio) {
+    void
+    setAudioSettings(AudioSettings* audio)
+    {
         m_audio = audio;
     }
-    void setLayout(HomeLayout* layout) {
+    void
+    setLayout(HomeLayout* layout)
+    {
         m_layout = layout;
     }
-    void setGames(GameLibrary* games) {
+    void
+    setGames(GameLibrary* games)
+    {
         m_games = games;
     }
-    void setGuide(GuideController* guide);
-    bool guideTransitionPending() const {
+    void
+    setGuide(GuideController* guide);
+    bool
+    guideTransitionPending() const
+    {
         return m_guideTransition;
     }
-    Q_INVOKABLE void cancelGuidePlayback();
-    Q_INVOKABLE bool surfGuide(int direction);
+    Q_INVOKABLE void
+    cancelGuidePlayback();
+    Q_INVOKABLE bool
+    surfGuide(int direction);
   signals:
-    void guidePlaybackChanged();
-    void allAppsRequested(const QString& originId);
-    void searchRequested(const QString& originId);
+    void
+    guidePlaybackChanged();
+    void
+    allAppsRequested(const QString& originId);
+    void
+    searchRequested(const QString& originId);
     // Kept for older in-process observers; the shell routes this to All Apps.
-    void drawerRequested();
-    void guideRequested(const QString& originId, const QVariantMap& presentation, const QString& focusChannelId);
-    void pageRequested(const QString& id, const QString& originId);
-    void rejected(const QString& reason);
-    void libraryRequested(bool returnHomeAfterPlayback);
-    void settingsRequested(int section);
-    void restoreFocusRequested(const QString& originId);
-    void captureSessionRequested(int input, const QString& originId);
-    void desktopRequested(const QString& originId);
+    void
+    drawerRequested();
+    void
+    guideRequested(const QString& originId, const QVariantMap& presentation, const QString& focusChannelId);
+    void
+    pageRequested(const QString& id, const QString& originId);
+    void
+    rejected(const QString& reason);
+    void
+    libraryRequested(bool returnHomeAfterPlayback);
+    void
+    settingsRequested(int section);
+    void
+    restoreFocusRequested(const QString& originId);
+    void
+    captureSessionRequested(int input, const QString& originId);
+    void
+    desktopRequested(const QString& originId);
 
   private:
-    bool launchApp(const QString& id);
-    void clearGuidePlayback();
+    bool
+    launchApp(const QString& id);
+    void
+    clearGuidePlayback();
     AppRegistry* m_apps;
     SessionManager* m_sessions;
     KodiMedia* m_media;

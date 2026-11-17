@@ -4,7 +4,8 @@
 #include <QTimer>
 #include <QVariantList>
 
-class ComponentHealth final : public QObject {
+class ComponentHealth final : public QObject
+{
     Q_OBJECT
     Q_PROPERTY(QVariantList components READ components NOTIFY changed)
     Q_PROPERTY(bool busy READ busy NOTIFY changed)
@@ -12,18 +13,26 @@ class ComponentHealth final : public QObject {
   public:
     explicit ComponentHealth(QObject* parent = nullptr);
     ~ComponentHealth() override;
-    QVariantList components() const {
+    QVariantList
+    components() const
+    {
         return m_components;
     }
-    bool busy() const {
+    bool
+    busy() const
+    {
         return m_busy;
     }
-    QString status() const {
+    QString
+    status() const
+    {
         return m_status;
     }
-    Q_INVOKABLE void refresh();
+    Q_INVOKABLE void
+    refresh();
   signals:
-    void changed();
+    void
+    changed();
 
   private:
     QProcess m_process;

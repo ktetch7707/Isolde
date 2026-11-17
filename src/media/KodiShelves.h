@@ -3,7 +3,8 @@
 #include "KodiMedia.h"
 
 // Derived Home presentation. Never edits the existing Home layout or Kodi.
-class KodiShelves final : public QObject {
+class KodiShelves final : public QObject
+{
     Q_OBJECT
     Q_PROPERTY(QVariantList sections READ sections NOTIFY changed)
     Q_PROPERTY(QVariantList items READ items NOTIFY changed)
@@ -13,21 +14,30 @@ class KodiShelves final : public QObject {
                 KodiMedia* library,
                 QObject* parent = nullptr,
                 const QString& testDirectory = {});
-    QVariantList sections() const;
-    QVariantList items() const;
-    void setAvailable(bool available);
-    void invalidateAllShelves();
-    void refresh();
+    QVariantList
+    sections() const;
+    QVariantList
+    items() const;
+    void
+    setAvailable(bool available);
+    void
+    invalidateAllShelves();
+    void
+    refresh();
   signals:
-    void changed();
+    void
+    changed();
 
   private:
-    void rebuild();
-    void openShelf(const Shelf& shelf);
+    void
+    rebuild();
+    void
+    openShelf(const Shelf& shelf);
     QString m_profile, m_testDirectory;
     KodiMedia* m_library;
     bool m_available = false;
-    struct Shelf {
+    struct Shelf
+    {
         QVariantMap definition;
         KodiMedia* client;
     };

@@ -1,6 +1,8 @@
 #include "home/StudioSession.h"
 
-QVariantList StudioSession::actionChoices() const {
+QVariantList
+StudioSession::actionChoices() const
+{
     QVariantList choices;
     if (!currentProfile())
         return choices;
@@ -11,14 +13,16 @@ QVariantList StudioSession::actionChoices() const {
     if (!root.contains("visible") || root["visible"].toBool())
         choices.append(QVariantMap{{"name",
                                     tr("Open page · ") + root.value("name").toString(
-                                         m_live->studioOptions().value("rootPageName").toString())},
+                                                             m_live->studioOptions().value("rootPageName").toString())},
                                    {"action", QVariantMap{{"type", "root-page"}}}});
-    for (const auto& entry : document["pages"].toArray()) {
+    for (const auto& entry : document["pages"].toArray())
+    {
         const auto page = entry.toObject();
         choices.append(QVariantMap{{"name", tr("Open page · ") + page["name"].toString()},
                                    {"action", QVariantMap{{"type", "open-page"}, {"pageId", page["id"].toString()}}}});
     }
-    for (const auto& entry : m_live->registry()->apps()) {
+    for (const auto& entry : m_live->registry()->apps())
+    {
         const auto app = entry.toMap();
         const auto id = app.value("id").toString();
         choices.append(QVariantMap{{"name", tr("Open app · ") + app.value("name").toString()},
@@ -34,7 +38,8 @@ QVariantList StudioSession::actionChoices() const {
                                                {"needsTarget", true},
                                                {"action", QVariantMap{{"type", type}, {"openWith", id}}}});
     }
-    for (const auto& entry : m_live->m_collections) {
+    for (const auto& entry : m_live->m_collections)
+    {
         const auto collection = entry.toMap();
         choices.append(QVariantMap{
             {"name", tr("Open collection · ") + collection.value("name").toString()},
@@ -44,16 +49,20 @@ QVariantList StudioSession::actionChoices() const {
     return choices;
 }
 
-QVariantList StudioSession::sourceChoices(const QString& id, const QString& pageId) const {
+QVariantList
+StudioSession::sourceChoices(const QString& id, const QString& pageId) const
+{
     if (!currentProfile())
         return {};
     HomeLayout worker(m_live->registry());
     configureWorker(worker);
     auto document = QJsonDocument::fromJson(m_draft).object();
-    if (!pageId.isEmpty()) {
+    if (!pageId.isEmpty())
+    {
         bool found = false;
         for (const auto& entry : document["pages"].toArray())
-            if (entry.toObject()["id"] == pageId) {
+            if (entry.toObject()["id"] == pageId)
+            {
                 document = entry.toObject()["layout"].toObject();
                 found = true;
                 break;
@@ -61,7 +70,8 @@ QVariantList StudioSession::sourceChoices(const QString& id, const QString& page
         if (!found)
             return {};
     }
-    if (!pageId.isEmpty()) {
+    if (!pageId.isEmpty())
+    {
         auto composition = document["composition"].toObject();
         const QJsonValue library =
             QJsonDocument::fromJson(m_draft).object()["composition"].toObject().value("designLibrary");
@@ -74,11 +84,15 @@ QVariantList StudioSession::sourceChoices(const QString& id, const QString& page
     return worker.sourceChoices(id);
 }
 
-QObject* StudioSession::proposalModel() const {
+QObject*
+StudioSession::proposalModel() const
+{
     return m_proposalModel;
 }
 
-void StudioSession::configureWorker(HomeLayout& worker, bool assetPaths) const {
+void
+StudioSession::configureWorker(HomeLayout& worker, bool assetPaths) const
+{
     worker.m_draftOnly = true;
     if (!m_live)
         return;
@@ -93,35 +107,44 @@ void StudioSession::configureWorker(HomeLayout& worker, bool assetPaths) const {
         worker.m_userPath = m_live->m_userPath;
 }
 
-bool StudioSession::validNewAction(const QVariantMap& value) {
+bool
+StudioSession::validNewAction(const QVariantMap& value)
+{
     if (value.isEmpty())
         return true;
     QString error;
     const auto action = ComponentSchema::action(value, &error);
-    if (action.isEmpty()) {
+    if (action.isEmpty())
+    {
         setError(error);
         return false;
     }
     const auto type = action.value("type").toString();
-    if (type == "open-page") {
+    if (type == "open-page")
+    {
         bool exists = false;
         for (const auto& entry : m_model->studioPages())
             if (entry.toMap().value("id") == action.value("pageId"))
                 exists = true;
-        if (!exists) {
+        if (!exists)
+        {
             setError(tr("Choose an existing destination page."));
             return false;
         }
     }
-    if (type == "root-page" && !m_model->rootPageVisible()) {
+    if (type == "root-page" && !m_model->rootPageVisible())
+    {
         setError(tr("This page was removed. Choose an existing destination."));
         return false;
     }
     return true;
 }
 
-QVariantMap StudioSession::componentPrototype(const QString& type, const QVariantMap& configuration) {
-    if (!currentProfile()) {
+QVariantMap
+StudioSession::componentPrototype(const QString& type, const QVariantMap& configuration)
+{
+    if (!currentProfile())
+    {
         setError(tr("Reopen Skin Studio before adding components."));
         return {};
     }
@@ -131,15 +154,19 @@ QVariantMap StudioSession::componentPrototype(const QString& type, const QVarian
         nodes.append(QJsonObject::fromVariantMap(options.value("componentPresets").toMap().value(type).toMap()));
     else if (type == "container")
         nodes.append(QJsonObject::fromVariantMap(options.value("groupPreset").toMap()));
-    else if (type == "input-panel") {
+    else if (type == "input-panel")
+    {
         const auto preset = options.value("inputPanelPreset").toMap();
         nodes.append(QJsonObject::fromVariantMap(preset.value("root").toMap()));
         for (const auto& entry : preset.value("children").toList())
             nodes.append(QJsonObject::fromVariantMap(entry.toMap()));
-    } else if (type == "clock" || type == "text") {
+    }
+    else if (type == "clock" || type == "text")
+    {
         HomeLayout factory(m_live->registry());
         configureWorker(factory);
-        if (!factory.addWidget(type)) {
+        if (!factory.addWidget(type))
+        {
             setError(factory.errorString());
             return {};
         }
@@ -148,17 +175,22 @@ QVariantMap StudioSession::componentPrototype(const QString& type, const QVarian
         item["placement"] = QJsonObject::fromVariantMap(
             {{"x", 0}, {"y", 0}, {"width", span.value("width")}, {"height", span.value("height")}});
         nodes.append(item);
-    } else {
+    }
+    else
+    {
         setError(tr("Choose a registered component type."));
         return {};
     }
-    if (nodes.isEmpty() || nodes.size() > 129) {
+    if (nodes.isEmpty() || nodes.size() > 129)
+    {
         setError(tr("The packaged component preset is invalid."));
         return {};
     }
     auto configured = nodes.first().toObject();
-    if (configuration.contains("variant")) {
-        if (configuration["variant"].metaType().id() != QMetaType::QString) {
+    if (configuration.contains("variant"))
+    {
+        if (configuration["variant"].metaType().id() != QMetaType::QString)
+        {
             setError(tr("Choose a registered starting style."));
             return {};
         }
@@ -166,7 +198,8 @@ QVariantMap StudioSession::componentPrototype(const QString& type, const QVarian
         for (const auto& entry : options.value("componentVariants").toMap().value(type).toList())
             if (entry.toMap().value("id") == configuration["variant"])
                 selected = entry.toMap();
-        if (selected.isEmpty()) {
+        if (selected.isEmpty())
+        {
             setError(tr("This starting style is not available for that component."));
             return {};
         }
@@ -181,16 +214,20 @@ QVariantMap StudioSession::componentPrototype(const QString& type, const QVarian
         placement["height"] = QJsonValue::fromVariant(span["height"]);
         configured["placement"] = placement;
     }
-    for (auto it = configuration.cbegin(); it != configuration.cend(); ++it) {
+    for (auto it = configuration.cbegin(); it != configuration.cend(); ++it)
+    {
         if (!QStringList{"name", "action", "customLogo", "presentation", "appCollection", "apps", "buttons", "variant"}
-                 .contains(it.key())) {
+                 .contains(it.key()))
+        {
             setError(tr("Unsupported component configuration."));
             return {};
         }
         if (it.key() == "apps" || it.key() == "buttons" || it.key() == "variant")
             continue;
-        if (it.key() == "presentation") {
-            if (it.value().metaType().id() != QMetaType::QVariantMap) {
+        if (it.key() == "presentation")
+        {
+            if (it.value().metaType().id() != QMetaType::QVariantMap)
+            {
                 setError(tr("Choose valid presentation values."));
                 return {};
             }
@@ -199,16 +236,19 @@ QVariantMap StudioSession::componentPrototype(const QString& type, const QVarian
             for (auto change = changes.cbegin(); change != changes.cend(); ++change)
                 style[change.key()] = QJsonValue::fromVariant(change.value());
             configured["presentation"] = style;
-        } else if (it.key() == "action" && it.value().toMap().isEmpty())
+        }
+        else if (it.key() == "action" && it.value().toMap().isEmpty())
             configured.remove("action");
         else
             configured[it.key()] = QJsonValue::fromVariant(it.value());
     }
     nodes[0] = configured;
-    if (configuration.contains("buttons")) {
+    if (configuration.contains("buttons"))
+    {
         const auto buttons = configuration.value("buttons").toList();
         if (type != "carousel" || configuration.value("buttons").metaType().id() != QMetaType::QVariantList ||
-            buttons.size() > 128) {
+            buttons.size() > 128)
+        {
             setError(tr("Choose up to 128 carousel buttons."));
             return {};
         }
@@ -219,15 +259,19 @@ QVariantMap StudioSession::componentPrototype(const QString& type, const QVarian
         configured["presentation"] = style;
         nodes[0] = configured;
         int column = 0;
-        for (const auto& value : buttons) {
+        for (const auto& value : buttons)
+        {
             const auto changes = value.toMap();
-            if (value.metaType().id() != QMetaType::QVariantMap) {
+            if (value.metaType().id() != QMetaType::QVariantMap)
+            {
                 setError(tr("Choose a named button."));
                 return {};
             }
             auto child = QJsonObject::fromVariantMap(options.value("buttonChildPreset").toMap());
-            for (auto it = changes.cbegin(); it != changes.cend(); ++it) {
-                if (!QStringList{"name", "action"}.contains(it.key())) {
+            for (auto it = changes.cbegin(); it != changes.cend(); ++it)
+            {
+                if (!QStringList{"name", "action"}.contains(it.key()))
+                {
                     setError(tr("Unsupported carousel button property."));
                     return {};
                 }
@@ -241,19 +285,23 @@ QVariantMap StudioSession::componentPrototype(const QString& type, const QVarian
             nodes.append(child);
         }
     }
-    if (configuration.contains("apps")) {
+    if (configuration.contains("apps"))
+    {
         const auto apps = configuration.value("apps").toList();
         QSet<QString> selected;
         if (type != "app-bar" || configuration.value("apps").metaType().id() != QMetaType::QVariantList ||
-            apps.size() > 128) {
+            apps.size() > 128)
+        {
             setError(tr("Choose up to 128 installed apps."));
             return {};
         }
-        for (const auto& value : apps) {
+        for (const auto& value : apps)
+        {
             const auto id = value.toString();
             const auto* app = m_live->registry()->find(id);
             if (value.metaType().id() != QMetaType::QString || selected.contains(id) || !app ||
-                !QStringList{"desktop", "web", "android"}.contains(app->type)) {
+                !QStringList{"desktop", "web", "android"}.contains(app->type))
+            {
                 setError(tr("Choose distinct installed applications."));
                 return {};
             }
@@ -264,18 +312,21 @@ QVariantMap StudioSession::componentPrototype(const QString& type, const QVarian
     }
     QHash<QString, QString> remap;
     QSet<QString> allocated;
-    for (int i = 0; i < nodes.size(); ++i) {
+    for (int i = 0; i < nodes.size(); ++i)
+    {
         if (!validNewAction(nodes[i].toObject()["action"].toObject().toVariantMap()))
             return {};
         QString error;
         const auto canonical = ComponentSchema::component(nodes[i].toObject().toVariantMap(), true, &error);
-        if (canonical.isEmpty()) {
+        if (canonical.isEmpty())
+        {
             setError(error);
             return {};
         }
         auto item = QJsonObject::fromVariantMap(canonical);
         const auto oldId = item["id"].toString();
-        if (remap.contains(oldId)) {
+        if (remap.contains(oldId))
+        {
             setError(tr("The preset contains duplicate identities."));
             return {};
         }
@@ -286,7 +337,8 @@ QVariantMap StudioSession::componentPrototype(const QString& type, const QVarian
         int suffix = 2;
         while (allocated.contains(identity))
             identity = base + QString::number(suffix++);
-        if (!ComponentSchema::safeId(identity)) {
+        if (!ComponentSchema::safeId(identity))
+        {
             setError(tr("The component identity exceeds its limit."));
             return {};
         }
@@ -295,11 +347,14 @@ QVariantMap StudioSession::componentPrototype(const QString& type, const QVarian
         item["id"] = identity;
         nodes[i] = item;
     }
-    for (int i = 0; i < nodes.size(); ++i) {
+    for (int i = 0; i < nodes.size(); ++i)
+    {
         auto item = nodes[i].toObject();
         const auto parent = item.value("parentId").toString();
-        if (!parent.isEmpty()) {
-            if (!remap.contains(parent)) {
+        if (!parent.isEmpty())
+        {
+            if (!remap.contains(parent))
+            {
                 setError(tr("The preset refers to an external parent."));
                 return {};
             }
@@ -308,7 +363,8 @@ QVariantMap StudioSession::componentPrototype(const QString& type, const QVarian
         }
     }
     const auto root = nodes.first().toObject();
-    if (!root.value("parentId").toString().isEmpty()) {
+    if (!root.value("parentId").toString().isEmpty())
+    {
         setError(tr("The preset root cannot have an external parent."));
         return {};
     }
@@ -322,8 +378,11 @@ QVariantMap StudioSession::componentPrototype(const QString& type, const QVarian
             {"viewItems", view.items()}};
 }
 
-QVariantMap StudioSession::replacementProposal(const QString& id, const QString& type, const QString& pageId) {
-    const auto fail = [](const QString& reason) {
+QVariantMap
+StudioSession::replacementProposal(const QString& id, const QString& type, const QString& pageId)
+{
+    const auto fail = [](const QString& reason)
+    {
         return QVariantMap{{"valid", false}, {"reason", reason}};
     };
     if (!currentProfile())
@@ -333,9 +392,11 @@ QVariantMap StudioSession::replacementProposal(const QString& id, const QString&
     auto document = QJsonDocument::fromJson(m_draft).object(), page = document;
     int pageIndex = -1;
     auto pages = document["pages"].toArray();
-    if (!pageId.isEmpty()) {
+    if (!pageId.isEmpty())
+    {
         for (int i = 0; i < pages.size(); ++i)
-            if (pages[i].toObject()["id"] == pageId) {
+            if (pages[i].toObject()["id"] == pageId)
+            {
                 pageIndex = i;
                 page = pages[i].toObject()["layout"].toObject();
                 break;
@@ -345,7 +406,8 @@ QVariantMap StudioSession::replacementProposal(const QString& id, const QString&
     }
     auto entries = page["components"].toArray();
     int index = -1;
-    for (int i = 0; i < entries.size(); ++i) {
+    for (int i = 0; i < entries.size(); ++i)
+    {
         const auto entry = entries[i].toObject();
         if (entry["id"] == id)
             index = i;
@@ -379,7 +441,8 @@ QVariantMap StudioSession::replacementProposal(const QString& id, const QString&
             replacement[key] = original[key];
     auto presentation = replacement["presentation"].toObject();
     const auto oldStyle = original["presentation"].toObject();
-    for (auto it = oldStyle.begin(); it != oldStyle.end(); ++it) {
+    for (auto it = oldStyle.begin(); it != oldStyle.end(); ++it)
+    {
         const auto key = it.key();
         const bool semantic = key.startsWith("library") || key.startsWith("guide") ||
                               (key.startsWith("body") && type != "text") ||
@@ -387,7 +450,8 @@ QVariantMap StudioSession::replacementProposal(const QString& id, const QString&
                               (key == "shape" && type != "shape" &&
                                (type != "container" || it.value() == "ellipse" || it.value() == "divider"));
         if (semantic ||
-            !ComponentSchema::validPresentation({{key, it.value().toVariant()}}, false, type == "container")) {
+            !ComponentSchema::validPresentation({{key, it.value().toVariant()}}, false, type == "container"))
+        {
             losses.append(key == "layout"     ? tr("Container layout")
                           : key == "shape"    ? tr("Shape outline")
                           : key == "bodyText" ? tr("Text body")
@@ -399,13 +463,15 @@ QVariantMap StudioSession::replacementProposal(const QString& id, const QString&
     replacement["presentation"] = presentation;
     if (original["componentType"] == "text" && type != "text" && !losses.contains(tr("Text body")))
         losses.append(tr("Text body"));
-    if (original.contains("action")) {
+    if (original.contains("action"))
+    {
         if (type == "button" || type == "image")
             replacement["action"] = original["action"];
         else
             losses.append(tr("Action link"));
     }
-    if (original.contains("customLogo")) {
+    if (original.contains("customLogo"))
+    {
         if (type != "shape" && type != "text")
             replacement["customLogo"] = original["customLogo"];
         else
@@ -418,7 +484,8 @@ QVariantMap StudioSession::replacementProposal(const QString& id, const QString&
     page["components"] = entries;
     if (pageIndex < 0)
         document = page;
-    else {
+    else
+    {
         auto entry = pages[pageIndex].toObject();
         entry["layout"] = page;
         pages[pageIndex] = entry;
@@ -431,12 +498,15 @@ QVariantMap StudioSession::replacementProposal(const QString& id, const QString&
     return {{"valid", true}, {"document", document.toVariantMap()}, {"losses", losses}};
 }
 
-QVariantMap StudioSession::placementProposal(const QString& id,
-                                             const QVariantMap& placement,
-                                             const QString& strategy,
-                                             const QString& pageId,
-                                             const QVariantMap& options) {
-    const auto fail = [](const QString& reason) {
+QVariantMap
+StudioSession::placementProposal(const QString& id,
+                                 const QVariantMap& placement,
+                                 const QString& strategy,
+                                 const QString& pageId,
+                                 const QVariantMap& options)
+{
+    const auto fail = [](const QString& reason)
+    {
         return QVariantMap{{"valid", false}, {"reason", reason}};
     };
     if (!m_active)
@@ -447,10 +517,12 @@ QVariantMap StudioSession::placementProposal(const QString& id,
         if ((it.key() != "categoryId" && it.key() != "parentId") || it.value().metaType().id() != QMetaType::QString)
             return fail(tr("Choose a valid destination section or group."));
     auto doc = QJsonDocument::fromJson(m_draft).object();
-    if (!pageId.isEmpty()) {
+    if (!pageId.isEmpty())
+    {
         bool found = false;
         for (const auto& entry : doc["pages"].toArray())
-            if (entry.toObject()["id"] == pageId) {
+            if (entry.toObject()["id"] == pageId)
+            {
                 doc = entry.toObject()["layout"].toObject();
                 found = true;
                 break;
@@ -462,7 +534,8 @@ QVariantMap StudioSession::placementProposal(const QString& id,
     QString category, parent;
     bool selectedFound = false;
     for (const auto& entry : entries)
-        if (entry.toObject()["id"] == id) {
+        if (entry.toObject()["id"] == id)
+        {
             if (ComponentSchema::positionLocked(entries, id))
                 return fail(tr("Unlock the component and its containing groups before moving or resizing it."));
             category = entry.toObject()["categoryId"].toString();
@@ -477,7 +550,8 @@ QVariantMap StudioSession::placementProposal(const QString& id,
     const auto sourceParent = parent;
     if (options.contains("parentId"))
         parent = options.value("parentId").toString();
-    if (!parent.isEmpty()) {
+    if (!parent.isEmpty())
+    {
         bool found = false;
         QString ancestor = parent;
         for (const auto& entry : entries)
@@ -485,7 +559,8 @@ QVariantMap StudioSession::placementProposal(const QString& id,
                 found = entry.toObject()["componentType"] == "container";
         if (!found || ComponentSchema::positionLocked(entries, parent))
             return fail(tr("Choose an unlocked destination group."));
-        for (int depth = 0; !ancestor.isEmpty() && depth < 6; ++depth) {
+        for (int depth = 0; !ancestor.isEmpty() && depth < 6; ++depth)
+        {
             if (ancestor == id)
                 return fail(tr("A group cannot contain itself or its ancestors."));
             QString next;
@@ -495,9 +570,11 @@ QVariantMap StudioSession::placementProposal(const QString& id,
             ancestor = next;
         }
         category.clear();
-    } else if (!sourceParent.isEmpty())
+    }
+    else if (!sourceParent.isEmpty())
         category = ComponentSchema::effectiveCategory(entries, id);
-    if (options.contains("categoryId")) {
+    if (options.contains("categoryId"))
+    {
         if (!parent.isEmpty() && !options.value("categoryId").toString().isEmpty())
             return fail(tr("Group contents inherit their section."));
         if (!sections && !options.value("categoryId").toString().isEmpty())
@@ -505,7 +582,8 @@ QVariantMap StudioSession::placementProposal(const QString& id,
         category = options.value("categoryId").toString();
         bool found = category.isEmpty();
         for (const auto& entry : doc["categories"].toArray())
-            if (entry.toObject()["id"] == category) {
+            if (entry.toObject()["id"] == category)
+            {
                 found = true;
                 if (entry.toObject()["presentation"].toObject().value("variant") == "library")
                     return fail(tr("A media shelf manages its own contents. Choose a component section."));
@@ -523,15 +601,18 @@ QVariantMap StudioSession::placementProposal(const QString& id,
     int selected = -1;
     QVariantMap origin;
     QList<int> colliders;
-    for (int i = 0; i < entries.size(); ++i) {
+    for (int i = 0; i < entries.size(); ++i)
+    {
         const auto item = entries[i].toObject();
-        if (item["id"] == id) {
+        if (item["id"] == id)
+        {
             selected = i;
             origin = item["placement"].toObject().toVariantMap();
-        } else if ((!grid.value("overlap").toBool() || strategy == "swap") && item["parentId"].toString() == parent &&
-                   (!sections || !parent.isEmpty() || item["categoryId"].toString() == category) &&
-                   item.contains("placement") &&
-                   ComponentSchema::placementsOverlap(item["placement"].toObject().toVariantMap(), placement))
+        }
+        else if ((!grid.value("overlap").toBool() || strategy == "swap") && item["parentId"].toString() == parent &&
+                 (!sections || !parent.isEmpty() || item["categoryId"].toString() == category) &&
+                 item.contains("placement") &&
+                 ComponentSchema::placementsOverlap(item["placement"].toObject().toVariantMap(), placement))
             colliders.append(i);
     }
     if (selected < 0)
@@ -553,14 +634,16 @@ QVariantMap StudioSession::placementProposal(const QString& id,
     entries[selected] = moving;
     if (!colliders.isEmpty() && strategy == "cancel")
         return fail(QStringLiteral("Occupied cells: choose Shift, Swap or Cancel."));
-    if (!colliders.isEmpty() && strategy == "swap") {
+    if (!colliders.isEmpty() && strategy == "swap")
+    {
         if (colliders.size() != 1 || origin.isEmpty())
             return fail(QStringLiteral("Swap needs one occupant and an existing origin."));
         auto other = entries[colliders.first()].toObject();
         auto replacement = other["placement"].toObject().toVariantMap();
         replacement["x"] = origin["x"];
         replacement["y"] = origin["y"];
-        if (sourceCategory != category) {
+        if (sourceCategory != category)
+        {
             if (sourceCategory.isEmpty())
                 other.remove("categoryId");
             else
@@ -572,9 +655,12 @@ QVariantMap StudioSession::placementProposal(const QString& id,
             other["parentId"] = sourceParent;
         other["placement"] = QJsonObject::fromVariantMap(replacement);
         entries[colliders.first()] = other;
-    } else if (!colliders.isEmpty() && strategy == "shift") {
+    }
+    else if (!colliders.isEmpty() && strategy == "shift")
+    {
         const auto originalEntries = doc["components"].toArray();
-        const auto stableOrder = [&originalEntries](int a, int b) {
+        const auto stableOrder = [&originalEntries](int a, int b)
+        {
             const auto x = originalEntries[a].toObject(), y = originalEntries[b].toObject();
             const auto p = x["placement"].toObject(), q = y["placement"].toObject();
             if (p["y"] != q["y"])
@@ -589,17 +675,22 @@ QVariantMap StudioSession::placementProposal(const QString& id,
         QSet<int> fixed{selected};
         int attempts = 0;
         bool affectedLimit = false;
-        std::function<bool(QList<int>)> solve = [&](QList<int> pending) -> bool {
+        std::function<bool(QList<int>)> solve = [&](QList<int> pending) -> bool
+        {
             pending.erase(std::remove_if(pending.begin(),
                                          pending.end(),
-                                         [&](int i) { return fixed.contains(i); }),
+                                         [&](int i)
+                                         {
+                                             return fixed.contains(i);
+                                         }),
                           pending.end());
             std::sort(pending.begin(), pending.end(), stableOrder);
             pending.erase(std::unique(pending.begin(), pending.end()), pending.end());
             if (pending.isEmpty())
                 return true;
             const int index = pending.takeFirst();
-            if (fixed.size() >= 64) {
+            if (fixed.size() >= 64)
+            {
                 affectedLimit = true;
                 return false;
             }
@@ -614,9 +705,11 @@ QVariantMap StudioSession::placementProposal(const QString& id,
             const auto vacant = entries;
             QList<QPair<int, int>> cells;
             int searchRows = rows;
-            if (rows == ComponentSchema::MaxScrollableRows) {
+            if (rows == ComponentSchema::MaxScrollableRows)
+            {
                 int bottom = placement.value("y").toInt() + placement.value("height").toInt();
-                for (const auto& value : originalEntries) {
+                for (const auto& value : originalEntries)
+                {
                     const auto entry = value.toObject();
                     if (entry.value("parentId").toString() != parent)
                         continue;
@@ -629,13 +722,18 @@ QVariantMap StudioSession::placementProposal(const QString& id,
                 for (int col = 0; col < cols; ++col)
                     cells.append({col, row});
             const int originalX = target["x"].toInt(), originalY = target["y"].toInt();
-            std::stable_sort(cells.begin(), cells.end(), [=](const auto& a, const auto& b) {
-                return std::abs(a.first - originalX) + std::abs(a.second - originalY) <
-                       std::abs(b.first - originalX) + std::abs(b.second - originalY);
-            });
+            std::stable_sort(cells.begin(),
+                             cells.end(),
+                             [=](const auto& a, const auto& b)
+                             {
+                                 return std::abs(a.first - originalX) + std::abs(a.second - originalY) <
+                                        std::abs(b.first - originalX) + std::abs(b.second - originalY);
+                             });
             for (int pass = 0; pass < 2; ++pass)
-                for (const auto& cell : cells) {
-                    if (++attempts > 4096) {
+                for (const auto& cell : cells)
+                {
+                    if (++attempts > 4096)
+                    {
                         entries = baseline;
                         fixed = fixedBefore;
                         return false;
@@ -646,14 +744,16 @@ QVariantMap StudioSession::placementProposal(const QString& id,
                         continue;
                     QList<int> displaced;
                     bool blocked = false;
-                    for (int j = 0; j < entries.size(); ++j) {
+                    for (int j = 0; j < entries.size(); ++j)
+                    {
                         const auto other = entries[j].toObject();
                         if (j == index || other.value("parentId").toString() != parent ||
                             (sections && parent.isEmpty() && other.value("categoryId").toString() != category) ||
                             !other.contains("placement") ||
                             !ComponentSchema::placementsOverlap(other["placement"].toObject().toVariantMap(), target))
                             continue;
-                        if (fixed.contains(j) || other.value("locked").toBool()) {
+                        if (fixed.contains(j) || other.value("locked").toBool())
+                        {
                             blocked = true;
                             break;
                         }
@@ -671,7 +771,8 @@ QVariantMap StudioSession::placementProposal(const QString& id,
                         return true;
                     entries = vacant;
                     fixed = fixedBefore;
-                    if (attempts > 4096) {
+                    if (attempts > 4096)
+                    {
                         entries = baseline;
                         return false;
                     }
@@ -685,10 +786,12 @@ QVariantMap StudioSession::placementProposal(const QString& id,
                             ? tr("Shift reached its 4096-proposal search limit. Choose another cell or Swap.")
                         : affectedLimit ? tr("The shift exceeds 64 affected components.")
                                         : tr("No complete shift fits. Cancel or choose another cell."));
-    } else if (!colliders.isEmpty())
+    }
+    else if (!colliders.isEmpty())
         return fail(QStringLiteral("Choose a collision strategy."));
     const auto originalEntries = doc["components"].toArray();
-    const auto appendChange = [&](int index) {
+    const auto appendChange = [&](int index)
+    {
         const auto item = entries[index].toObject();
         changes.append(QVariantMap{{"id", item["id"].toString()},
                                    {"placement", item["placement"].toObject().toVariantMap()},
@@ -709,14 +812,16 @@ QVariantMap StudioSession::placementProposal(const QString& id,
     return {{"valid", true}, {"placements", changes}, {"reason", QString()}};
 }
 
-QVariantMap StudioSession::additionProposal(const QString& type,
-                                            const QVariantMap& placement,
-                                            const QString& strategy,
-                                            const QString& pageId,
-                                            const QString& categoryId,
-                                            const QString& parentId,
-                                            const QVariantMap& configuration,
-                                            bool enableScrolling) {
+QVariantMap
+StudioSession::additionProposal(const QString& type,
+                                const QVariantMap& placement,
+                                const QString& strategy,
+                                const QString& pageId,
+                                const QString& categoryId,
+                                const QString& parentId,
+                                const QVariantMap& configuration,
+                                bool enableScrolling)
+{
     if (!currentProfile())
         return {{"valid", false}, {"reason", QStringLiteral("The edit session has closed.")}};
     HomeLayout temporary(m_live->registry());
@@ -734,7 +839,8 @@ QVariantMap StudioSession::additionProposal(const QString& type,
     auto pages = root["pages"].toArray();
     auto document = root;
     int pageIndex = -1;
-    if (!pageId.isEmpty()) {
+    if (!pageId.isEmpty())
+    {
         for (int i = 0; i < pages.size(); ++i)
             if (pages[i].toObject()["id"] == pageId)
                 pageIndex = i;
@@ -742,22 +848,26 @@ QVariantMap StudioSession::additionProposal(const QString& type,
             return {{"valid", false}, {"reason", QStringLiteral("The page no longer exists.")}};
         document = pages[pageIndex].toObject()["layout"].toObject();
     }
-    if (enableScrolling) {
+    if (enableScrolling)
+    {
         if (!parentId.isEmpty() || !categoryId.isEmpty())
             return {{"valid", false}, {"reason", tr("Choose the page before enabling vertical scrolling.")}};
         auto composition = document["composition"].toObject();
         composition["verticalScrolling"] = true;
         document["composition"] = composition;
     }
-    if (type == "page-menu" && !pageId.isEmpty()) {
+    if (type == "page-menu" && !pageId.isEmpty())
+    {
         auto composition = document["composition"].toObject();
         composition["pageNavigation"] = "none";
         document["composition"] = composition;
     }
     auto entries = document["components"].toArray();
-    for (const auto& value : prototype.value("components").toList()) {
+    for (const auto& value : prototype.value("components").toList())
+    {
         auto item = QJsonObject::fromVariantMap(value.toMap());
-        if (item["id"] == identity) {
+        if (item["id"] == identity)
+        {
             item.remove("placement");
             if (!parentId.isEmpty())
                 item["parentId"] = parentId;
@@ -767,13 +877,16 @@ QVariantMap StudioSession::additionProposal(const QString& type,
         entries.append(item);
     }
     document["components"] = entries;
-    const auto store = [&] {
-        if (pageIndex >= 0) {
+    const auto store = [&]
+    {
+        if (pageIndex >= 0)
+        {
             auto entry = pages[pageIndex].toObject();
             entry["layout"] = document;
             pages[pageIndex] = entry;
             root["pages"] = pages;
-        } else
+        }
+        else
             root = document;
     };
     store();
@@ -783,13 +896,16 @@ QVariantMap StudioSession::additionProposal(const QString& type,
     if (!proposal.value("valid").toBool())
         return proposal;
     proposal["id"] = identity;
-    for (const auto& change : proposal["placements"].toList()) {
+    for (const auto& change : proposal["placements"].toList())
+    {
         const auto value = change.toMap();
         for (int i = 0; i < entries.size(); ++i)
-            if (entries[i].toObject()["id"] == value["id"].toString()) {
+            if (entries[i].toObject()["id"] == value["id"].toString())
+            {
                 auto entry = entries[i].toObject();
                 entry["placement"] = QJsonObject::fromVariantMap(value["placement"].toMap());
-                for (const auto& key : QStringList{"parentId", "categoryId"}) {
+                for (const auto& key : QStringList{"parentId", "categoryId"})
+                {
                     const auto destination = value.value(key).toString();
                     if (destination.isEmpty())
                         entry.remove(key);

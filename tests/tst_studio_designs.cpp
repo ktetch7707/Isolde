@@ -11,35 +11,55 @@
 #include "home/PageModel.h"
 #include "home/StudioSession.h"
 
-namespace {
-QByteArray read(const QString& path) {
+namespace
+{
+QByteArray
+read(const QString& path)
+{
     QFile file(path);
     return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray{};
 }
-bool write(const QString& path, const QByteArray& data) {
+bool
+write(const QString& path, const QByteArray& data)
+{
     QFile file(path);
     return file.open(QIODevice::WriteOnly) && file.write(data) == data.size();
 }
 const QByteArray apps =
     R"([{"id":"installed-app","name":"Installed app","type":"web","url":"https://example.invalid"}])";
 } // namespace
-class StudioDesignTests : public QObject {
+class StudioDesignTests : public QObject
+{
     Q_OBJECT
   private slots:
-    void pageAndInterfacePreviewsAreAtomicAndCancelable();
-    void damagedGalleryThumbnailsRemainBoundedAndCannotChangeDraft();
-    void portableRoundTripStagesArtworkAndRemapsMissingApps();
-    void invalidPortablePackagesCannotMutateOrPublish();
-    void referenceImagesArePrivateBoundedAndTornDown();
-    void sharedStylesPreserveContentAndOverrides();
-    void reusableGroupsPreviewPropagateDetachAndRollback();
-    void responsiveRulesRemainDeclarativeAndBounded();
-    void cachedPageStylesAndHomeTokensRefreshWithoutWrites();
-    void editorViewportDefaultsRejectInvalidDimensionsWithoutWrites();
-    void navigationOnlyReorderingAppearsInTheApplySummary();
-    void appearancePasteAndIndependentArtworkCopiesKeepOwnership();
+    void
+    pageAndInterfacePreviewsAreAtomicAndCancelable();
+    void
+    damagedGalleryThumbnailsRemainBoundedAndCannotChangeDraft();
+    void
+    portableRoundTripStagesArtworkAndRemapsMissingApps();
+    void
+    invalidPortablePackagesCannotMutateOrPublish();
+    void
+    referenceImagesArePrivateBoundedAndTornDown();
+    void
+    sharedStylesPreserveContentAndOverrides();
+    void
+    reusableGroupsPreviewPropagateDetachAndRollback();
+    void
+    responsiveRulesRemainDeclarativeAndBounded();
+    void
+    cachedPageStylesAndHomeTokensRefreshWithoutWrites();
+    void
+    editorViewportDefaultsRejectInvalidDimensionsWithoutWrites();
+    void
+    navigationOnlyReorderingAppearsInTheApplySummary();
+    void
+    appearancePasteAndIndependentArtworkCopiesKeepOwnership();
 };
-void StudioDesignTests::damagedGalleryThumbnailsRemainBoundedAndCannotChangeDraft() {
+void
+StudioDesignTests::damagedGalleryThumbnailsRemainBoundedAndCannotChangeDraft()
+{
     QTemporaryDir dir;
     AppRegistry registry;
     HomeLayout home(&registry);
@@ -62,7 +82,8 @@ void StudioDesignTests::damagedGalleryThumbnailsRemainBoundedAndCannotChangeDraf
     QVERIFY(session);
     const auto draft = session->draft(), disk = read(dir.filePath("home.json"));
     bool found = false;
-    for (const auto& value : session->designChoices()) {
+    for (const auto& value : session->designChoices())
+    {
         const auto entry = value.toMap();
         if (entry.value("id").toString() != id)
             continue;
@@ -77,7 +98,9 @@ void StudioDesignTests::damagedGalleryThumbnailsRemainBoundedAndCannotChangeDraf
     QCOMPARE(read(dir.filePath("home.json")), disk);
 }
 
-void StudioDesignTests::pageAndInterfacePreviewsAreAtomicAndCancelable() {
+void
+StudioDesignTests::pageAndInterfacePreviewsAreAtomicAndCancelable()
+{
     QTemporaryDir dir;
     AppRegistry registry;
     QVERIFY(registry.loadFromData(apps));
@@ -149,7 +172,9 @@ void StudioDesignTests::pageAndInterfacePreviewsAreAtomicAndCancelable() {
     session->invalidate();
     QVERIFY(session->previewDesign("builtin-compact-launcher", "page").isEmpty());
 }
-void StudioDesignTests::portableRoundTripStagesArtworkAndRemapsMissingApps() {
+void
+StudioDesignTests::portableRoundTripStagesArtworkAndRemapsMissingApps()
+{
     QTemporaryDir dir;
     AppRegistry registry;
     QVERIFY(registry.loadFromData(apps));
@@ -226,7 +251,9 @@ void StudioDesignTests::portableRoundTripStagesArtworkAndRemapsMissingApps() {
     QVERIFY(importer->exportDesign(secondPackage, "page"));
     QVERIFY(!importer->previewImport(secondPackage, "interface")["valid"].toBool());
 }
-void StudioDesignTests::invalidPortablePackagesCannotMutateOrPublish() {
+void
+StudioDesignTests::invalidPortablePackagesCannotMutateOrPublish()
+{
     QTemporaryDir dir;
     AppRegistry registry;
     QVERIFY(registry.loadFromData(apps));
@@ -275,7 +302,8 @@ void StudioDesignTests::invalidPortablePackagesCannotMutateOrPublish() {
     layout["components"] = nodes;
     package["layout"] = layout;
     bad.append(package);
-    for (const auto& entry : bad) {
+    for (const auto& entry : bad)
+    {
         QVERIFY(write(dir.filePath("bad.json"), QJsonDocument(entry).toJson()));
         QVERIFY(session->previewImport(dir.filePath("bad.json"), "page").isEmpty());
         QVERIFY(!session->errorString().isEmpty());
@@ -299,7 +327,9 @@ void StudioDesignTests::invalidPortablePackagesCannotMutateOrPublish() {
     QCOMPARE(session->draft(), privateDraft);
     QVERIFY(!QFileInfo::exists(dir.filePath("private.json")));
 }
-void StudioDesignTests::referenceImagesArePrivateBoundedAndTornDown() {
+void
+StudioDesignTests::referenceImagesArePrivateBoundedAndTornDown()
+{
     QTemporaryDir dir;
     AppRegistry registry;
     QVERIFY(registry.loadFromData(apps));
@@ -337,7 +367,9 @@ void StudioDesignTests::referenceImagesArePrivateBoundedAndTornDown() {
     QVERIFY(!session->setReferenceImage(dir.filePath("reference.png")));
     QCOMPARE(read(dir.filePath("home.json")), disk);
 }
-void StudioDesignTests::sharedStylesPreserveContentAndOverrides() {
+void
+StudioDesignTests::sharedStylesPreserveContentAndOverrides()
+{
     QTemporaryDir dir;
     AppRegistry registry;
     QVERIFY(registry.loadFromData(apps));
@@ -390,7 +422,9 @@ void StudioDesignTests::sharedStylesPreserveContentAndOverrides() {
     QCOMPARE(session->changeCount(), count);
     QCOMPARE(read(dir.filePath("home.json")), disk);
 }
-void StudioDesignTests::reusableGroupsPreviewPropagateDetachAndRollback() {
+void
+StudioDesignTests::reusableGroupsPreviewPropagateDetachAndRollback()
+{
     QTemporaryDir dir;
     AppRegistry registry;
     QVERIFY(registry.loadFromData(apps));
@@ -466,7 +500,9 @@ void StudioDesignTests::reusableGroupsPreviewPropagateDetachAndRollback() {
                 .toObject()
                 .contains("designLibrary"));
 }
-void StudioDesignTests::responsiveRulesRemainDeclarativeAndBounded() {
+void
+StudioDesignTests::responsiveRulesRemainDeclarativeAndBounded()
+{
     QVariantMap rule{
         {"schemaVersion", 1}, {"policy", "wrap"}, {"minimumWidth", 96}, {"minimumHeight", 48}, {"aspect", 16.0 / 9}};
     QVERIFY(DesignSystem::validResponsive(rule));
@@ -518,7 +554,9 @@ void StudioDesignTests::responsiveRulesRemainDeclarativeAndBounded() {
     QVERIFY(session->previewReuse("responsive", {{"categoryId", "flow"}, {"rule", rule}}).isEmpty());
     QCOMPARE(session->draft(), baseline);
 }
-void StudioDesignTests::cachedPageStylesAndHomeTokensRefreshWithoutWrites() {
+void
+StudioDesignTests::cachedPageStylesAndHomeTokensRefreshWithoutWrites()
+{
     QTemporaryDir dir;
     AppRegistry registry;
     QVERIFY(registry.loadFromData(apps));
@@ -582,7 +620,9 @@ void StudioDesignTests::cachedPageStylesAndHomeTokensRefreshWithoutWrites() {
 QTEST_GUILESS_MAIN(StudioDesignTests)
 #include "tst_studio_designs.moc"
 
-void StudioDesignTests::editorViewportDefaultsRejectInvalidDimensionsWithoutWrites() {
+void
+StudioDesignTests::editorViewportDefaultsRejectInvalidDimensionsWithoutWrites()
+{
     QTemporaryDir dir;
     AppRegistry registry;
     const auto defaults = dir.filePath("default-home-layout.json");
@@ -599,7 +639,8 @@ void StudioDesignTests::editorViewportDefaultsRejectInvalidDimensionsWithoutWrit
                                                   {{"width", 1280}, {"height", 2161}},
                                                   {{"width", "1280"}, {"height", 720}},
                                                   {{"width", 1280.5}, {"height", 720}},
-                                                  {{"width", 1280}, {"height", 720}, {"extra", true}}}) {
+                                                  {{"width", 1280}, {"height", 720}, {"extra", true}}})
+    {
         options["referenceViewport"] = invalid;
         QVERIFY(write(optionsPath, QJsonDocument(options).toJson(QJsonDocument::Compact)));
         QVERIFY(home.studioOptions().isEmpty());
@@ -614,7 +655,9 @@ void StudioDesignTests::editorViewportDefaultsRejectInvalidDimensionsWithoutWrit
     QVERIFY(!QFile::exists(saved));
 }
 
-void StudioDesignTests::navigationOnlyReorderingAppearsInTheApplySummary() {
+void
+StudioDesignTests::navigationOnlyReorderingAppearsInTheApplySummary()
+{
     QTemporaryDir dir;
     AppRegistry registry;
     HomeLayout home(&registry);
@@ -630,7 +673,8 @@ void StudioDesignTests::navigationOnlyReorderingAppearsInTheApplySummary() {
     QVERIFY(session->execute("reorderPage", {{"id", first}, {"offset", 1}}));
     const auto changes = session->changeSummary();
     QCOMPARE(changes.size(), 2);
-    for (const auto& change : changes) {
+    for (const auto& change : changes)
+    {
         QCOMPARE(change.toMap()["change"].toString(), QString("Reordered"));
         QVERIFY(!change.toMap()["pageId"].toString().isEmpty());
     }
@@ -640,7 +684,9 @@ void StudioDesignTests::navigationOnlyReorderingAppearsInTheApplySummary() {
     QVERIFY(session->changeSummary().isEmpty());
 }
 
-void StudioDesignTests::appearancePasteAndIndependentArtworkCopiesKeepOwnership() {
+void
+StudioDesignTests::appearancePasteAndIndependentArtworkCopiesKeepOwnership()
+{
     QTemporaryDir dir;
     AppRegistry registry;
     QVERIFY(registry.loadFromData(apps));

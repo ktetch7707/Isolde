@@ -23,14 +23,19 @@
 
 AppRegistry::AppRegistry(QObject* parent) : QObject(parent) {}
 
-static bool validIconName(const AppDefinition& app) {
+static bool
+validIconName(const AppDefinition& app)
+{
     const auto value = app.launchConfiguration.value("icon");
     static const QRegularExpression name("^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$");
     return !value.isValid() || (value.metaType().id() == QMetaType::QString && name.match(value.toString()).hasMatch());
 }
 
-static QJsonObject iconRole(const AppDefinition& app) {
-    static const auto roles = []() {
+static QJsonObject
+iconRole(const AppDefinition& app)
+{
+    static const auto roles = []()
+    {
         QFile file(":/config/app-icons/roles.json");
         if (!file.open(QIODevice::ReadOnly))
             return QJsonObject();
@@ -39,7 +44,9 @@ static QJsonObject iconRole(const AppDefinition& app) {
     }();
     return roles[app.launchConfiguration.value("icon", app.id).toString()].toObject();
 }
-static QString appIcon(const AppDefinition& app, int role = 0) {
+static QString
+appIcon(const AppDefinition& app, int role = 0)
+{
     if (!qobject_cast<QGuiApplication*>(QCoreApplication::instance()))
         return {};
     const auto packaged = ":/config/app-icons/" + app.launchConfiguration.value("icon", app.id).toString() + ".svg";
@@ -47,12 +54,14 @@ static QString appIcon(const AppDefinition& app, int role = 0) {
         return {};
     auto name = app.launchConfiguration.value("icon", app.id).toString();
     const auto roots = QStandardPaths::standardLocations(QStandardPaths::GenericDataLocation);
-    const auto safeFile = [&](const QString& path) {
+    const auto safeFile = [&](const QString& path)
+    {
         const QFileInfo info(path);
         if (!info.isFile() || info.size() < 1 || info.size() > 1024 * 1024)
             return false;
         const auto canonical = info.canonicalFilePath();
-        for (const auto& root : roots) {
+        for (const auto& root : roots)
+        {
             const auto base = QFileInfo(root).canonicalFilePath();
             if (!base.isEmpty() && canonical.startsWith(base + "/"))
                 return true;
@@ -68,10 +77,12 @@ static QString appIcon(const AppDefinition& app, int role = 0) {
         desktopIds.append(app.id);
     bool suppliedIcon = false;
     for (auto candidateId : desktopIds)
-        if (desktopName.match(candidateId).hasMatch()) {
+        if (desktopName.match(candidateId).hasMatch())
+        {
             if (!candidateId.endsWith(".desktop"))
                 candidateId += ".desktop";
-            for (const auto& root : roots) {
+            for (const auto& root : roots)
+            {
                 const auto entry = QDir(root).filePath("applications/" + candidateId);
                 if (!safeFile(entry))
                     continue;
@@ -79,7 +90,8 @@ static QString appIcon(const AppDefinition& app, int role = 0) {
                 const auto supplied = settings.value("Desktop Entry/Icon").toString().trimmed();
                 static const QSet<QString> genericIcons{
                     "application-x-executable", "application-default-icon", "package-x-generic", "system-run"};
-                if (!supplied.isEmpty() && !genericIcons.contains(supplied)) {
+                if (!supplied.isEmpty() && !genericIcons.contains(supplied))
+                {
                     name = supplied;
                     suppliedIcon = true;
                     break;
@@ -89,8 +101,10 @@ static QString appIcon(const AppDefinition& app, int role = 0) {
                 break;
         }
     QIcon icon;
-    if (QFile::exists(packaged)) {
-        if (role) {
+    if (QFile::exists(packaged))
+    {
+        if (role)
+        {
             const auto metadata = iconRole(app);
             const auto relative = metadata["foreground"].toString();
             if (!QRegularExpression("^foreground/[a-z0-9][a-z0-9-]{0,127}\\.svg$").match(relative).hasMatch())
@@ -111,12 +125,14 @@ static QString appIcon(const AppDefinition& app, int role = 0) {
             auto foreground = reader.read();
             if (foreground.isNull())
                 return {};
-            if (role == 2) {
+            if (role == 2)
+            {
                 const QColor ink(metadata["inkColour"].toString());
                 QList<QColor> excluded;
                 if (!ink.isValid() || metadata["inkExclude"].toArray().size() > 4)
                     return {};
-                for (const auto& value : metadata["inkExclude"].toArray()) {
+                for (const auto& value : metadata["inkExclude"].toArray())
+                {
                     const QColor colour(value.toString());
                     if (!colour.isValid())
                         return {};
@@ -125,9 +141,12 @@ static QString appIcon(const AppDefinition& app, int role = 0) {
                 foreground = AppArtwork::inkMask(foreground, ink, excluded);
             }
             icon = QIcon(QPixmap::fromImage(foreground));
-        } else
+        }
+        else
             icon = QIcon(packaged);
-    } else if (QDir::isAbsolutePath(name)) {
+    }
+    else if (QDir::isAbsolutePath(name))
+    {
         if (!safeFile(name))
             return {};
         QImageReader reader(name);
@@ -135,21 +154,27 @@ static QString appIcon(const AppDefinition& app, int role = 0) {
         if (!reader.canRead() || size.width() < 1 || size.height() < 1 || size.width() > 4096 || size.height() > 4096)
             return {};
         icon = QIcon(name);
-    } else {
+    }
+    else
+    {
         if (!desktopName.match(name).hasMatch())
             return {};
         icon = QIcon::fromTheme(name);
         if (icon.isNull())
-            for (const auto& root : roots) {
+            for (const auto& root : roots)
+            {
                 for (const auto& folder : QStringList{"icons/hicolor/256x256/apps/",
                                                       "icons/hicolor/128x128/apps/",
                                                       "icons/hicolor/64x64/apps/",
                                                       "icons/hicolor/48x48/apps/",
                                                       "icons/hicolor/scalable/apps/",
-                                                      "pixmaps/"}) {
-                    for (const auto& extension : QStringList{".png", ".svg", ".xpm"}) {
+                                                      "pixmaps/"})
+                {
+                    for (const auto& extension : QStringList{".png", ".svg", ".xpm"})
+                    {
                         const auto path = QDir(root).filePath(folder + name + extension);
-                        if (safeFile(path)) {
+                        if (safeFile(path))
+                        {
                             icon = QIcon(path);
                             break;
                         }
@@ -168,7 +193,8 @@ static QString appIcon(const AppDefinition& app, int role = 0) {
         return {};
     if (role == 2 && !QFile::exists(packaged))
         return {}; // Unreviewed rasters have no approved monochrome mask.
-    if (role == 1 && !QFile::exists(packaged)) {
+    if (role == 1 && !QFile::exists(packaged))
+    {
         const auto cleaned = AppArtwork::cleanBackground(image);
         if (cleaned.accepted)
             image = cleaned.image;
@@ -192,7 +218,8 @@ static QString appIcon(const AppDefinition& app, int role = 0) {
     if (QFileInfo(path).isSymLink())
         return {};
     QFile existing(path);
-    if (!existing.open(QIODevice::ReadOnly) || existing.read(1024 * 1024 + 1) != bytes) {
+    if (!existing.open(QIODevice::ReadOnly) || existing.read(1024 * 1024 + 1) != bytes)
+    {
         existing.close();
         QSaveFile file(path);
         if (!file.open(QIODevice::WriteOnly) || file.write(bytes) != bytes.size() || !file.commit())
@@ -201,9 +228,12 @@ static QString appIcon(const AppDefinition& app, int role = 0) {
     return QUrl::fromLocalFile(path).toString();
 }
 
-static QStringList readStringArray(const QJsonArray& array) {
+static QStringList
+readStringArray(const QJsonArray& array)
+{
     QStringList result;
-    for (const auto& value : array) {
+    for (const auto& value : array)
+    {
         const auto text = value.toString().trimmed();
         if (!text.isEmpty() && !result.contains(text))
             result.append(text);
@@ -211,21 +241,28 @@ static QStringList readStringArray(const QJsonArray& array) {
     return result;
 }
 
-static bool isSafeWebUrl(const QUrl& url) {
+static bool
+isSafeWebUrl(const QUrl& url)
+{
     return url.isValid() && (url.scheme() == QStringLiteral("https") || url.scheme() == QStringLiteral("qrc"));
 }
 
-static bool isSafeWebOrigin(const QString& text) {
+static bool
+isSafeWebOrigin(const QString& text)
+{
     const QUrl url(text.trimmed());
     return isSafeWebUrl(url) &&
            (url.scheme() == QStringLiteral("qrc") ||
             (!url.host().isEmpty() && url.path().isEmpty() && url.query().isEmpty() && url.fragment().isEmpty()));
 }
 
-QVariantList AppRegistry::apps() const {
+QVariantList
+AppRegistry::apps() const
+{
     QVariantList result;
     result.reserve(m_apps.size());
-    for (const auto& app : m_apps) {
+    for (const auto& app : m_apps)
+    {
         result.append(QVariantMap{{"id", app.id},
                                   {"name", app.name},
                                   {"type", app.type},
@@ -244,11 +281,15 @@ QVariantList AppRegistry::apps() const {
     return result;
 }
 
-QString AppRegistry::errorString() const {
+QString
+AppRegistry::errorString() const
+{
     return m_errorString;
 }
 
-const AppDefinition* AppRegistry::find(const QString& id) const {
+const AppDefinition*
+AppRegistry::find(const QString& id) const
+{
     for (const auto& app : m_apps)
         if (app.id == id)
             return &app;
@@ -258,7 +299,9 @@ const AppDefinition* AppRegistry::find(const QString& id) const {
     return nullptr;
 }
 
-bool AppRegistry::addApp(const AppDefinition& app) {
+bool
+AppRegistry::addApp(const AppDefinition& app)
+{
     if (!app.isValid() || find(app.id) || !validIconName(app))
         return false;
     for (const auto& alias : app.legacyIds())
@@ -275,11 +318,14 @@ bool AppRegistry::addApp(const AppDefinition& app) {
     return true;
 }
 
-bool AppRegistry::replaceApp(const AppDefinition& app) {
+bool
+AppRegistry::replaceApp(const AppDefinition& app)
+{
     if (!app.isValid() || !validIconName(app))
         return false;
     for (auto& existing : m_apps)
-        if (existing.id == app.id) {
+        if (existing.id == app.id)
+        {
             if (existing.type != app.type || existing.legacyIds() != app.legacyIds())
                 return false;
             auto resolved = app;
@@ -295,9 +341,13 @@ bool AppRegistry::replaceApp(const AppDefinition& app) {
     return false;
 }
 
-bool AppRegistry::removeApp(const QString& id) {
-    for (qsizetype i = 0; i < m_apps.size(); ++i) {
-        if (m_apps.at(i).id == id) {
+bool
+AppRegistry::removeApp(const QString& id)
+{
+    for (qsizetype i = 0; i < m_apps.size(); ++i)
+    {
+        if (m_apps.at(i).id == id)
+        {
             m_apps.removeAt(i);
             emit appsChanged();
             return true;
@@ -306,14 +356,18 @@ bool AppRegistry::removeApp(const QString& id) {
     return false;
 }
 
-bool AppRegistry::load(const QString& path) {
+bool
+AppRegistry::load(const QString& path)
+{
     return loadFromFile(resolveConfigPath(path, "config/apps.json", ":/config/apps.json"));
 }
 
-QString AppRegistry::resolveConfigPath(const QString& path, const QString& defaultName,
-                                       const QString& resourceName) {
+QString
+AppRegistry::resolveConfigPath(const QString& path, const QString& defaultName, const QString& resourceName)
+{
     QString resolvedPath = path;
-    if (resolvedPath.isEmpty()) {
+    if (resolvedPath.isEmpty())
+    {
         resolvedPath = QDir(QCoreApplication::applicationDirPath()).filePath(defaultName);
         if (!QFile::exists(resolvedPath))
             resolvedPath = resourceName;
@@ -321,9 +375,12 @@ QString AppRegistry::resolveConfigPath(const QString& path, const QString& defau
     return resolvedPath;
 }
 
-bool AppRegistry::loadFromFile(const QString& resolvedPath) {
+bool
+AppRegistry::loadFromFile(const QString& resolvedPath)
+{
     QFile file(resolvedPath);
-    if (!file.open(QIODevice::ReadOnly)) {
+    if (!file.open(QIODevice::ReadOnly))
+    {
         setError(tr("Unable to open app configuration: %1").arg(resolvedPath));
         return false;
     }
@@ -331,18 +388,23 @@ bool AppRegistry::loadFromFile(const QString& resolvedPath) {
 }
 }
 
-bool AppRegistry::loadFromData(const QByteArray& data) {
+bool
+AppRegistry::loadFromData(const QByteArray& data)
+{
     QJsonParseError parseError;
     const auto document = QJsonDocument::fromJson(data, &parseError);
-    if (parseError.error != QJsonParseError::NoError || !document.isArray()) {
+    if (parseError.error != QJsonParseError::NoError || !document.isArray())
+    {
         setError(tr("Invalid app configuration: %1").arg(parseError.errorString()));
         return false;
     }
 
     QVector<AppDefinition> loaded;
     QSet<QString> ids;
-    for (const auto& value : document.array()) {
-        if (!value.isObject()) {
+    for (const auto& value : document.array())
+    {
+        if (!value.isObject())
+        {
             setError(tr("Every app entry must be an object."));
             return false;
         }
@@ -383,22 +445,28 @@ bool AppRegistry::loadFromData(const QByteArray& data) {
             validOrigins = validOrigins && isSafeWebOrigin(origin.toString());
         const bool validWeb = app.type != QStringLiteral("web") || (isSafeWebUrl(url) && validOrigins);
         if (!app.isValid() || ids.contains(app.id) || !app.accent.isValid() ||
-            !presentationModes.contains(app.presentationMode) || !validWeb) {
-            setError(tr("App entries require unique IDs, names, types, valid accent colors, known presentation/network "
-                        "modes, and safe web URLs/origins."));
+            !presentationModes.contains(app.presentationMode) || !validWeb)
+        {
+            setError(
+                tr("App entries require unique IDs, names, types, valid accent colors, known presentation/network "
+                   "modes, and safe web URLs/origins."));
             return false;
         }
-        if (!networkRequirements.contains(app.networkRequirement)) {
+        if (!networkRequirements.contains(app.networkRequirement))
+        {
             setError(tr("App entries require a known network requirement."));
             return false;
         }
-        for (const auto& handledAction : app.handledActions) {
-            if (!handledActionTypes.contains(handledAction)) {
+        for (const auto& handledAction : app.handledActions)
+        {
+            if (!handledActionTypes.contains(handledAction))
+            {
                 setError(tr("App entries require known handled action types."));
                 return false;
             }
         }
-        if (!validIconName(app)) {
+        if (!validIconName(app))
+        {
             setError(tr("Choose a local registered app icon name."));
             return false;
         }
@@ -408,8 +476,10 @@ bool AppRegistry::loadFromData(const QByteArray& data) {
         app.iconContrastBackdrop = iconRole(app)["contrastBackdrop"].toString();
         app.iconOpticalScale = qBound(.5, iconRole(app)["opticalScale"].toDouble(1), 1.4);
         ids.insert(app.id);
-        for (const auto& alias : app.legacyIds()) {
-            if (ids.contains(alias)) {
+        for (const auto& alias : app.legacyIds())
+        {
+            if (ids.contains(alias))
+            {
                 setError(tr("App compatibility IDs must be unique."));
                 return false;
             }
@@ -417,7 +487,8 @@ bool AppRegistry::loadFromData(const QByteArray& data) {
         }
         loaded.append(app);
     }
-    if (loaded.isEmpty()) {
+    if (loaded.isEmpty())
+    {
         setError(tr("App configuration contains no apps."));
         return false;
     }
@@ -428,7 +499,9 @@ bool AppRegistry::loadFromData(const QByteArray& data) {
     return true;
 }
 
-void AppRegistry::setError(const QString& message) {
+void
+AppRegistry::setError(const QString& message)
+{
     if (m_errorString == message)
         return;
     m_errorString = message;

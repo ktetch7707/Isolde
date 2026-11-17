@@ -1,17 +1,24 @@
 #include "KodiMedia.h"
 
-void KodiMedia::scanMovies() {
+void
+KodiMedia::scanMovies()
+{
     startScan("Video");
 }
-void KodiMedia::scanMusic() {
+void
+KodiMedia::scanMusic()
+{
     startScan("Music");
 }
-void KodiMedia::startScan(const QString& kind) {
-    if (m_busy || m_playbackActive || !m_connected) {
+void
+KodiMedia::startScan(const QString& kind)
+{
+    if (m_busy || m_playbackActive || !m_connected)
+    {
         m_scanStatus = m_playbackActive ? "Stop playback before scanning, then retry."
                        : m_busy
-                          ? "Kodi is finishing another operation. Wait, then retry the scan."
-                          : "Connect to Kodi before scanning. Refresh the library connection, then retry. " + m_status;
+                           ? "Kodi is finishing another operation. Wait, then retry the scan."
+                           : "Connect to Kodi before scanning. Refresh the library connection, then retry. " + m_status;
         emit changed();
         return;
     }
@@ -26,7 +33,9 @@ void KodiMedia::startScan(const QString& kind) {
     emit changed();
     request(kind == "Music" ? "AudioLibrary.Scan" : "VideoLibrary.Scan");
 }
-void KodiMedia::refreshSources() {
+void
+KodiMedia::refreshSources()
+{
     if (m_busy || m_playbackActive)
         return;
     m_sourcePreviewReady = false;
@@ -36,7 +45,9 @@ void KodiMedia::refreshSources() {
     emit changed();
     request("Isolde.GetSources");
 }
-void KodiMedia::previewSource(const QVariantMap& source) {
+void
+KodiMedia::previewSource(const QVariantMap& source)
+{
     if (!canPreviewSource())
         return;
     m_sourceDraft = source;
@@ -49,13 +60,18 @@ void KodiMedia::previewSource(const QVariantMap& source) {
     request("Isolde.PreviewSource", {{"source", QJsonObject::fromVariantMap(source)}});
 }
 
-bool KodiMedia::canPreviewSource() const {
+bool
+KodiMedia::canPreviewSource() const
+{
     return !m_busy && !m_playbackActive && m_sourceGuard && m_sourceGuard();
 }
-void KodiMedia::applySource(const QVariantMap& source) {
+void
+KodiMedia::applySource(const QVariantMap& source)
+{
     if (m_busy || m_playbackActive || !m_sourceGuard || !m_sourceGuard())
         return;
-    if (!m_sourcePreviewReady || source != m_sourceDraft || m_sourceRevision.size() != 64) {
+    if (!m_sourcePreviewReady || source != m_sourceDraft || m_sourceRevision.size() != 64)
+    {
         m_sourceStatus = "Preview this exact source draft before saving.";
         emit changed();
         return;
@@ -67,7 +83,9 @@ void KodiMedia::applySource(const QVariantMap& source) {
     emit changed();
     request("Isolde.ApplySource", {{"source", QJsonObject::fromVariantMap(source)}, {"revision", m_sourceRevision}});
 }
-void KodiMedia::cancelSourcePreview() {
+void
+KodiMedia::cancelSourcePreview()
+{
     m_sourcePreviewReady = false;
     m_sourceDraft.clear();
     m_sourceRevision.clear();

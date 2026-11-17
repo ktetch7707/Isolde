@@ -11,59 +11,91 @@
 #include <QUrl>
 #include "home/ComponentSchema.h"
 
-AmbientSettings::AmbientSettings(QObject* parent) : QObject(parent), m_settingsGroup(ProfileManager::ambientGroup()) {
+AmbientSettings::AmbientSettings(QObject* parent) : QObject(parent), m_settingsGroup(ProfileManager::ambientGroup())
+{
     load();
 }
 
-bool AmbientSettings::enabled() const {
+bool
+AmbientSettings::enabled() const
+{
     return m_enabled;
 }
-int AmbientSettings::timeoutMinutes() const {
+int
+AmbientSettings::timeoutMinutes() const
+{
     return m_timeoutMinutes;
 }
-QString AmbientSettings::mode() const {
+QString
+AmbientSettings::mode() const
+{
     return m_mode;
 }
-int AmbientSettings::slideshowSeconds() const {
+int
+AmbientSettings::slideshowSeconds() const
+{
     return m_slideshowSeconds;
 }
-bool AmbientSettings::showClock() const {
+bool
+AmbientSettings::showClock() const
+{
     return m_showClock;
 }
-bool AmbientSettings::showDate() const {
+bool
+AmbientSettings::showDate() const
+{
     return m_showDate;
 }
-bool AmbientSettings::showSystemHint() const {
+bool
+AmbientSettings::showSystemHint() const
+{
     return m_showSystemHint;
 }
-QString AmbientSettings::photoDirectory() const {
+QString
+AmbientSettings::photoDirectory() const
+{
     return m_photoDirectory;
 }
-QVariantList AmbientSettings::photoUrls() const {
+QVariantList
+AmbientSettings::photoUrls() const
+{
     return m_photoUrls;
 }
-int AmbientSettings::photoCount() const {
+int
+AmbientSettings::photoCount() const
+{
     return m_photoUrls.size();
 }
-QString AmbientSettings::imageFit() const {
+QString
+AmbientSettings::imageFit() const
+{
     return m_imageFit;
 }
-bool AmbientSettings::shuffle() const {
+bool
+AmbientSettings::shuffle() const
+{
     return m_shuffle;
 }
-QString AmbientSettings::errorString() const {
+QString
+AmbientSettings::errorString() const
+{
     return m_errorString;
 }
 
-bool AmbientSettings::setPageIds(const QStringList& ids) {
-    if (ids.size() > 64) {
+bool
+AmbientSettings::setPageIds(const QStringList& ids)
+{
+    if (ids.size() > 64)
+    {
         m_errorString = tr("Select at most 64 pages.");
         emit changed();
         return false;
     }
     QStringList unique;
-    for (const auto& id : ids) {
-        if (!ComponentSchema::safeId(id) || unique.contains(id)) {
+    for (const auto& id : ids)
+    {
+        if (!ComponentSchema::safeId(id) || unique.contains(id))
+        {
             m_errorString = tr("Choose distinct valid pages.");
             emit changed();
             return false;
@@ -75,7 +107,8 @@ bool AmbientSettings::setPageIds(const QStringList& ids) {
     const auto previous = settings.value(QStringLiteral("pageIds"));
     settings.setValue(QStringLiteral("pageIds"), unique);
     settings.sync();
-    if (settings.status() != QSettings::NoError) {
+    if (settings.status() != QSettings::NoError)
+    {
         settings.setValue(QStringLiteral("pageIds"), previous);
         m_errorString = tr("Screensaver pages could not be saved. Nothing changed.");
         emit changed();
@@ -87,13 +120,17 @@ bool AmbientSettings::setPageIds(const QStringList& ids) {
     return true;
 }
 
-void AmbientSettings::toggleEnabled() {
+void
+AmbientSettings::toggleEnabled()
+{
     m_enabled = !m_enabled;
     save();
     emit changed();
 }
 
-void AmbientSettings::adjustTimeout(int delta) {
+void
+AmbientSettings::adjustTimeout(int delta)
+{
     const auto next = clamp(m_timeoutMinutes + delta, 1, 120);
     if (next == m_timeoutMinutes)
         return;
@@ -102,7 +139,9 @@ void AmbientSettings::adjustTimeout(int delta) {
     emit changed();
 }
 
-void AmbientSettings::nextMode() {
+void
+AmbientSettings::nextMode()
+{
     static const QStringList modes{
         QStringLiteral("slideshow"), QStringLiteral("gradient"), QStringLiteral("dim"), QStringLiteral("pages")};
     const auto next = (modes.indexOf(m_mode) + 1) % modes.size();
@@ -111,7 +150,9 @@ void AmbientSettings::nextMode() {
     emit changed();
 }
 
-void AmbientSettings::adjustSlideshowSeconds(int delta) {
+void
+AmbientSettings::adjustSlideshowSeconds(int delta)
+{
     const auto next = clamp(m_slideshowSeconds + delta, 5, 300);
     if (next == m_slideshowSeconds)
         return;
@@ -120,37 +161,49 @@ void AmbientSettings::adjustSlideshowSeconds(int delta) {
     emit changed();
 }
 
-void AmbientSettings::toggleClock() {
+void
+AmbientSettings::toggleClock()
+{
     m_showClock = !m_showClock;
     save();
     emit changed();
 }
 
-void AmbientSettings::toggleDate() {
+void
+AmbientSettings::toggleDate()
+{
     m_showDate = !m_showDate;
     save();
     emit changed();
 }
 
-void AmbientSettings::toggleSystemHint() {
+void
+AmbientSettings::toggleSystemHint()
+{
     m_showSystemHint = !m_showSystemHint;
     save();
     emit changed();
 }
 
-void AmbientSettings::useManagedPhotoDirectory() {
+void
+AmbientSettings::useManagedPhotoDirectory()
+{
     setPhotoDirectory(defaultPhotoDirectory());
 }
 
-bool AmbientSettings::setPhotoDirectory(const QString& path) {
+bool
+AmbientSettings::setPhotoDirectory(const QString& path)
+{
     const QFileInfo info(path.trimmed());
-    if (!info.exists() || !info.isDir()) {
+    if (!info.exists() || !info.isDir())
+    {
         m_errorString = tr("Photo folder does not exist.");
         emit changed();
         return false;
     }
     const auto canonical = info.canonicalFilePath();
-    if (canonical.isEmpty()) {
+    if (canonical.isEmpty())
+    {
         m_errorString = tr("Photo folder could not be resolved.");
         emit changed();
         return false;
@@ -165,10 +218,13 @@ bool AmbientSettings::setPhotoDirectory(const QString& path) {
     return true;
 }
 
-bool AmbientSettings::importSamplePhotos() {
+bool
+AmbientSettings::importSamplePhotos()
+{
     if (m_photoDirectory.isEmpty())
         m_photoDirectory = defaultPhotoDirectory();
-    if (!QDir().mkpath(m_photoDirectory)) {
+    if (!QDir().mkpath(m_photoDirectory))
+    {
         m_errorString = tr("Unable to create ambient photo folder.");
         emit changed();
         return false;
@@ -178,9 +234,11 @@ bool AmbientSettings::importSamplePhotos() {
         {QStringLiteral("aurora.png"), {QColor(QStringLiteral("#0A142D")), QColor(QStringLiteral("#438CB4"))}},
         {QStringLiteral("ember.png"), {QColor(QStringLiteral("#37140C")), QColor(QStringLiteral("#BE5F2D"))}},
         {QStringLiteral("meadow.png"), {QColor(QStringLiteral("#08251E")), QColor(QStringLiteral("#5AA87A"))}}};
-    for (const auto& sample : samples) {
+    for (const auto& sample : samples)
+    {
         QImage image(1280, 720, QImage::Format_RGB32);
-        for (int y = 0; y < image.height(); ++y) {
+        for (int y = 0; y < image.height(); ++y)
+        {
             const auto t = static_cast<double>(y) / static_cast<double>(image.height() - 1);
             const auto r = static_cast<int>(sample.second.first.red() * (1.0 - t) + sample.second.second.red() * t);
             const auto g = static_cast<int>(sample.second.first.green() * (1.0 - t) + sample.second.second.green() * t);
@@ -188,7 +246,8 @@ bool AmbientSettings::importSamplePhotos() {
             for (int x = 0; x < image.width(); ++x)
                 image.setPixelColor(x, y, QColor(r, g, b));
         }
-        if (!image.save(QDir(m_photoDirectory).filePath(sample.first), "PNG")) {
+        if (!image.save(QDir(m_photoDirectory).filePath(sample.first), "PNG"))
+        {
             m_errorString = tr("Unable to write sample ambient photo.");
             emit changed();
             return false;
@@ -201,13 +260,17 @@ bool AmbientSettings::importSamplePhotos() {
     return true;
 }
 
-void AmbientSettings::rescanPhotos() {
+void
+AmbientSettings::rescanPhotos()
+{
     m_errorString.clear();
     scanPhotos();
     emit changed();
 }
 
-void AmbientSettings::nextImageFit() {
+void
+AmbientSettings::nextImageFit()
+{
     static const QStringList modes{QStringLiteral("fill"), QStringLiteral("fit"), QStringLiteral("stretch")};
     const auto next = (modes.indexOf(m_imageFit) + 1) % modes.size();
     m_imageFit = modes.at(next);
@@ -215,13 +278,17 @@ void AmbientSettings::nextImageFit() {
     emit changed();
 }
 
-void AmbientSettings::toggleShuffle() {
+void
+AmbientSettings::toggleShuffle()
+{
     m_shuffle = !m_shuffle;
     save();
     emit changed();
 }
 
-void AmbientSettings::reset() {
+void
+AmbientSettings::reset()
+{
     if (!setPageIds({}))
         return;
     m_enabled = true;
@@ -241,7 +308,9 @@ void AmbientSettings::reset() {
     emit changed();
 }
 
-void AmbientSettings::load() {
+void
+AmbientSettings::load()
+{
     QSettings settings;
     settings.beginGroup(m_settingsGroup);
     m_enabled = settings.value(QStringLiteral("enabled"), m_enabled).toBool();
@@ -267,7 +336,9 @@ void AmbientSettings::load() {
     scanPhotos();
 }
 
-void AmbientSettings::save() const {
+void
+AmbientSettings::save() const
+{
     QSettings settings;
     settings.beginGroup(m_settingsGroup);
     settings.setValue(QStringLiteral("enabled"), m_enabled);
@@ -282,7 +353,9 @@ void AmbientSettings::save() const {
     settings.setValue(QStringLiteral("shuffle"), m_shuffle);
 }
 
-void AmbientSettings::scanPhotos() {
+void
+AmbientSettings::scanPhotos()
+{
     QVariantList urls;
     const QDir directory(m_photoDirectory);
     const auto files = directory.entryInfoList(
@@ -294,7 +367,9 @@ void AmbientSettings::scanPhotos() {
     m_photoUrls = urls;
 }
 
-QString AmbientSettings::defaultPhotoDirectory() const {
+QString
+AmbientSettings::defaultPhotoDirectory() const
+{
     if (m_settingsGroup.startsWith("profiles/"))
         return QDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation))
             .filePath(m_settingsGroup + "/photos");
@@ -304,6 +379,8 @@ QString AmbientSettings::defaultPhotoDirectory() const {
     return QDir(pictures).filePath(QStringLiteral("Isolde Ambient"));
 }
 
-int AmbientSettings::clamp(int value, int minimum, int maximum) {
+int
+AmbientSettings::clamp(int value, int minimum, int maximum)
+{
     return qBound(minimum, value, maximum);
 }

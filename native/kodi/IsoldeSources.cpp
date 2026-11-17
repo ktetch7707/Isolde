@@ -26,22 +26,30 @@
 #include "video/VideoInfoScanner.h"
 #include "video/VideoLibraryQueue.h"
 
-namespace {
-struct Descriptor {
+namespace
+{
+struct Descriptor
+{
     int value;
-    explicit Descriptor(int fd) : value(fd) {
+    explicit Descriptor(int fd) : value(fd)
+    {
         if (fd < 0)
             throw std::runtime_error("Managed source storage unavailable");
     }
-    ~Descriptor() {
+    ~Descriptor()
+    {
         close(value);
     }
     Descriptor(const Descriptor&) = delete;
 };
-bool Token(const std::string& token) {
+bool
+Token(const std::string& token)
+{
     return token.size() == 32 && token.find_first_not_of("0123456789abcdef") == std::string::npos;
 }
-std::filesystem::path SourceFile() {
+std::filesystem::path
+SourceFile()
+{
     const auto file = std::filesystem::path(CSpecialProtocol::TranslatePath(CMediaSourceSettings::GetSourcesFile()));
     const auto root = std::filesystem::canonical(CSpecialProtocol::TranslatePath("special://masterprofile"));
     const auto parent = std::filesystem::canonical(file.parent_path());
@@ -50,7 +58,9 @@ std::filesystem::path SourceFile() {
         throw std::runtime_error("Unmanaged source configuration");
     return parent / file.filename();
 }
-std::string Read(int directory, const char* name) {
+std::string
+Read(int directory, const char* name)
+{
     Descriptor input(openat(directory, name, O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC));
     struct stat info{};
     if (fstat(input.value, &info) != 0 || !S_ISREG(info.st_mode) || info.st_uid != getuid() || info.st_size < 0 ||
@@ -58,7 +68,8 @@ std::string Read(int directory, const char* name) {
         throw std::runtime_error("Unsafe source configuration");
     std::string bytes(static_cast<size_t>(info.st_size), '\0');
     size_t offset = 0;
-    while (offset < bytes.size()) {
+    while (offset < bytes.size())
+    {
         const auto n = read(input.value, bytes.data() + offset, bytes.size() - offset);
         if (n <= 0)
             throw std::runtime_error("Source configuration read failed");
@@ -66,12 +77,15 @@ std::string Read(int directory, const char* name) {
     }
     return bytes;
 }
-void Atomic(int directory, const char* name, const std::string& bytes) {
+void
+Atomic(int directory, const char* name, const std::string& bytes)
+{
     unlinkat(directory, ".isolde-source-write.tmp", 0);
     Descriptor output(
         openat(directory, ".isolde-source-write.tmp", O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0600));
     size_t offset = 0;
-    while (offset < bytes.size()) {
+    while (offset < bytes.size())
+    {
         const auto n = write(output.value, bytes.data() + offset, bytes.size() - offset);
         if (n <= 0)
             throw std::runtime_error("Source configuration write failed");
@@ -81,7 +95,9 @@ void Atomic(int directory, const char* name, const std::string& bytes) {
         fsync(directory) != 0)
         throw std::runtime_error("Source configuration publication failed");
 }
-void SaveAtomic() {
+void
+SaveAtomic()
+{
     const auto file = SourceFile();
     Descriptor directory(open(file.parent_path().c_str(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC));
     const auto temporary = file.parent_path() / ".isolde-sources.xml";
@@ -90,17 +106,23 @@ void SaveAtomic() {
         throw std::runtime_error("Unfinished source configuration publication");
     if (!CMediaSourceSettings::GetInstance().Save(temporary.string()))
         throw std::runtime_error("Kodi could not serialize sources");
-    try {
+    try
+    {
         const auto bytes = Read(directory.value, temporary.filename().c_str());
         Atomic(directory.value, "sources.xml", bytes);
         unlinkat(directory.value, temporary.filename().c_str(), 0);
-    } catch (...) {
+    }
+    catch (...)
+    {
         unlinkat(directory.value, temporary.filename().c_str(), 0);
         throw;
     }
 }
-void BackupContent(int directory, CVideoDatabase& database, const std::string& path, const std::string& category) {
-    if (category == "music") {
+void
+BackupContent(int directory, CVideoDatabase& database, const std::string& path, const std::string& category)
+{
+    if (category == "music")
+    {
         CVariant backup(CVariant::VariantTypeObject);
         backup["version"] = 1;
         backup["category"] = "music";
@@ -130,14 +152,18 @@ void BackupContent(int directory, CVideoDatabase& database, const std::string& p
         throw std::runtime_error("Source recovery metadata exceeds limit");
     Atomic(directory, "source-native-backup.json", bytes);
 }
-bool ConfigureScraper(const ADDON::ScraperPtr& scraper, const std::string& content, const std::string& settings) {
+bool
+ConfigureScraper(const ADDON::ScraperPtr& scraper, const std::string& content, const std::string& settings)
+{
     if (scraper->SetPathSettings(ADDON::TranslateContent(content), settings))
         return true;
     // Kodi sets the path content before loading settings. Its bundled local
     // information provider has no settings file and can scan without one.
     return scraper->ID() == "metadata.local" && settings.empty();
 }
-void RestoreContent(int directory, CVideoDatabase& database) {
+void
+RestoreContent(int directory, CVideoDatabase& database)
+{
     CVariant backup;
     if (!CJSONVariantParser::Parse(Read(directory, "source-native-backup.json"), backup) ||
         backup["version"].asInteger() != 1)
@@ -151,7 +177,8 @@ void RestoreContent(int directory, CVideoDatabase& database) {
     if (path.empty() || path.front() != '/' || path.size() > 4096 || backup["settings"].asString().size() > 65536)
         throw std::runtime_error("Invalid source recovery path");
     ADDON::ScraperPtr scraper;
-    if (!content.empty()) {
+    if (!content.empty())
+    {
         ADDON::AddonPtr addon;
         if (!CServiceBroker::GetAddonMgr().GetAddon(id, addon, ADDON::OnlyEnabled::CHOICE_YES) ||
             !(scraper = std::dynamic_pointer_cast<ADDON::CScraper>(addon)) ||
@@ -166,16 +193,21 @@ void RestoreContent(int directory, CVideoDatabase& database) {
     settings.exclude = backup["exclude"].asBoolean();
     settings.m_allExtAudio = backup["allAudio"].asBoolean();
     database.BeginTransaction();
-    try {
+    try
+    {
         database.SetScraperForPath(path, scraper, settings);
         if (!database.CommitTransaction())
             throw std::runtime_error("Content recovery failed");
-    } catch (...) {
+    }
+    catch (...)
+    {
         database.RollbackTransaction();
         throw;
     }
 }
-void Publish(int directory, const CVariant& reply) {
+void
+Publish(int directory, const CVariant& reply)
+{
     std::string bytes;
     if (!CJSONVariantWriter::Write(reply, bytes, true) || bytes.size() > 1048576)
         throw std::runtime_error("Source response exceeds limit");
@@ -183,7 +215,8 @@ void Publish(int directory, const CVariant& reply) {
     Descriptor output(
         openat(directory, "source-reply.tmp", O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0600));
     size_t done = 0;
-    while (done < bytes.size()) {
+    while (done < bytes.size())
+    {
         const auto n = write(output.value, bytes.data() + done, bytes.size() - done);
         if (n <= 0)
             throw std::runtime_error("Source response write failed");
@@ -193,13 +226,17 @@ void Publish(int directory, const CVariant& reply) {
         fsync(directory) != 0)
         throw std::runtime_error("Source response publication failed");
 }
-CVariant Inventory(CVideoDatabase& database) {
+CVariant
+Inventory(CVideoDatabase& database)
+{
     CVariant rows(CVariant::VariantTypeArray);
-    for (const auto& category : std::vector<std::string>{"video", "music"}) {
+    for (const auto& category : std::vector<std::string>{"video", "music"})
+    {
         auto* sources = CMediaSourceSettings::GetInstance().GetSources(category);
         if (!sources || sources->size() + rows.size() > 128)
             throw std::runtime_error("Source limit exceeded");
-        for (const auto& source : *sources) {
+        for (const auto& source : *sources)
+        {
             VIDEO::SScanSettings settings;
             bool direct = false;
             const auto scraper = category == "video" ? database.GetScraperForPath(source.strPath, settings, direct)
@@ -222,7 +259,9 @@ CVariant Inventory(CVideoDatabase& database) {
     }
     return rows;
 }
-void Change(CVideoDatabase& database, const CVariant& source) {
+void
+Change(CVideoDatabase& database, const CVariant& source)
+{
     if (!source.isObject() || source.size() != 10 || !source["name"].isString() || !source["path"].isString() ||
         !source["category"].isString() || !source["content"].isString() || !source["scraper"].isString() ||
         !source["recursive"].isBoolean() || !source["folderNames"].isBoolean() || !source["noUpdate"].isBoolean() ||
@@ -247,9 +286,12 @@ void Change(CVideoDatabase& database, const CVariant& source) {
     if (!sources || sources->size() > 128)
         throw std::runtime_error("Video source limit exceeded");
     const auto previous = *sources;
-    auto found = std::find_if(sources->begin(), sources->end(), [&](const CMediaSource& item) {
-        return item.strPath == path;
-    });
+    auto found = std::find_if(sources->begin(),
+                              sources->end(),
+                              [&](const CMediaSource& item)
+                              {
+                                  return item.strPath == path;
+                              });
     const bool remove = source["remove"].asBoolean();
     if (found != sources->end() && found->vecPaths.size() != 1)
         throw std::runtime_error("Multipath sources must remain unchanged");
@@ -260,7 +302,8 @@ void Change(CVideoDatabase& database, const CVariant& source) {
     bool direct = false;
     const auto previousScraper =
         category == "video" ? database.GetScraperForPath(path, previousSettings, direct) : ADDON::ScraperPtr{};
-    if (category == "video" && !remove && !content.empty()) {
+    if (category == "video" && !remove && !content.empty())
+    {
         ADDON::AddonPtr addon;
         if (!CServiceBroker::GetAddonMgr().GetAddon(scraperId, addon, ADDON::OnlyEnabled::CHOICE_YES) ||
             !(scraper = std::dynamic_pointer_cast<ADDON::CScraper>(addon)) ||
@@ -279,13 +322,17 @@ void Change(CVideoDatabase& database, const CVariant& source) {
     settings.noupdate = source["noUpdate"].asBoolean();
     settings.exclude = remove || source["exclude"].asBoolean();
     database.BeginTransaction();
-    try {
+    try
+    {
         if (category == "video")
             database.SetScraperForPath(path, scraper, settings);
-        if (remove) {
+        if (remove)
+        {
             if (found != sources->end())
                 sources->erase(found);
-        } else {
+        }
+        else
+        {
             CMediaSource updated;
             if (found != sources->end())
                 updated = *found;
@@ -301,7 +348,9 @@ void Change(CVideoDatabase& database, const CVariant& source) {
         SaveAtomic();
         if (!database.CommitTransaction())
             throw std::runtime_error("Kodi could not save the source");
-    } catch (...) {
+    }
+    catch (...)
+    {
         database.RollbackTransaction();
         *sources = previous;
         throw;
@@ -309,11 +358,14 @@ void Change(CVideoDatabase& database, const CVariant& source) {
 }
 } // namespace
 
-int IsoldeSources(const std::vector<std::string>& parameters) {
+int
+IsoldeSources(const std::vector<std::string>& parameters)
+{
     const auto* managed = std::getenv("ISOLDE_MANAGED_KODI");
     if (!managed || std::string(managed) != "1" || parameters.size() != 1 || !Token(parameters[0]))
         return -1;
-    try {
+    try
+    {
         Descriptor directory(open(CSpecialProtocol::TranslatePath("special://profile/isolde").c_str(),
                                   O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC));
         Descriptor input(
@@ -324,7 +376,8 @@ int IsoldeSources(const std::vector<std::string>& parameters) {
             return -1;
         std::string bytes(static_cast<size_t>(info.st_size), '\0');
         size_t offset = 0;
-        while (offset < bytes.size()) {
+        while (offset < bytes.size())
+        {
             const auto n = read(input.value, bytes.data() + offset, bytes.size() - offset);
             if (n <= 0)
                 return -1;
@@ -338,12 +391,14 @@ int IsoldeSources(const std::vector<std::string>& parameters) {
         reply["version"] = 1;
         reply["token"] = parameters[0];
         reply["ok"] = false;
-        try {
+        try
+        {
             CVideoDatabase database;
             if (!database.Open())
                 throw std::runtime_error("Kodi video library unavailable");
             const auto operation = request["operation"].asString();
-            if (operation == "scanmusic") {
+            if (operation == "scanmusic")
+            {
                 if (request["expected"] != Inventory(database))
                     throw std::runtime_error("Sources changed before scanning");
                 if (CVideoLibraryQueue::GetInstance().IsScanningLibrary() ||
@@ -354,13 +409,17 @@ int IsoldeSources(const std::vector<std::string>& parameters) {
                 if (!paths.isArray() || paths.size() == 0 || paths.size() > 128 || !sources)
                     throw std::runtime_error("Choose configured music sources");
                 std::vector<std::string> validated;
-                for (unsigned int index = 0; index < paths.size(); ++index) {
+                for (unsigned int index = 0; index < paths.size(); ++index)
+                {
                     const auto path = paths[index].asString();
                     if (path.empty() || path.front() != '/' || path.size() > 4096 ||
                         std::find(validated.begin(), validated.end(), path) != validated.end() ||
-                        std::none_of(sources->begin(), sources->end(), [&](const CMediaSource& source) {
-                            return source.strPath == path && source.vecPaths.size() == 1;
-                        }))
+                        std::none_of(sources->begin(),
+                                     sources->end(),
+                                     [&](const CMediaSource& source)
+                                     {
+                                         return source.strPath == path && source.vecPaths.size() == 1;
+                                     }))
                         throw std::runtime_error("Music scan path no longer matches its source");
                     validated.push_back(path);
                 }
@@ -369,13 +428,16 @@ int IsoldeSources(const std::vector<std::string>& parameters) {
                 for (const auto& path : validated)
                     CMusicLibraryQueue::GetInstance().ScanLibrary(
                         path, MUSIC_INFO::CMusicInfoScanner::SCAN_NORMAL, false);
-            } else if (operation == "set" || operation == "restore") {
+            }
+            else if (operation == "set" || operation == "restore")
+            {
                 if (CVideoLibraryQueue::GetInstance().IsScanningLibrary() ||
                     CMusicLibraryQueue::GetInstance().IsScanningLibrary())
                     throw std::runtime_error("Wait for the Kodi scan to finish");
                 const auto file = SourceFile();
                 Descriptor config(open(file.parent_path().c_str(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC));
-                if (operation == "set") {
+                if (operation == "set")
+                {
                     if (request["expected"] != Inventory(database))
                         throw std::runtime_error("Sources changed after preview");
                     struct stat backup{};
@@ -390,9 +452,12 @@ int IsoldeSources(const std::vector<std::string>& parameters) {
                                   database,
                                   request["source"]["path"].asString(),
                                   request["source"]["category"].asString());
-                } else {
+                }
+                else
+                {
                     struct stat existing{};
-                    if (fstatat(directory.value, "source-config-backup.xml", &existing, AT_SYMLINK_NOFOLLOW) == 0) {
+                    if (fstatat(directory.value, "source-config-backup.xml", &existing, AT_SYMLINK_NOFOLLOW) == 0)
+                    {
                         Read(directory.value, "source-config-backup.xml");
                         auto& manager = CMediaSourceSettings::GetInstance();
                         std::map<std::string, std::vector<CMediaSource>> previous;
@@ -401,7 +466,8 @@ int IsoldeSources(const std::vector<std::string>& parameters) {
                             if (const auto* sources = manager.GetSources(category))
                                 previous.emplace(category, *sources);
                         if (!manager.Load(
-                                CSpecialProtocol::TranslatePath("special://profile/isolde/source-config-backup.xml"))) {
+                                CSpecialProtocol::TranslatePath("special://profile/isolde/source-config-backup.xml")))
+                        {
                             for (const auto& entry : previous)
                                 if (auto* sources = manager.GetSources(entry.first))
                                     *sources = entry.second;
@@ -412,16 +478,19 @@ int IsoldeSources(const std::vector<std::string>& parameters) {
                         // attempt, including attempts that later fail XML publication.
                         for (const auto& entry : previous)
                             if (auto* sources = manager.GetSources(entry.first))
-                                for (size_t index = 0; index < entry.second.size(); ++index) {
+                                for (size_t index = 0; index < entry.second.size(); ++index)
+                                {
                                     const auto& source = entry.second[index];
                                     if (!source.strPath.empty() && source.strPath.front() == '/')
                                         continue;
-                                    const auto found = std::find_if(
-                                        sources->begin(), sources->end(), [&](const CMediaSource& candidate) {
-                                            return candidate.strName == source.strName &&
-                                                   candidate.strPath == source.strPath &&
-                                                   candidate.vecPaths == source.vecPaths;
-                                        });
+                                    const auto found = std::find_if(sources->begin(),
+                                                                    sources->end(),
+                                                                    [&](const CMediaSource& candidate)
+                                                                    {
+                                                                        return candidate.strName == source.strName &&
+                                                                               candidate.strPath == source.strPath &&
+                                                                               candidate.vecPaths == source.vecPaths;
+                                                                    });
                                     if (found == sources->end())
                                         sources->insert(sources->begin() + std::min(index, sources->size()), source);
                                 }
@@ -430,32 +499,40 @@ int IsoldeSources(const std::vector<std::string>& parameters) {
                 }
                 if (operation == "set")
                     Change(database, request["source"]);
-                else {
+                else
+                {
                     struct stat metadata{};
                     if (fstatat(directory.value, "source-native-backup.json", &metadata, AT_SYMLINK_NOFOLLOW) == 0)
                         RestoreContent(directory.value, database);
                 }
-                if (operation == "restore") {
+                if (operation == "restore")
+                {
                     struct stat backup{};
                     if (fstatat(directory.value, "source-config-backup.xml", &backup, AT_SYMLINK_NOFOLLOW) == 0)
                         Atomic(config.value, "sources.xml", Read(directory.value, "source-config-backup.xml"));
-                    if (request["hadConfig"].isBoolean() && !request["hadConfig"].asBoolean()) {
+                    if (request["hadConfig"].isBoolean() && !request["hadConfig"].asBoolean())
+                    {
                         if (unlinkat(config.value, "sources.xml", 0) != 0 && errno != ENOENT)
                             throw std::runtime_error("Source rollback removal failed");
                         fsync(config.value);
                     }
                 }
-            } else if (operation != "get")
+            }
+            else if (operation != "get")
                 throw std::runtime_error("Unsupported source operation");
             reply["sources"] = Inventory(database);
             reply["sourceFileExists"] = std::filesystem::exists(SourceFile());
             reply["ok"] = true;
-        } catch (const std::exception&) {
+        }
+        catch (const std::exception&)
+        {
             reply["error"] = "Kodi could not apply the requested source operation. Refresh or recover before retrying.";
         }
         Publish(directory.value, reply);
         return reply["ok"].asBoolean() ? 0 : -1;
-    } catch (...) {
+    }
+    catch (...)
+    {
         return -1;
     }
 }

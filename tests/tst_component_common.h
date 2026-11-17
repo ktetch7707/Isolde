@@ -33,12 +33,16 @@ static const QByteArray legacy =
  {"id":"my-app","kind":"app","appId":"absent","size":"compact"},
  {"id":"clock","kind":"widget","widgetType":"clock"}]})";
 
-static void writeFile(const QString& path, const QByteArray& data) {
+static void
+writeFile(const QString& path, const QByteArray& data)
+{
     QFile file(path);
     if (file.open(QIODevice::WriteOnly))
         file.write(data);
 }
-static QByteArray readFile(const QString& path) {
+static QByteArray
+readFile(const QString& path)
+{
     QFile file(path);
     if (!file.open(QIODevice::ReadOnly))
         return {};

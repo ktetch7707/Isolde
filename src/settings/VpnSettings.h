@@ -4,7 +4,8 @@
 #include <QTimer>
 #include <QVariantList>
 
-class VpnSettings final : public QObject {
+class VpnSettings final : public QObject
+{
     Q_OBJECT
     Q_PROPERTY(bool busy READ busy NOTIFY changed)
     Q_PROPERTY(QString message READ message NOTIFY changed)
@@ -16,37 +17,57 @@ class VpnSettings final : public QObject {
   public:
     explicit VpnSettings(QString profile = "default", QObject* parent = nullptr);
     ~VpnSettings() override;
-    bool busy() const {
+    bool
+    busy() const
+    {
         return m_busy;
     }
-    QString message() const {
+    QString
+    message() const
+    {
         return m_message;
     }
-    QVariantList providers() const {
+    QVariantList
+    providers() const
+    {
         return m_providers;
     }
-    QVariantList connections() const {
+    QVariantList
+    connections() const
+    {
         return m_connections;
     }
-    QVariantList downloads() const {
+    QVariantList
+    downloads() const
+    {
         return m_downloads;
     }
-    QVariantList countries() const {
+    QVariantList
+    countries() const
+    {
         return m_countries;
     }
-    bool waitingExternal() const {
+    bool
+    waitingExternal() const
+    {
         return !m_externalAction.isEmpty();
     }
-    Q_INVOKABLE void perform(const QString& action,
-                             const QString& target = {},
-                             const QString& provider = "surfshark",
-                             const QString& country = "CA");
-    void resumeExternal();
-    void cancelExternal();
+    Q_INVOKABLE void
+    perform(const QString& action,
+            const QString& target = {},
+            const QString& provider = "surfshark",
+            const QString& country = "CA");
+    void
+    resumeExternal();
+    void
+    cancelExternal();
   signals:
-    void changed();
-    void refreshed();
-    void externalOpening();
+    void
+    changed();
+    void
+    refreshed();
+    void
+    externalOpening();
 
   private:
     QProcess m_process;
@@ -56,6 +77,7 @@ class VpnSettings final : public QObject {
     QString m_message;
     QString m_profile;
     QString m_externalAction, m_externalTarget;
-    void launchHelper(const QString& action, const QString& target, const QString& provider, const QString& country);
+    void
+    launchHelper(const QString& action, const QString& target, const QString& provider, const QString& country);
     QVariantList m_providers, m_connections, m_downloads, m_countries;
 };

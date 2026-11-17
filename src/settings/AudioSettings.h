@@ -8,7 +8,8 @@
 #include <QVariantList>
 #include <memory>
 
-class AudioSettings final : public QObject {
+class AudioSettings final : public QObject
+{
     Q_OBJECT
     Q_PROPERTY(int volume READ volume NOTIFY changed)
     Q_PROPERTY(bool muted READ muted NOTIFY changed)
@@ -31,63 +32,109 @@ class AudioSettings final : public QObject {
                            const QString& mixerExecutable = {},
                            const QString& playerExecutable = {});
     ~AudioSettings() override;
-    void initialize();
-    QVariantList outputs() const {
+    void
+    initialize();
+    QVariantList
+    outputs() const
+    {
         return m_outputs;
     }
-    QString outputStatus() const {
+    QString
+    outputStatus() const
+    {
         return m_outputStatus;
     }
-    Q_INVOKABLE bool selectOutput(const QString& id);
-    bool testPlaying() const {
+    Q_INVOKABLE bool
+    selectOutput(const QString& id);
+    bool
+    testPlaying() const
+    {
         return m_testPlaying;
     }
-    QString testStatus() const {
+    QString
+    testStatus() const
+    {
         return m_testStatus;
     }
-    Q_INVOKABLE void playTestSound();
-    Q_INVOKABLE void stopTestSound();
+    Q_INVOKABLE void
+    playTestSound();
+    Q_INVOKABLE void
+    stopTestSound();
 
-    [[nodiscard]] int volume() const;
-    [[nodiscard]] bool muted() const;
-    [[nodiscard]] QString startupPolicy() const;
-    [[nodiscard]] int startupVolume() const;
-    [[nodiscard]] int volumeStep() const;
-    [[nodiscard]] bool nightMode() const;
-    [[nodiscard]] int lipSyncMs() const;
-    [[nodiscard]] QString volumeMode() const;
-    [[nodiscard]] int tvReferenceVolume() const;
-    [[nodiscard]] bool mixerAvailable() const;
-    [[nodiscard]] QString backendStatus() const;
+    [[nodiscard]] int
+    volume() const;
+    [[nodiscard]] bool
+    muted() const;
+    [[nodiscard]] QString
+    startupPolicy() const;
+    [[nodiscard]] int
+    startupVolume() const;
+    [[nodiscard]] int
+    volumeStep() const;
+    [[nodiscard]] bool
+    nightMode() const;
+    [[nodiscard]] int
+    lipSyncMs() const;
+    [[nodiscard]] QString
+    volumeMode() const;
+    [[nodiscard]] int
+    tvReferenceVolume() const;
+    [[nodiscard]] bool
+    mixerAvailable() const;
+    [[nodiscard]] QString
+    backendStatus() const;
 
-    Q_INVOKABLE void adjustVolume(int delta);
-    Q_INVOKABLE void toggleMute();
-    Q_INVOKABLE void nextStartupPolicy();
-    Q_INVOKABLE void adjustStartupVolume(int delta);
-    Q_INVOKABLE void adjustVolumeStep(int delta);
-    Q_INVOKABLE void toggleNightMode();
-    Q_INVOKABLE void adjustLipSync(int delta);
-    Q_INVOKABLE void nextVolumeMode();
-    Q_INVOKABLE void adjustTvReferenceVolume(int delta);
-    Q_INVOKABLE bool refreshBackend();
-    Q_INVOKABLE void reset();
+    Q_INVOKABLE void
+    adjustVolume(int delta);
+    Q_INVOKABLE void
+    toggleMute();
+    Q_INVOKABLE void
+    nextStartupPolicy();
+    Q_INVOKABLE void
+    adjustStartupVolume(int delta);
+    Q_INVOKABLE void
+    adjustVolumeStep(int delta);
+    Q_INVOKABLE void
+    toggleNightMode();
+    Q_INVOKABLE void
+    adjustLipSync(int delta);
+    Q_INVOKABLE void
+    nextVolumeMode();
+    Q_INVOKABLE void
+    adjustTvReferenceVolume(int delta);
+    Q_INVOKABLE bool
+    refreshBackend();
+    Q_INVOKABLE void
+    reset();
 
-    void setMixerEnabledForTests(bool enabled);
+    void
+    setMixerEnabledForTests(bool enabled);
 
   signals:
-    void changed();
+    void
+    changed();
 
   private:
-    void load();
-    void save();
-    static int clamp(int value, int minimum, int maximum);
-    static QString cleanStartupPolicy(const QString& policy);
-    static QString cleanVolumeMode(const QString& mode);
-    void submit(int volume, bool muted);
-    void runNext();
-    void completeCommand(int exitCode, QProcess::ExitStatus status);
-    void mixerFailed(const QString& reason);
-    void enqueueRead();
+    void
+    load();
+    void
+    save();
+    static int
+    clamp(int value, int minimum, int maximum);
+    static QString
+    cleanStartupPolicy(const QString& policy);
+    static QString
+    cleanVolumeMode(const QString& mode);
+    void
+    submit(int volume, bool muted);
+    void
+    runNext();
+    void
+    completeCommand(int exitCode, QProcess::ExitStatus status);
+    void
+    mixerFailed(const QString& reason);
+    void
+    enqueueRead();
     QProcess m_process;
     QTimer m_deadline, m_poll;
     QList<QStringList> m_commands;

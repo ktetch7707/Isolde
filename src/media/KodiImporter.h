@@ -10,7 +10,8 @@
 #include <functional>
 #include <memory>
 
-class KodiImporter final : public QObject {
+class KodiImporter final : public QObject
+{
     Q_OBJECT
     Q_PROPERTY(bool backupAvailable READ backupAvailable NOTIFY changed)
     Q_PROPERTY(QString backupPath READ backupPath NOTIFY changed)
@@ -25,62 +26,98 @@ class KodiImporter final : public QObject {
     explicit KodiImporter(const QString& profile, QObject* parent = nullptr);
     ~KodiImporter() override;
 
-    bool backupAvailable() const {
+    bool
+    backupAvailable() const
+    {
         return m_backupAvailable;
     }
-    QString backupPath() const {
+    QString
+    backupPath() const
+    {
         return m_backupPath;
     }
-    bool importInProgress() const {
+    bool
+    importInProgress() const
+    {
         return m_importInProgress;
     }
-    QString importStatus() const {
+    QString
+    importStatus() const
+    {
         return m_importStatus;
     }
-    QStringList conflicts() const {
+    QStringList
+    conflicts() const
+    {
         return m_conflicts;
     }
-    QString previewText() const {
+    QString
+    previewText() const
+    {
         return m_previewText;
     }
-    bool canImport() const {
+    bool
+    canImport() const
+    {
         return m_canImport;
     }
-    bool canRollback() const {
+    bool
+    canRollback() const
+    {
         return m_canRollback;
     }
-    bool recoveryPending() const;
-    void setBackendGuard(std::function<bool()> prepare,
-                         std::function<void()> release,
-                         std::function<bool()> preparing = {}) {
+    bool
+    recoveryPending() const;
+    void
+    setBackendGuard(std::function<bool()> prepare, std::function<void()> release, std::function<bool()> preparing = {})
+    {
         m_prepareBackend = std::move(prepare);
         m_releaseBackend = std::move(release);
         m_backendPreparing = std::move(preparing);
     }
-    void continueWhenBackendReady();
-    void shutdown();
+    void
+    continueWhenBackendReady();
+    void
+    shutdown();
 
-    Q_INVOKABLE void scanExistingKodi();
-    Q_INVOKABLE void createBackup();
-    Q_INVOKABLE void previewImport();
-    Q_INVOKABLE void import();
-    Q_INVOKABLE void rollback();
-    Q_INVOKABLE void clearConflicts();
-    Q_INVOKABLE void cancel();
-    Q_INVOKABLE void releasePreview();
+    Q_INVOKABLE void
+    scanExistingKodi();
+    Q_INVOKABLE void
+    createBackup();
+    Q_INVOKABLE void
+    previewImport();
+    Q_INVOKABLE void
+    import();
+    Q_INVOKABLE void
+    rollback();
+    Q_INVOKABLE void
+    clearConflicts();
+    Q_INVOKABLE void
+    cancel();
+    Q_INVOKABLE void
+    releasePreview();
 
   signals:
-    void changed();
-    void backupCreated(const QString& path);
-    void importCompleted(bool success, const QString& message);
-    void rollbackCompleted(bool success, const QString& message);
+    void
+    changed();
+    void
+    backupCreated(const QString& path);
+    void
+    importCompleted(bool success, const QString& message);
+    void
+    rollbackCompleted(bool success, const QString& message);
 
   private:
-    QString backupDir() const;
-    void loadImportState();
-    void runAction(const QString& action);
-    void finish(bool success);
-    void releaseBackend();
+    QString
+    backupDir() const;
+    void
+    loadImportState();
+    void
+    runAction(const QString& action);
+    void
+    finish(bool success);
+    void
+    releaseBackend();
     bool m_valid = false;
     QProcess m_process;
     QTimer m_deadline;

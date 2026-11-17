@@ -1,5 +1,4 @@
-﻿#include "GameLibrary.h"
-#include <QCoreApplication>
+﻿#include <QCoreApplication>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -9,16 +8,17 @@
 #include <QRegularExpression>
 #include <QStandardPaths>
 #include <QUuid>
+#include "GameLibrary.h"
 
-#include "app/AppCatalog.h"
 #include "CompatibilityRuntime.h"
 #include "GameEmulators.h"
 #include "ManagedGamePaths.h"
 #include "MediaGrants.h"
+#include "OpticalDiscGrants.h"
 #include "OpticalDiscIdentity.h"
 #include "OpticalDiscMount.h"
-#include "OpticalDiscGrants.h"
 #include "SteamLibraryGrants.h"
+#include "app/AppCatalog.h"
 
 #ifdef Q_OS_UNIX
 #include <signal.h>
@@ -28,14 +28,17 @@
 #endif
 #endif
 
-QString GameLibrary::checkedTarget(const QString& root, const QString& relative) {
+QString
+GameLibrary::checkedTarget(const QString& root, const QString& relative)
+{
     QString validatedRoot = root;
     if (!validateOpticalTarget(root, validatedRoot))
         return {};
     const auto grantError = MediaGrants::validate(root);
     const bool managed = ManagedGamePaths::isInstallRoot(m_emulatorProfile, root);
     const bool optical = OpticalDiscIdentify::isRootReference(root);
-    if (!optical && !grantError.isEmpty() && !managed) {
+    if (!optical && !grantError.isEmpty() && !managed)
+    {
         fail(grantError);
         return {};
     }
@@ -44,51 +47,61 @@ QString GameLibrary::checkedTarget(const QString& root, const QString& relative)
     return validateGameFile(validatedRoot, relative);
 }
 
-bool GameLibrary::validateOpticalTarget(const QString& root, QString& validatedRoot) const {
+bool
+GameLibrary::validateOpticalTarget(const QString& root, QString& validatedRoot) const
+{
     const bool optical = OpticalDiscIdentify::isRootReference(root);
     if (!optical)
         return true;
     const auto mediaId = OpticalDiscIdentify::mediaIdFromRoot(root);
-    if (!OpticalDiscGrants::approved(m_emulatorProfile, mediaId)) {
-        fail(tr("This profile has not approved that optical identity. Insert the disc and explicitly approve it in "
-                "Games."));
+    if (!OpticalDiscGrants::approved(m_emulatorProfile, mediaId))
+    {
+        fail(
+            tr("This profile has not approved that optical identity. Insert the disc and explicitly approve it in "
+               "Games."));
         return false;
     }
     const auto media = OpticalDiscClassify::resolveRootReference(root);
     const auto disc = media.value("disc").toMap();
-    if (media.value("state") != "ready") {
+    if (media.value("state") != "ready")
+    {
         const auto number = media.value("expectedDisc").toInt();
-        fail(media.value("state") == "wrong-disc" ? tr("Wrong optical disc. Insert disc %1 of %2, then retry.")
-                                                    .arg(number)
-                                                    .arg(media.value("discCount").toInt())
-                                              : tr("Insert optical disc %1 of %2, then retry.")
-                                                .arg(number)
-                                                .arg(media.value("discCount").toInt()));
+        fail(media.value("state") == "wrong-disc"
+                 ? tr("Wrong optical disc. Insert disc %1 of %2, then retry.")
+                       .arg(number)
+                       .arg(media.value("discCount").toInt())
+                 : tr("Insert optical disc %1 of %2, then retry.").arg(number).arg(media.value("discCount").toInt()));
         return false;
     }
     validatedRoot = disc.value("mountRoot").toString();
     return true;
 }
 
-bool GameLibrary::validateRelativePath(const QString& relative) const {
+bool
+GameLibrary::validateRelativePath(const QString& relative) const
+{
     return !(relative.isEmpty() || QDir::isAbsolutePath(relative) || relative.contains('\\') ||
              relative.contains(QChar::Null) || relative.size() > 4096 || QDir::cleanPath(relative) != relative ||
              relative.split('/').contains(".."));
 }
 
-QString GameLibrary::validateGameFile(const QString& validatedRoot, const QString& relative) const {
+QString
+GameLibrary::validateGameFile(const QString& validatedRoot, const QString& relative) const
+{
     const auto path = QDir(validatedRoot).filePath(relative);
     const QFileInfo info(path);
     if (!info.isFile() || !info.isReadable() || info.canonicalFilePath() != path ||
-        !path.startsWith(validatedRoot + '/')) {
+        !path.startsWith(validatedRoot + '/'))
+    {
         fail(tr("The game file is missing, unreadable or redirected. Reconnect its source and retry."));
         return QString();
     }
     return path;
 }
 
-
-bool GameLibrary::installEmulators(bool consent, bool update, bool offline) {
+bool
+GameLibrary::installEmulators(bool consent, bool update, bool offline)
+{
     if (!validInstallEmulatorsArgs(consent))
         return fail(tr("Review and confirm emulator installation before continuing."));
 #ifndef Q_OS_LINUX
@@ -105,48 +118,64 @@ bool GameLibrary::installEmulators(bool consent, bool update, bool offline) {
 #endif
 }
 
-bool GameLibrary::validInstallEmulatorsArgs(bool consent) const {
+bool
+GameLibrary::validInstallEmulatorsArgs(bool consent) const
+{
     return m_ready && consent && !setupBusy() && m_catalog && !(m_sessionActiveGuard && m_sessionActiveGuard());
 }
 
-QString GameLibrary::findInstallerRoot() const {
+QString
+GameLibrary::findInstallerRoot() const
+{
     auto root = QCoreApplication::applicationDirPath() + "/share/isolde";
     if (!QFileInfo(root + "/provision-games.py").isReadable())
         root = QCoreApplication::applicationDirPath() + "/../share/isolde";
     return root;
 }
 
-bool GameLibrary::validateInstaller(const QString& root) const {
+bool
+GameLibrary::validateInstaller(const QString& root) const
+{
     const auto program = QStandardPaths::findExecutable("python3");
     return !program.isEmpty() && QFileInfo(root + "/provision-games.py").isReadable();
 }
 
-bool GameLibrary::prepareEmulatorState() {
+bool
+GameLibrary::prepareEmulatorState()
+{
     const auto state = GameEmulators::home(m_emulatorProfile, "ppsspp") + "/.local/state";
-    for (auto ancestor = QFileInfo(state);; ancestor = QFileInfo(ancestor.absolutePath())) {
-        if (ancestor.isSymLink()) {
+    for (auto ancestor = QFileInfo(state);; ancestor = QFileInfo(ancestor.absolutePath()))
+    {
+        if (ancestor.isSymLink())
+        {
             fail(tr("Private emulator storage is redirected."));
             return false;
         }
         if (ancestor.absolutePath() == ancestor.absoluteFilePath())
             break;
     }
-    if (!QDir().mkpath(state) || QFileInfo(state).canonicalFilePath() != state) {
+    if (!QDir().mkpath(state) || QFileInfo(state).canonicalFilePath() != state)
+    {
         fail(tr("Cannot prepare private installation evidence."));
         return false;
     }
     m_setupReceipt = state + "/runtime-install-" + QUuid::createUuid().toString(QUuid::WithoutBraces) + ".json";
     m_setupCanceled = false;
     m_setupOutput.clear();
-    m_setupStatus = "Installing the verified runtimes and console cores. First-time PSP preparation may take several "
-                    "minutes. No game or firmware downloads.";
-    m_setup.setChildProcessModifier([] {
-        ::setsid();
-    });
+    m_setupStatus =
+        "Installing the verified runtimes and console cores. First-time PSP preparation may take several "
+        "minutes. No game or firmware downloads.";
+    m_setup.setChildProcessModifier(
+        []
+        {
+            ::setsid();
+        });
     return true;
 }
 
-bool GameLibrary::startEmulatorInstaller(const QString& root, bool update, bool offline) {
+bool
+GameLibrary::startEmulatorInstaller(const QString& root, bool update, bool offline)
+{
     QStringList arguments{root + "/provision-games.py", "--install", "--receipt", m_setupReceipt};
     if (update)
         arguments.append("--update");
@@ -159,8 +188,9 @@ bool GameLibrary::startEmulatorInstaller(const QString& root, bool update, bool 
     return true;
 }
 
-
-bool GameLibrary::rebuildEmulatorData(const QString& id) {
+bool
+GameLibrary::rebuildEmulatorData(const QString& id)
+{
 #ifndef Q_OS_LINUX
     Q_UNUSED(id);
     return fail(tr("Prepared emulator data is managed on the Linux appliance."));
@@ -181,46 +211,60 @@ bool GameLibrary::rebuildEmulatorData(const QString& id) {
 #endif
 }
 
-bool GameLibrary::validRebuildArgs(const QString& id) const {
+bool
+GameLibrary::validRebuildArgs(const QString& id) const
+{
     return m_ready && !setupBusy() && !GameEmulators::definition(id).value("setup").toMap().isEmpty();
 }
 
-bool GameLibrary::validPreparedRoot(const QString& root) const {
-    if (QFileInfo(root).isSymLink()) {
+bool
+GameLibrary::validPreparedRoot(const QString& root) const
+{
+    if (QFileInfo(root).isSymLink())
+    {
         fail(tr("Prepared emulator storage is redirected. Nothing was moved."));
         return false;
     }
-    if (QFileInfo(root).canonicalFilePath() != root) {
+    if (QFileInfo(root).canonicalFilePath() != root)
+    {
         fail(tr("Prepared emulator storage is redirected. Nothing was moved."));
         return false;
     }
     const auto lockPath = QFileInfo(root).absolutePath() + "/.config/isolde-emulator/prepare.lock";
     if (QFileInfo(lockPath).isSymLink() ||
-        QFileInfo(QFileInfo(lockPath).absolutePath()).canonicalFilePath() != QFileInfo(lockPath).absolutePath()) {
+        QFileInfo(QFileInfo(lockPath).absolutePath()).canonicalFilePath() != QFileInfo(lockPath).absolutePath())
+    {
         fail(tr("Emulator preparation storage is redirected."));
         return false;
     }
     QFile lock(lockPath);
-    if (!lock.open(QIODevice::ReadWrite) || ::flock(int(lock.handle()), LOCK_EX | LOCK_NB) != 0) {
+    if (!lock.open(QIODevice::ReadWrite) || ::flock(int(lock.handle()), LOCK_EX | LOCK_NB) != 0)
+    {
         fail(tr("Emulator preparation is active. Return after it stops, then retry."));
         return false;
     }
     return true;
 }
 
-bool GameLibrary::checkRetirementLimit(const QString& home) const {
+bool
+GameLibrary::checkRetirementLimit(const QString& home) const
+{
     const auto parent = QFileInfo(home).absolutePath();
-    if (QDir(parent).entryList({"isolde-prepared-retired-*"}, QDir::Dirs | QDir::NoDotAndDotDot).size() >= 4) {
+    if (QDir(parent).entryList({"isolde-prepared-retired-*"}, QDir::Dirs | QDir::NoDotAndDotDot).size() >= 4)
+    {
         fail(tr("Four recovery copies are already retained. Review emulator storage before rebuilding again."));
         return false;
     }
     return true;
 }
 
-bool GameLibrary::retirePreparedData(const QString& home, const QString& root) {
+bool
+GameLibrary::retirePreparedData(const QString& home, const QString& root)
+{
     const auto parent = QFileInfo(root).absolutePath();
     const auto destination = parent + "/isolde-prepared-retired-" + QUuid::createUuid().toString(QUuid::WithoutBraces);
-    if (QFileInfo(destination).exists() || QFileInfo(destination).isSymLink() || !QDir().rename(root, destination)) {
+    if (QFileInfo(destination).exists() || QFileInfo(destination).isSymLink() || !QDir().rename(root, destination))
+    {
         fail(tr("Prepared emulator data could not be retained for recovery. Existing data is unchanged."));
         return false;
     }
@@ -230,8 +274,9 @@ bool GameLibrary::retirePreparedData(const QString& home, const QString& root) {
     return true;
 }
 
-
-void GameLibrary::cancelEmulatorSetup() {
+void
+GameLibrary::cancelEmulatorSetup()
+{
     if (!setupBusy())
         return;
     m_setupCanceled = true;
@@ -240,7 +285,9 @@ void GameLibrary::cancelEmulatorSetup() {
         "Finishing the current package operation safely. Wait before retrying; existing games and saves are untouched.";
 }
 
-void stopSetupProcess(QProcess& process) {
+void
+stopSetupProcess(QProcess& process)
+{
 #ifdef Q_OS_UNIX
     if (process.processId() > 0)
         ::kill(pid_t(process.processId()), SIGTERM);
@@ -249,12 +296,15 @@ void stopSetupProcess(QProcess& process) {
 #endif
 }
 
-QString GameLibrary::addGameWithOrigin(const QVariantMap& input, const QString& origin) {
+QString
+GameLibrary::addGameWithOrigin(const QVariantMap& input, const QString& origin)
+{
     if (!validAddGameSource())
         return {};
     QString error;
     const auto registration = ComponentSchema::gameRegistration(input, &error);
-    if (registration.isEmpty()) {
+    if (registration.isEmpty())
+    {
         fail(error);
         return {};
     }
@@ -269,17 +319,25 @@ QString GameLibrary::addGameWithOrigin(const QVariantMap& input, const QString& 
     return insertGameRecord(registration, runtime, root, target, origin);
 }
 
-bool GameLibrary::validAddGameSource() const {
+bool
+GameLibrary::validAddGameSource() const
+{
     return m_ready && !m_portablePhase.startsWith("uninstall");
 }
 
-bool GameLibrary::validGameRegistration(const QVariantMap& registration, const QString& runtime, const QString& root,
-                                        const QString& target) const {
-    if (!platformAvailable(registration.value("platform").toString())) {
+bool
+GameLibrary::validGameRegistration(const QVariantMap& registration,
+                                   const QString& runtime,
+                                   const QString& root,
+                                   const QString& target) const
+{
+    if (!platformAvailable(registration.value("platform").toString()))
+    {
         fail(tr("The Games catalog supports up to 128 distinct platforms. Existing entries were preserved."));
         return false;
     }
-    if (!compatibleRuntime(runtime, !root.isEmpty())) {
+    if (!compatibleRuntime(runtime, !root.isEmpty()))
+    {
         fail(tr("Choose an installed compatible game runtime."));
         return false;
     }
@@ -288,39 +346,53 @@ bool GameLibrary::validGameRegistration(const QVariantMap& registration, const Q
     return true;
 }
 
-bool GameLibrary::checkEditionConflict(const QString& runtime, const QString& root, const QString& target) const {
-    if (m_hasEditions && installationExists(runtime, root, target)) {
+bool
+GameLibrary::checkEditionConflict(const QString& runtime, const QString& root, const QString& target) const
+{
+    if (m_hasEditions && installationExists(runtime, root, target))
+    {
         fail(tr("This installation already belongs to a game or edition."));
         return false;
     }
     return true;
 }
 
-bool GameLibrary::ensureGameProvenanceSchema() {
+bool
+GameLibrary::ensureGameProvenanceSchema()
+{
     return ensureProvenanceSchema();
 }
 
-QString GameLibrary::insertGameRecord(const QVariantMap& registration, const QString& runtime, const QString& root,
-                                      const QString& target, const QString& origin) {
+QString
+GameLibrary::insertGameRecord(const QVariantMap& registration,
+                              const QString& runtime,
+                              const QString& root,
+                              const QString& target,
+                              const QString& origin)
+{
     QSqlQuery query(m_db);
     query.prepare("SELECT id FROM games WHERE runtime=? AND root=? AND target=?");
     query.addBindValue(runtime);
     query.addBindValue(root);
     query.addBindValue(target);
-    if (!query.exec()) {
+    if (!query.exec())
+    {
         fail(query.lastError().text());
         return QString();
     }
-    if (query.next()) {
+    if (query.next())
+    {
         fail(tr("This installation is already in Games. Its metadata was preserved."));
         return QString();
     }
     query.finish();
-    if (!m_db.transaction()) {
+    if (!m_db.transaction())
+    {
         fail(m_db.lastError().text());
         return QString();
     }
-    if (!query.exec("SELECT count(*) FROM games") || !query.next() || query.value(0).toInt() >= MaxGames) {
+    if (!query.exec("SELECT count(*) FROM games") || !query.next() || query.value(0).toInt() >= MaxGames)
+    {
         m_db.rollback();
         fail(tr("The games catalog is full or unavailable."));
         return QString();
@@ -335,7 +407,8 @@ QString GameLibrary::insertGameRecord(const QVariantMap& registration, const QSt
                                          root,
                                          target})
         query.addBindValue(value);
-    if (!query.exec() || !recordProvenance(id, "game", runtime, root, target, origin) || !m_db.commit()) {
+    if (!query.exec() || !recordProvenance(id, "game", runtime, root, target, origin) || !m_db.commit())
+    {
         const auto error = query.lastError().text();
         m_db.rollback();
         if (m_error.isEmpty())
@@ -347,13 +420,15 @@ QString GameLibrary::insertGameRecord(const QVariantMap& registration, const QSt
     return id;
 }
 
-
-bool GameLibrary::addEditionWithOrigin(const QString& gameId, const QVariantMap& input, const QString& origin) {
+bool
+GameLibrary::addEditionWithOrigin(const QString& gameId, const QVariantMap& input, const QString& origin)
+{
     if (!validAddEditionSource(gameId))
         return false;
     QString error;
     const auto value = ComponentSchema::gameRegistration(input, &error);
-    if (value.isEmpty()) {
+    if (value.isEmpty())
+    {
         fail(error);
         return false;
     }
@@ -368,43 +443,57 @@ bool GameLibrary::addEditionWithOrigin(const QString& gameId, const QVariantMap&
     return insertEditionRecord(gameId, value, runtime, root, target, origin);
 }
 
-bool GameLibrary::validAddEditionSource(const QString& gameId) const {
+bool
+GameLibrary::validAddEditionSource(const QString& gameId) const
+{
     return !m_portablePhase.startsWith("uninstall") && m_ready && !registration(gameId).isEmpty();
 }
 
-bool GameLibrary::validEditionRegistration(const QVariantMap& value, const QString& runtime, const QString& root,
-                                           const QString& target) const {
-    if (!platformAvailable(value.value("platform").toString())) {
+bool
+GameLibrary::validEditionRegistration(const QVariantMap& value,
+                                      const QString& runtime,
+                                      const QString& root,
+                                      const QString& target) const
+{
+    if (!platformAvailable(value.value("platform").toString()))
+    {
         fail(tr("The Games catalog supports up to 128 distinct platforms."));
         return false;
     }
-    if (!compatibleRuntime(runtime, !root.isEmpty())) {
+    if (!compatibleRuntime(runtime, !root.isEmpty()))
+    {
         fail(tr("Choose a compatible edition runtime."));
         return false;
     }
     if (!root.isEmpty() && checkedTarget(root, target).isEmpty())
         return false;
-    if (editions(value.value("id").toString()).size() >= 32) {
+    if (editions(value.value("id").toString()).size() >= 32)
+    {
         fail(tr("A game supports up to 32 editions."));
         return false;
     }
     return true;
 }
 
-bool GameLibrary::checkEditionInstallConflict(const QString& runtime, const QString& root,
-                                              const QString& target) const {
-    if (installationExists(runtime, root, target)) {
+bool
+GameLibrary::checkEditionInstallConflict(const QString& runtime, const QString& root, const QString& target) const
+{
+    if (installationExists(runtime, root, target))
+    {
         fail(tr("This installation already belongs to a game or edition."));
         return false;
     }
     return true;
 }
 
-bool GameLibrary::ensureEditionSchemaAndTransaction() {
+bool
+GameLibrary::ensureEditionSchemaAndTransaction()
+{
     if (!ensureProvenanceSchema())
         return false;
     QSqlQuery query(m_db);
-    if (!m_db.transaction()) {
+    if (!m_db.transaction())
+    {
         fail(m_db.lastError().text());
         return false;
     }
@@ -413,7 +502,8 @@ bool GameLibrary::ensureEditionSchemaAndTransaction() {
                      "DELETE CASCADE,title TEXT NOT NULL,platform TEXT NOT NULL,runtime TEXT NOT NULL,root TEXT NOT "
                      "NULL,target TEXT NOT NULL,UNIQUE(runtime,root,target))") ||
          !query.exec("CREATE INDEX game_editions_owner ON game_editions(game_id)") ||
-         (!m_hasActivity && !query.exec("PRAGMA user_version=2")))) {
+         (!m_hasActivity && !query.exec("PRAGMA user_version=2"))))
+    {
         m_db.rollback();
         fail(query.lastError().text());
         return false;
@@ -421,8 +511,14 @@ bool GameLibrary::ensureEditionSchemaAndTransaction() {
     return true;
 }
 
-bool GameLibrary::insertEditionRecord(const QString& gameId, const QVariantMap& value, const QString& runtime,
-                                      const QString& root, const QString& target, const QString& origin) {
+bool
+GameLibrary::insertEditionRecord(const QString& gameId,
+                                 const QVariantMap& value,
+                                 const QString& runtime,
+                                 const QString& root,
+                                 const QString& target,
+                                 const QString& origin)
+{
     QSqlQuery query(m_db);
     const auto edition = "edition-" + QUuid::createUuid().toString(QUuid::WithoutBraces);
     query.prepare("INSERT INTO game_editions(id,game_id,title,platform,runtime,root,target) VALUES(?,?,?,?,?,?,?)");
@@ -430,7 +526,8 @@ bool GameLibrary::insertEditionRecord(const QString& gameId, const QVariantMap& 
     query.addBindValue(gameId);
     for (const auto& key : QStringList{"title", "platform", "runtimeId", "root", "target"})
         query.addBindValue(value.value(key));
-    if (!query.exec() || !recordProvenance(edition, "edition", runtime, root, target, origin) || !m_db.commit()) {
+    if (!query.exec() || !recordProvenance(edition, "edition", runtime, root, target, origin) || !m_db.commit())
+    {
         m_db.rollback();
         if (m_error.isEmpty())
             fail(tr("Edition could not be saved; the previous catalog was preserved."));
@@ -443,8 +540,9 @@ bool GameLibrary::insertEditionRecord(const QString& gameId, const QVariantMap& 
     return true;
 }
 
-
-void GameLibrary::cancelImport() {
+void
+GameLibrary::cancelImport()
+{
     m_steamScanCanceled = true;
     m_steamScanDeadline.stop();
     if (m_steamScan.state() != QProcess::NotRunning)
@@ -463,7 +561,9 @@ void GameLibrary::cancelImport() {
     emit importChanged();
 }
 
-bool GameLibrary::beginSteamImport() {
+bool
+GameLibrary::beginSteamImport()
+{
     if (!m_ready || scanning() || m_importReady)
         return fail(tr("Finish or cancel the current import first."));
     if (!compatibleRuntime("steam", false))
@@ -485,7 +585,8 @@ bool GameLibrary::beginSteamImport() {
     if (!grantsError.isEmpty())
         return fail(tr("Review external Steam library access in Games settings. %1").arg(grantsError));
     QStringList arguments{helper, "--discover", "--home", home};
-    for (const auto& library : libraries) {
+    for (const auto& library : libraries)
+    {
         if (QFileInfo(library).isDir())
             arguments << "--library" << library;
     }
@@ -504,11 +605,15 @@ bool GameLibrary::beginSteamImport() {
     return true;
 }
 
-QStringList GameLibrary::steamLibraries() const {
+QStringList
+GameLibrary::steamLibraries() const
+{
     return SteamLibraryGrants::folders(m_emulatorProfile);
 }
 
-bool GameLibrary::addSteamLibrary(const QString& path) {
+bool
+GameLibrary::addSteamLibrary(const QString& path)
+{
     if (!m_ready)
         return fail(tr("Games is unavailable in this profile."));
     auto libraries = steamLibraries();
@@ -527,7 +632,9 @@ bool GameLibrary::addSteamLibrary(const QString& path) {
     return true;
 }
 
-bool GameLibrary::removeSteamLibrary(const QString& path) {
+bool
+GameLibrary::removeSteamLibrary(const QString& path)
+{
     if (!m_ready)
         return fail(tr("Games is unavailable in this profile."));
     auto libraries = steamLibraries();
@@ -542,11 +649,15 @@ bool GameLibrary::removeSteamLibrary(const QString& path) {
     return true;
 }
 
-QVariantList GameLibrary::mountedOpticalDiscs() const {
+QVariantList
+GameLibrary::mountedOpticalDiscs() const
+{
     return m_ready ? OpticalDiscHash::mountedDiscs() : QVariantList{};
 }
 
-QVariantList GameLibrary::refreshOpticalDiscs() const {
+QVariantList
+GameLibrary::refreshOpticalDiscs() const
+{
     if (!m_ready)
         return {};
     for (const auto& item : OpticalDiscHash::mountedDiscs())
@@ -554,34 +665,42 @@ QVariantList GameLibrary::refreshOpticalDiscs() const {
     return OpticalDiscHash::mountedDiscs();
 }
 
-QVariantMap GameLibrary::revalidateOpticalDisc(const QString& observationId, const QString& device) const {
+QVariantMap
+GameLibrary::revalidateOpticalDisc(const QString& observationId, const QString& device) const
+{
     if (!m_ready || !QRegularExpression("^[0-9a-f]{64}$").match(observationId).hasMatch() ||
         !QRegularExpression("^/dev/sr[0-9]{1,3}$").match(device).hasMatch())
         return {{"schemaVersion", 1}, {"state", "invalid"}};
     return OpticalDiscProbe::revalidate(observationId, device);
 }
 
-bool GameLibrary::registerOpticalGame(const QString& title,
-                                      const QString& runtimeId,
-                                      const QString& relativeExecutable,
-                                      const QString& observationId,
-                                      const QString& device) {
-    if (!m_ready || !compatibleRuntime(runtimeId, true)) {
+bool
+GameLibrary::registerOpticalGame(const QString& title,
+                                 const QString& runtimeId,
+                                 const QString& relativeExecutable,
+                                 const QString& observationId,
+                                 const QString& device)
+{
+    if (!m_ready || !compatibleRuntime(runtimeId, true))
+    {
         fail(tr("Choose an installed file-based game runtime."));
         return {};
     }
-    if (title.trimmed().isEmpty() || title != title.trimmed() || title.size() > 256) {
+    if (title.trimmed().isEmpty() || title != title.trimmed() || title.size() > 256)
+    {
         fail(tr("Enter a game title."));
         return {};
     }
     const auto media = revalidateOpticalDisc(observationId, device);
-    if (media.value("state") != "ready") {
+    if (media.value("state") != "ready")
+    {
         fail(tr("Optical media changed. Refresh disc details and review it again."));
         return {};
     }
     const auto disc = media.value("disc").toMap();
     const auto root = OpticalDiscIdentify::rootReference(disc);
-    if (root.isEmpty() || !disc.value("directPlaySupported").toBool()) {
+    if (root.isEmpty() || !disc.value("directPlaySupported").toBool())
+    {
         fail(disc.value("mountTracking") == "unavailable"
                  ? tr("This system cannot identify the mounted disc instance. Direct Play is unavailable; update the "
                       "kernel or use another supported system.")
@@ -589,7 +708,8 @@ bool GameLibrary::registerOpticalGame(const QString& title,
         return {};
     }
     const auto grantError = OpticalDiscGrants::authorize(m_emulatorProfile, disc.value("mediaId").toString());
-    if (!grantError.isEmpty()) {
+    if (!grantError.isEmpty())
+    {
         fail(grantError);
         return {};
     }
@@ -599,7 +719,10 @@ bool GameLibrary::registerOpticalGame(const QString& title,
     QFile executable(target);
     if (!(QFileInfo(target).permissions() & (QFile::ExeOwner | QFile::ExeGroup | QFile::ExeOther)) ||
         !executable.open(QIODevice::ReadOnly) ||
-        executable.read(20).left(4) != QByteArray("\x7f" "ELF", 4)) {
+        executable.read(20).left(4) != QByteArray("\x7f"
+                                                  "ELF",
+                                                  4))
+    {
         fail(tr("Choose a native Linux ELF executable on the selected disc. Installers and scripts are not run."));
         return {};
     }
@@ -612,7 +735,9 @@ bool GameLibrary::registerOpticalGame(const QString& title,
     return addGameWithOrigin(registration, "optical-registration");
 }
 
-bool GameLibrary::approveOpticalMedia(const QString& observationId, const QString& device) {
+bool
+GameLibrary::approveOpticalMedia(const QString& observationId, const QString& device)
+{
     if (!m_ready)
         return fail(tr("Games is unavailable."));
     const auto media = revalidateOpticalDisc(observationId, device);
@@ -628,7 +753,9 @@ bool GameLibrary::approveOpticalMedia(const QString& observationId, const QStrin
     return true;
 }
 
-bool GameLibrary::revokeOpticalMedia(const QString& observationId, const QString& device) {
+bool
+GameLibrary::revokeOpticalMedia(const QString& observationId, const QString& device)
+{
     if (!m_ready)
         return fail(tr("Games is unavailable."));
     const auto media = revalidateOpticalDisc(observationId, device);
@@ -643,7 +770,9 @@ bool GameLibrary::revokeOpticalMedia(const QString& observationId, const QString
     return true;
 }
 
-bool GameLibrary::mountOpticalDisc(const QString& observationId, const QString& device) {
+bool
+GameLibrary::mountOpticalDisc(const QString& observationId, const QString& device)
+{
     if (!m_ready)
         return fail(tr("Games is unavailable."));
     if (revalidateOpticalDisc(observationId, device).value("state") != "unmounted")
@@ -657,7 +786,9 @@ bool GameLibrary::mountOpticalDisc(const QString& observationId, const QString& 
     return true;
 }
 
-bool GameLibrary::ejectOpticalDisc(const QString& observationId, const QString& device) {
+bool
+GameLibrary::ejectOpticalDisc(const QString& observationId, const QString& device)
+{
     if (!m_ready)
         return fail(tr("Games is unavailable."));
     if (m_sessionActiveGuard && m_sessionActiveGuard())
@@ -676,16 +807,19 @@ bool GameLibrary::ejectOpticalDisc(const QString& observationId, const QString& 
     return true;
 }
 
-bool GameLibrary::beginPortableInstall(const QString& source,
-                                       const QString& runtimeId,
-                                       const QString& opticalObservationId,
-                                       const QString& opticalDevice) {
+bool
+GameLibrary::beginPortableInstall(const QString& source,
+                                  const QString& runtimeId,
+                                  const QString& opticalObservationId,
+                                  const QString& opticalDevice)
+{
     if (!validBeginPortableInstallArgs(runtimeId))
         return fail(tr("Finish or cancel the current game installation first."));
     const QFileInfo file(source);
     if (!validPortableSourceFile(file, opticalObservationId, opticalDevice))
-        return fail(tr("Choose a regular native Linux ELF executable or ZIP, USTAR, gzip- or bzip2-compressed USTAR "
-                       "bundle inside an approved media folder."));
+        return fail(
+            tr("Choose a regular native Linux ELF executable or ZIP, USTAR, gzip- or bzip2-compressed USTAR "
+               "bundle inside an approved media folder."));
     if (!opticalObservationId.isEmpty() && !validateOpticalSource(file, opticalObservationId, opticalDevice))
         return fail(tr("The selected optical disc changed. Refresh disc details and choose its package again."));
     const auto helper = findInstallerHelper("portable-game-installer.py");
@@ -696,12 +830,17 @@ bool GameLibrary::beginPortableInstall(const QString& source,
     return startPortableInspect(python, helper, m_portableSource);
 }
 
-bool GameLibrary::validBeginPortableInstallArgs(const QString& runtimeId) const {
+bool
+GameLibrary::validBeginPortableInstallArgs(const QString& runtimeId) const
+{
     return m_ready && !portableInstallBusy() && m_portablePhase.isEmpty() && compatibleRuntime(runtimeId, true);
 }
 
-bool GameLibrary::validPortableSourceFile(const QFileInfo& file, const QString& opticalObservationId,
-                                          const QString& opticalDevice) const {
+bool
+GameLibrary::validPortableSourceFile(const QFileInfo& file,
+                                     const QString& opticalObservationId,
+                                     const QString& opticalDevice) const
+{
     if (opticalObservationId.isEmpty() != opticalDevice.isEmpty())
         return false;
     return file.isFile() && !file.isSymLink() && file.canonicalFilePath() == file.absoluteFilePath() &&
@@ -709,23 +848,32 @@ bool GameLibrary::validPortableSourceFile(const QFileInfo& file, const QString& 
            (opticalObservationId.isEmpty() || approvedMediaDirectory(m_emulatorProfile, file.absolutePath()));
 }
 
-bool GameLibrary::validateOpticalSource(const QFileInfo& file, const QString& opticalObservationId,
-                                        const QString& opticalDevice) const {
+bool
+GameLibrary::validateOpticalSource(const QFileInfo& file,
+                                   const QString& opticalObservationId,
+                                   const QString& opticalDevice) const
+{
     const auto media = revalidateOpticalDisc(opticalObservationId, opticalDevice);
     const auto disc = media.value("disc").toMap();
     return media.value("state") == "ready" &&
            file.canonicalFilePath().startsWith(disc.value("mountRoot").toString() + '/');
 }
 
-QString GameLibrary::findInstallerHelper(const QString& scriptName) const {
+QString
+GameLibrary::findInstallerHelper(const QString& scriptName) const
+{
     auto helper = QCoreApplication::applicationDirPath() + "/share/isolde/" + scriptName;
     if (!QFileInfo(helper).isReadable())
         helper = QCoreApplication::applicationDirPath() + "/../share/isolde/" + scriptName;
     return helper;
 }
 
-void GameLibrary::initializePortableInstallState(const QFileInfo& file, const QString& runtimeId,
-                                                 const QString& opticalObservationId, const QString& opticalDevice) {
+void
+GameLibrary::initializePortableInstallState(const QFileInfo& file,
+                                            const QString& runtimeId,
+                                            const QString& opticalObservationId,
+                                            const QString& opticalDevice)
+{
     m_portableDirectoryCopy = false;
     m_portableDirectoryEntrypoint.clear();
     m_portableSource = file.canonicalFilePath();
@@ -745,16 +893,17 @@ void GameLibrary::initializePortableInstallState(const QFileInfo& file, const QS
     emit portableInstallChanged();
 }
 
-bool GameLibrary::startPortableInspect(const QString& python, const QString& helper, const QString& source) {
+bool
+GameLibrary::startPortableInspect(const QString& python, const QString& helper, const QString& source)
+{
     m_portableInstall.start(python, {helper, "--inspect", "--source", source});
     m_portableInstallDeadline.start();
     return true;
 }
 
-
-bool GameLibrary::beginPortableDirectoryInstall(const QString& source,
-                                                const QString& entrypoint,
-                                                const QString& runtimeId) {
+bool
+GameLibrary::beginPortableDirectoryInstall(const QString& source, const QString& entrypoint, const QString& runtimeId)
+{
     if (!validBeginPortableDirectoryInstallArgs(runtimeId))
         return fail(tr("Finish or cancel the current game installation first."));
     const QFileInfo directory(source);
@@ -770,25 +919,34 @@ bool GameLibrary::beginPortableDirectoryInstall(const QString& source,
     return startPortableDirectoryInspect(python, helper, m_portableSource, m_portableDirectoryEntrypoint);
 }
 
-bool GameLibrary::validBeginPortableDirectoryInstallArgs(const QString& runtimeId) const {
+bool
+GameLibrary::validBeginPortableDirectoryInstallArgs(const QString& runtimeId) const
+{
     return m_ready && !portableInstallBusy() && m_portablePhase.isEmpty() && compatibleRuntime(runtimeId, true);
 }
 
-bool GameLibrary::validPortableSourceDirectory(const QFileInfo& directory) const {
+bool
+GameLibrary::validPortableSourceDirectory(const QFileInfo& directory) const
+{
     return directory.isDir() && !directory.isSymLink() &&
            directory.canonicalFilePath() == directory.absoluteFilePath() &&
            approvedMediaDirectory(m_emulatorProfile, directory.canonicalFilePath());
 }
 
-bool GameLibrary::validPortableEntryPoint(const QString& entrypoint) const {
+bool
+GameLibrary::validPortableEntryPoint(const QString& entrypoint) const
+{
     return !(entrypoint.isEmpty() || entrypoint.size() > 4096 || QDir::isAbsolutePath(entrypoint) ||
              QDir::cleanPath(entrypoint) != entrypoint || entrypoint.contains('\\') ||
              entrypoint.contains(QChar::Null) || entrypoint.split('/').contains("..") ||
              entrypoint.split('/').contains("."));
 }
 
-void GameLibrary::initializePortableDirectoryInstallState(const QFileInfo& directory, const QString& entrypoint,
-                                                          const QString& runtimeId) {
+void
+GameLibrary::initializePortableDirectoryInstallState(const QFileInfo& directory,
+                                                     const QString& entrypoint,
+                                                     const QString& runtimeId)
+{
     m_portableDirectoryCopy = true;
     m_portableDirectoryEntrypoint = entrypoint;
     m_portableSource = directory.canonicalFilePath();
@@ -808,17 +966,20 @@ void GameLibrary::initializePortableDirectoryInstallState(const QFileInfo& direc
     emit portableInstallChanged();
 }
 
-bool GameLibrary::startPortableDirectoryInspect(const QString& python, const QString& helper, const QString& source,
-                                                const QString& entrypoint) {
-    m_portableInstall.start(
-        python,
-        {helper, "--inspect-directory", "--source", source, "--entrypoint", entrypoint});
+bool
+GameLibrary::startPortableDirectoryInspect(const QString& python,
+                                           const QString& helper,
+                                           const QString& source,
+                                           const QString& entrypoint)
+{
+    m_portableInstall.start(python, {helper, "--inspect-directory", "--source", source, "--entrypoint", entrypoint});
     m_portableInstallDeadline.start();
     return true;
 }
 
-
-bool GameLibrary::confirmPortableInstall() {
+bool
+GameLibrary::confirmPortableInstall()
+{
     if (!validConfirmPortableInstallArgs())
         return fail(tr("No portable game package is awaiting confirmation."));
     if (!validatePortableSource())
@@ -841,11 +1002,15 @@ bool GameLibrary::confirmPortableInstall() {
     return true;
 }
 
-bool GameLibrary::validConfirmPortableInstallArgs() const {
+bool
+GameLibrary::validConfirmPortableInstallArgs() const
+{
     return m_ready && m_portablePhase == "review" && !portableInstallBusy();
 }
 
-bool GameLibrary::validatePortableSource() const {
+bool
+GameLibrary::validatePortableSource() const
+{
     const QFileInfo source(m_portableSource);
     const bool sourceValid =
         m_portableDirectoryCopy
@@ -857,31 +1022,36 @@ bool GameLibrary::validatePortableSource() const {
     return compatibleRuntime(m_portableRuntime, true) && sourceValid;
 }
 
-bool GameLibrary::validateOpticalMediaForConfirm() const {
+bool
+GameLibrary::validateOpticalMediaForConfirm() const
+{
     const auto media = revalidateOpticalDisc(m_portableOpticalObservationId, m_portableOpticalDevice);
     const auto disc = media.value("disc").toMap();
-    return media.value("state") == "ready" &&
-           m_portableSource.startsWith(disc.value("mountRoot").toString() + '/');
+    return media.value("state") == "ready" && m_portableSource.startsWith(disc.value("mountRoot").toString() + '/');
 }
 
-bool GameLibrary::validateInstallDestination() const {
+bool
+GameLibrary::validateInstallDestination() const
+{
     const auto parent = QFileInfo(m_portableDestination).absolutePath();
     const auto gamesRoot = ManagedGamePaths::gamesRoot(m_emulatorProfile);
-    return !gamesRoot.isEmpty() && QDir().mkpath(parent) &&
-           QFileInfo(gamesRoot).canonicalFilePath() == gamesRoot &&
+    return !gamesRoot.isEmpty() && QDir().mkpath(parent) && QFileInfo(gamesRoot).canonicalFilePath() == gamesRoot &&
            QFileInfo(parent).canonicalFilePath() == parent && !QFileInfo(parent).isSymLink() &&
-           !QFileInfo::exists(m_portableDestination) &&
-           !QFileInfo::exists(m_portableDestination + ".staging");
+           !QFileInfo::exists(m_portableDestination) && !QFileInfo::exists(m_portableDestination + ".staging");
 }
 
-bool GameLibrary::secureInstallDestination() const {
+bool
+GameLibrary::secureInstallDestination() const
+{
     const auto parent = QFileInfo(m_portableDestination).absolutePath();
     const auto gamesRoot = ManagedGamePaths::gamesRoot(m_emulatorProfile);
     return QFile::setPermissions(gamesRoot, QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner) &&
            QFile::setPermissions(parent, QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
 }
 
-void GameLibrary::initializePortableInstallForConfirm() {
+void
+GameLibrary::initializePortableInstallForConfirm()
+{
     m_portableInstallOutput.clear();
     m_portableInstallError.clear();
     m_portableCanceled = false;
@@ -893,7 +1063,9 @@ void GameLibrary::initializePortableInstallForConfirm() {
             : "Installing into a new private profile folder. Existing installs and saves will not be overwritten.";
 }
 
-QStringList GameLibrary::buildInstallArguments(const QString& helper) const {
+QStringList
+GameLibrary::buildInstallArguments(const QString& helper) const
+{
     QStringList arguments{helper,
                           m_portableDirectoryCopy ? "--install-directory" : "--install",
                           "--source",
@@ -907,16 +1079,19 @@ QStringList GameLibrary::buildInstallArguments(const QString& helper) const {
     return arguments;
 }
 
-
-void GameLibrary::cancelPortableInstall() {
+void
+GameLibrary::cancelPortableInstall()
+{
     m_portableInstallDeadline.stop();
     if (m_portablePhase.isEmpty())
         return;
     const auto phase = m_portablePhase;
     m_portableCanceled = true;
-    if (m_portableInstall.state() != QProcess::NotRunning) {
+    if (m_portableInstall.state() != QProcess::NotRunning)
+    {
         m_portableInstall.terminate();
-        if (!m_portableInstall.waitForFinished(2000)) {
+        if (!m_portableInstall.waitForFinished(2000))
+        {
             m_portableInstall.kill();
             m_portableInstall.waitForFinished(2000);
         }
@@ -944,7 +1119,9 @@ void GameLibrary::cancelPortableInstall() {
     emit portableInstallChanged();
 }
 
-bool GameLibrary::inspectWindowsInstaller(const QString& source) {
+bool
+GameLibrary::inspectWindowsInstaller(const QString& source)
+{
     if (!m_ready || portableInstallBusy() || !m_portablePhase.isEmpty())
         return fail(tr("Finish or cancel the current game operation first."));
     const QFileInfo file(source);
@@ -975,7 +1152,9 @@ bool GameLibrary::inspectWindowsInstaller(const QString& source) {
     return true;
 }
 
-bool GameLibrary::beginWindowsInstall(const QString& source) {
+bool
+GameLibrary::beginWindowsInstall(const QString& source)
+{
     if (!m_ready || portableInstallBusy() || !m_portablePhase.isEmpty())
         return fail(tr("Finish or cancel the current game operation first."));
     const QFileInfo file(source);
@@ -1010,14 +1189,18 @@ bool GameLibrary::beginWindowsInstall(const QString& source) {
     return true;
 }
 
-void GameLibrary::cancelWindowsInstall() {
+void
+GameLibrary::cancelWindowsInstall()
+{
     m_windowsInstallDeadline.stop();
     if (m_portablePhase != "windows-install")
         return;
     m_portableCanceled = true;
-    if (m_windowsInstall.state() != QProcess::NotRunning) {
+    if (m_windowsInstall.state() != QProcess::NotRunning)
+    {
         m_windowsInstall.terminate();
-        if (!m_windowsInstall.waitForFinished(2000)) {
+        if (!m_windowsInstall.waitForFinished(2000))
+        {
             m_windowsInstall.kill();
             m_windowsInstall.waitForFinished(2000);
         }
@@ -1027,7 +1210,9 @@ void GameLibrary::cancelWindowsInstall() {
     emit windowsInstallChanged();
 }
 
-bool GameLibrary::beginImport(const QString& root, const QString& runtime, const QString& platform) {
+bool
+GameLibrary::beginImport(const QString& root, const QString& runtime, const QString& platform)
+{
     if (!m_ready || scanning() || m_importReady)
         return fail(tr("Finish or cancel the current import first."));
     const auto error = MediaGrants::validate(root);
@@ -1039,7 +1224,8 @@ bool GameLibrary::beginImport(const QString& root, const QString& runtime, const
     if (formats.isEmpty() || formats.size() > 32)
         return fail(tr("This runtime has no verified import formats. Add individual games instead."));
     QStringList extensions;
-    for (const auto& format : formats) {
+    for (const auto& format : formats)
+    {
         const auto text = format.toString();
         if (format.metaType().id() != QMetaType::QString ||
             !QRegularExpression("^[a-z0-9]{1,8}$").match(text).hasMatch())
@@ -1061,7 +1247,9 @@ bool GameLibrary::beginImport(const QString& root, const QString& runtime, const
     return true;
 }
 
-void GameLibrary::scanStep() {
+void
+GameLibrary::scanStep()
+{
     if (!validScanState())
         return;
     processScanBatch();
@@ -1070,15 +1258,21 @@ void GameLibrary::scanStep() {
     emit importChanged();
 }
 
-bool GameLibrary::validScanState() const {
+bool
+GameLibrary::validScanState() const
+{
     return m_ready && m_scan;
 }
 
-void GameLibrary::processScanBatch() {
-    for (int batch = 0; batch < 32 && m_scan->hasNext(); ++batch) {
+void
+GameLibrary::processScanBatch()
+{
+    for (int batch = 0; batch < 32 && m_scan->hasNext(); ++batch)
+    {
         const auto path = m_scan->next();
         const auto info = m_scan->fileInfo();
-        if (++m_scanEntries > 10000) {
+        if (++m_scanEntries > 10000)
+        {
             cancelImport();
             fail(tr(
                 "This folder exceeds the 10,000-entry import limit. Choose a smaller folder; nothing was imported."));
@@ -1089,7 +1283,8 @@ void GameLibrary::processScanBatch() {
         if (!m_importFormats.contains(info.suffix().toLower()))
             continue;
         const auto title = info.completeBaseName();
-        if (!validScanTitle(title)) {
+        if (!validScanTitle(title))
+        {
             cancelImport();
             fail(tr("An import title is invalid. Add it manually with a corrected title."));
             return;
@@ -1103,29 +1298,38 @@ void GameLibrary::processScanBatch() {
     }
 }
 
-bool GameLibrary::validScanEntry(const QFileInfo& info, const QString& path) const {
+bool
+GameLibrary::validScanEntry(const QFileInfo& info, const QString& path) const
+{
     return info.isFile() && !info.isSymLink() && info.canonicalFilePath() == path &&
            path.startsWith(m_importRoot + '/') && info.isReadable();
 }
 
-bool GameLibrary::validScanTitle(const QString& title) const {
+bool
+GameLibrary::validScanTitle(const QString& title) const
+{
     return title.trimmed() == title && !title.isEmpty() && title.size() <= 256;
 }
 
-void GameLibrary::finalizeScan() {
+void
+GameLibrary::finalizeScan()
+{
     m_scanTimer.stop();
     m_scan.reset();
     m_importReady = true;
 }
 
-
-QVariantList GameLibrary::importPage(int offset) const {
+QVariantList
+GameLibrary::importPage(int offset) const
+{
     if (offset < 0 || offset % PageSize || offset >= 10000)
         return {};
     return m_preview.mid(offset, PageSize);
 }
 
-bool GameLibrary::commitImport() {
+bool
+GameLibrary::commitImport()
+{
     if (!validCommitImportArgs())
         return false;
     const bool steam = m_importRuntime == "steam";
@@ -1138,28 +1342,37 @@ bool GameLibrary::commitImport() {
     QSqlQuery query(m_db);
     int count = readGameCount(query);
     bool checkedPlatform = false;
-    for (const auto& entry : m_preview) {
+    for (const auto& entry : m_preview)
+    {
         if (!processImportEntry(query, entry, steam, count, checkedPlatform))
             return false;
     }
     return finalizeCommitImport();
 }
 
-bool GameLibrary::validCommitImportArgs() const {
+bool
+GameLibrary::validCommitImportArgs() const
+{
     return !m_portablePhase.startsWith("uninstall") && m_ready && !scanning() && m_importReady;
 }
 
-bool GameLibrary::validateCommitRuntime(bool& steam) const {
+bool
+GameLibrary::validateCommitRuntime(bool& steam) const
+{
     steam = m_importRuntime == "steam";
-    if (!compatibleRuntime(m_importRuntime, !steam)) {
+    if (!compatibleRuntime(m_importRuntime, !steam))
+    {
         fail(tr("The selected runtime is no longer installed."));
         return false;
     }
     return true;
 }
 
-int GameLibrary::readGameCount(QSqlQuery& query) {
-    if (!query.exec("SELECT count(*) FROM games") || !query.next()) {
+int
+GameLibrary::readGameCount(QSqlQuery& query)
+{
+    if (!query.exec("SELECT count(*) FROM games") || !query.next())
+    {
         query.finish();
         return -1;
     }
@@ -1168,12 +1381,14 @@ int GameLibrary::readGameCount(QSqlQuery& query) {
     return count;
 }
 
-bool GameLibrary::processImportEntry(QSqlQuery& query, const QVariant& entry, bool steam, int& count,
-                                     bool& checkedPlatform) {
+bool
+GameLibrary::processImportEntry(QSqlQuery& query, const QVariant& entry, bool steam, int& count, bool& checkedPlatform)
+{
     const auto value = entry.toMap();
     QString error;
     if (ComponentSchema::gameRegistration(value, &error).isEmpty() ||
-        (!steam && checkedTarget(m_importRoot, value.value("target").toString()).isEmpty())) {
+        (!steam && checkedTarget(m_importRoot, value.value("target").toString()).isEmpty()))
+    {
         return rollbackImport(error.isEmpty()
                                   ? tr("A source changed after preview. Nothing was imported; review the folder again.")
                                   : error);
@@ -1186,13 +1401,16 @@ bool GameLibrary::processImportEntry(QSqlQuery& query, const QVariant& entry, bo
         return true;
     if (!checkPlatformLimit(value, checkedPlatform))
         return false;
-    if (++count > MaxGames) {
+    if (++count > MaxGames)
+    {
         return rollbackImport(tr("Import would exceed the catalog limit. Nothing was imported."));
     }
     return insertImportedGame(query, value, steam);
 }
 
-bool GameLibrary::checkExistingGame(QSqlQuery& query, const QVariantMap& value, bool steam) {
+bool
+GameLibrary::checkExistingGame(QSqlQuery& query, const QVariantMap& value, bool steam)
+{
     query.prepare("SELECT id FROM games WHERE runtime=? AND root=? AND target=?" +
                   QString(m_hasEditions
                               ? " UNION ALL SELECT id FROM game_editions WHERE runtime=? AND root=? AND target=?"
@@ -1200,7 +1418,8 @@ bool GameLibrary::checkExistingGame(QSqlQuery& query, const QVariantMap& value, 
     query.addBindValue(m_importRuntime);
     query.addBindValue(m_importRoot);
     query.addBindValue(value.value("target"));
-    if (m_hasEditions) {
+    if (m_hasEditions)
+    {
         query.addBindValue(m_importRuntime);
         query.addBindValue(m_importRoot);
         query.addBindValue(value.value("target"));
@@ -1208,38 +1427,53 @@ bool GameLibrary::checkExistingGame(QSqlQuery& query, const QVariantMap& value, 
     return query.exec();
 }
 
-bool GameLibrary::checkPlatformLimit(const QVariantMap& value, bool& checkedPlatform) {
-    if (!checkedPlatform) {
+bool
+GameLibrary::checkPlatformLimit(const QVariantMap& value, bool& checkedPlatform)
+{
+    if (!checkedPlatform)
+    {
         checkedPlatform = true;
-        if (!platformAvailable(value.value("platform").toString())) {
+        if (!platformAvailable(value.value("platform").toString()))
+        {
             return rollbackImport(tr("The Games catalog supports up to 128 distinct platforms. Nothing was imported."));
         }
     }
     return true;
 }
 
-bool GameLibrary::insertImportedGame(QSqlQuery& query, const QVariantMap& value, bool steam) {
+bool
+GameLibrary::insertImportedGame(QSqlQuery& query, const QVariantMap& value, bool steam)
+{
     const auto id = "game-" + QUuid::createUuid().toString(QUuid::WithoutBraces);
     query.prepare("INSERT INTO games(id,title,platform,runtime,root,target,added) VALUES(?,?,?,?,?,?,unixepoch())");
     query.addBindValue(id);
     for (const auto& key : QStringList{"title", "platform", "runtimeId", "root", "target"})
         query.addBindValue(value.value(key));
-    if (!query.exec() || !recordProvenance(id, "game", m_importRuntime, m_importRoot,
+    if (!query.exec() || !recordProvenance(id,
+                                           "game",
+                                           m_importRuntime,
+                                           m_importRoot,
                                            value.value("target").toString(),
-                                           steam ? "steam-import" : "folder-import")) {
+                                           steam ? "steam-import" : "folder-import"))
+    {
         const auto reason = query.lastError().text();
         return rollbackImport(m_error.isEmpty() ? reason : m_error);
     }
     return true;
 }
 
-bool GameLibrary::rollbackImport(const QString& message) {
+bool
+GameLibrary::rollbackImport(const QString& message)
+{
     m_db.rollback();
     return fail(message);
 }
 
-bool GameLibrary::finalizeCommitImport() {
-    if (!m_db.commit()) {
+bool
+GameLibrary::finalizeCommitImport()
+{
+    if (!m_db.commit())
+    {
         m_db.rollback();
         return fail(tr("Import could not be saved. Previous data was preserved."));
     }
@@ -1250,10 +1484,9 @@ bool GameLibrary::finalizeCommitImport() {
     return true;
 }
 
-
-bool GameLibrary::recoverUnregisteredManagedInstall(const QString& installationId,
-                                                    const QString& runtimeId,
-                                                    bool confirmed) {
+bool
+GameLibrary::recoverUnregisteredManagedInstall(const QString& installationId, const QString& runtimeId, bool confirmed)
+{
     if (!validRecoveryArgs(confirmed))
         return fail(tr("Return Home and confirm recovery after all game operations finish."));
     if (!validateRecoveryInstallationId(installationId) || !validateRecoveryRuntime(runtimeId))
@@ -1274,25 +1507,35 @@ bool GameLibrary::recoverUnregisteredManagedInstall(const QString& installationI
     return startRecoveryInspect(python, helper, root);
 }
 
-bool GameLibrary::validRecoveryArgs(bool confirmed) const {
+bool
+GameLibrary::validRecoveryArgs(bool confirmed) const
+{
     return m_ready && confirmed && m_portablePhase.isEmpty() && !portableInstallBusy() &&
            !(m_sessionActiveGuard && m_sessionActiveGuard());
 }
 
-bool GameLibrary::validateRecoveryInstallationId(const QString& installationId) const {
+bool
+GameLibrary::validateRecoveryInstallationId(const QString& installationId) const
+{
     const auto uuid = QUuid(installationId);
     return !uuid.isNull() && uuid.toString(QUuid::WithoutBraces) == installationId;
 }
 
-bool GameLibrary::validateRecoveryRuntime(const QString& runtimeId) const {
+bool
+GameLibrary::validateRecoveryRuntime(const QString& runtimeId) const
+{
     return compatibleRuntime(runtimeId, true);
 }
 
-bool GameLibrary::validateInstallRoot(const QString& root) const {
+bool
+GameLibrary::validateInstallRoot(const QString& root) const
+{
     return ManagedGamePaths::isInstallRoot(m_emulatorProfile, root);
 }
 
-void GameLibrary::initializeRecoveryState(const QString& installationId, const QString& runtimeId, const QString& root) {
+void
+GameLibrary::initializeRecoveryState(const QString& installationId, const QString& runtimeId, const QString& root)
+{
     m_portableGameId.clear();
     m_portableRuntime = runtimeId;
     m_portableDestination = root;
@@ -1308,14 +1551,17 @@ void GameLibrary::initializeRecoveryState(const QString& installationId, const Q
     emit portableInstallChanged();
 }
 
-bool GameLibrary::startRecoveryInspect(const QString& python, const QString& helper, const QString& root) {
+bool
+GameLibrary::startRecoveryInspect(const QString& python, const QString& helper, const QString& root)
+{
     m_portableInstall.start(python, {helper, "--inspect-installed", "--root", root});
     m_portableInstallDeadline.start();
     return true;
 }
 
-
-bool GameLibrary::recoverOrphanedUninstall(const QString& installationId, bool confirmed) {
+bool
+GameLibrary::recoverOrphanedUninstall(const QString& installationId, bool confirmed)
+{
     if (!m_ready || !confirmed || !m_portablePhase.isEmpty() || portableInstallBusy() ||
         (m_sessionActiveGuard && m_sessionActiveGuard()))
         return fail(tr("Return Home and confirm recovery after all game operations finish."));
@@ -1340,7 +1586,9 @@ bool GameLibrary::recoverOrphanedUninstall(const QString& installationId, bool c
     return true;
 }
 
-bool GameLibrary::resumeOrphanedUninstall(const QString& installationId, bool confirmed) {
+bool
+GameLibrary::resumeOrphanedUninstall(const QString& installationId, bool confirmed)
+{
     if (!validResumeUninstallArgs(confirmed))
         return fail(tr("Return Home and confirm cleanup after all game operations finish."));
     if (!validateResumeInstallationId(installationId))
@@ -1362,24 +1610,32 @@ bool GameLibrary::resumeOrphanedUninstall(const QString& installationId, bool co
     return startResumeUninstall(python, helper, root);
 }
 
-bool GameLibrary::validResumeUninstallArgs(bool confirmed) const {
+bool
+GameLibrary::validResumeUninstallArgs(bool confirmed) const
+{
     return m_ready && confirmed && m_portablePhase.isEmpty() && !portableInstallBusy() &&
            !(m_sessionActiveGuard && m_sessionActiveGuard());
 }
 
-bool GameLibrary::validateResumeInstallationId(const QString& installationId) const {
+bool
+GameLibrary::validateResumeInstallationId(const QString& installationId) const
+{
     const auto uuid = QUuid(installationId);
     return !uuid.isNull() && uuid.toString(QUuid::WithoutBraces) == installationId;
 }
 
-bool GameLibrary::validateResumePendingState(const QString& root) const {
+bool
+GameLibrary::validateResumePendingState(const QString& root) const
+{
     const QFileInfo pending(root + ".uninstall-pending");
     return ManagedGamePaths::isInstallRoot(m_emulatorProfile, root, false) && !QFileInfo::exists(root) &&
            !QFileInfo(root).isSymLink() && pending.isDir() && !pending.isSymLink() &&
            pending.canonicalFilePath() == pending.absoluteFilePath();
 }
 
-void GameLibrary::initializeResumeUninstallState(const QString& installationId, const QString& root) {
+void
+GameLibrary::initializeResumeUninstallState(const QString& installationId, const QString& root)
+{
     m_portableGameId.clear();
     m_portableDestination = root;
     m_portableInstallOutput.clear();
@@ -1393,14 +1649,17 @@ void GameLibrary::initializeResumeUninstallState(const QString& installationId, 
     emit portableInstallChanged();
 }
 
-bool GameLibrary::startResumeUninstall(const QString& python, const QString& helper, const QString& root) {
+bool
+GameLibrary::startResumeUninstall(const QString& python, const QString& helper, const QString& root)
+{
     m_portableInstall.start(python, {helper, "--resume-uninstall", "--root", root});
     m_portableInstallDeadline.start();
     return true;
 }
 
-
-bool GameLibrary::uninstallManagedGame(const QString& id, bool confirmed) {
+bool
+GameLibrary::uninstallManagedGame(const QString& id, bool confirmed)
+{
     if (m_sessionActiveGuard && m_sessionActiveGuard())
         return fail(tr("A session is active or starting. Return Home before uninstalling a game."));
     if (!m_ready || !confirmed || portableInstallBusy() || !m_portablePhase.isEmpty() || !canUninstallManagedGame(id))
@@ -1422,8 +1681,9 @@ bool GameLibrary::uninstallManagedGame(const QString& id, bool confirmed) {
     m_portableInstallError.clear();
     m_portableCanceled = false;
     m_portablePhase = "uninstall";
-    m_portableInstallStatus = "Verifying the complete owned-file manifest before removing this install. Profile saves "
-                              "are outside the install folder.";
+    m_portableInstallStatus =
+        "Verifying the complete owned-file manifest before removing this install. Profile saves "
+        "are outside the install folder.";
     m_portableInstall.start(python, {helper, "--prepare-uninstall", "--root", root});
     m_portableInstallDeadline.start();
     m_error.clear();
@@ -1431,5 +1691,3 @@ bool GameLibrary::uninstallManagedGame(const QString& id, bool confirmed) {
     emit portableInstallChanged();
     return true;
 }
-
-

@@ -5,22 +5,31 @@
 #include <QUuid>
 #include <algorithm>
 
-namespace {
-bool valid(const QString& value) {
+namespace
+{
+bool
+valid(const QString& value)
+{
     return QRegularExpression("^[0-9a-f]{64}$").match(value).hasMatch();
 }
-bool validProfile(const QString& profile) {
+bool
+validProfile(const QString& profile)
+{
     if (profile == "default")
         return true;
     const auto id = QUuid(profile);
     return !id.isNull() && id.toString(QUuid::WithoutBraces) == profile;
 }
-QString key(const QString& profile) {
+QString
+key(const QString& profile)
+{
     return "profiles/" + profile + "/optical-media";
 }
 } // namespace
 
-QStringList OpticalDiscGrants::mediaIds(const QString& profile) {
+QStringList
+OpticalDiscGrants::mediaIds(const QString& profile)
+{
     if (!validProfile(profile))
         return {};
     QSettings store(QSettings::defaultFormat(), QSettings::UserScope, "Isolde", "Games");
@@ -28,7 +37,8 @@ QStringList OpticalDiscGrants::mediaIds(const QString& profile) {
     values.removeDuplicates();
     values.erase(std::remove_if(values.begin(),
                                 values.end(),
-                                [](const QString& id) {
+                                [](const QString& id)
+                                {
                                     return !valid(id);
                                 }),
                  values.end());
@@ -36,11 +46,15 @@ QStringList OpticalDiscGrants::mediaIds(const QString& profile) {
     return values;
 }
 
-bool OpticalDiscGrants::approved(const QString& profile, const QString& mediaId) {
+bool
+OpticalDiscGrants::approved(const QString& profile, const QString& mediaId)
+{
     return valid(mediaId) && mediaIds(profile).contains(mediaId);
 }
 
-QString OpticalDiscGrants::authorize(const QString& profile, const QString& mediaId) {
+QString
+OpticalDiscGrants::authorize(const QString& profile, const QString& mediaId)
+{
     if (!validProfile(profile) || !valid(mediaId))
         return "Invalid profile-scoped optical media identity.";
     auto values = mediaIds(profile);
@@ -55,7 +69,9 @@ QString OpticalDiscGrants::authorize(const QString& profile, const QString& medi
     return store.status() == QSettings::NoError ? QString() : "Could not save this profile's optical-media approval.";
 }
 
-QString OpticalDiscGrants::revoke(const QString& profile, const QString& mediaId) {
+QString
+OpticalDiscGrants::revoke(const QString& profile, const QString& mediaId)
+{
     if (!isValidOpticalIdentity(profile, mediaId))
         return "Invalid profile-scoped optical media identity.";
     auto values = mediaIds(profile);
@@ -67,6 +83,8 @@ QString OpticalDiscGrants::revoke(const QString& profile, const QString& mediaId
     return store.status() == QSettings::NoError ? QString() : "Could not update this profile's optical-media approval.";
 }
 
-bool isValidOpticalIdentity(const QString& profile, const QString& mediaId) {
+bool
+isValidOpticalIdentity(const QString& profile, const QString& mediaId)
+{
     return validProfile(profile) && valid(mediaId);
 }

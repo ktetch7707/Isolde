@@ -8,8 +8,11 @@
 #include <QSaveFile>
 #include <QVariantMap>
 #include <cmath>
-namespace GuideClock {
-inline QVariantMap observation() {
+namespace GuideClock
+{
+inline QVariantMap
+observation()
+{
     QElapsedTimer timer;
     timer.start();
     QString boot;
@@ -23,7 +26,9 @@ inline QVariantMap observation() {
             {"monotonic", timer.msecsSinceReference()},
             {"boot", boot}};
 }
-inline QString warning(const QString& profile, const QVariantMap& current) {
+inline QString
+warning(const QString& profile, const QVariantMap& current)
+{
     const auto path = QDir(profile).filePath("guide-clock.json");
     if (!QFileInfo::exists(path))
         return {};
@@ -31,7 +36,8 @@ inline QString warning(const QString& profile, const QVariantMap& current) {
     if (QFileInfo(path).isSymLink() || !file.open(QIODevice::ReadOnly) || file.size() > 1024)
         return QStringLiteral("The saved clock observation is unreadable. Review the device clock before tuning.");
     const auto previous = QJsonDocument::fromJson(file.read(1025)).toVariant().toMap();
-    const auto integer = [](const QVariant& v, double low, double high) {
+    const auto integer = [](const QVariant& v, double low, double high)
+    {
         const auto type = v.metaType().id();
         if (type != QMetaType::Int && type != QMetaType::LongLong && type != QMetaType::Double)
             return false;
@@ -43,7 +49,8 @@ inline QString warning(const QString& profile, const QVariantMap& current) {
         previous.value("boot").metaType().id() != QMetaType::QString || previous.value("boot").toString().size() > 80)
         return QStringLiteral("The saved clock observation is invalid. Review the device clock before tuning.");
     const auto wall = current.value("utc").toLongLong() - previous.value("utc").toLongLong();
-    if (!current.value("boot").toString().isEmpty() && current.value("boot") == previous.value("boot")) {
+    if (!current.value("boot").toString().isEmpty() && current.value("boot") == previous.value("boot"))
+    {
         const auto elapsed =
             (current.value("monotonic").toLongLong() - previous.value("monotonic").toLongLong()) / 1000;
         if (elapsed >= 0 && std::abs(wall - elapsed) > 120)
@@ -51,12 +58,16 @@ inline QString warning(const QString& profile, const QVariantMap& current) {
                        "The device wall clock changed by %1 seconds relative to its running clock. Cached UTC programs "
                        "are unchanged. Review the device clock, then choose whether to use its current time.")
                 .arg(wall - elapsed);
-    } else if (wall < -120)
-        return QStringLiteral("The device clock is earlier than the last guide checkpoint. Cached programs are "
-                              "unchanged. Review the clock before tuning.");
+    }
+    else if (wall < -120)
+        return QStringLiteral(
+            "The device clock is earlier than the last guide checkpoint. Cached programs are "
+            "unchanged. Review the clock before tuning.");
     return {};
 }
-inline bool save(const QString& profile, const QVariantMap& value) {
+inline bool
+save(const QString& profile, const QVariantMap& value)
+{
     const auto path = QDir(profile).filePath("guide-clock.json");
     if (QFileInfo(path).isSymLink())
         return false;

@@ -8,7 +8,8 @@
 #include <QVariantMap>
 #include "games/GameEmulators.h"
 
-struct AppDefinition {
+struct AppDefinition
+{
     QString id;
     QString name;
     QString type;
@@ -25,7 +26,9 @@ struct AppDefinition {
     QColor accent;
     QVariantMap launchConfiguration;
 
-    [[nodiscard]] bool isValid() const {
+    [[nodiscard]] bool
+    isValid() const
+    {
         if (id.trimmed().isEmpty() || name.trimmed().isEmpty() || type.trimmed().isEmpty())
             return false;
         for (const auto& key : {"gameSourceRoot",
@@ -37,7 +40,8 @@ struct AppDefinition {
                                 "opticalObservationId"})
             if (launchConfiguration.contains(key))
                 return false;
-        if (launchConfiguration.contains("emulatorRuntime")) {
+        if (launchConfiguration.contains("emulatorRuntime"))
+        {
             const auto runtime = launchConfiguration.value("emulatorRuntime");
             if (runtime.metaType() != QMetaType::fromType<QString>() || runtime.toString() != id ||
                 GameEmulators::definition(id).isEmpty() || type != "desktop" || presentationMode != "game-hub" ||
@@ -45,7 +49,8 @@ struct AppDefinition {
                 launchConfiguration.value("desktopId").toString() != "isolde-" + id)
                 return false;
         }
-        if (type == "android") {
+        if (type == "android")
+        {
             static const QRegularExpression runtimeId("^[a-z0-9][a-z0-9.-]{0,79}$");
             const auto runtimeApp = launchConfiguration.value("runtimeApp");
             if (runtimeApp.metaType() != QMetaType::fromType<QString>() ||
@@ -63,7 +68,8 @@ struct AppDefinition {
             return false;
         static const QRegularExpression safe("^[a-z0-9][a-z0-9.-]{0,79}$");
         QSet<QString> seen{id};
-        for (const auto& entry : value.toList()) {
+        for (const auto& entry : value.toList())
+        {
             const auto alias = entry.toString();
             if (entry.metaType() != QMetaType::fromType<QString>() || !safe.match(alias).hasMatch() ||
                 seen.contains(alias))
@@ -72,7 +78,9 @@ struct AppDefinition {
         }
         return true;
     }
-    [[nodiscard]] QStringList legacyIds() const {
+    [[nodiscard]] QStringList
+    legacyIds() const
+    {
         QStringList result;
         for (const auto& entry : launchConfiguration.value("legacyIds").toList())
             result.append(entry.toString());

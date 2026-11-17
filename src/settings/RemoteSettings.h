@@ -4,7 +4,8 @@
 #include <QString>
 #include <QVariantList>
 
-class RemoteSettings final : public QObject {
+class RemoteSettings final : public QObject
+{
     Q_OBJECT
     Q_PROPERTY(QString profile READ profile NOTIFY changed)
     Q_PROPERTY(bool setupMode READ setupMode NOTIFY changed)
@@ -18,35 +19,59 @@ class RemoteSettings final : public QObject {
   public:
     explicit RemoteSettings(QObject* parent = nullptr);
 
-    [[nodiscard]] QString profile() const;
-    [[nodiscard]] bool setupMode() const;
-    [[nodiscard]] QString lastInput() const;
-    [[nodiscard]] QString setupStatus() const;
-    [[nodiscard]] QVariantList requiredButtons() const;
-    [[nodiscard]] bool cecAvailable() const;
-    [[nodiscard]] QString cecStatus() const;
-    [[nodiscard]] QString powerAction() const;
+    [[nodiscard]] QString
+    profile() const;
+    [[nodiscard]] bool
+    setupMode() const;
+    [[nodiscard]] QString
+    lastInput() const;
+    [[nodiscard]] QString
+    setupStatus() const;
+    [[nodiscard]] QVariantList
+    requiredButtons() const;
+    [[nodiscard]] bool
+    cecAvailable() const;
+    [[nodiscard]] QString
+    cecStatus() const;
+    [[nodiscard]] QString
+    powerAction() const;
 
-    Q_INVOKABLE void nextProfile();
-    Q_INVOKABLE void toggleSetupMode();
-    Q_INVOKABLE void nextPowerAction();
-    Q_INVOKABLE bool refreshCec();
-    Q_INVOKABLE bool sendTvPowerCommand();
-    Q_INVOKABLE bool turnTvOn();
-    Q_INVOKABLE bool putTvInStandby();
-    Q_INVOKABLE void recordTestInput(const QString& inputName);
-    Q_INVOKABLE void reset();
-    void setCecEnabledForTests(bool enabled);
+    Q_INVOKABLE void
+    nextProfile();
+    Q_INVOKABLE void
+    toggleSetupMode();
+    Q_INVOKABLE void
+    nextPowerAction();
+    Q_INVOKABLE bool
+    refreshCec();
+    Q_INVOKABLE bool
+    sendTvPowerCommand();
+    Q_INVOKABLE bool
+    turnTvOn();
+    Q_INVOKABLE bool
+    putTvInStandby();
+    Q_INVOKABLE void
+    recordTestInput(const QString& inputName);
+    Q_INVOKABLE void
+    reset();
+    void
+    setCecEnabledForTests(bool enabled);
 
   signals:
-    void changed();
+    void
+    changed();
 
   private:
-    void load();
-    void save() const;
-    static QString cleanProfile(const QString& profile);
-    static QString cleanPowerAction(const QString& action);
-    bool runCecCommand(const QString& command);
+    void
+    load();
+    void
+    save() const;
+    static QString
+    cleanProfile(const QString& profile);
+    static QString
+    cleanPowerAction(const QString& action);
+    bool
+    runCecCommand(const QString& command);
 
     QString m_profile = QStringLiteral("simple");
     bool m_setupMode = false;

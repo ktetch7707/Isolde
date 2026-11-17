@@ -4,9 +4,12 @@
 #include <QSet>
 #include <QVariantMap>
 
-namespace GamepadTopology {
+namespace GamepadTopology
+{
 
-inline bool deviceNumber(const QString& name, const QString& text, uint* major, uint* minor) {
+inline bool
+deviceNumber(const QString& name, const QString& text, uint* major, uint* minor)
+{
     const auto match = QRegularExpression("^(event|js)([0-9]{1,3})$").match(name);
     if (!match.hasMatch())
         return false;
@@ -26,7 +29,9 @@ inline bool deviceNumber(const QString& name, const QString& text, uint* major, 
     return true;
 }
 
-inline bool hasGamepadKeyCapabilities(const QString& bitmap) {
+inline bool
+hasGamepadKeyCapabilities(const QString& bitmap)
+{
     if (bitmap.isEmpty() || bitmap.size() > 4096)
         return false;
     const auto words = bitmap.split(' ', Qt::SkipEmptyParts);
@@ -35,7 +40,8 @@ inline bool hasGamepadKeyCapabilities(const QString& bitmap) {
     for (const auto& word : words)
         if (word.isEmpty() || word.size() > 16 || !QRegularExpression("^[0-9a-fA-F]+$").match(word).hasMatch())
             return false;
-    for (int code = 0x120; code < 0x140; ++code) {
+    for (int code = 0x120; code < 0x140; ++code)
+    {
         const auto word = words.size() - 1 - code / 64;
         if (word < 0)
             continue;
@@ -47,13 +53,17 @@ inline bool hasGamepadKeyCapabilities(const QString& bitmap) {
     return false;
 }
 
-inline bool verifiedGamepadNode(const QString& name, const QString& bitmap, const QString& device) {
+inline bool
+verifiedGamepadNode(const QString& name, const QString& bitmap, const QString& device)
+{
     return hasGamepadKeyCapabilities(bitmap) && deviceNumber(name, device, nullptr, nullptr);
 }
 
-inline QVariantMap summarize(const QSet<QString>& connected,
-                             const QSet<QString>& availableAtLaunch,
-                             const QSet<QString>& availableAfterLaunch = {}) {
+inline QVariantMap
+summarize(const QSet<QString>& connected,
+          const QSet<QString>& availableAtLaunch,
+          const QSet<QString>& availableAfterLaunch = {})
+{
     auto availableNodes = availableAtLaunch;
     availableNodes.unite(availableAfterLaunch);
     int available = 0;

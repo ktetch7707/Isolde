@@ -3,15 +3,20 @@
 #include <QJsonDocument>
 
 LocalCatalogProvider::LocalCatalogProvider(AppCatalog* catalog, QObject* parent)
-    : StoreProvider(parent), m_catalog(catalog) {}
+    : StoreProvider(parent), m_catalog(catalog)
+{
+}
 
-QVariantList LocalCatalogProvider::search(const QString& query) {
+QVariantList
+LocalCatalogProvider::search(const QString& query)
+{
     QVariantList result;
     if (!m_catalog)
         return result;
     const auto entries = m_catalog->entries();
     const QString q = query.trimmed().toLower();
-    for (const auto& value : entries) {
+    for (const auto& value : entries)
+    {
         const auto map = value.toMap();
         const QString id = map.value(QStringLiteral("id")).toString();
         const QString name = map.value(QStringLiteral("name")).toString();
@@ -24,7 +29,8 @@ QVariantList LocalCatalogProvider::search(const QString& query) {
         const QString provenance = map.value(QStringLiteral("provenance")).toString();
         const QString state = map.value(QStringLiteral("state")).toString();
 
-        if (!q.isEmpty()) {
+        if (!q.isEmpty())
+        {
             const auto haystack = QStringLiteral("%1 %2 %3 %4 %5").arg(name, category, description, publisher, type);
             if (!haystack.toLower().contains(q))
                 continue;
@@ -54,17 +60,23 @@ QVariantList LocalCatalogProvider::search(const QString& query) {
     return result;
 }
 
-QUrl LocalCatalogProvider::artifactUrl(const QString& storeId) const {
+QUrl
+LocalCatalogProvider::artifactUrl(const QString& storeId) const
+{
     Q_UNUSED(storeId);
     return QUrl();
 }
 
-QByteArray LocalCatalogProvider::artifactHash(const QString& storeId) const {
+QByteArray
+LocalCatalogProvider::artifactHash(const QString& storeId) const
+{
     Q_UNUSED(storeId);
     return QByteArray();
 }
 
-QString LocalCatalogProvider::provenanceText(const QString& storeId) const {
+QString
+LocalCatalogProvider::provenanceText(const QString& storeId) const
+{
     Q_UNUSED(storeId);
     return QObject::tr("Isolde curated catalog");
 }

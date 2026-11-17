@@ -8,20 +8,27 @@
 #include <functional>
 #include <memory>
 
-class ProfileCompletion : public QObject {
+class ProfileCompletion : public QObject
+{
     Q_OBJECT
   public:
-    Q_INVOKABLE void complete(int code) {
+    Q_INVOKABLE void
+    complete(int code)
+    {
         emit completed(code);
     }
   signals:
-    void completed(int code);
+    void
+    completed(int code);
 };
 
-int main(int argc, char** argv) {
+int
+main(int argc, char** argv)
+{
     QtWebEngineQuick::initialize();
     QGuiApplication app(argc, argv);
-    if (app.arguments().size() == 1) {
+    if (app.arguments().size() == 1)
+    {
         QTemporaryDir storage;
         if (!storage.isValid())
             return 1;
@@ -30,17 +37,20 @@ int main(int argc, char** argv) {
         switching.setProcessChannelMode(QProcess::ForwardedChannels);
         switching.start(app.applicationFilePath(), {switchingStorage.path(), "cycle"});
         if (!switching.waitForFinished(45000) || switching.exitStatus() != QProcess::NormalExit ||
-            switching.exitCode() != 0) {
+            switching.exitCode() != 0)
+        {
             qCritical() << "Profile cycle failed:" << switching.exitStatus() << switching.exitCode()
                         << switching.errorString();
             return 1;
         }
-        for (const auto& phase : {"A-write", "B-write", "A-read", "B-read"}) {
+        for (const auto& phase : {"A-write", "B-write", "A-read", "B-read"})
+        {
             QProcess process;
             process.setProcessChannelMode(QProcess::ForwardedChannels);
             process.start(app.applicationFilePath(), {storage.path(), phase});
             if (!process.waitForFinished(45000) || process.exitStatus() != QProcess::NormalExit ||
-                process.exitCode() != 0) {
+                process.exitCode() != 0)
+            {
                 qCritical() << "Profile phase failed:" << phase << process.exitStatus() << process.exitCode()
                             << process.errorString();
                 return 1;
@@ -54,9 +64,11 @@ int main(int argc, char** argv) {
     std::unique_ptr<QQmlApplicationEngine> engine;
     ProfileCompletion completion;
     int index = 0;
-    std::function<void()> next = [&] {
+    std::function<void()> next = [&]
+    {
         engine.reset();
-        if (index == phases.size()) {
+        if (index == phases.size())
+        {
             app.exit(0);
             return;
         }
@@ -71,16 +83,23 @@ int main(int argc, char** argv) {
         if (engine->rootObjects().isEmpty())
             app.exit(1);
     };
-    QObject::connect(&completion, &ProfileCompletion::completed, &app, [&](int code) {
-        if (code)
-            app.exit(code);
-        else
-            QTimer::singleShot(0, &app, next);
-    });
-    QTimer::singleShot(35000, &app, [] {
-        qCritical("Browser isolation test timed out");
-        QCoreApplication::exit(1);
-    });
+    QObject::connect(&completion,
+                     &ProfileCompletion::completed,
+                     &app,
+                     [&](int code)
+                     {
+                         if (code)
+                             app.exit(code);
+                         else
+                             QTimer::singleShot(0, &app, next);
+                     });
+    QTimer::singleShot(35000,
+                       &app,
+                       []
+                       {
+                           qCritical("Browser isolation test timed out");
+                           QCoreApplication::exit(1);
+                       });
     QTimer::singleShot(0, &app, next);
     const int result = app.exec();
     qInfo() << "Profile loop ended:" << result << "phases" << index << "/" << phases.size() << "engine destroyed"

@@ -9,8 +9,11 @@
 #include <QUrl>
 
 // Same profile artwork namespace and content-addressed convention as HomeLayout.
-namespace GuideAssets {
-inline QString name(const QByteArray& bytes) {
+namespace GuideAssets
+{
+inline QString
+name(const QByteArray& bytes)
+{
     if (bytes.isEmpty() || bytes.size() > 20 * 1024 * 1024)
         return {};
     QBuffer buffer;
@@ -26,10 +29,14 @@ inline QString name(const QByteArray& bytes) {
     return "artwork/logo-" + QString::fromLatin1(QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex()) +
            (format == "png" ? ".png" : ".jpg");
 }
-inline bool safeName(const QString& relative) {
+inline bool
+safeName(const QString& relative)
+{
     return QRegularExpression("^artwork/logo-[0-9a-f]{64}\\.(png|jpg)$").match(relative).hasMatch();
 }
-inline QString path(const QString& profile, const QString& relative) {
+inline QString
+path(const QString& profile, const QString& relative)
+{
     if (!safeName(relative))
         return {};
     const auto root = QFileInfo(profile).canonicalFilePath(), assets = QDir(profile).filePath("artwork");
@@ -43,7 +50,9 @@ inline QString path(const QString& profile, const QString& relative) {
         return {};
     return target;
 }
-inline bool write(const QString& profile, const QString& relative, const QByteArray& bytes) {
+inline bool
+write(const QString& profile, const QString& relative, const QByteArray& bytes)
+{
     if (!canWriteArtwork(profile, relative, bytes))
         return false;
     const auto target = path(profile, relative);
@@ -54,11 +63,15 @@ inline bool write(const QString& profile, const QString& relative, const QByteAr
     return file.open(QIODevice::WriteOnly) && file.write(bytes) == bytes.size() && file.commit();
 }
 
-bool canWriteArtwork(const QString& profile, const QString& relative, const QByteArray& bytes) {
+bool
+canWriteArtwork(const QString& profile, const QString& relative, const QByteArray& bytes)
+{
     return name(bytes) == relative && !path(profile, relative).isEmpty() &&
            QDir().mkpath(QDir(profile).filePath("artwork"));
 }
-inline QString source(const QString& profile, const QString& relative) {
+inline QString
+source(const QString& profile, const QString& relative)
+{
     const auto target = path(profile, relative);
     return !target.isEmpty() && QFileInfo(target).isFile() ? QUrl::fromLocalFile(target).toString() : QString();
 }

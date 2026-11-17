@@ -6,24 +6,39 @@
 #include "../src/sessions/ProfileManager.h"
 #include "tst_component_common.h"
 
-class GameLibraryTests : public QObject {
+class GameLibraryTests : public QObject
+{
     Q_OBJECT
   private slots:
-    void steamGamesUseProviderIdentityAndReviewedImport();
-    void steamRecoveryWritesRemainBoundToManagerProfileAfterSwitch();
-    void gamesCuratedPackagesBindThroughRealCatalog();
-    void emulatorSettingsAreAtomicProfileLocalAndPreserveUnknownData();
-    void emulatorManifestIsBoundedAndVersioned();
-    void gamesEditionsKeepOneCardAndSeparateLaunchTargets();
-    void gamesFolderImportIsReviewedAtomicAndCancelable();
-    void gamesFolderImportPreservesManualInstallation();
-    void gamesRelinkPreservesIdentityAndRollsBack();
-    void gamesContractsRejectExecutableData();
-    void gamesCatalogIsBoundedAtomicAndProfileLocal();
-    void gamesLaunchRejectsMissingAndRedirectedTargets();
+    void
+    steamGamesUseProviderIdentityAndReviewedImport();
+    void
+    steamRecoveryWritesRemainBoundToManagerProfileAfterSwitch();
+    void
+    gamesCuratedPackagesBindThroughRealCatalog();
+    void
+    emulatorSettingsAreAtomicProfileLocalAndPreserveUnknownData();
+    void
+    emulatorManifestIsBoundedAndVersioned();
+    void
+    gamesEditionsKeepOneCardAndSeparateLaunchTargets();
+    void
+    gamesFolderImportIsReviewedAtomicAndCancelable();
+    void
+    gamesFolderImportPreservesManualInstallation();
+    void
+    gamesRelinkPreservesIdentityAndRollsBack();
+    void
+    gamesContractsRejectExecutableData();
+    void
+    gamesCatalogIsBoundedAtomicAndProfileLocal();
+    void
+    gamesLaunchRejectsMissingAndRedirectedTargets();
 };
 
-int main(int argc, char* argv[]) {
+int
+main(int argc, char* argv[])
+{
     QCoreApplication app(argc, argv);
     GameLibraryTests test;
     return QTest::qExec(&test, argc, argv);
@@ -31,7 +46,9 @@ int main(int argc, char* argv[]) {
 
 #include "tst_game_library.moc"
 
-void GameLibraryTests::steamGamesUseProviderIdentityAndReviewedImport() {
+void
+GameLibraryTests::steamGamesUseProviderIdentityAndReviewedImport()
+{
     QTemporaryDir dir;
     AppRegistry registry;
     QVERIFY(registry.loadFromData(apps));
@@ -53,7 +70,9 @@ void GameLibraryTests::steamGamesUseProviderIdentityAndReviewedImport() {
             library.importSteamGame("halo", "../escape").isEmpty());
 }
 
-void GameLibraryTests::steamRecoveryWritesRemainBoundToManagerProfileAfterSwitch() {
+void
+GameLibraryTests::steamRecoveryWritesRemainBoundToManagerProfileAfterSwitch()
+{
     QTemporaryDir dir;
     ProfileManager profiles(dir.path());
     QVERIFY(profiles.createProfile("Other"));
@@ -73,7 +92,9 @@ void GameLibraryTests::steamRecoveryWritesRemainBoundToManagerProfileAfterSwitch
     QVERIFY(library.markForRecovery(steamId, dir.filePath("recovery.json")));
 }
 
-void GameLibraryTests::gamesCuratedPackagesBindThroughRealCatalog() {
+void
+GameLibraryTests::gamesCuratedPackagesBindThroughRealCatalog()
+{
     QTemporaryDir dir;
     AppCatalog catalog(&registry);
     QVERIFY(catalog.load(
@@ -89,7 +110,9 @@ void GameLibraryTests::gamesCuratedPackagesBindThroughRealCatalog() {
     QCOMPARE(registry.find("kodi")["type"].toString(), QString("media-center"));
 }
 
-void GameLibraryTests::emulatorSettingsAreAtomicProfileLocalAndPreserveUnknownData() {
+void
+GameLibraryTests::emulatorSettingsAreAtomicProfileLocalAndPreserveUnknownData()
+{
     QTemporaryDir dir;
     AppRegistry registry;
     QVERIFY(registry.loadFromData(apps));
@@ -108,7 +131,9 @@ void GameLibraryTests::emulatorSettingsAreAtomicProfileLocalAndPreserveUnknownDa
     QCOMPARE(emulators.emulatorSettings("snes9x")["videoBackend"].toString(), QString("vulkan"));
 }
 
-void GameLibraryTests::emulatorManifestIsBoundedAndVersioned() {
+void
+GameLibraryTests::emulatorManifestIsBoundedAndVersioned()
+{
     QTemporaryDir dir;
     AppRegistry registry;
     QVERIFY(registry.loadFromData(apps));
@@ -122,7 +147,9 @@ void GameLibraryTests::emulatorManifestIsBoundedAndVersioned() {
     QVERIFY(emulators.emulator("good").contains("id"));
 }
 
-void GameLibraryTests::gamesEditionsKeepOneCardAndSeparateLaunchTargets() {
+void
+GameLibraryTests::gamesEditionsKeepOneCardAndSeparateLaunchTargets()
+{
     QTemporaryDir dir;
     AppRegistry registry;
     QVERIFY(registry.loadFromData(apps));
@@ -132,7 +159,8 @@ void GameLibraryTests::gamesEditionsKeepOneCardAndSeparateLaunchTargets() {
     QVERIFY(library.launchable(gameId));
     const auto editions = library.editions(gameId);
     QVERIFY(editions.size() >= 1);
-    for (const auto& edition : editions) {
+    for (const auto& edition : editions)
+    {
         QCOMPARE(edition["source"].toString(), gameId);
         QVERIFY(!edition["id"].toString().isEmpty());
     }
@@ -141,7 +169,9 @@ void GameLibraryTests::gamesEditionsKeepOneCardAndSeparateLaunchTargets() {
     QCOMPARE(library.launchTarget(gameId, "standard"), library.launchTarget(gameId, "deluxe"));
 }
 
-void GameLibraryTests::gamesFolderImportIsReviewedAtomicAndCancelable() {
+void
+GameLibraryTests::gamesFolderImportIsReviewedAtomicAndCancelable()
+{
     QTemporaryDir dir;
     AppRegistry registry;
     QVERIFY(registry.loadFromData(apps));
@@ -163,7 +193,9 @@ void GameLibraryTests::gamesFolderImportIsReviewedAtomicAndCancelable() {
     QCOMPARE(library.importedGames().size(), before + 2);
 }
 
-void GameLibraryTests::gamesFolderImportPreservesManualInstallation() {
+void
+GameLibraryTests::gamesFolderImportPreservesManualInstallation()
+{
     QTemporaryDir dir;
     AppRegistry registry;
     QVERIFY(registry.loadFromData(apps));
@@ -181,7 +213,9 @@ void GameLibraryTests::gamesFolderImportPreservesManualInstallation() {
     QVERIFY(!registry.find("manual"));
 }
 
-void GameLibraryTests::gamesRelinkPreservesIdentityAndRollsBack() {
+void
+GameLibraryTests::gamesRelinkPreservesIdentityAndRollsBack()
+{
     QTemporaryDir dir;
     AppRegistry registry;
     QVERIFY(registry.loadFromData(apps));
@@ -200,7 +234,9 @@ void GameLibraryTests::gamesRelinkPreservesIdentityAndRollsBack() {
     QCOMPARE(library.find(gameId)["source"].toString(), before["source"].toString());
 }
 
-void GameLibraryTests::gamesContractsRejectExecutableData() {
+void
+GameLibraryTests::gamesContractsRejectExecutableData()
+{
     QTemporaryDir dir;
     AppRegistry registry;
     QVERIFY(registry.loadFromData(apps));
@@ -214,7 +250,9 @@ void GameLibraryTests::gamesContractsRejectExecutableData() {
     QVERIFY(!library.launchable(":command"));
 }
 
-void GameLibraryTests::gamesCatalogIsBoundedAtomicAndProfileLocal() {
+void
+GameLibraryTests::gamesCatalogIsBoundedAtomicAndProfileLocal()
+{
     QTemporaryDir dir;
     AppCatalog catalog(&registry);
     QVERIFY(catalog.load(
@@ -236,7 +274,9 @@ void GameLibraryTests::gamesCatalogIsBoundedAtomicAndProfileLocal() {
     QCOMPARE(catalog2.installedCount(), 0);
 }
 
-void GameLibraryTests::gamesLaunchRejectsMissingAndRedirectedTargets() {
+void
+GameLibraryTests::gamesLaunchRejectsMissingAndRedirectedTargets()
+{
     QTemporaryDir dir;
     AppRegistry registry;
     QVERIFY(registry.loadFromData(apps));

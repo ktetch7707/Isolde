@@ -4,8 +4,11 @@
 #include <QDataStream>
 #include <QFileInfo>
 
-void stopProcess(QProcess& process) {
-    if (process.state() != QProcess::NotRunning) {
+void
+stopProcess(QProcess& process)
+{
+    if (process.state() != QProcess::NotRunning)
+    {
         process.kill();
         process.waitForFinished(1000);
     }
@@ -18,7 +21,8 @@ void stopProcess(QProcess& process) {
 #include <cmath>
 
 AudioSettings::AudioSettings(QObject* parent, const QString& mixerExecutable, const QString& playerExecutable)
-    : QObject(parent) {
+    : QObject(parent)
+{
     load();
     auto environment = QProcessEnvironment::systemEnvironment();
     environment.insert("LC_ALL", "C");
@@ -30,30 +34,47 @@ AudioSettings::AudioSettings(QObject* parent, const QString& mixerExecutable, co
         m_playerExecutable = QStandardPaths::findExecutable("paplay");
     m_testDeadline.setSingleShot(true);
     m_testDeadline.setInterval(8000);
-    connect(&m_testDeadline, &QTimer::timeout, this, [this] {
-        stopTestSound();
-        m_testStatus = "Sound test timed out. Check the output and retry.";
-        emit changed();
-    });
-    connect(&m_testPlayer, &QProcess::readyReadStandardError, this, [this] {
-        m_testPlayer.readAllStandardError();
-    });
-    connect(&m_testPlayer, &QProcess::readyReadStandardOutput, this, [this] {
-        m_testPlayer.readAllStandardOutput();
-    });
-    connect(&m_testPlayer, &QProcess::errorOccurred, this, [this](QProcess::ProcessError error) {
-        if (error != QProcess::FailedToStart)
-            return;
-        m_testDeadline.stop();
-        m_testPlaying = false;
-        m_testFile.reset();
-        m_testStatus = "Could not start the sound player.";
-        emit changed();
-    });
+    connect(&m_testDeadline,
+            &QTimer::timeout,
+            this,
+            [this]
+            {
+                stopTestSound();
+                m_testStatus = "Sound test timed out. Check the output and retry.";
+                emit changed();
+            });
+    connect(&m_testPlayer,
+            &QProcess::readyReadStandardError,
+            this,
+            [this]
+            {
+                m_testPlayer.readAllStandardError();
+            });
+    connect(&m_testPlayer,
+            &QProcess::readyReadStandardOutput,
+            this,
+            [this]
+            {
+                m_testPlayer.readAllStandardOutput();
+            });
+    connect(&m_testPlayer,
+            &QProcess::errorOccurred,
+            this,
+            [this](QProcess::ProcessError error)
+            {
+                if (error != QProcess::FailedToStart)
+                    return;
+                m_testDeadline.stop();
+                m_testPlaying = false;
+                m_testFile.reset();
+                m_testStatus = "Could not start the sound player.";
+                emit changed();
+            });
     connect(&m_testPlayer,
             qOverload<int, QProcess::ExitStatus>(&QProcess::finished),
             this,
-            [this](int code, QProcess::ExitStatus status) {
+            [this](int code, QProcess::ExitStatus status)
+            {
                 m_testDeadline.stop();
                 m_testFile.reset();
                 if (m_testPlaying)
@@ -71,71 +92,104 @@ AudioSettings::AudioSettings(QObject* parent, const QString& mixerExecutable, co
     m_deadline.setSingleShot(true);
     m_deadline.setInterval(2000);
     m_poll.setInterval(3000);
-    connect(&m_poll, &QTimer::timeout, this, [this] {
-        if (m_active || m_process.state() != QProcess::NotRunning)
-            return;
-        if (m_startupAttempts > 0) {
-            --m_startupAttempts;
-            submit(m_targetVolume, m_targetMuted);
-        } else
-            refreshBackend();
-    });
-    connect(&m_deadline, &QTimer::timeout, this, [this] {
-        mixerFailed("Audio service timed out; volume is unconfirmed.");
-        m_process.kill();
-    });
-    connect(&m_process, &QProcess::readyReadStandardOutput, this, [this] {
-        m_output += m_process.readAllStandardOutput();
-        if (m_output.size() > 65536) {
-            mixerFailed("Invalid mixer response.");
-            m_process.kill();
-        }
-    });
-    connect(&m_process, &QProcess::readyReadStandardError, this, [this] {
-        m_process.readAllStandardError();
-    });
-    connect(&m_process, &QProcess::errorOccurred, this, [this](QProcess::ProcessError error) {
-        if (error == QProcess::FailedToStart)
-            mixerFailed("Cannot start the audio backend.");
-    });
+    connect(&m_poll,
+            &QTimer::timeout,
+            this,
+            [this]
+            {
+                if (m_active || m_process.state() != QProcess::NotRunning)
+                    return;
+                if (m_startupAttempts > 0)
+                {
+                    --m_startupAttempts;
+                    submit(m_targetVolume, m_targetMuted);
+                }
+                else
+                    refreshBackend();
+            });
+    connect(&m_deadline,
+            &QTimer::timeout,
+            this,
+            [this]
+            {
+                mixerFailed("Audio service timed out; volume is unconfirmed.");
+                m_process.kill();
+            });
+    connect(&m_process,
+            &QProcess::readyReadStandardOutput,
+            this,
+            [this]
+            {
+                m_output += m_process.readAllStandardOutput();
+                if (m_output.size() > 65536)
+                {
+                    mixerFailed("Invalid mixer response.");
+                    m_process.kill();
+                }
+            });
+    connect(&m_process,
+            &QProcess::readyReadStandardError,
+            this,
+            [this]
+            {
+                m_process.readAllStandardError();
+            });
+    connect(&m_process,
+            &QProcess::errorOccurred,
+            this,
+            [this](QProcess::ProcessError error)
+            {
+                if (error == QProcess::FailedToStart)
+                    mixerFailed("Cannot start the audio backend.");
+            });
     connect(
         &m_process, qOverload<int, QProcess::ExitStatus>(&QProcess::finished), this, &AudioSettings::completeCommand);
 }
 
-AudioSettings::~AudioSettings() {
+AudioSettings::~AudioSettings()
+{
     m_testPlayer.disconnect(this);
     stopProcess(m_testPlayer);
     m_process.disconnect(this);
     stopProcess(m_process);
 }
 
-void stopProcess(QProcess& process) {
-    if (process.state() != QProcess::NotRunning) {
+void
+stopProcess(QProcess& process)
+{
+    if (process.state() != QProcess::NotRunning)
+    {
         process.kill();
         process.waitForFinished(1000);
     }
 }
 
-void AudioSettings::playTestSound() {
+void
+AudioSettings::playTestSound()
+{
     if (m_testPlayer.state() != QProcess::NotRunning)
         return;
-    if (m_playerExecutable.isEmpty()) {
+    if (m_playerExecutable.isEmpty())
+    {
         m_testStatus = "Install pw-play or paplay to play the sound test.";
         emit changed();
         return;
     }
-    if (!m_mixerAvailable || m_active) {
+    if (!m_mixerAvailable || m_active)
+    {
         m_testStatus = "Wait for the audio output to be confirmed, then retry.";
         emit changed();
         return;
     }
-    if (m_muted || m_volume == 0) {
+    if (m_muted || m_volume == 0)
+    {
         m_testStatus = "Unmute and raise the volume before testing. The test will not change your volume.";
         emit changed();
         return;
     }
     m_testFile = std::make_unique<QTemporaryFile>();
-    if (!m_testFile->open()) {
+    if (!m_testFile->open())
+    {
         m_testFile.reset();
         m_testStatus = "Cannot prepare the sound test.";
         emit changed();
@@ -151,14 +205,16 @@ void AudioSettings::playTestSound() {
            << quint16(16);
     stream.writeRawData("data", 4);
     stream << quint32(bytes);
-    for (int frame = 0; frame < frames; ++frame) {
+    for (int frame = 0; frame < frames; ++frame)
+    {
         const int section = frame / rate;
         const double t = double(frame % rate) / rate;
         const double envelope = qBound(0.0, qMin(t / 0.03, (0.7 - t) / 0.03), 1.0);
         const qint16 sample = qRound(3276 * envelope * std::sin(2 * M_PI * (section == 1 ? 660 : 440) * t));
         stream << qint16(section == 1 ? 0 : sample) << qint16(section == 0 ? 0 : sample);
     }
-    if (stream.status() != QDataStream::Ok || !m_testFile->flush()) {
+    if (stream.status() != QDataStream::Ok || !m_testFile->flush())
+    {
         m_testFile.reset();
         m_testStatus = "Cannot write the sound test.";
         emit changed();
@@ -171,7 +227,9 @@ void AudioSettings::playTestSound() {
     emit changed();
 }
 
-void AudioSettings::stopTestSound() {
+void
+AudioSettings::stopTestSound()
+{
     if (!m_testPlaying)
         return;
     m_testPlaying = false;
@@ -181,7 +239,9 @@ void AudioSettings::stopTestSound() {
     emit changed();
 }
 
-void AudioSettings::initialize() {
+void
+AudioSettings::initialize()
+{
     if (m_initialized)
         return;
     m_initialized = true;
@@ -191,50 +251,78 @@ void AudioSettings::initialize() {
            m_startupPolicy == "muted" || (m_startupPolicy == "remember" && m_muted));
 }
 
-int AudioSettings::volume() const {
+int
+AudioSettings::volume() const
+{
     return m_volume;
 }
-bool AudioSettings::muted() const {
+bool
+AudioSettings::muted() const
+{
     return m_muted;
 }
-QString AudioSettings::startupPolicy() const {
+QString
+AudioSettings::startupPolicy() const
+{
     return m_startupPolicy;
 }
-int AudioSettings::startupVolume() const {
+int
+AudioSettings::startupVolume() const
+{
     return m_startupVolume;
 }
-int AudioSettings::volumeStep() const {
+int
+AudioSettings::volumeStep() const
+{
     return m_volumeStep;
 }
-bool AudioSettings::nightMode() const {
+bool
+AudioSettings::nightMode() const
+{
     return m_nightMode;
 }
-int AudioSettings::lipSyncMs() const {
+int
+AudioSettings::lipSyncMs() const
+{
     return m_lipSyncMs;
 }
-QString AudioSettings::volumeMode() const {
+QString
+AudioSettings::volumeMode() const
+{
     return m_volumeMode;
 }
-int AudioSettings::tvReferenceVolume() const {
+int
+AudioSettings::tvReferenceVolume() const
+{
     return m_tvReferenceVolume;
 }
-bool AudioSettings::mixerAvailable() const {
+bool
+AudioSettings::mixerAvailable() const
+{
     return m_mixerAvailable;
 }
-QString AudioSettings::backendStatus() const {
+QString
+AudioSettings::backendStatus() const
+{
     return m_backendStatus;
 }
 
-void AudioSettings::adjustVolume(int delta) {
+void
+AudioSettings::adjustVolume(int delta)
+{
     const auto next = clamp((m_active || m_pending ? m_targetVolume : m_volume) + delta, 0, 100);
     submit(next, next > 0 ? false : m_muted);
 }
 
-void AudioSettings::toggleMute() {
+void
+AudioSettings::toggleMute()
+{
     submit(m_active || m_pending ? m_targetVolume : m_volume, !(m_active || m_pending ? m_targetMuted : m_muted));
 }
 
-void AudioSettings::nextStartupPolicy() {
+void
+AudioSettings::nextStartupPolicy()
+{
     if (m_startupPolicy == QStringLiteral("remember"))
         m_startupPolicy = QStringLiteral("fixed");
     else if (m_startupPolicy == QStringLiteral("fixed"))
@@ -245,7 +333,9 @@ void AudioSettings::nextStartupPolicy() {
     emit changed();
 }
 
-void AudioSettings::adjustStartupVolume(int delta) {
+void
+AudioSettings::adjustStartupVolume(int delta)
+{
     const auto next = clamp(m_startupVolume + delta, 0, 100);
     if (next == m_startupVolume)
         return;
@@ -254,7 +344,9 @@ void AudioSettings::adjustStartupVolume(int delta) {
     emit changed();
 }
 
-void AudioSettings::adjustVolumeStep(int delta) {
+void
+AudioSettings::adjustVolumeStep(int delta)
+{
     const auto next = clamp(m_volumeStep + delta, 1, 20);
     if (next == m_volumeStep)
         return;
@@ -263,13 +355,17 @@ void AudioSettings::adjustVolumeStep(int delta) {
     emit changed();
 }
 
-void AudioSettings::toggleNightMode() {
+void
+AudioSettings::toggleNightMode()
+{
     m_nightMode = !m_nightMode;
     save();
     emit changed();
 }
 
-void AudioSettings::adjustLipSync(int delta) {
+void
+AudioSettings::adjustLipSync(int delta)
+{
     const auto next = clamp(m_lipSyncMs + delta, -250, 250);
     if (next == m_lipSyncMs)
         return;
@@ -278,13 +374,17 @@ void AudioSettings::adjustLipSync(int delta) {
     emit changed();
 }
 
-void AudioSettings::nextVolumeMode() {
+void
+AudioSettings::nextVolumeMode()
+{
     m_volumeMode = QStringLiteral("isolde");
     save();
     emit changed();
 }
 
-void AudioSettings::adjustTvReferenceVolume(int delta) {
+void
+AudioSettings::adjustTvReferenceVolume(int delta)
+{
     const auto next = clamp(m_tvReferenceVolume + delta, 0, 100);
     if (next == m_tvReferenceVolume)
         return;
@@ -293,7 +393,9 @@ void AudioSettings::adjustTvReferenceVolume(int delta) {
     emit changed();
 }
 
-void AudioSettings::reset() {
+void
+AudioSettings::reset()
+{
     m_startupPolicy = QStringLiteral("remember");
     m_startupVolume = 35;
     m_volumeStep = 5;
@@ -306,14 +408,18 @@ void AudioSettings::reset() {
     emit changed();
 }
 
-bool AudioSettings::refreshBackend() {
+bool
+AudioSettings::refreshBackend()
+{
     if (!m_mixerEnabled)
         return m_mixerAvailable;
-    if (m_active || m_process.state() != QProcess::NotRunning) {
+    if (m_active || m_process.state() != QProcess::NotRunning)
+    {
         m_refreshPending = true;
         return m_mixerAvailable;
     }
-    if (m_pending) {
+    if (m_pending)
+    {
         runNext();
         return m_mixerAvailable;
     }
@@ -324,11 +430,15 @@ bool AudioSettings::refreshBackend() {
     return m_mixerAvailable;
 }
 
-void AudioSettings::setMixerEnabledForTests(bool enabled) {
+void
+AudioSettings::setMixerEnabledForTests(bool enabled)
+{
     m_mixerEnabled = enabled;
 }
 
-void AudioSettings::load() {
+void
+AudioSettings::load()
+{
     QSettings settings(QSettings::defaultFormat(), QSettings::UserScope, "Isolde", QCoreApplication::applicationName());
     settings.beginGroup(QStringLiteral("audio"));
     m_volume = clamp(settings.value(QStringLiteral("volume"), m_volume).toInt(), 0, 100);
@@ -343,7 +453,9 @@ void AudioSettings::load() {
         clamp(settings.value(QStringLiteral("tvReferenceVolume"), m_tvReferenceVolume).toInt(), 0, 100);
 }
 
-void AudioSettings::save() {
+void
+AudioSettings::save()
+{
     QSettings settings(QSettings::defaultFormat(), QSettings::UserScope, "Isolde", QCoreApplication::applicationName());
     settings.beginGroup(QStringLiteral("audio"));
     settings.setValue(QStringLiteral("volume"), m_volume);
@@ -360,26 +472,35 @@ void AudioSettings::save() {
         m_backendStatus = "Audio settings could not be saved.";
 }
 
-int AudioSettings::clamp(int value, int minimum, int maximum) {
+int
+AudioSettings::clamp(int value, int minimum, int maximum)
+{
     return qBound(minimum, value, maximum);
 }
 
-QString AudioSettings::cleanStartupPolicy(const QString& policy) {
+QString
+AudioSettings::cleanStartupPolicy(const QString& policy)
+{
     const auto normalized = policy.trimmed().toLower();
     if (normalized == QStringLiteral("fixed") || normalized == QStringLiteral("muted"))
         return normalized;
     return QStringLiteral("remember");
 }
 
-QString AudioSettings::cleanVolumeMode(const QString& mode) {
+QString
+AudioSettings::cleanVolumeMode(const QString& mode)
+{
     Q_UNUSED(mode);
     return QStringLiteral("isolde");
 }
 
-void AudioSettings::submit(int volume, bool muted) {
+void
+AudioSettings::submit(int volume, bool muted)
+{
     m_targetVolume = volume;
     m_targetMuted = muted;
-    if (!m_mixerEnabled) {
+    if (!m_mixerEnabled)
+    {
         applyVolumeDirectly(volume, muted);
         return;
     }
@@ -388,36 +509,49 @@ void AudioSettings::submit(int volume, bool muted) {
         runNext();
 }
 
-void AudioSettings::applyVolumeDirectly(int volume, bool muted) {
+void
+AudioSettings::applyVolumeDirectly(int volume, bool muted)
+{
     m_volume = volume;
     m_muted = muted;
     save();
     emit changed();
 }
 
-void AudioSettings::enqueueRead() {
-    if (isPactlMixer()) {
+void
+AudioSettings::enqueueRead()
+{
+    if (isPactlMixer())
+    {
         m_commands.append(QStringList{"get-sink-volume", "@DEFAULT_SINK@"});
         m_commands.append(QStringList{"get-sink-mute", "@DEFAULT_SINK@"});
         m_commands.append(QStringList{"list", "sinks"});
         m_commands.append(QStringList{"get-default-sink"});
-    } else {
+    }
+    else
+    {
         m_commands.append(QStringList{"get-volume", "@DEFAULT_AUDIO_SINK@"});
         m_commands.append(QStringList{"status"});
     }
 }
 
-bool AudioSettings::isPactlMixer() {
+bool
+AudioSettings::isPactlMixer()
+{
     return QFileInfo(m_mixerTool).fileName() == "pactl";
 }
 
-bool AudioSettings::selectOutput(const QString& id) {
-    if (m_testPlaying) {
+bool
+AudioSettings::selectOutput(const QString& id)
+{
+    if (m_testPlaying)
+    {
         m_outputStatus = "Stop the sound test before changing outputs.";
         emit changed();
         return false;
     }
-    if (m_active || m_process.state() != QProcess::NotRunning) {
+    if (m_active || m_process.state() != QProcess::NotRunning)
+    {
         m_outputStatus = "Audio is busy; try Apply again.";
         emit changed();
         return false;
@@ -428,7 +562,8 @@ bool AudioSettings::selectOutput(const QString& id) {
             found = true;
     const bool pulse = QFileInfo(m_mixerTool).fileName() == "pactl";
     if (!found || !(pulse ? QRegularExpression("^[A-Za-z0-9_.:-]+$").match(id).hasMatch()
-                          : QRegularExpression("^[0-9]+$").match(id).hasMatch())) {
+                          : QRegularExpression("^[0-9]+$").match(id).hasMatch()))
+    {
         m_outputStatus = "Output is no longer available. Refresh outputs.";
         emit changed();
         return false;
@@ -443,12 +578,16 @@ bool AudioSettings::selectOutput(const QString& id) {
     return true;
 }
 
-void AudioSettings::runNext() {
-    if (m_mixerTool.isEmpty()) {
+void
+AudioSettings::runNext()
+{
+    if (m_mixerTool.isEmpty())
+    {
         mixerFailed("No supported audio backend installed.");
         return;
     }
-    if (m_commands.isEmpty() && m_pending) {
+    if (m_commands.isEmpty() && m_pending)
+    {
         m_pending = false;
         const bool pulse = QFileInfo(m_mixerTool).fileName() == "pactl";
         const QString sink = pulse ? "@DEFAULT_SINK@" : "@DEFAULT_AUDIO_SINK@";
@@ -461,11 +600,13 @@ void AudioSettings::runNext() {
             m_commands.append(QStringList{pulse ? "set-sink-mute" : "set-mute", sink, "0"});
         enqueueRead();
     }
-    if (m_commands.isEmpty() && m_refreshPending) {
+    if (m_commands.isEmpty() && m_refreshPending)
+    {
         m_refreshPending = false;
         enqueueRead();
     }
-    if (m_commands.isEmpty()) {
+    if (m_commands.isEmpty())
+    {
         m_active = false;
         return;
     }
@@ -476,7 +617,9 @@ void AudioSettings::runNext() {
     m_process.start(m_mixerTool, m_currentCommand);
 }
 
-void AudioSettings::mixerFailed(const QString& reason) {
+void
+AudioSettings::mixerFailed(const QString& reason)
+{
     m_deadline.stop();
     m_commands.clear();
     m_pending = false;
@@ -490,11 +633,14 @@ void AudioSettings::mixerFailed(const QString& reason) {
     emit changed();
 }
 
-void AudioSettings::completeCommand(int exitCode, QProcess::ExitStatus status) {
+void
+AudioSettings::completeCommand(int exitCode, QProcess::ExitStatus status)
+{
     m_deadline.stop();
     if (!m_active)
         return;
-    if (status != QProcess::NormalExit || exitCode != 0) {
+    if (status != QProcess::NormalExit || exitCode != 0)
+    {
         mixerFailed("Audio service rejected the command; volume is unconfirmed.");
         return;
     }
@@ -502,12 +648,15 @@ void AudioSettings::completeCommand(int exitCode, QProcess::ExitStatus status) {
     const auto command = m_currentCommand.first();
     const QString output = QString::fromUtf8(m_output).trimmed();
     bool readComplete = false, mute = false;
-    if (command == "status") {
+    if (command == "status")
+    {
         QVariantList outputs;
         bool audio = false, sinks = false, sawSinks = false;
         QString current;
-        for (const auto& line : output.split('\n')) {
-            if (line == "Audio") {
+        for (const auto& line : output.split('\n'))
+        {
+            if (line == "Audio")
+            {
                 audio = true;
                 continue;
             }
@@ -515,7 +664,8 @@ void AudioSettings::completeCommand(int exitCode, QProcess::ExitStatus status) {
                 break;
             if (!audio)
                 continue;
-            if (line.contains("Sinks:")) {
+            if (line.contains("Sinks:"))
+            {
                 sinks = true;
                 sawSinks = true;
                 continue;
@@ -544,25 +694,34 @@ void AudioSettings::completeCommand(int exitCode, QProcess::ExitStatus status) {
             m_outputStatus = "Choose with ← →, Enter applies. Restart playback if it stays on the old output.";
         m_requestedOutput.clear();
         emit changed();
-    } else if (command == "list") {
+    }
+    else if (command == "list")
+    {
         QVariantList outputs;
         QString id, name;
-        const auto appendOutput = [&] {
+        const auto appendOutput = [&]
+        {
             if (id.isEmpty() || id.size() > 256 || outputs.size() >= 128 ||
                 !QRegularExpression("^[A-Za-z0-9_.:-]+$").match(id).hasMatch())
                 return;
             const auto displayName = name.isEmpty() || name.size() > 256 ? id : name;
             outputs.append(QVariantMap{{"id", id}, {"name", displayName}, {"active", false}});
         };
-        for (const auto& line : output.split('\n')) {
+        for (const auto& line : output.split('\n'))
+        {
             const auto trimmed = line.trimmed();
-            if (trimmed.startsWith("Sink #")) {
+            if (trimmed.startsWith("Sink #"))
+            {
                 appendOutput();
                 id.clear();
                 name.clear();
-            } else if (trimmed.startsWith("Name:")) {
+            }
+            else if (trimmed.startsWith("Name:"))
+            {
                 id = trimmed.mid(5).trimmed();
-            } else if (trimmed.startsWith("Description:")) {
+            }
+            else if (trimmed.startsWith("Description:"))
+            {
                 name = trimmed.mid(12).trimmed();
             }
         }
@@ -573,10 +732,13 @@ void AudioSettings::completeCommand(int exitCode, QProcess::ExitStatus status) {
                              ? "No audio outputs detected."
                              : "Choose with ← →, Enter applies. Restart playback if it stays on the old output.";
         emit changed();
-    } else if (command == "get-default-sink") {
+    }
+    else if (command == "get-default-sink")
+    {
         bool found = false;
         const auto current = output;
-        for (auto& entry : m_outputs) {
+        for (auto& entry : m_outputs)
+        {
             auto item = entry.toMap();
             const bool active = item.value("id").toString() == current;
             item.insert("active", active);
@@ -591,31 +753,41 @@ void AudioSettings::completeCommand(int exitCode, QProcess::ExitStatus status) {
             m_outputStatus = "Choose with ← →, Enter applies. Restart playback if it stays on the old output.";
         m_requestedOutput.clear();
         emit changed();
-    } else if (command == "get-volume") {
+    }
+    else if (command == "get-volume")
+    {
         const auto match = QRegularExpression("^Volume: ([0-9]+(?:\\.[0-9]+)?)(?: (\\[MUTED\\]))?$").match(output);
-        if (!match.hasMatch()) {
+        if (!match.hasMatch())
+        {
             mixerFailed("Invalid mixer volume response.");
             return;
         }
         m_readVolume = qRound(match.captured(1).toDouble() * 100);
         mute = !match.captured(2).isEmpty();
         readComplete = true;
-    } else if (command == "get-sink-volume") {
+    }
+    else if (command == "get-sink-volume")
+    {
         const auto match = QRegularExpression("([0-9]+)%").match(output);
-        if (!match.hasMatch()) {
+        if (!match.hasMatch())
+        {
             mixerFailed("Invalid mixer volume response.");
             return;
         }
         m_readVolume = match.captured(1).toInt();
-    } else if (command == "get-sink-mute") {
-        if (output != "Mute: yes" && output != "Mute: no") {
+    }
+    else if (command == "get-sink-mute")
+    {
+        if (output != "Mute: yes" && output != "Mute: no")
+        {
             mixerFailed("Invalid mixer mute response.");
             return;
         }
         mute = output == "Mute: yes";
         readComplete = true;
     }
-    if (readComplete) {
+    if (readComplete)
+    {
         m_startupAttempts = 0;
         m_volume = m_readVolume;
         m_muted = mute;

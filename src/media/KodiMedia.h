@@ -6,7 +6,8 @@
 #include <QVariantList>
 #include <functional>
 
-class KodiMedia final : public QObject {
+class KodiMedia final : public QObject
+{
     Q_OBJECT
     Q_PROPERTY(QString status READ status NOTIFY changed)
     Q_PROPERTY(QVariantList movies READ movies NOTIFY changed)
@@ -48,222 +49,389 @@ class KodiMedia final : public QObject {
   public:
     explicit KodiMedia(const QString& profile, QObject* parent = nullptr, const QString& testDirectory = {});
     ~KodiMedia() override;
-    QString status() const {
+    QString
+    status() const
+    {
         return m_status + (m_mediaKind == "history" ? m_historyNotice : QString());
     }
-    QVariantList movies() const {
+    QVariantList
+    movies() const
+    {
         return m_movies;
     }
-    QVariantList items() const {
+    QVariantList
+    items() const
+    {
         return m_movies;
     }
-    QString mediaKind() const {
+    QString
+    mediaKind() const
+    {
         return m_mediaKind;
     }
-    QString browseTitle() const;
-    int selectedIndex() const {
+    QString
+    browseTitle() const;
+    int
+    selectedIndex() const
+    {
         return m_selectedIndex;
     }
-    bool canGoBack() const {
+    bool
+    canGoBack() const
+    {
         return !m_history.isEmpty();
     }
-    Q_INVOKABLE void selectIndex(int index);
-    Q_INVOKABLE void openLibrary(const QString& kind);
-    Q_INVOKABLE void savePlaylist(const QString& name);
-    Q_INVOKABLE void renamePlaylist(const QString& name, const QString& newName);
-    Q_INVOKABLE void deletePlaylist(const QString& name);
-    Q_INVOKABLE void reorderPlaylist(const QString& name, const QVariantList& order);
-    Q_INVOKABLE void sortPlaylist(const QString& name, const QString& sort, const QString& direction);
-    Q_INVOKABLE void editPlaylist(const QString& name, const QString& view, const QString& value);
-    Q_INVOKABLE void previewPlaylist(const QString& name, const QString& view, const QString& value);
-    Q_INVOKABLE void loadPlaylistMembers(const QString& name);
-    QVariantList playlistPreview() const {
+    Q_INVOKABLE void
+    selectIndex(int index);
+    Q_INVOKABLE void
+    openLibrary(const QString& kind);
+    Q_INVOKABLE void
+    savePlaylist(const QString& name);
+    Q_INVOKABLE void
+    renamePlaylist(const QString& name, const QString& newName);
+    Q_INVOKABLE void
+    deletePlaylist(const QString& name);
+    Q_INVOKABLE void
+    reorderPlaylist(const QString& name, const QVariantList& order);
+    Q_INVOKABLE void
+    sortPlaylist(const QString& name, const QString& sort, const QString& direction);
+    Q_INVOKABLE void
+    editPlaylist(const QString& name, const QString& view, const QString& value);
+    Q_INVOKABLE void
+    previewPlaylist(const QString& name, const QString& view, const QString& value);
+    Q_INVOKABLE void
+    loadPlaylistMembers(const QString& name);
+    QVariantList
+    playlistPreview() const
+    {
         return m_playlistPreview;
     }
-    bool playlistPreviewReady() const {
+    bool
+    playlistPreviewReady() const
+    {
         return m_playlistPreviewReady;
     }
-    QVariantList playlistMembers() const {
+    QVariantList
+    playlistMembers() const
+    {
         return m_playlistMembers;
     }
-    QString playlistStatus() const {
+    QString
+    playlistStatus() const
+    {
         return m_playlistStatus;
     }
-    void openPlaylists();
-    static bool validPlaylistName(const QString& name);
-    Q_INVOKABLE void openView(const QString& kind, const QString& view, const QString& value = {});
-    void openHistory(int count);
-    void setAppOpenings(const QVariantList& items);
-    void setHistoryNotice(const QString& notice) {
+    void
+    openPlaylists();
+    static bool
+    validPlaylistName(const QString& name);
+    Q_INVOKABLE void
+    openView(const QString& kind, const QString& view, const QString& value = {});
+    void
+    openHistory(int count);
+    void
+    setAppOpenings(const QVariantList& items);
+    void
+    setHistoryNotice(const QString& notice)
+    {
         if (m_retired || m_historyNotice == notice)
             return;
         m_historyNotice = notice;
         emit changed();
     }
     // Permanent profile teardown; unlike an unavailable bridge, this cannot retry.
-    void retire(const QString& reason);
-    Q_INVOKABLE void openShowResult(const QString& query, int tvShowId, int pageStart = 0);
-    Q_INVOKABLE void playMedia(const QString& kind, int id, bool resume = true);
-    Q_INVOKABLE void loadSubtitle(const QString& path);
-    Q_INVOKABLE void refreshSubtitleTracks();
-    Q_INVOKABLE void setSubtitleTrack(int trackId);
+    void
+    retire(const QString& reason);
+    Q_INVOKABLE void
+    openShowResult(const QString& query, int tvShowId, int pageStart = 0);
+    Q_INVOKABLE void
+    playMedia(const QString& kind, int id, bool resume = true);
+    Q_INVOKABLE void
+    loadSubtitle(const QString& path);
+    Q_INVOKABLE void
+    refreshSubtitleTracks();
+    Q_INVOKABLE void
+    setSubtitleTrack(int trackId);
     // Guide coordinator only: explicit broadcast offset, never saved resume.
-    bool playScheduled(const QString& kind, int id, int offsetSeconds);
-    bool playPvr(int id, int clientId, int uniqueId);
-    bool playGuideStream(const QString& url);
-    Q_INVOKABLE void activate(int index);
-    Q_INVOKABLE bool goBack();
-    Q_INVOKABLE void playSelected(bool resume = true);
-    bool busy() const {
+    bool
+    playScheduled(const QString& kind, int id, int offsetSeconds);
+    bool
+    playPvr(int id, int clientId, int uniqueId);
+    bool
+    playGuideStream(const QString& url);
+    Q_INVOKABLE void
+    activate(int index);
+    Q_INVOKABLE bool
+    goBack();
+    Q_INVOKABLE void
+    playSelected(bool resume = true);
+    bool
+    busy() const
+    {
         return m_busy;
     }
-    bool connected() const {
+    bool
+    connected() const
+    {
         return m_connected;
     }
-    QString scanStatus() const {
+    QString
+    scanStatus() const
+    {
         return m_scanStatus;
     }
-    int pageStart() const {
+    int
+    pageStart() const
+    {
         return m_pageStart;
     }
-    int totalMovies() const {
+    int
+    totalMovies() const
+    {
         return m_totalMovies;
     }
-    bool hasNextPage() const {
+    bool
+    hasNextPage() const
+    {
         return m_connected && m_pageStart + m_pageCount < m_totalMovies;
     }
-    Q_INVOKABLE void nextPage();
-    Q_INVOKABLE void previousPage();
-    bool playbackActive() const {
+    Q_INVOKABLE void
+    nextPage();
+    Q_INVOKABLE void
+    previousPage();
+    bool
+    playbackActive() const
+    {
         return m_playbackActive;
     }
-    QString playbackStatus() const {
+    QString
+    playbackStatus() const
+    {
         return m_playbackStatus;
     }
-    QString playbackMediaType() const {
+    QString
+    playbackMediaType() const
+    {
         return m_playingKind;
     }
-    bool playbackCanPrevious() const;
-    bool playbackCanNext() const;
-    bool canPlayAdjacent(int direction) const;
-    Q_INVOKABLE bool playAdjacent(int direction);
-    QString subtitleStatus() const {
+    bool
+    playbackCanPrevious() const;
+    bool
+    playbackCanNext() const;
+    bool
+    canPlayAdjacent(int direction) const;
+    Q_INVOKABLE bool
+    playAdjacent(int direction);
+    QString
+    subtitleStatus() const
+    {
         return m_subtitleStatus;
     }
-    QVariantList subtitleTracks() const {
+    QVariantList
+    subtitleTracks() const
+    {
         return m_subtitleTracks;
     }
-    QVariantMap playbackOptions() const {
+    QVariantMap
+    playbackOptions() const
+    {
         return m_playbackOptions;
     }
-    QString playbackOptionsStatus() const {
+    QString
+    playbackOptionsStatus() const
+    {
         return m_playbackOptionsStatus;
     }
-    Q_INVOKABLE void refreshPlaybackOptions();
-    Q_INVOKABLE void setPlaybackOption(const QString& kind, const QVariant& value);
-    Q_INVOKABLE void requestVideoPresentation() {
+    Q_INVOKABLE void
+    refreshPlaybackOptions();
+    Q_INVOKABLE void
+    setPlaybackOption(const QString& kind, const QVariant& value);
+    Q_INVOKABLE void
+    requestVideoPresentation()
+    {
         if (m_playbackActive && m_playbackVisible)
             emit playbackPresentationRequested();
     }
-    QVariantList librarySources() const {
+    QVariantList
+    librarySources() const
+    {
         return m_librarySources;
     }
-    QVariantList sourceScrapers() const {
+    QVariantList
+    sourceScrapers() const
+    {
         return m_sourceScrapers;
     }
-    QStringList sourceRoots() const {
+    QStringList
+    sourceRoots() const
+    {
         return m_sourceRoots;
     }
-    QString sourceStatus() const {
+    QString
+    sourceStatus() const
+    {
         return m_sourceStatus;
     }
-    bool sourcePreviewReady() const {
+    bool
+    sourcePreviewReady() const
+    {
         return m_sourcePreviewReady;
     }
-    void setSourceEditGuard(std::function<bool()> guard) {
+    void
+    setSourceEditGuard(std::function<bool()> guard)
+    {
         m_sourceGuard = std::move(guard);
     }
-    Q_INVOKABLE void refreshSources();
-    Q_INVOKABLE void previewSource(const QVariantMap& source);
-    Q_INVOKABLE void applySource(const QVariantMap& source);
-    Q_INVOKABLE void cancelSourcePreview();
-    bool playbackCanPause() const {
+    Q_INVOKABLE void
+    refreshSources();
+    Q_INVOKABLE void
+    previewSource(const QVariantMap& source);
+    Q_INVOKABLE void
+    applySource(const QVariantMap& source);
+    Q_INVOKABLE void
+    cancelSourcePreview();
+    bool
+    playbackCanPause() const
+    {
         return m_playbackActive && m_playbackCanPause;
     }
-    bool playbackCanSeek() const {
+    bool
+    playbackCanSeek() const
+    {
         return m_playbackActive && m_playbackCanSeek;
     }
-    bool lastPlaybackNaturalEnd() const {
+    bool
+    lastPlaybackNaturalEnd() const
+    {
         return m_lastPlaybackNaturalEnd;
     }
-    QString viewKind() const {
+    QString
+    viewKind() const
+    {
         return m_viewKind;
     }
-    QString viewValue() const {
+    QString
+    viewValue() const
+    {
         return m_viewValue;
     }
-    QVariantList collections() const;
-    QString collectionStatus() const {
+    QVariantList
+    collections() const;
+    QString
+    collectionStatus() const
+    {
         return m_collectionStatus;
     }
-    Q_INVOKABLE void setView(const QString& kind, const QString& value = {});
-    Q_INVOKABLE void saveCollection(const QString& name);
-    Q_INVOKABLE void createManualMovieCollection(const QString& name, int movieId);
-    Q_INVOKABLE void addMovieToCollection(const QString& collectionId, int movieId);
-    Q_INVOKABLE void removeMovieFromCollection(const QString& collectionId, int movieId);
-    Q_INVOKABLE void createManualCollection(const QString& name, const QString& mediaType, int itemId);
-    Q_INVOKABLE void addManualCollectionMember(const QString& collectionId, const QString& mediaType, int itemId);
-    Q_INVOKABLE void removeManualCollectionMember(const QString& collectionId, int itemId);
-    Q_INVOKABLE void renameCollection(const QString& id, const QString& name);
-    Q_INVOKABLE void removeCollection(const QString& id);
-    Q_INVOKABLE void openCollection(const QString& id);
-    Q_INVOKABLE void configureShelf(const QString& id, bool pinned, int count = 6);
-    Q_INVOKABLE void moveCollection(const QString& id, int offset);
-    Q_INVOKABLE void playCollectionMovie(const QString& id, int movieId);
-    Q_INVOKABLE void openCollectionShow(const QString& id, int tvShowId);
-    Q_INVOKABLE void playMovie(int movieId, bool resume = true);
-    Q_INVOKABLE void playbackControl(const QString& action);
-    void presentationFailed();
-    Q_INVOKABLE void invalidate(const QString& reason);
-    Q_INVOKABLE void refresh();
-    Q_INVOKABLE void scanMovies();
-    Q_INVOKABLE void scanMusic();
-    void quitIfIdle();
+    Q_INVOKABLE void
+    setView(const QString& kind, const QString& value = {});
+    Q_INVOKABLE void
+    saveCollection(const QString& name);
+    Q_INVOKABLE void
+    createManualMovieCollection(const QString& name, int movieId);
+    Q_INVOKABLE void
+    addMovieToCollection(const QString& collectionId, int movieId);
+    Q_INVOKABLE void
+    removeMovieFromCollection(const QString& collectionId, int movieId);
+    Q_INVOKABLE void
+    createManualCollection(const QString& name, const QString& mediaType, int itemId);
+    Q_INVOKABLE void
+    addManualCollectionMember(const QString& collectionId, const QString& mediaType, int itemId);
+    Q_INVOKABLE void
+    removeManualCollectionMember(const QString& collectionId, int itemId);
+    Q_INVOKABLE void
+    renameCollection(const QString& id, const QString& name);
+    Q_INVOKABLE void
+    removeCollection(const QString& id);
+    Q_INVOKABLE void
+    openCollection(const QString& id);
+    Q_INVOKABLE void
+    configureShelf(const QString& id, bool pinned, int count = 6);
+    Q_INVOKABLE void
+    moveCollection(const QString& id, int offset);
+    Q_INVOKABLE void
+    playCollectionMovie(const QString& id, int movieId);
+    Q_INVOKABLE void
+    openCollectionShow(const QString& id, int tvShowId);
+    Q_INVOKABLE void
+    playMovie(int movieId, bool resume = true);
+    Q_INVOKABLE void
+    playbackControl(const QString& action);
+    void
+    presentationFailed();
+    Q_INVOKABLE void
+    invalidate(const QString& reason);
+    Q_INVOKABLE void
+    refresh();
+    Q_INVOKABLE void
+    scanMovies();
+    Q_INVOKABLE void
+    scanMusic();
+    void
+    quitIfIdle();
   signals:
-    void sourceApplied();
-    void playbackOptionsRequested();
-    void playbackPresentationRequested();
-    void changed();
-    void collectionsChanged();
-    void quitReply(bool accepted);
-    void playbackStarted();
-    void playbackReturned(bool home);
-    void scheduledMediaUnavailable(const QString& kind, int id);
-    void guideSurfRequested(int direction);
-    void playbackFailed(const QString& reason);
-    void playlistSaved(const QString& filename);
+    void
+    sourceApplied();
+    void
+    playbackOptionsRequested();
+    void
+    playbackPresentationRequested();
+    void
+    changed();
+    void
+    collectionsChanged();
+    void
+    quitReply(bool accepted);
+    void
+    playbackStarted();
+    void
+    playbackReturned(bool home);
+    void
+    scheduledMediaUnavailable(const QString& kind, int id);
+    void
+    guideSurfRequested(int direction);
+    void
+    playbackFailed(const QString& reason);
+    void
+    playlistSaved(const QString& filename);
 
   private:
-    bool adjacentScope() const;
-    void finishAdjacent();
-    void startScan(const QString& kind);
-    void request(const QString& method, const QJsonObject& params = {});
-    void consume();
-    void fail(const QString& message, bool forceDisconnect = false);
-    void releaseSocket();
-    void loadPage(int start);
-    void loadManualPage(int start);
-    void loadNextManualMovie();
-    void beginRead(int start);
-    void playLibraryItem(const QString& kind, int id, bool resume, bool requireListed = true);
-    bool canNavigate() const;
-    struct BrowseState {
+    bool
+    adjacentScope() const;
+    void
+    finishAdjacent();
+    void
+    startScan(const QString& kind);
+    void
+    request(const QString& method, const QJsonObject& params = {});
+    void
+    consume();
+    void
+    fail(const QString& message, bool forceDisconnect = false);
+    void
+    releaseSocket();
+    void
+    loadPage(int start);
+    void
+    loadManualPage(int start);
+    void
+    loadNextManualMovie();
+    void
+    beginRead(int start);
+    void
+    playLibraryItem(const QString& kind, int id, bool resume, bool requireListed = true);
+    bool
+    canNavigate() const;
+    struct BrowseState
+    {
         QString kind, view, value, showTitle;
         int show, season, start, selected;
     };
-    BrowseState browseState() const;
-    void restoreBrowse(const BrowseState& state);
-    bool storeCollections(const QVariantList& entries);
+    BrowseState
+    browseState() const;
+    void
+    restoreBrowse(const BrowseState& state);
+    bool
+    storeCollections(const QVariantList& entries);
     QString m_profile, m_viewKind = "all", m_viewValue, m_collectionStatus;
     QString m_playlistStatus;
     QVariantList m_playlistPreview, m_playlistMembers;
@@ -280,7 +448,8 @@ class KodiMedia final : public QObject {
     QVariantList m_appOpenings;
     QString m_historyNotice;
     QString m_historySelection;
-    void restoreHistorySelection();
+    void
+    restoreHistorySelection();
     int m_historyLimit = 50;
     bool m_retired = false;
     bool m_recentEpisodes = false;

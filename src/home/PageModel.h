@@ -20,7 +20,8 @@ class HomeLayout;
  * Usage: const PageModel *pm = layout->pageModel(id);
  *        pm->composition(); pm->setComposition(map); pm->grid();
  */
-class PageModel final : public QObject {
+class PageModel final : public QObject
+{
     Q_OBJECT
     Q_PROPERTY(QVariantMap composition READ composition WRITE setComposition NOTIFY compositionChanged)
     Q_PROPERTY(QVariantMap grid READ grid WRITE setGrid NOTIFY gridChanged)
@@ -40,61 +41,105 @@ class PageModel final : public QObject {
 
   public:
     explicit PageModel(HomeLayout* owner, const QString& id, QObject* parent = nullptr);
-    [[nodiscard]] HomeLayout* owner() const {
+    [[nodiscard]] HomeLayout*
+    owner() const
+    {
         return m_owner;
     }
-    [[nodiscard]] QString id() const {
+    [[nodiscard]] QString
+    id() const
+    {
         return m_pageId;
     }
-    [[nodiscard]] bool isPage() const {
+    [[nodiscard]] bool
+    isPage() const
+    {
         return m_owner && !m_pageId.isEmpty();
     }
 
-    [[nodiscard]] QVariantMap composition() const;
-    bool setComposition(const QVariantMap& value);
-    [[nodiscard]] QVariantMap grid() const;
-    bool setGrid(const QVariantMap& value);
-    [[nodiscard]] QVariantList placements() const;
-    [[nodiscard]] QVariantMap presentation() const;
-    bool setPresentation(const QVariantMap& value);
-    [[nodiscard]] QVariantList items() const;
-    [[nodiscard]] QVariantList sections() const;
-    [[nodiscard]] QVariantList categories() const {
+    [[nodiscard]] QVariantMap
+    composition() const;
+    bool
+    setComposition(const QVariantMap& value);
+    [[nodiscard]] QVariantMap
+    grid() const;
+    bool
+    setGrid(const QVariantMap& value);
+    [[nodiscard]] QVariantList
+    placements() const;
+    [[nodiscard]] QVariantMap
+    presentation() const;
+    bool
+    setPresentation(const QVariantMap& value);
+    [[nodiscard]] QVariantList
+    items() const;
+    [[nodiscard]] QVariantList
+    sections() const;
+    [[nodiscard]] QVariantList
+    categories() const
+    {
         return m_pageDocument.value("categories").toArray().toVariantList();
     }
-    Q_INVOKABLE bool setSectionPresentation(const QString& id, const QVariantMap& value);
-    [[nodiscard]] QString backgroundStart() const;
-    [[nodiscard]] QString backgroundEnd() const;
-    [[nodiscard]] QVariantMap appearance() const;
-    Q_INVOKABLE bool setAppearance(const QVariantMap& changes);
-    [[nodiscard]] QString wallpaperSource() const;
-    [[nodiscard]] double tileRoundness() const;
-    [[nodiscard]] bool brandVisible() const;
-    Q_INVOKABLE bool addWidget(const QString& widgetType);
-    Q_INVOKABLE bool addButton();
-    Q_INVOKABLE bool setItemName(const QString& id, const QString& name);
-    Q_INVOKABLE bool setItemAction(const QString& id, const QVariantList& actions);
-    Q_INVOKABLE bool setItemPresentation(const QString& id, const QVariantMap& value);
-    Q_INVOKABLE QString addLibraryWidget(const QString& name, const QString& kind = "movies");
-    Q_INVOKABLE bool setItemPlacement(const QString& id, const QVariantMap& placement);
-    Q_INVOKABLE bool clearItemPlacement(const QString& id);
+    Q_INVOKABLE bool
+    setSectionPresentation(const QString& id, const QVariantMap& value);
+    [[nodiscard]] QString
+    backgroundStart() const;
+    [[nodiscard]] QString
+    backgroundEnd() const;
+    [[nodiscard]] QVariantMap
+    appearance() const;
+    Q_INVOKABLE bool
+    setAppearance(const QVariantMap& changes);
+    [[nodiscard]] QString
+    wallpaperSource() const;
+    [[nodiscard]] double
+    tileRoundness() const;
+    [[nodiscard]] bool
+    brandVisible() const;
+    Q_INVOKABLE bool
+    addWidget(const QString& widgetType);
+    Q_INVOKABLE bool
+    addButton();
+    Q_INVOKABLE bool
+    setItemName(const QString& id, const QString& name);
+    Q_INVOKABLE bool
+    setItemAction(const QString& id, const QVariantList& actions);
+    Q_INVOKABLE bool
+    setItemPresentation(const QString& id, const QVariantMap& value);
+    Q_INVOKABLE QString
+    addLibraryWidget(const QString& name, const QString& kind = "movies");
+    Q_INVOKABLE bool
+    setItemPlacement(const QString& id, const QVariantMap& placement);
+    Q_INVOKABLE bool
+    clearItemPlacement(const QString& id);
     /** Page-scoped library sources (library sections + library widgets) for universal search. */
-    Q_INVOKABLE QVariantList pageSearchSources() const;
+    Q_INVOKABLE QVariantList
+    pageSearchSources() const;
 
     /** Load a page-scoped document (theme/composition/categories/components) into this model. */
-    Q_INVOKABLE bool loadDocument(const QByteArray& data, bool userDocument = false);
+    Q_INVOKABLE bool
+    loadDocument(const QByteArray& data, bool userDocument = false);
     /** Persist this page's document through the owning HomeLayout storePage(). */
-    Q_INVOKABLE bool storePage();
-    [[nodiscard]] QString errorString() const;
-    [[nodiscard]] QVariantMap document() const;
+    Q_INVOKABLE bool
+    storePage();
+    [[nodiscard]] QString
+    errorString() const;
+    [[nodiscard]] QVariantMap
+    document() const;
 
   signals:
-    void compositionChanged();
-    void gridChanged();
-    void placementsChanged();
-    void presentationChanged();
-    void isPageChanged();
-    void documentLoaded();
+    void
+    compositionChanged();
+    void
+    gridChanged();
+    void
+    placementsChanged();
+    void
+    presentationChanged();
+    void
+    isPageChanged();
+    void
+    documentLoaded();
 
   private:
     QVariantMap m_inheritedAppearance;
@@ -104,7 +149,10 @@ class PageModel final : public QObject {
     QJsonObject m_pageDocument;
     bool m_documentLoaded = false;
 
-    [[nodiscard]] QVariantList resolveItems(const QJsonArray& components) const;
-    [[nodiscard]] QVariantMap themeDefaults() const;
-    bool setItemField(const QString& id, std::function<void(QJsonObject&)> mutate);
+    [[nodiscard]] QVariantList
+    resolveItems(const QJsonArray& components) const;
+    [[nodiscard]] QVariantMap
+    themeDefaults() const;
+    bool
+    setItemField(const QString& id, std::function<void(QJsonObject&)> mutate);
 };

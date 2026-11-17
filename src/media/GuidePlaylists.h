@@ -2,7 +2,8 @@
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
 #include "home/ComponentSchema.h"
-namespace GuidePlaylists {
+namespace GuidePlaylists
+{
 inline const QMap<QString, QString> fields{{"title", "title"},
                                            {"showtitle", "tvshow"},
                                            {"studio", "studio"},
@@ -23,11 +24,15 @@ inline const QMap<QString, QString> operators{{"is", "is"},
                                               {"starts-with", "startswith"}};
 inline const QMap<QString, QString> kinds{
     {"movie", "movies"}, {"episode", "episodes"}, {"musicvideo", "musicvideos"}, {"song", "songs"}};
-inline QByteArray encode(const QVariantMap& definition, QString* error) {
-    const auto fail = [error]() {
+inline QByteArray
+encode(const QVariantMap& definition, QString* error)
+{
+    const auto fail = [error]()
+    {
         if (error)
-            *error = "This rule set cannot be represented losslessly as a Kodi smart playlist. Export a JSON channel "
-                     "package instead.";
+            *error =
+                "This rule set cannot be represented losslessly as a Kodi smart playlist. Export a JSON channel "
+                "package instead.";
         return QByteArray();
     };
     const auto media = definition.value("mediaKinds").toList();
@@ -36,10 +41,12 @@ inline QByteArray encode(const QVariantMap& definition, QString* error) {
     const auto rule = definition.value("rule").toMap();
     QVariantList children;
     QString match = "all";
-    if (rule.value("op") == "all" || rule.value("op") == "any") {
+    if (rule.value("op") == "all" || rule.value("op") == "any")
+    {
         children = rule.value("rules").toList();
         match = rule.value("op").toString();
-    } else
+    }
+    else
         children = {rule};
     QByteArray output;
     QXmlStreamWriter writer(&output);
@@ -48,7 +55,8 @@ inline QByteArray encode(const QVariantMap& definition, QString* error) {
     writer.writeAttribute("type", kinds.value(media.first().toString()));
     writer.writeTextElement("name", definition.value("name").toString());
     writer.writeTextElement("match", match == "any" ? "one" : match);
-    for (const auto& v : children) {
+    for (const auto& v : children)
+    {
         const auto child = v.toMap();
         if (child == QVariantMap{{"field", "source"}, {"op", "is"}, {"value", "kodi"}} && match == "all")
             continue;
@@ -68,11 +76,15 @@ inline QByteArray encode(const QVariantMap& definition, QString* error) {
         error->clear();
     return output;
 }
-inline QVariantMap decode(const QByteArray& bytes, const QVariantMap& fresh, QString* error) {
-    const auto fail = [error]() {
+inline QVariantMap
+decode(const QByteArray& bytes, const QVariantMap& fresh, QString* error)
+{
+    const auto fail = [error]()
+    {
         if (error)
-            *error = "Unsupported or malformed Kodi smart playlist. Only single-media, flat all/any rules with known "
-                     "fields and operators can be imported without losing meaning.";
+            *error =
+                "Unsupported or malformed Kodi smart playlist. Only single-media, flat all/any rules with known "
+                "fields and operators can be imported without losing meaning.";
         return QVariantMap();
     };
     if (bytes.isEmpty() || bytes.size() > 256 * 1024)
@@ -81,13 +93,15 @@ inline QVariantMap decode(const QByteArray& bytes, const QVariantMap& fresh, QSt
     QVariantList rules;
     QString name, match, kind;
     bool root = false;
-    while (!reader.atEnd()) {
+    while (!reader.atEnd())
+    {
         const auto token = reader.readNext();
         if (token == QXmlStreamReader::DTD || token == QXmlStreamReader::EntityReference)
             return fail();
         if (!reader.isStartElement())
             continue;
-        if (!root) {
+        if (!root)
+        {
             if (reader.name() != u"smartplaylist" || reader.attributes().size() != 1)
                 return fail();
             kind = kinds.key(reader.attributes().value("type").toString());
@@ -96,17 +110,22 @@ inline QVariantMap decode(const QByteArray& bytes, const QVariantMap& fresh, QSt
             root = true;
             continue;
         }
-        if (reader.name() == u"name") {
+        if (reader.name() == u"name")
+        {
             if (!name.isEmpty())
                 return fail();
             name = reader.readElementText();
-        } else if (reader.name() == u"match") {
+        }
+        else if (reader.name() == u"match")
+        {
             if (!match.isEmpty())
                 return fail();
             match = reader.readElementText();
             if (match != "all" && match != "one" && match != "any")
                 return fail();
-        } else if (reader.name() == u"rule") {
+        }
+        else if (reader.name() == u"rule")
+        {
             const auto field = fields.key(reader.attributes().value("field").toString()),
                        op = operators.key(reader.attributes().value("operator").toString());
             if (reader.attributes().size() != 2 || field.isEmpty() || op.isEmpty() || !reader.readNextStartElement() ||
@@ -116,7 +135,8 @@ inline QVariantMap decode(const QByteArray& bytes, const QVariantMap& fresh, QSt
             if (reader.readNextStartElement())
                 return fail();
             QVariant value = text;
-            if (QStringList{"year", "rating", "playcount", "season", "episode"}.contains(field)) {
+            if (QStringList{"year", "rating", "playcount", "season", "episode"}.contains(field))
+            {
                 bool ok = false;
                 const auto number = text.toDouble(&ok);
                 if (!ok)
@@ -127,7 +147,8 @@ inline QVariantMap decode(const QByteArray& bytes, const QVariantMap& fresh, QSt
             if (ComponentSchema::guideRule(rule).isEmpty() || rules.size() >= 32)
                 return fail();
             rules.append(rule);
-        } else
+        }
+        else
             return fail(); // order/limit/nested rules are meaningful: never discard them.
     }
     if (reader.hasError() || !root || name.trimmed().isEmpty() || name.size() > 160 || match.isEmpty())

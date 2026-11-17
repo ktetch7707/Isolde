@@ -10,18 +10,21 @@
 SetupState::SetupState(const QString& path, QObject* parent)
     : QObject(parent),
       m_path(path.isEmpty() ? QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation) + "/device-setup.json"
-                            : path) {
+                            : path)
+{
     QFile file(m_path);
     if (!file.exists())
         return;
-    if (!file.open(QIODevice::ReadOnly)) {
+    if (!file.open(QIODevice::ReadOnly))
+    {
         m_error = "Cannot read setup progress.";
         return;
     }
     const auto obj = QJsonDocument::fromJson(file.readAll()).object();
     const int saved = obj.value("step").toInt(-1);
     if (obj.value("version").toInt() != 1 || saved < 0 || saved > 7 || !obj.value("complete").isBool() ||
-        (obj.value("complete").toBool() && saved != 6 && saved != 7)) {
+        (obj.value("complete").toBool() && saved != 6 && saved != 7))
+    {
         m_error = "Setup progress could not be read. Your profiles and settings are unchanged.";
         return;
     }
@@ -31,11 +34,14 @@ SetupState::SetupState(const QString& path, QObject* parent)
     m_complete = obj.value("complete").toBool();
 }
 
-bool SetupState::store(int step, bool complete) {
+bool
+SetupState::store(int step, bool complete)
+{
     QSaveFile file(m_path);
     const QByteArray data = QJsonDocument(QJsonObject{{"version", 1}, {"step", step}, {"complete", complete}}).toJson();
     if (!QDir().mkpath(QFileInfo(m_path).absolutePath()) || !file.open(QIODevice::WriteOnly) ||
-        file.write(data) != data.size() || !file.commit()) {
+        file.write(data) != data.size() || !file.commit())
+    {
         m_error = "Could not save setup progress. Check that storage is writable and has free space.";
         emit changed();
         return false;
@@ -46,12 +52,18 @@ bool SetupState::store(int step, bool complete) {
     emit changed();
     return true;
 }
-bool SetupState::advance() {
+bool
+SetupState::advance()
+{
     return store(qMin(7, m_step + 1), m_step == 7);
 }
-bool SetupState::back() {
+bool
+SetupState::back()
+{
     return store(qMax(0, m_step - 1), false);
 }
-bool SetupState::restart() {
+bool
+SetupState::restart()
+{
     return store(0, false);
 }

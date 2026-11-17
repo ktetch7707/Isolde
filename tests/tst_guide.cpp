@@ -23,9 +23,12 @@
 #include <unistd.h>
 #endif
 
-namespace {
+namespace
+{
 constexpr qint64 Now = 1793052000, Day = 86400;
-QVariantMap definition(const QString& id = "cartoons", int number = 101) {
+QVariantMap
+definition(const QString& id = "cartoons", int number = 101)
+{
     return {{"schemaVersion", 1},
             {"id", id},
             {"name", "Cartoon Network"},
@@ -36,7 +39,9 @@ QVariantMap definition(const QString& id = "cartoons", int number = 101) {
             {"timezone", "America/Los_Angeles"},
             {"rule", QVariantMap{{"field", "studio"}, {"op", "contains"}, {"value", "Cartoon Network"}}}};
 }
-QVariantList media() {
+QVariantList
+media()
+{
     QVariantList result;
     for (int i = 1; i <= 8; ++i)
         result.append(QVariantMap{{"mediaType", i % 2 ? "episode" : "movie"},
@@ -51,19 +56,24 @@ QVariantList media() {
                                   {"playcount", 0}});
     return result;
 }
-QByteArray bytes(const QString& path) {
+QByteArray
+bytes(const QString& path)
+{
     QFile file(path);
     if (!file.open(QIODevice::ReadOnly))
         return {};
     return file.readAll();
 }
-QVariant clockCursor(const QString& path) {
+QVariant
+clockCursor(const QString& path)
+{
     QVariant value;
     {
         auto db = QSqlDatabase::addDatabase("QSQLITE", "clock-cursor");
         db.setDatabaseName(path);
         db.setConnectOptions("QSQLITE_OPEN_READONLY");
-        if (db.open()) {
+        if (db.open())
+        {
             QSqlQuery query(db);
             if (query.exec("SELECT cursor FROM channels WHERE id='cartoons'") && query.next())
                 value = query.value(0);
@@ -74,39 +84,69 @@ QVariant clockCursor(const QString& path) {
     return value;
 }
 } // namespace
-class GuideTests final : public QObject {
+class GuideTests final : public QObject
+{
     Q_OBJECT
   private slots:
-    void rulesAreBoundedAndMixedMediaMatches();
-    void packagedGuideOptionsValidateOverlayAndLegacyBoundaries();
-    void persistsSevenDaysAndTwelveHourOffset();
-    void channelAndExtensionFailuresRollback();
-    void rulesOnlyAffectUncommittedSlots();
-    void nextUnwatchedUsesStrictKodiSnapshotAndPreservesCommittedSchedule();
-    void targetedMissingMediaPreservesIntervals();
-    void profileIsolationAndInvalidation();
-    void lineupPreferencesSurviveRestart();
-    void numberSwapIsRevisionedAtomicAndPreservesSchedules();
-    void channelSchedulePolicyPersistsAndPrunesWithoutReplacingFuture();
-    void selectedSlotRepairPreservesIntervalsAndRejectsStaleOrForeignChoices();
-    void virtualClockPausesWhileProfileIsOff();
-    void reviewedClockAdjustmentPreservesSchedulesAndSurvivesRestart();
-    void unknownDatabaseIsNeverRewritten();
-    void corruptKnownDatabaseIsNeverRewritten();
-    void intervalOverlapRejectedAtDatabaseBoundary();
-    void cancelledTransactionsAndInterruptedVirtualClock();
-    void rollingMaintenancePreservesSlotsAndCatchesUpAfterLongOutage();
-    void pvrGenerationIsAtomicAndPreservesUserOverrides();
-    void regenerationRequiresCurrentReviewAndPreservesAiringProgram();
-    void calendarPolicySurvivesDstAndPreservesCommittedSlots();
-    void shorterRepairAndPortableSnapshotsAreAtomicAndRemapped();
-    void feedImportPreservesSourceTimesAndRollsBackFailures();
-    void artworkClockAndPlaylistBoundaries();
-    void largeLineupRetainsTwentyThousandKodiIdentities();
-    void killedScheduleWriterRecoversCommittedSlots();
+    void
+    rulesAreBoundedAndMixedMediaMatches();
+    void
+    packagedGuideOptionsValidateOverlayAndLegacyBoundaries();
+    void
+    persistsSevenDaysAndTwelveHourOffset();
+    void
+    channelAndExtensionFailuresRollback();
+    void
+    rulesOnlyAffectUncommittedSlots();
+    void
+    nextUnwatchedUsesStrictKodiSnapshotAndPreservesCommittedSchedule();
+    void
+    targetedMissingMediaPreservesIntervals();
+    void
+    profileIsolationAndInvalidation();
+    void
+    lineupPreferencesSurviveRestart();
+    void
+    numberSwapIsRevisionedAtomicAndPreservesSchedules();
+    void
+    channelSchedulePolicyPersistsAndPrunesWithoutReplacingFuture();
+    void
+    selectedSlotRepairPreservesIntervalsAndRejectsStaleOrForeignChoices();
+    void
+    virtualClockPausesWhileProfileIsOff();
+    void
+    reviewedClockAdjustmentPreservesSchedulesAndSurvivesRestart();
+    void
+    unknownDatabaseIsNeverRewritten();
+    void
+    corruptKnownDatabaseIsNeverRewritten();
+    void
+    intervalOverlapRejectedAtDatabaseBoundary();
+    void
+    cancelledTransactionsAndInterruptedVirtualClock();
+    void
+    rollingMaintenancePreservesSlotsAndCatchesUpAfterLongOutage();
+    void
+    pvrGenerationIsAtomicAndPreservesUserOverrides();
+    void
+    regenerationRequiresCurrentReviewAndPreservesAiringProgram();
+    void
+    calendarPolicySurvivesDstAndPreservesCommittedSlots();
+    void
+    shorterRepairAndPortableSnapshotsAreAtomicAndRemapped();
+    void
+    feedImportPreservesSourceTimesAndRollsBackFailures();
+    void
+    artworkClockAndPlaylistBoundaries();
+    void
+    largeLineupRetainsTwentyThousandKodiIdentities();
+    void
+    killedScheduleWriterRecoversCommittedSlots();
 };
 
-void GuideTests::killedScheduleWriterRecoversCommittedSlots() {
+void
+GuideTests::killedScheduleWriterRecoversCommittedSlots()
+{
 #ifdef Q_OS_LINUX
     QTemporaryDir dir;
     const auto path = dir.filePath("interrupted.sqlite");
@@ -118,14 +158,17 @@ void GuideTests::killedScheduleWriterRecoversCommittedSlots() {
     }
     const auto child = ::fork();
     QVERIFY(child >= 0);
-    if (child == 0) {
+    if (child == 0)
+    {
         GuideStore store(path);
         int calls = 0;
-        store.setCancellationCheck([&calls] {
-            if (++calls == 4)
-                ::kill(::getpid(), SIGKILL);
-            return false;
-        });
+        store.setCancellationCheck(
+            [&calls]
+            {
+                if (++calls == 4)
+                    ::kill(::getpid(), SIGKILL);
+                return false;
+            });
         const bool extended = store.extend("cartoons", Now + 2 * Day, 1);
         ::_exit(extended ? 2 : 3);
     }
@@ -135,7 +178,8 @@ void GuideTests::killedScheduleWriterRecoversCommittedSlots() {
     pid_t result = 0;
     while (timer.elapsed() < 5000 && (result = ::waitpid(child, &status, WNOHANG)) == 0)
         QTest::qWait(10);
-    if (result == 0) {
+    if (result == 0)
+    {
         ::kill(child, SIGKILL);
         ::waitpid(child, &status, 0);
         QFAIL("Owned schedule writer exceeded its five-second interruption budget");
@@ -153,16 +197,21 @@ void GuideTests::killedScheduleWriterRecoversCommittedSlots() {
 #endif
 }
 
-void GuideTests::artworkClockAndPlaylistBoundaries() {
+void
+GuideTests::artworkClockAndPlaylistBoundaries()
+{
     QTemporaryDir exportDir;
     const auto exportPath = exportDir.filePath("channel.json");
     QVERIFY(GuideAtomicFile::publish(exportPath, "original"));
     QVERIFY(!GuideAtomicFile::publish(exportPath, "replacement"));
     QCOMPARE(bytes(exportPath), QByteArray("original"));
     const auto cancelledPath = exportDir.filePath("cancelled.json");
-    QVERIFY(!GuideAtomicFile::publish(cancelledPath, "cancelled", [] {
-        return false;
-    }));
+    QVERIFY(!GuideAtomicFile::publish(cancelledPath,
+                                      "cancelled",
+                                      []
+                                      {
+                                          return false;
+                                      }));
     QVERIFY(!QFileInfo::exists(cancelledPath));
     QTemporaryDir dir;
     QImage image(24, 24, QImage::Format_ARGB32);
@@ -232,12 +281,15 @@ void GuideTests::artworkClockAndPlaylistBoundaries() {
     QCOMPARE(store.broadcastTime("cartoons", Now + 600), Now + 600);
     QCOMPARE(store.programs("cartoons", Now, Now + Day, 1000), before);
 }
-void GuideTests::largeLineupRetainsTwentyThousandKodiIdentities() {
+void
+GuideTests::largeLineupRetainsTwentyThousandKodiIdentities()
+{
     QTemporaryDir dir;
     const auto path = dir.filePath("scale.sqlite");
     {
         GuideStore store(path);
-        for (int channel = 0; channel < 100; ++channel) {
+        for (int channel = 0; channel < 100; ++channel)
+        {
             QVariantList items;
             for (int i = 0; i < 200; ++i)
                 items.append(QVariantMap{{"mediaType", "episode"},
@@ -256,7 +308,8 @@ void GuideTests::largeLineupRetainsTwentyThousandKodiIdentities() {
     QVERIFY(reopened.ready());
     QCOMPARE(reopened.channels().size(), 100);
     int identities = 0;
-    for (const auto& v : reopened.channels()) {
+    for (const auto& v : reopened.channels())
+    {
         const auto id = v.toMap().value("id").toString();
         identities += reopened.candidateSnapshot(id).size();
         QVERIFY(!reopened.programs(id, Now, Now + 7200, 50).isEmpty());
@@ -266,15 +319,19 @@ void GuideTests::largeLineupRetainsTwentyThousandKodiIdentities() {
             << timer.elapsed();
 }
 
-void GuideTests::feedImportPreservesSourceTimesAndRollsBackFailures() {
+void
+GuideTests::feedImportPreservesSourceTimesAndRollsBackFailures()
+{
     const QByteArray playlist =
         "#EXTM3U\n#EXTINF:-1 tvg-id=\"news\" group-title=\"News\",Station\nhttps://example.test/live.m3u8\n#EXTINF:-1 "
         "tvg-id=\"empty\",No EPG\nrtsp://example.test/live\n";
-    const auto stamp = [](qint64 value) {
+    const auto stamp = [](qint64 value)
+    {
         return QDateTime::fromSecsSinceEpoch(value, QTimeZone::utc()).toString("yyyyMMddHHmmss +0000").toUtf8();
     };
-    const auto xml = QByteArray("<tv><channel id=\"news\"><display-name>Station</display-name></channel><programme "
-                                "channel=\"news\" start=\"") +
+    const auto xml = QByteArray(
+                         "<tv><channel id=\"news\"><display-name>Station</display-name></channel><programme "
+                         "channel=\"news\" start=\"") +
                      stamp(Now - 600) + "\" stop=\"" + stamp(Now + 1200) + "\"><title>Current</title></programme></tv>";
     auto parsed = GuideFeeds::parse(playlist, xml, "my-source", Now);
     QVERIFY2(parsed.value("ok").toBool(), qPrintable(parsed.value("error").toString()));
@@ -293,7 +350,8 @@ void GuideTests::feedImportPreservesSourceTimesAndRollsBackFailures() {
     QVERIFY(store.setMetadata(id, {{"name", "My station"}}, old.value("revision").toInt()));
     const auto before = store.programs(id, Now - 86400, Now + 86400);
     QVariantMap revisions;
-    for (const auto& v : store.channels()) {
+    for (const auto& v : store.channels())
+    {
         const auto channel = v.toMap();
         revisions[channel.value("id").toString()] = channel.value("revision");
     }
@@ -303,7 +361,8 @@ void GuideTests::feedImportPreservesSourceTimesAndRollsBackFailures() {
     QVERIFY(store.importPvr("my-source", entries, Now, revisions));
     QCOMPARE(store.channel(id).value("name").toString(), QString("My station"));
     revisions.clear();
-    for (const auto& v : store.channels()) {
+    for (const auto& v : store.channels())
+    {
         const auto channel = v.toMap();
         revisions[channel.value("id").toString()] = channel.value("revision");
     }
@@ -315,7 +374,8 @@ void GuideTests::feedImportPreservesSourceTimesAndRollsBackFailures() {
     QVERIFY(store.tuneTarget(empty, Now).isEmpty());
     QCOMPARE(store.programs(id, Now - 86400, Now + 86400), before);
     revisions.clear();
-    for (const auto& v : store.channels()) {
+    for (const auto& v : store.channels())
+    {
         const auto channel = v.toMap();
         revisions[channel.value("id").toString()] = channel.value("revision");
     }
@@ -362,7 +422,9 @@ void GuideTests::feedImportPreservesSourceTimesAndRollsBackFailures() {
     QVERIFY(!GuideFeeds::parse(numbered, xml, "my-source", Now).value("ok").toBool());
 }
 
-void GuideTests::calendarPolicySurvivesDstAndPreservesCommittedSlots() {
+void
+GuideTests::calendarPolicySurvivesDstAndPreservesCommittedSlots()
+{
     {
         QTemporaryDir dir;
         GuideStore store(dir.filePath("cooldown-retry.sqlite"));
@@ -387,7 +449,8 @@ void GuideTests::calendarPolicySurvivesDstAndPreservesCommittedSlots() {
         plain["timezone"] = "UTC";
         plain["schedule"] = QVariantMap{{"cooldownSeconds", 0}};
         auto items = media();
-        for (auto& v : items) {
+        for (auto& v : items)
+        {
             auto item = v.toMap();
             item["duration"] = 3600;
             v = item;
@@ -412,12 +475,14 @@ void GuideTests::calendarPolicySurvivesDstAndPreservesCommittedSlots() {
     invalid["schedule"] = policy;
     QVERIFY(ComponentSchema::guideChannel(invalid).isEmpty());
     auto items = media();
-    for (auto& v : items) {
+    for (auto& v : items)
+    {
         auto item = v.toMap();
         item["duration"] = 600;
         v = item;
     }
-    for (const auto& stamp : QStringList{"2026-03-08T08:00:00Z", "2026-11-01T07:00:00Z"}) {
+    for (const auto& stamp : QStringList{"2026-03-08T08:00:00Z", "2026-11-01T07:00:00Z"})
+    {
         QTemporaryDir dir;
         const auto path = dir.filePath("calendar.sqlite");
         const auto start = QDateTime::fromString(stamp, Qt::ISODate).toSecsSinceEpoch();
@@ -429,7 +494,8 @@ void GuideTests::calendarPolicySurvivesDstAndPreservesCommittedSlots() {
             QVERIFY(!before.isEmpty());
             qint64 end = start;
             QMap<QString, qint64> last;
-            for (const auto& v : before) {
+            for (const auto& v : before)
+            {
                 const auto slot = v.toMap();
                 const auto begin = slot.value("startUtc").toLongLong();
                 QCOMPARE(begin, end);
@@ -459,11 +525,14 @@ void GuideTests::calendarPolicySurvivesDstAndPreservesCommittedSlots() {
     }
 }
 
-void GuideTests::shorterRepairAndPortableSnapshotsAreAtomicAndRemapped() {
+void
+GuideTests::shorterRepairAndPortableSnapshotsAreAtomicAndRemapped()
+{
     QTemporaryDir dir;
     GuideStore store(dir.filePath("source.sqlite"));
     auto items = media();
-    for (auto& v : items) {
+    for (auto& v : items)
+    {
         auto item = v.toMap();
         item["duration"] = 1800;
         v = item;
@@ -474,9 +543,11 @@ void GuideTests::shorterRepairAndPortableSnapshotsAreAtomicAndRemapped() {
     QVERIFY(store.createLocal(definition(), items, Now, 1));
     const auto original = store.programs("cartoons", Now, Now + Day, 1000);
     QVariantMap selected;
-    for (const auto& v : original) {
+    for (const auto& v : original)
+    {
         const auto slot = v.toMap();
-        if (slot.value("endUtc").toLongLong() - slot.value("startUtc").toLongLong() == 1800) {
+        if (slot.value("endUtc").toLongLong() - slot.value("startUtc").toLongLong() == 1800)
+        {
             selected = slot;
             break;
         }
@@ -490,7 +561,8 @@ void GuideTests::shorterRepairAndPortableSnapshotsAreAtomicAndRemapped() {
     QVERIFY(store.repairSlot("cartoons", id, "movie", 8, 1, true));
     const auto after = store.programs("cartoons", Now, Now + Day, 1000);
     QCOMPARE(after.size(), original.size() + 1);
-    for (const auto& v : original) {
+    for (const auto& v : original)
+    {
         const auto slot = v.toMap();
         if (slot.value("id") == id)
             continue;
@@ -508,7 +580,8 @@ void GuideTests::shorterRepairAndPortableSnapshotsAreAtomicAndRemapped() {
     QVERIFY(!QJsonDocument::fromVariant(package).toJson().contains("path"));
     auto imported = definition("imported", 202);
     auto remapped = items;
-    for (auto& v : remapped) {
+    for (auto& v : remapped)
+    {
         auto item = v.toMap();
         item["mediaId"] = item.value("mediaId").toInt() + 100;
         v = item;
@@ -520,7 +593,8 @@ void GuideTests::shorterRepairAndPortableSnapshotsAreAtomicAndRemapped() {
     QVERIFY2(destination.createLocal(imported, remapped, Now, 1, package), qPrintable(destination.errorString()));
     const auto restored = destination.programs("imported", Now, Now + Day, 1000);
     QCOMPARE(restored.size(), after.size());
-    for (int i = 0; i < after.size(); ++i) {
+    for (int i = 0; i < after.size(); ++i)
+    {
         const auto a = after[i].toMap(), b = restored[i].toMap();
         for (const auto& key : QStringList{"startUtc", "endUtc", "title", "status", "mediaType"})
             QCOMPARE(a.value(key), b.value(key));
@@ -543,7 +617,8 @@ void GuideTests::shorterRepairAndPortableSnapshotsAreAtomicAndRemapped() {
     replacement["title"] = "Replacement short";
     missing.append(replacement);
     QVariantMap mapping;
-    for (const auto& v : package.value("items").toList()) {
+    for (const auto& v : package.value("items").toList())
+    {
         const auto item = v.toMap();
         mapping[item.value("mediaType").toString() + ":" + item.value("mediaId").toString()] =
             QVariantMap{{"mediaType", item.value("duration").toInt() == 600 ? "movie" : "episode"},
@@ -555,7 +630,8 @@ void GuideTests::shorterRepairAndPortableSnapshotsAreAtomicAndRemapped() {
     QVERIFY2(destination.createLocal(other, missing, Now, 1, package, mapping), qPrintable(destination.errorString()));
     const auto explicitlyMapped = destination.programs("missing", Now, Now + Day, 1000);
     QCOMPARE(explicitlyMapped.size(), after.size());
-    for (int i = 0; i < after.size(); ++i) {
+    for (int i = 0; i < after.size(); ++i)
+    {
         QCOMPARE(explicitlyMapped[i].toMap().value("startUtc"), after[i].toMap().value("startUtc"));
         QCOMPARE(explicitlyMapped[i].toMap().value("endUtc"), after[i].toMap().value("endUtc"));
         QCOMPARE(explicitlyMapped[i].toMap().value("mediaId").toInt(),
@@ -567,13 +643,16 @@ void GuideTests::shorterRepairAndPortableSnapshotsAreAtomicAndRemapped() {
     QCOMPARE(destination.definition("changed-rules").value("rule"), changedRules.value("rule"));
     const auto changedSlots = destination.programs("changed-rules", Now, Now + Day, 1000);
     QCOMPARE(changedSlots.size(), after.size());
-    for (int i = 0; i < after.size(); ++i) {
+    for (int i = 0; i < after.size(); ++i)
+    {
         QCOMPARE(changedSlots[i].toMap().value("startUtc"), after[i].toMap().value("startUtc"));
         QCOMPARE(changedSlots[i].toMap().value("endUtc"), after[i].toMap().value("endUtc"));
     }
 }
 
-void GuideTests::packagedGuideOptionsValidateOverlayAndLegacyBoundaries() {
+void
+GuideTests::packagedGuideOptionsValidateOverlayAndLegacyBoundaries()
+{
     QFile file(QFINDTESTDATA("../config/studio-defaults.json"));
     QVERIFY(file.open(QIODevice::ReadOnly));
     const auto document = QJsonDocument::fromJson(file.readAll()).object();
@@ -584,12 +663,14 @@ void GuideTests::packagedGuideOptionsValidateOverlayAndLegacyBoundaries() {
     for (const auto& key : QStringList{"surface", "overlayWidth", "overlayHeight", "overlayRows", "overlayPosition"})
         legacy.remove(key);
     QVERIFY2(!ComponentSchema::guideOptions(legacy, &error).isEmpty(), qPrintable(error));
-    for (const auto& value : QVariantList{64, 101, 95.5, true, QString("95")}) {
+    for (const auto& value : QVariantList{64, 101, 95.5, true, QString("95")})
+    {
         auto invalid = packaged;
         invalid["overlayWidth"] = value;
         QVERIFY(ComponentSchema::guideOptions(invalid).isEmpty());
     }
-    for (const auto& key : QStringList{"surface", "overlayPosition"}) {
+    for (const auto& key : QStringList{"surface", "overlayPosition"})
+    {
         auto invalid = packaged;
         invalid[key] = "unsupported";
         QVERIFY(ComponentSchema::guideOptions(invalid).isEmpty());
@@ -624,16 +705,20 @@ void GuideTests::packagedGuideOptionsValidateOverlayAndLegacyBoundaries() {
     QCOMPARE(bytes(customPath), legacyBytes);
     QVERIFY(!QFile::exists(dir.filePath("legacy-profile.json")));
 }
-void GuideTests::rulesAreBoundedAndMixedMediaMatches() {
+void
+GuideTests::rulesAreBoundedAndMixedMediaMatches()
+{
     auto def = definition();
     QString error;
     QVERIFY2(!ComponentSchema::guideChannel(def, &error).isEmpty(), qPrintable(error));
-    for (const auto& field : QStringList{"schemaVersion", "number", "seed"}) {
+    for (const auto& field : QStringList{"schemaVersion", "number", "seed"})
+    {
         auto bad = def;
         bad[field] = "1";
         QVERIFY(ComponentSchema::guideChannel(bad).isEmpty());
     }
-    for (const auto& field : QStringList{"clock", "sequence", "timezone"}) {
+    for (const auto& field : QStringList{"clock", "sequence", "timezone"})
+    {
         auto bad = def;
         bad[field] = "unknown";
         QVERIFY(ComponentSchema::guideChannel(bad).isEmpty());
@@ -679,7 +764,9 @@ void GuideTests::rulesAreBoundedAndMixedMediaMatches() {
         wide.append(missing);
     QVERIFY(ComponentSchema::guideRule({{"op", "any"}, {"rules", wide}}).isEmpty());
 }
-void GuideTests::persistsSevenDaysAndTwelveHourOffset() {
+void
+GuideTests::persistsSevenDaysAndTwelveHourOffset()
+{
     QTemporaryDir dir;
     const auto path = dir.filePath("guide.sqlite");
     QVariantList baseline;
@@ -701,7 +788,8 @@ void GuideTests::persistsSevenDaysAndTwelveHourOffset() {
         const auto boundary = baseline.first().toMap().value("endUtc").toLongLong();
         QCOMPARE(store.tuneTarget("cartoons", boundary).value("id"), baseline[1].toMap().value("id"));
     }
-    for (int restart = 0; restart < 3; ++restart) {
+    for (int restart = 0; restart < 3; ++restart)
+    {
         GuideStore store(path);
         QVERIFY(store.ready());
         QCOMPARE(store.programs("cartoons", Now, Now + 7 * Day, 1000), baseline);
@@ -710,7 +798,9 @@ void GuideTests::persistsSevenDaysAndTwelveHourOffset() {
         QCOMPARE(store.programs("cartoons", Now, Now + 7 * Day, 1000), baseline);
     }
 }
-void GuideTests::channelAndExtensionFailuresRollback() {
+void
+GuideTests::channelAndExtensionFailuresRollback()
+{
     QTemporaryDir dir;
     GuideStore store(dir.filePath("guide.sqlite"));
     store.failNextCommitForTest();
@@ -734,7 +824,9 @@ void GuideTests::channelAndExtensionFailuresRollback() {
     QCOMPARE(store.channels().size(), 1);
     QVERIFY(!store.extend("cartoons", Now + 100 * Day, 1));
 }
-void GuideTests::rulesOnlyAffectUncommittedSlots() {
+void
+GuideTests::rulesOnlyAffectUncommittedSlots()
+{
     QTemporaryDir dir;
     GuideStore store(dir.filePath("guide.sqlite"));
     QVERIFY(store.createLocal(definition(), media(), Now, 1));
@@ -749,12 +841,15 @@ void GuideTests::rulesOnlyAffectUncommittedSlots() {
     for (const auto& v : store.programs("cartoons", boundary, Now + 2 * Day, 1000))
         QCOMPARE(v.toMap().value("mediaType").toString(), QString("movie"));
 }
-void GuideTests::nextUnwatchedUsesStrictKodiSnapshotAndPreservesCommittedSchedule() {
+void
+GuideTests::nextUnwatchedUsesStrictKodiSnapshotAndPreservesCommittedSchedule()
+{
     auto def = definition();
     def["sequence"] = "next-unwatched";
     QVariantList candidates;
     const QVariantList states{0, 0, 1, QVariant(), false, QString("0"), -1};
-    for (int i = 0; i < states.size(); ++i) {
+    for (int i = 0; i < states.size(); ++i)
+    {
         auto item = media().first().toMap();
         item["mediaId"] = i + 1;
         item["duration"] = 3600;
@@ -777,7 +872,8 @@ void GuideTests::nextUnwatchedUsesStrictKodiSnapshotAndPreservesCommittedSchedul
         for (int i = 0; i < committed.size(); ++i)
             QCOMPARE(committed[i].toMap().value("mediaId").toInt(), i % 2 ? 1 : 2);
         auto watched = candidates;
-        for (auto& value : watched) {
+        for (auto& value : watched)
+        {
             auto item = value.toMap();
             item["playcount"] = 1;
             value = item;
@@ -811,10 +907,13 @@ void GuideTests::nextUnwatchedUsesStrictKodiSnapshotAndPreservesCommittedSchedul
     QCOMPARE(reopened.programs("cartoons", Now, Now + Day, 1000), committed);
     QCOMPARE(reopened.tuneTarget("cartoons", Now + Day).value("mediaId").toInt(), 3);
 }
-void GuideTests::reviewedClockAdjustmentPreservesSchedulesAndSurvivesRestart() {
+void
+GuideTests::reviewedClockAdjustmentPreservesSchedulesAndSurvivesRestart()
+{
     const qint64 wall = QDateTime(QDate(2026, 3, 8), QTime(9, 30), QTimeZone::UTC)
                             .toSecsSinceEpoch(); // LA spring gap, UTC remains continuous.
-    for (const auto& offset : QVariantList{true, QString("3600"), 1.5, 31 * 86400 + 1, -31 * 86400 - 1}) {
+    for (const auto& offset : QVariantList{true, QString("3600"), 1.5, 31 * 86400 + 1, -31 * 86400 - 1})
+    {
         auto invalid = definition();
         invalid["clockOffsetSeconds"] = offset;
         QVERIFY(ComponentSchema::guideChannel(invalid).isEmpty());
@@ -834,7 +933,8 @@ void GuideTests::reviewedClockAdjustmentPreservesSchedulesAndSurvivesRestart() {
         QVERIFY(store.tuneTarget("cartoons", wall).value("startUtc").toLongLong() == wall + 3600);
         QCOMPARE(store.broadcastTime("cartoons", wall), wall + 3600);
     }
-    for (int mode = 0; mode < 3; ++mode) {
+    for (int mode = 0; mode < 3; ++mode)
+    {
         QTemporaryDir dir;
         const auto path = dir.filePath("guide.sqlite");
         auto def = definition();
@@ -860,7 +960,8 @@ void GuideTests::reviewedClockAdjustmentPreservesSchedulesAndSurvivesRestart() {
             const auto review = store.clockAdjustmentPreview("cartoons", 3600, 1, wall + 60);
             QVERIFY(!review.isEmpty());
             QCOMPARE(store.channels(), baseline);
-            for (const auto& key : QStringList{"channelId", "title", "programId", "toClockUtc", "active"}) {
+            for (const auto& key : QStringList{"channelId", "title", "programId", "toClockUtc", "active"})
+            {
                 auto tampered = review;
                 tampered[key] = QString("tampered");
                 QVERIFY(!store.adjustClock(tampered, wall + 90));
@@ -884,7 +985,8 @@ void GuideTests::reviewedClockAdjustmentPreservesSchedulesAndSurvivesRestart() {
             applied = store.channel("cartoons");
             QCOMPARE(applied.value("revision").toInt(), 2);
             QVERIFY(!store.adjustClock(review, wall + 121));
-            if (!mode) {
+            if (!mode)
+            {
                 auto bypass = store.definition("cartoons");
                 bypass["clockOffsetSeconds"] = 7200;
                 QVERIFY(!store.updateRules(bypass, media(), 2));
@@ -897,7 +999,9 @@ void GuideTests::reviewedClockAdjustmentPreservesSchedulesAndSurvivesRestart() {
         QCOMPARE(reopened.broadcastTime("cartoons", wall + 120), wall + (mode == 2 ? 30 : 120) + 3600);
     }
 }
-void GuideTests::targetedMissingMediaPreservesIntervals() {
+void
+GuideTests::targetedMissingMediaPreservesIntervals()
+{
     QTemporaryDir dir;
     GuideStore store(dir.filePath("guide.sqlite"));
     QVERIFY(store.createLocal(definition(), media(), Now, 1));
@@ -911,7 +1015,8 @@ void GuideTests::targetedMissingMediaPreservesIntervals() {
     QVERIFY(store.markUnavailable(missing.value("mediaType").toString(), missing.value("mediaId").toInt()));
     const auto repaired = store.programs("cartoons", Now, Now + Day, 1000);
     QCOMPARE(baseline.size(), repaired.size());
-    for (int i = 0; i < baseline.size(); ++i) {
+    for (int i = 0; i < baseline.size(); ++i)
+    {
         auto original = baseline[i].toMap();
         if (original.value("mediaType") == missing.value("mediaType") &&
             original.value("mediaId") == missing.value("mediaId"))
@@ -921,13 +1026,16 @@ void GuideTests::targetedMissingMediaPreservesIntervals() {
     QVERIFY(store.tuneTarget("cartoons", missing.value("startUtc").toLongLong()).isEmpty());
     const auto boundary = baseline.last().toMap().value("endUtc").toLongLong();
     QVERIFY(store.extend("cartoons", Now + 2 * Day, 2));
-    for (const auto& v : store.programs("cartoons", boundary, Now + 2 * Day, 1000)) {
+    for (const auto& v : store.programs("cartoons", boundary, Now + 2 * Day, 1000))
+    {
         const auto item = v.toMap();
         QVERIFY(item.value("mediaType") != missing.value("mediaType") ||
                 item.value("mediaId") != missing.value("mediaId"));
     }
 }
-void GuideTests::profileIsolationAndInvalidation() {
+void
+GuideTests::profileIsolationAndInvalidation()
+{
     QTemporaryDir dir;
     GuideStore a(dir.filePath("a/guide.sqlite")), b(dir.filePath("b/guide.sqlite"));
     QVERIFY(a.createLocal(definition(), media(), Now, 1));
@@ -941,7 +1049,9 @@ void GuideTests::profileIsolationAndInvalidation() {
     GuideStore reopened(dir.filePath("a/guide.sqlite"));
     QCOMPARE(reopened.channels().size(), 1);
 }
-void GuideTests::lineupPreferencesSurviveRestart() {
+void
+GuideTests::lineupPreferencesSurviveRestart()
+{
     QTemporaryDir dir;
     const auto path = dir.filePath("guide.sqlite");
     {
@@ -973,7 +1083,9 @@ void GuideTests::lineupPreferencesSurviveRestart() {
     QCOMPARE(store.channels().size(), 1);
     QVERIFY(store.programs("second", Now, Now + Day).isEmpty());
 }
-void GuideTests::numberSwapIsRevisionedAtomicAndPreservesSchedules() {
+void
+GuideTests::numberSwapIsRevisionedAtomicAndPreservesSchedules()
+{
     QTemporaryDir dir;
     GuideStore store(dir.filePath("guide.sqlite"));
     QVERIFY(store.createLocal(definition(), media(), Now, 1));
@@ -995,7 +1107,9 @@ void GuideTests::numberSwapIsRevisionedAtomicAndPreservesSchedules() {
     QCOMPARE(store.programs("cartoons", Now, Now + Day, 1000), first);
     QCOMPARE(store.programs("second", Now, Now + Day, 1000), second);
 }
-void GuideTests::channelSchedulePolicyPersistsAndPrunesWithoutReplacingFuture() {
+void
+GuideTests::channelSchedulePolicyPersistsAndPrunesWithoutReplacingFuture()
+{
     QTemporaryDir dir;
     const auto path = dir.filePath("policy.sqlite");
     auto def = definition();
@@ -1020,13 +1134,15 @@ void GuideTests::channelSchedulePolicyPersistsAndPrunesWithoutReplacingFuture() 
     for (const auto& slot : store.programs("cartoons", Now, Now + Day, 1000))
         QVERIFY(slot.toMap().value("endUtc").toLongLong() > Now + Day);
     const auto saved = store.channels();
-    for (const auto& value : QVariantList{0, 32, true, 1.5}) {
+    for (const auto& value : QVariantList{0, 32, true, 1.5})
+    {
         auto invalid = def;
         invalid["horizonDays"] = value;
         QVERIFY(!store.updateRules(invalid, media(), 2));
         QCOMPARE(store.channels(), saved);
     }
-    for (const auto& value : QVariantList{-1, 8, true, 1.5}) {
+    for (const auto& value : QVariantList{-1, 8, true, 1.5})
+    {
         auto invalid = def;
         invalid["retentionDays"] = value;
         QVERIFY(!store.updateRules(invalid, media(), 2));
@@ -1042,11 +1158,14 @@ void GuideTests::channelSchedulePolicyPersistsAndPrunesWithoutReplacingFuture() 
     for (const auto& slot : retained)
         QVERIFY(slot.toMap().value("endUtc").toLongLong() > Now + Day); // legacy two-day history
 }
-void GuideTests::selectedSlotRepairPreservesIntervalsAndRejectsStaleOrForeignChoices() {
+void
+GuideTests::selectedSlotRepairPreservesIntervalsAndRejectsStaleOrForeignChoices()
+{
     QTemporaryDir dir;
     GuideStore store(dir.filePath("repair.sqlite"));
     auto candidates = media();
-    for (int i = 0; i < candidates.size(); ++i) {
+    for (int i = 0; i < candidates.size(); ++i)
+    {
         auto item = candidates[i].toMap();
         item["duration"] = i == 7 ? 1900 : 1800;
         candidates[i] = item;
@@ -1066,9 +1185,11 @@ void GuideTests::selectedSlotRepairPreservesIntervalsAndRejectsStaleOrForeignCho
     const auto alternatives = review.value("alternatives").toList();
     QVERIFY(!alternatives.isEmpty());
     QVariantMap replacement;
-    for (const auto& value : alternatives) {
+    for (const auto& value : alternatives)
+    {
         const auto item = value.toMap();
-        if (item.value("mediaId") != slot.value("mediaId")) {
+        if (item.value("mediaId") != slot.value("mediaId"))
+        {
             replacement = item;
             break;
         }
@@ -1103,7 +1224,9 @@ void GuideTests::selectedSlotRepairPreservesIntervalsAndRejectsStaleOrForeignCho
     finalState["revision"] = state.value("revision");
     QCOMPARE(finalState, state);
 }
-void GuideTests::virtualClockPausesWhileProfileIsOff() {
+void
+GuideTests::virtualClockPausesWhileProfileIsOff()
+{
     QTemporaryDir dir;
     const auto path = dir.filePath("guide.sqlite");
     auto def = definition();
@@ -1126,7 +1249,9 @@ void GuideTests::virtualClockPausesWhileProfileIsOff() {
              paused.value("offsetSeconds").toLongLong() + 10);
     QVERIFY(!store.setActive(false, Now - 1));
 }
-void GuideTests::unknownDatabaseIsNeverRewritten() {
+void
+GuideTests::unknownDatabaseIsNeverRewritten()
+{
     QTemporaryDir dir;
     const auto path = dir.filePath("unknown.sqlite");
     {
@@ -1150,7 +1275,9 @@ void GuideTests::unknownDatabaseIsNeverRewritten() {
     }
     QCOMPARE(bytes(path), before);
 }
-void GuideTests::corruptKnownDatabaseIsNeverRewritten() {
+void
+GuideTests::corruptKnownDatabaseIsNeverRewritten()
+{
     QTemporaryDir dir;
     const auto path = dir.filePath("corrupt.sqlite");
     {
@@ -1178,16 +1305,20 @@ void GuideTests::corruptKnownDatabaseIsNeverRewritten() {
     }
     QCOMPARE(bytes(path), before);
 }
-void GuideTests::cancelledTransactionsAndInterruptedVirtualClock() {
+void
+GuideTests::cancelledTransactionsAndInterruptedVirtualClock()
+{
     QTemporaryDir dir;
     const auto path = dir.filePath("guide.sqlite");
     auto def = definition();
     def["clock"] = "pause-when-off";
     {
         GuideStore store(path);
-        store.setCancellationCheck([] {
-            return true;
-        });
+        store.setCancellationCheck(
+            []
+            {
+                return true;
+            });
         QVERIFY(!store.createLocal(def, media(), Now));
         QVERIFY(store.channels().isEmpty());
         store.setCancellationCheck({});
@@ -1204,7 +1335,9 @@ void GuideTests::cancelledTransactionsAndInterruptedVirtualClock() {
     QCOMPARE(target.value("clockUtc").toLongLong(), Now + 800);
     QCOMPARE(reopened.channel("cartoons").value("number").toInt(), 202);
 }
-void GuideTests::intervalOverlapRejectedAtDatabaseBoundary() {
+void
+GuideTests::intervalOverlapRejectedAtDatabaseBoundary()
+{
     QTemporaryDir dir;
     const auto path = dir.filePath("guide.sqlite");
     GuideStore store(path);
@@ -1225,7 +1358,9 @@ void GuideTests::intervalOverlapRejectedAtDatabaseBoundary() {
     }
     QSqlDatabase::removeDatabase("overlap-guide");
 }
-void GuideTests::rollingMaintenancePreservesSlotsAndCatchesUpAfterLongOutage() {
+void
+GuideTests::rollingMaintenancePreservesSlotsAndCatchesUpAfterLongOutage()
+{
     QTemporaryDir dir;
     GuideStore store(dir.filePath("guide.sqlite"));
     QVERIFY(store.createLocal(definition(), media(), Now));
@@ -1255,10 +1390,13 @@ void GuideTests::rollingMaintenancePreservesSlotsAndCatchesUpAfterLongOutage() {
     QVERIFY(store.maintain("paused", Now + 400 * Day, 1));
     QCOMPARE(store.tuneTarget("paused", Now + 400 * Day).value("clockUtc").toLongLong(), Now + 700);
 }
-void GuideTests::pvrGenerationIsAtomicAndPreservesUserOverrides() {
+void
+GuideTests::pvrGenerationIsAtomicAndPreservesUserOverrides()
+{
     QTemporaryDir dir;
     GuideStore store(dir.filePath("guide.sqlite"));
-    const auto entry = [](int kodi, int unique, int number) {
+    const auto entry = [](int kodi, int unique, int number)
+    {
         const auto id = "pvr-" + QString::fromLatin1(
                                      QCryptographicHash::hash(QByteArray("kodi-pvr:9:") + QByteArray::number(unique),
                                                               QCryptographicHash::Sha256)
@@ -1329,7 +1467,8 @@ void GuideTests::pvrGenerationIsAtomicAndPreservesUserOverrides() {
     QCOMPARE(updated.value("description").toString(), QString("My station notes"));
     QCOMPARE(store.tuneTarget(firstId, Now).value("mediaId").toInt(), 99);
     auto remapped = baseline;
-    for (auto& v : remapped) {
+    for (auto& v : remapped)
+    {
         auto p = v.toMap();
         p["mediaId"] = 99;
         v = p;
@@ -1343,7 +1482,9 @@ void GuideTests::pvrGenerationIsAtomicAndPreservesUserOverrides() {
     QVERIFY(!store.tuneTarget(secondId, Now).isEmpty());
     QVERIFY(!store.maintain(firstId, Now, 5)); // source is its only scheduler
 }
-void GuideTests::regenerationRequiresCurrentReviewAndPreservesAiringProgram() {
+void
+GuideTests::regenerationRequiresCurrentReviewAndPreservesAiringProgram()
+{
     QTemporaryDir dir;
     GuideStore store(dir.filePath("guide.sqlite"));
     QVERIFY(store.createLocal(definition(), media(), Now, 1));
@@ -1363,7 +1504,8 @@ void GuideTests::regenerationRequiresCurrentReviewAndPreservesAiringProgram() {
     QVERIFY2(store.regenerate("cartoons", review, Now + 102), qPrintable(store.errorString()));
     const auto replaced = store.programs("cartoons", Now, Now + Day, 1000);
     QCOMPARE(replaced.first().toMap(), airing);
-    for (int i = 1; i < replaced.size(); ++i) {
+    for (int i = 1; i < replaced.size(); ++i)
+    {
         QCOMPARE(replaced[i].toMap().value("mediaType").toString(), QString("movie"));
         QCOMPARE(replaced[i - 1].toMap().value("endUtc"), replaced[i].toMap().value("startUtc"));
     }

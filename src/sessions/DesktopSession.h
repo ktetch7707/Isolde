@@ -7,23 +7,33 @@
 #include <QProcess>
 #include <memory>
 
-class DesktopSession final : public AppSession {
+class DesktopSession final : public AppSession
+{
     Q_OBJECT
   public:
     using AppSession::AppSession;
     ~DesktopSession() override;
-    QString diagnostics() const {
+    QString
+    diagnostics() const
+    {
         return QString::fromUtf8(m_diagnostics);
     }
-    void launch() override;
-    void suspend() override;
-    void resume() override;
-    void exit() override;
+    void
+    launch() override;
+    void
+    suspend() override;
+    void
+    resume() override;
+    void
+    exit() override;
 
   private:
-    bool applyContainment();
-    void stopProcess();
-    void readDiagnostics();
+    bool
+    applyContainment();
+    void
+    stopProcess();
+    void
+    readDiagnostics();
     bool m_stopping = false;
     QByteArray m_diagnostics;
     QByteArray m_protocolBuffer;

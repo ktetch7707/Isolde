@@ -8,25 +8,41 @@
 #include "../src/sessions/SessionManager.h"
 #include "tst_component_common.h"
 
-class LayoutPersistenceTests : public QObject {
+class LayoutPersistenceTests : public QObject
+{
     Q_OBJECT
   private slots:
-    void pagesPersistAndRouteAndTravelWithSkins();
-    void homeCopyPagePreservesExistingPages();
-    void skinSnapshotsSurviveResetAndArtworkChanges();
-    void starterTemplatesAreEditableAndPreservePages();
-    void starterTemplateRolesRemainEditableWithoutProviders();
-    void starterPageUpdatesPreserveDesignAndRollback();
-    void skinsRejectInvalidAndFailedApplications();
-    void sourceFamiliesUseGenericBoundedComposition();
-    void sourcePoliciesRejectUnsafeDataWithoutRewritingLayouts();
-    void universalGridValidatesAndPersists();
-    void migratesAndRepairsWithoutLosingPresentation();
-    void preservesMissingCollectionAndEmptyHome();
-    void rejectsConflictingVersionedLayout();
+    void
+    pagesPersistAndRouteAndTravelWithSkins();
+    void
+    homeCopyPagePreservesExistingPages();
+    void
+    skinSnapshotsSurviveResetAndArtworkChanges();
+    void
+    starterTemplatesAreEditableAndPreservePages();
+    void
+    starterTemplateRolesRemainEditableWithoutProviders();
+    void
+    starterPageUpdatesPreserveDesignAndRollback();
+    void
+    skinsRejectInvalidAndFailedApplications();
+    void
+    sourceFamiliesUseGenericBoundedComposition();
+    void
+    sourcePoliciesRejectUnsafeDataWithoutRewritingLayouts();
+    void
+    universalGridValidatesAndPersists();
+    void
+    migratesAndRepairsWithoutLosingPresentation();
+    void
+    preservesMissingCollectionAndEmptyHome();
+    void
+    rejectsConflictingVersionedLayout();
 };
 
-int main(int argc, char* argv[]) {
+int
+main(int argc, char* argv[])
+{
     QCoreApplication app(argc, argv);
     LayoutPersistenceTests test;
     return QTest::qExec(&test, argc, argv);
@@ -34,7 +50,9 @@ int main(int argc, char* argv[]) {
 
 #include "tst_layout_persistence.moc"
 
-void LayoutPersistenceTests::pagesPersistAndRouteAndTravelWithSkins() {
+void
+LayoutPersistenceTests::pagesPersistAndRouteAndTravelWithSkins()
+{
     QTemporaryDir dir;
     AppRegistry registry;
     QVERIFY(registry.loadFromData(apps));
@@ -68,15 +86,18 @@ void LayoutPersistenceTests::pagesPersistAndRouteAndTravelWithSkins() {
     const auto searchSources = page->pageSearchSources();
     QCOMPARE(searchSources.size(), 2);
     bool sawSection = false, sawWidget = false;
-    for (const auto& value : searchSources) {
+    for (const auto& value : searchSources)
+    {
         const auto source = value.toMap();
         QCOMPARE(source["kind"].toString(), QString("movies"));
         QCOMPARE(source["view"].toString(), QString("all"));
-        if (source["id"].toString() == QString("library")) {
+        if (source["id"].toString() == QString("library"))
+        {
             sawSection = true;
             QCOMPARE(source["name"].toString(), QString("Movies"));
         }
-        if (source["id"].toString().startsWith("library-")) {
+        if (source["id"].toString().startsWith("library-"))
+        {
             sawWidget = true;
             QCOMPARE(source["name"].toString(), QString("Keep watching"));
         }
@@ -173,7 +194,9 @@ void LayoutPersistenceTests::pagesPersistAndRouteAndTravelWithSkins() {
     QCOMPARE(layout.pages(), pages);
 }
 
-void LayoutPersistenceTests::homeCopyPagePreservesExistingPages() {
+void
+LayoutPersistenceTests::homeCopyPagePreservesExistingPages()
+{
     QTemporaryDir dir;
     AppRegistry registry;
     QVERIFY(registry.loadFromData(apps));
@@ -218,7 +241,9 @@ void LayoutPersistenceTests::homeCopyPagePreservesExistingPages() {
     QVERIFY(!reopenedCopy->document().contains("pages"));
 }
 
-void LayoutPersistenceTests::skinSnapshotsSurviveResetAndArtworkChanges() {
+void
+LayoutPersistenceTests::skinSnapshotsSurviveResetAndArtworkChanges()
+{
     QTemporaryDir dir;
     AppRegistry registry;
     QVERIFY(registry.loadFromData(apps));
@@ -277,7 +302,9 @@ void LayoutPersistenceTests::skinSnapshotsSurviveResetAndArtworkChanges() {
     QCOMPARE(other.skins().size(), 7);
 }
 
-void LayoutPersistenceTests::starterTemplatesAreEditableAndPreservePages() {
+void
+LayoutPersistenceTests::starterTemplatesAreEditableAndPreservePages()
+{
     QTemporaryDir dir;
     AppRegistry registry;
     QVERIFY(registry.loadFromData(apps));
@@ -287,7 +314,8 @@ void LayoutPersistenceTests::starterTemplatesAreEditableAndPreservePages() {
     const auto pageId = layout.createPage("Keep my page", "movies");
     QVERIFY(!pageId.isEmpty());
     const auto pages = layout.pages();
-    for (const auto& id : {"compact-launcher", "scrolling-dashboard", "poster-sidebar", "minimal-pastel"}) {
+    for (const auto& id : {"compact-launcher", "scrolling-dashboard", "poster-sidebar", "minimal-pastel"})
+    {
         QVERIFY2(layout.applySkin("builtin-" + QString::fromLatin1(id)), qPrintable(layout.errorString()));
         QCOMPARE(layout.pages(), pages);
         QVERIFY(!layout.components().isEmpty());
@@ -317,28 +345,35 @@ void LayoutPersistenceTests::starterTemplatesAreEditableAndPreservePages() {
     QCOMPARE(invalidCatalog.committedDocument(), unchanged);
 }
 
-void LayoutPersistenceTests::starterTemplateRolesRemainEditableWithoutProviders() {
+void
+LayoutPersistenceTests::starterTemplateRolesRemainEditableWithoutProviders()
+{
     QTemporaryDir dir;
     AppRegistry registry;
     QVERIFY(registry.loadFromData(apps));
     HomeLayout layout(&registry);
     QVERIFY(layout.load(QFINDTESTDATA("../config/default-home-layout.json"), dir.filePath("home.json")));
-    for (const auto& id : {"compact-launcher", "scrolling-dashboard", "poster-sidebar", "minimal-pastel"}) {
+    for (const auto& id : {"compact-launcher", "scrolling-dashboard", "poster-sidebar", "minimal-pastel"})
+    {
         QVERIFY(layout.applySkin("builtin-" + QString::fromLatin1(id)));
         const auto before = layout.committedDocument();
         const auto disk = readFile(dir.filePath("home.json"));
         auto* session = qobject_cast<StudioSession*>(layout.beginStudio());
         QVERIFY(session);
         const auto nodes = session->document()["components"].toList();
-        for (const auto& value : nodes) {
+        for (const auto& value : nodes)
+        {
             const auto node = value.toMap();
             const auto componentId = node["id"].toString();
             QVERIFY(!node["name"].toString().isEmpty());
             QVERIFY(session->execute("rename", {{"id", componentId}, {"name", "My content role"}}));
-            if (node.contains("appCollection")) {
+            if (node.contains("appCollection"))
+            {
                 QVERIFY(
                     session->execute("setApps", {{"id", componentId}, {"mode", "selected"}, {"apps", QVariantList{}}}));
-            } else {
+            }
+            else
+            {
                 QCOMPARE(node["source"].toMap()["provider"].toString(), QString("kodi"));
                 auto presentation = node["presentation"].toMap();
                 presentation["libraryColumns"] = 3;
@@ -354,7 +389,9 @@ void LayoutPersistenceTests::starterTemplateRolesRemainEditableWithoutProviders(
     }
 }
 
-void LayoutPersistenceTests::starterPageUpdatesPreserveDesignAndRollback() {
+void
+LayoutPersistenceTests::starterPageUpdatesPreserveDesignAndRollback()
+{
     QTemporaryDir dir;
     AppRegistry registry;
     QVERIFY(registry.loadFromData(apps));
@@ -363,10 +400,12 @@ void LayoutPersistenceTests::starterPageUpdatesPreserveDesignAndRollback() {
     QVERIFY(layout.applySkin("builtin-pastel"));
     auto document = QJsonDocument::fromJson(layout.committedDocument()).object();
     auto components = document["components"].toArray();
-    for (int i = 0; i < components.size(); ++i) {
+    for (int i = 0; i < components.size(); ++i)
+    {
         auto c = components[i].toObject();
         const auto id = c["id"].toString();
-        if (id == "music" || id == "games" || id == "guide") {
+        if (id == "music" || id == "games" || id == "guide")
+        {
             QVariantMap actionMap;
             if (id == "guide")
                 actionMap = QVariantMap{{"type", "settings"}, {"section", 4}};
@@ -402,9 +441,11 @@ void LayoutPersistenceTests::starterPageUpdatesPreserveDesignAndRollback() {
     QCOMPARE(layout.appearance()["fontFamily"].toString(), QString("Serif"));
     const auto after = QJsonDocument::fromJson(layout.committedDocument()).object();
     int updatedButtons = 0;
-    for (const auto& value : after["components"].toArray()) {
+    for (const auto& value : after["components"].toArray())
+    {
         const auto item = value.toObject();
-        if (item["id"] == "music" || item["id"] == "games" || item["id"] == "guide") {
+        if (item["id"] == "music" || item["id"] == "games" || item["id"] == "guide")
+        {
             ++updatedButtons;
             QCOMPARE(item["componentType"].toString(), QString("button"));
             QCOMPARE(item["source"].toObject()["kind"].toString(), QString("button"));
@@ -425,7 +466,9 @@ void LayoutPersistenceTests::starterPageUpdatesPreserveDesignAndRollback() {
     QCOMPARE(readFile(dir.filePath("home.json")), saved);
 }
 
-void LayoutPersistenceTests::skinsRejectInvalidAndFailedApplications() {
+void
+LayoutPersistenceTests::skinsRejectInvalidAndFailedApplications()
+{
     QTemporaryDir dir;
     AppRegistry registry;
     QVERIFY(registry.loadFromData(apps));
@@ -457,13 +500,16 @@ void LayoutPersistenceTests::skinsRejectInvalidAndFailedApplications() {
     QCOMPARE(layout.appearance()["focusColor"].toString(), QString("#123456"));
 }
 
-void LayoutPersistenceTests::sourceFamiliesUseGenericBoundedComposition() {
+void
+LayoutPersistenceTests::sourceFamiliesUseGenericBoundedComposition()
+{
     AppRegistry registry;
     QVERIFY(registry.loadFromData(apps));
     HomeLayout home(&registry);
     QVERIFY(home.load());
     const auto presets = home.studioOptions().value("componentPresets").toMap();
-    for (const auto& family : {"detected-sources", "source-notice"}) {
+    for (const auto& family : {"detected-sources", "source-notice"})
+    {
         const auto prototype = presets.value(family).toMap();
         if (prototype.isEmpty())
             continue;
@@ -492,7 +538,9 @@ void LayoutPersistenceTests::sourceFamiliesUseGenericBoundedComposition() {
         QVERIFY(!sourcePolicyFields.isEmpty());
 }
 
-void LayoutPersistenceTests::sourcePoliciesRejectUnsafeDataWithoutRewritingLayouts() {
+void
+LayoutPersistenceTests::sourcePoliciesRejectUnsafeDataWithoutRewritingLayouts()
+{
     QVERIFY(ComponentSchema::validSourcePolicy({{"schemaVersion", 1},
                                                 {"mode", "compact"},
                                                 {"duration", 8},
@@ -529,7 +577,9 @@ void LayoutPersistenceTests::sourcePoliciesRejectUnsafeDataWithoutRewritingLayou
     QCOMPARE(readFile(saved), original);
 }
 
-void LayoutPersistenceTests::universalGridValidatesAndPersists() {
+void
+LayoutPersistenceTests::universalGridValidatesAndPersists()
+{
     QTemporaryDir dir;
     AppRegistry registry;
     QVERIFY(registry.loadFromData(apps));
@@ -597,20 +647,25 @@ void LayoutPersistenceTests::universalGridValidatesAndPersists() {
     QCOMPARE(reloaded.grid().value("columns").toInt(), 12);
     QCOMPARE(reloaded.grid().value("overlap").toBool(), true);
     bool placed = false;
-    for (const auto& entry : reloaded.items()) {
+    for (const auto& entry : reloaded.items())
+    {
         const auto item = entry.toMap();
-        if (item.value("id").toString() == "my-folder") {
+        if (item.value("id").toString() == "my-folder")
+        {
             placed = true;
             QCOMPARE(item.value("placement").toMap().value("x").toInt(), 0);
             QCOMPARE(item.value("placement").toMap().value("width").toInt(), 3);
-        } else if (item.value("id").toString() == "my-app") {
+        }
+        else if (item.value("id").toString() == "my-app")
+        {
             QVERIFY(!item.contains("placement"));
         }
     }
     QVERIFY(placed);
     auto document = QJsonDocument::fromJson(readFile(dir.filePath("user.json"))).object();
     QJsonArray components = document.value("components").toArray();
-    for (qsizetype i = 0; i < components.size(); ++i) {
+    for (qsizetype i = 0; i < components.size(); ++i)
+    {
         auto component = components[i].toObject();
         if (component.value("id").toString() != "my-folder")
             continue;
@@ -629,7 +684,9 @@ void LayoutPersistenceTests::universalGridValidatesAndPersists() {
     QCOMPARE(readFile(dir.filePath("broken.json")), broken);
 }
 
-void LayoutPersistenceTests::migratesAndRepairsWithoutLosingPresentation() {
+void
+LayoutPersistenceTests::migratesAndRepairsWithoutLosingPresentation()
+{
     QTemporaryDir dir;
     writeFile(dir.filePath("defaults.json"), legacy);
     writeFile(dir.filePath("user.json"), legacy);
@@ -670,7 +727,9 @@ void LayoutPersistenceTests::migratesAndRepairsWithoutLosingPresentation() {
     QCOMPARE(readFile(dir.filePath("user.json.v1.backup.json")), legacy); // immutable original
 }
 
-void LayoutPersistenceTests::preservesMissingCollectionAndEmptyHome() {
+void
+LayoutPersistenceTests::preservesMissingCollectionAndEmptyHome()
+{
     QTemporaryDir dir;
     auto component = ComponentSchema::component(
         {{"id", "curated"},
@@ -700,7 +759,9 @@ void LayoutPersistenceTests::preservesMissingCollectionAndEmptyHome() {
     QVERIFY(empty.components().isEmpty()); // recovery is outside deletable layout
 }
 
-void LayoutPersistenceTests::rejectsConflictingVersionedLayout() {
+void
+LayoutPersistenceTests::rejectsConflictingVersionedLayout()
+{
     QTemporaryDir dir;
     writeFile(dir.filePath("defaults.json"), legacy);
     auto tile = ComponentSchema::component({{"id", "unsafe"}, {"kind", "app"}, {"appId", "movies"}}, true);

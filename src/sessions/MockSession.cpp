@@ -1,17 +1,25 @@
 #include "sessions/MockSession.h"
 
-void MockSession::launch() {
+void
+MockSession::launch()
+{
     setState(State::Running);
 }
-void MockSession::suspend() {
+void
+MockSession::suspend()
+{
     if (state() == State::Running)
         setState(State::Suspended);
 }
-void MockSession::resume() {
+void
+MockSession::resume()
+{
     if (state() == State::Suspended)
         setState(State::Running);
 }
-void MockSession::exit() {
+void
+MockSession::exit()
+{
     if (state() != State::Exited)
         setState(State::Exited);
 }

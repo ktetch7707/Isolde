@@ -1,5 +1,5 @@
-#include "home/HomeLayout.h"
 #include "home/ComponentSchema.h"
+#include "home/HomeLayout.h"
 #include "home/StudioSession.h"
 
 #include <QCoreApplication>
@@ -10,9 +10,12 @@
 #include <QJsonObject>
 #include <QStandardPaths>
 
-QVariantMap HomeLayout::studioOptions() const {
+QVariantMap
+HomeLayout::studioOptions() const
+{
     QFile file(QDir(QFileInfo(m_defaultPath).absolutePath()).filePath("studio-defaults.json"));
-    if (!file.open(QIODevice::ReadOnly)) {
+    if (!file.open(QIODevice::ReadOnly))
+    {
         file.setFileName(":/config/studio-defaults.json");
         if (!file.open(QIODevice::ReadOnly))
             return {};
@@ -27,7 +30,8 @@ QVariantMap HomeLayout::studioOptions() const {
     m_optionsBytes = bytes;
     m_optionsCache.clear();
     const auto object = QJsonDocument::fromJson(bytes).object();
-    if (object.contains("appIconStyles")) {
+    if (object.contains("appIconStyles"))
+    {
         const auto styles = object["appIconStyles"].toObject();
         if (styles.size() != 3)
             return {};
@@ -35,11 +39,13 @@ QVariantMap HomeLayout::studioOptions() const {
             if (!styles[name].isObject() || !ComponentSchema::validPresentation(styles[name].toObject().toVariantMap()))
                 return {};
     }
-    if (object.contains("artworkCleanup")) {
+    if (object.contains("artworkCleanup"))
+    {
         const auto surfaces = object["artworkCleanup"].toObject()["previewSurfaces"].toArray();
         if (surfaces.size() != 3)
             return {};
-        for (const auto& value : surfaces) {
+        for (const auto& value : surfaces)
+        {
             const auto item = value.toObject();
             const QColor colour(item["colour"].toString());
             if (item.size() != 2 || item["name"].toString().isEmpty() || item["name"].toString().size() > 40 ||
@@ -47,12 +53,14 @@ QVariantMap HomeLayout::studioOptions() const {
                 return {};
         }
     }
-    if (object.contains("referenceViewport")) {
+    if (object.contains("referenceViewport"))
+    {
         const auto viewport = object["referenceViewport"].toObject();
         if (viewport.size() != 2)
             return {};
         const QMap<QString, QPair<int, int>> bounds{{"width", {640, 3840}}, {"height", {360, 2160}}};
-        for (auto it = bounds.cbegin(); it != bounds.cend(); ++it) {
+        for (auto it = bounds.cbegin(); it != bounds.cend(); ++it)
+        {
             const auto value = viewport[it.key()];
             const double number = value.toDouble(-1);
             if (!value.isDouble() || !std::isfinite(number) || std::floor(number) != number ||
@@ -66,14 +74,14 @@ QVariantMap HomeLayout::studioOptions() const {
     if (object["schemaVersion"].toInt() != 1 || !object["defaultGrid"].isObject() ||
         !ComponentSchema::validGrid(object["defaultGrid"].toObject().toVariantMap()) || !object["gridModes"].isArray())
         return {};
-    if (!object["appearance"].isObject() ||
-        !readableStudioAppearance(object["appearance"].toObject().toVariantMap()))
+    if (!object["appearance"].isObject() || !readableStudioAppearance(object["appearance"].toObject().toVariantMap()))
         return {};
     auto guide = object.contains("guide") ? ComponentSchema::guideOptions(object["guide"].toObject().toVariantMap())
                                           : QVariantMap();
     if (object.contains("guide") && guide.isEmpty())
         return {};
-    if (object.contains("headerDefaults")) {
+    if (object.contains("headerDefaults"))
+    {
         const auto defaults = object["headerDefaults"].toObject();
         if (defaults.size() != 2 || !defaults.contains("navigation") || !defaults.contains("identity"))
             return {};
@@ -83,9 +91,10 @@ QVariantMap HomeLayout::studioOptions() const {
                                                     {"headerMode", mode},
                                                     {"showClock", true},
                                                     {"header", defaults[mode].toObject().toVariantMap()}}))
-                    return {};
+                return {};
     }
-    if (object.contains("appPicker")) {
+    if (object.contains("appPicker"))
+    {
         const auto picker = object["appPicker"].toObject();
         const QMap<QString, QPair<int, int>> bounds{{"columns", {2, 6}},
                                                     {"cardHeight", {96, 240}},
@@ -96,7 +105,8 @@ QVariantMap HomeLayout::studioOptions() const {
                                                     {"logoSize", {24, 96}}};
         if (picker.size() != bounds.size())
             return {};
-        for (auto it = bounds.cbegin(); it != bounds.cend(); ++it) {
+        for (auto it = bounds.cbegin(); it != bounds.cend(); ++it)
+        {
             const auto value = picker[it.key()];
             const auto n = value.toDouble(-1);
             if (!value.isDouble() || !std::isfinite(n) || std::floor(n) != n || n < it.value().first ||
@@ -114,26 +124,29 @@ QVariantMap HomeLayout::studioOptions() const {
         if (!desktop[key].isString() || desktop[key].toString().trimmed().isEmpty() ||
             desktop[key].toString().size() > 80 || desktop[key].toString().contains(QChar::Null))
             return {};
-    for (const auto& key : QStringList{"width", "height", "margin", "radius", "labelSize"}) {
+    for (const auto& key : QStringList{"width", "height", "margin", "radius", "labelSize"})
+    {
         const auto value = desktop[key];
         const auto n = value.toDouble(-1);
         const int low = key == "width"       ? 240
                         : key == "height"    ? 80
                         : key == "labelSize" ? 14
                                              : 0,
-                      high = key == "width"       ? 600
-                             : key == "height"    ? 240
-                             : key == "labelSize" ? 40
-                                                  : 100;
+                  high = key == "width"       ? 600
+                         : key == "height"    ? 240
+                         : key == "labelSize" ? 40
+                                              : 100;
         if (!value.isDouble() || !std::isfinite(n) || n < low || n > high || std::floor(n) != n)
             return {};
     }
-    if (object.contains("colorPicker")) {
+    if (object.contains("colorPicker"))
+    {
         const auto picker = object["colorPicker"].toObject();
         if (picker.size() != 1 || !picker["presets"].isArray() || picker["presets"].toArray().isEmpty() ||
             picker["presets"].toArray().size() > 8)
             return {};
-        for (const auto& entry : picker["presets"].toArray()) {
+        for (const auto& entry : picker["presets"].toArray())
+        {
             const auto swatch = entry.toObject();
             const QColor color(swatch["value"].toString());
             if (swatch.size() != 2 || !swatch["name"].isString() || swatch["name"].toString().isEmpty() ||
@@ -147,14 +160,16 @@ QVariantMap HomeLayout::studioOptions() const {
     if (groups.size() != 5 || simple["schemes"].toArray().isEmpty() || simple["schemes"].toArray().size() > 32)
         return {};
     QSet<QString> seenGroups;
-    for (const auto& value : groups) {
+    for (const auto& value : groups)
+    {
         const auto group = value.toObject();
         const auto id = group["id"].toString();
         if (!ThemeColors::roles().contains(id) || seenGroups.contains(id) || group["label"].toString().isEmpty())
             return {};
         seenGroups.insert(id);
         QStringList keys;
-        for (const auto& role : group["roles"].toArray()) {
+        for (const auto& role : group["roles"].toArray())
+        {
             const auto row = role.toObject();
             if (row["label"].toString().isEmpty())
                 return {};
@@ -166,14 +181,16 @@ QVariantMap HomeLayout::studioOptions() const {
         if (keys != expected)
             return {};
     }
-    for (const auto& value : simple["schemes"].toArray()) {
+    for (const auto& value : simple["schemes"].toArray())
+    {
         const auto scheme = value.toObject();
         if (scheme["name"].toString().trimmed().isEmpty() || scheme["name"].toString().size() > 80 ||
             !ThemeColors::valid(
                 QVariantMap{{"schemaVersion", 1}, {"colors", scheme["colors"].toObject().toVariantMap()}}))
             return {};
     }
-    for (const auto& value : simple["stylePresets"].toArray()) {
+    for (const auto& value : simple["stylePresets"].toArray())
+    {
         const auto preset = value.toObject();
         if (preset["name"].toString().isEmpty() ||
             !ComponentSchema::validPresentation(preset["presentation"].toObject().toVariantMap()))
@@ -182,7 +199,8 @@ QVariantMap HomeLayout::studioOptions() const {
     const auto trials = object["trialDurations"].toArray();
     if (trials.size() != 3)
         return {};
-    for (int i = 0; i < trials.size(); ++i) {
+    for (int i = 0; i < trials.size(); ++i)
+    {
         const auto trial = trials[i].toObject();
         const int seconds = QList<int>{30, 60, 300}[i];
         if (trial.size() != 2 || !trial["label"].isString() || trial["label"].toString().trimmed().isEmpty() ||
@@ -195,7 +213,8 @@ QVariantMap HomeLayout::studioOptions() const {
     if (!object["sectionHeight"].isDouble() || object["sectionHeight"].toDouble() < 60 ||
         object["sectionHeight"].toDouble() > 800)
         return {};
-    for (const auto& type : QStringList{"clock", "text"}) {
+    for (const auto& type : QStringList{"clock", "text"})
+    {
         const auto span = object["widgetSpans"].toObject()[type].toObject().toVariantMap();
         if (span.size() != 2 ||
             !ComponentSchema::validPlacement(
@@ -213,7 +232,8 @@ QVariantMap HomeLayout::studioOptions() const {
     if (panelRoot.isEmpty() || panelRoot.value("componentType") != "container")
         return {};
     panelItems.append(QJsonObject::fromVariantMap(panelRoot));
-    for (const auto& entry : panel["children"].toArray()) {
+    for (const auto& entry : panel["children"].toArray())
+    {
         const auto child = ComponentSchema::component(entry.toObject().toVariantMap(), true);
         if (child.isEmpty())
             return {};
@@ -225,16 +245,19 @@ QVariantMap HomeLayout::studioOptions() const {
             {}))
         return {};
     const auto presets = object["componentPresets"].toObject();
-    if (object.contains("componentVariants")) {
+    if (object.contains("componentVariants"))
+    {
         if (!object["componentVariants"].isObject() || object["componentVariants"].toObject().size() > 3)
             return {};
         const auto families = object["componentVariants"].toObject();
-        for (auto family = families.begin(); family != families.end(); ++family) {
+        for (auto family = families.begin(); family != families.end(); ++family)
+        {
             if (!QStringList{"button", "image", "text"}.contains(family.key()) || !family.value().isArray() ||
                 family.value().toArray().isEmpty() || family.value().toArray().size() > 8)
                 return {};
             QSet<QString> variants;
-            for (const auto& value : family.value().toArray()) {
+            for (const auto& value : family.value().toArray())
+            {
                 const auto variant = value.toObject();
                 const auto id = variant["id"].toString();
                 if (variant.size() != 5 || !variant["id"].isString() || !ComponentSchema::safeId(id) ||
@@ -275,11 +298,13 @@ QVariantMap HomeLayout::studioOptions() const {
                  .contains(it.key()) ||
             ComponentSchema::component(it.value().toObject().toVariantMap(), true).isEmpty())
             return {};
-    if (object.contains("shapeChoices")) {
+    if (object.contains("shapeChoices"))
+    {
         if (!object["shapeChoices"].isArray() || object["shapeChoices"].toArray().isEmpty() ||
             object["shapeChoices"].toArray().size() > 8)
             return {};
-        for (const auto& value : object["shapeChoices"].toArray()) {
+        for (const auto& value : object["shapeChoices"].toArray())
+        {
             const auto choice = value.toObject();
             const auto type = choice["type"].toString();
             if (choice.size() != 3 || !choice["name"].isString() || choice["name"].toString().trimmed().isEmpty() ||
@@ -296,12 +321,14 @@ QVariantMap HomeLayout::studioOptions() const {
                 return {};
         }
     }
-    if (object.contains("replacementChoices")) {
+    if (object.contains("replacementChoices"))
+    {
         const auto choices = object["replacementChoices"].toArray();
         if (!object["replacementChoices"].isArray() || choices.isEmpty() || choices.size() > 5)
             return {};
         QSet<QString> types;
-        for (const auto& value : choices) {
+        for (const auto& value : choices)
+        {
             const auto choice = value.toObject();
             const auto type = choice["type"].toString();
             if (choice.size() != 2 || !choice["name"].isString() || choice["name"].toString().trimmed().isEmpty() ||
@@ -316,7 +343,8 @@ QVariantMap HomeLayout::studioOptions() const {
     if (presets.isEmpty() || presets.size() > 16 || catalog.isEmpty() || catalog.size() > 16 ||
         object["inspector"].toObject()["fields"].toArray().size() > 160)
         return {};
-    for (const auto& entry : catalog) {
+    for (const auto& entry : catalog)
+    {
         const auto item = entry.toObject();
         const auto id = item["id"].toString(), name = item["name"].toString();
         if ((id != "widgets" && !presets.contains(id)) || catalogIds.contains(id) || name.trimmed().isEmpty() ||
@@ -324,7 +352,8 @@ QVariantMap HomeLayout::studioOptions() const {
             return {};
         catalogIds.insert(id);
     }
-    for (const auto& entry : object["actions"].toArray()) {
+    for (const auto& entry : object["actions"].toArray())
+    {
         const auto choice = entry.toObject();
         if (!choice["name"].isString() || choice["name"].toString().trimmed().isEmpty() ||
             choice["name"].toString().size() > 160)
@@ -332,7 +361,8 @@ QVariantMap HomeLayout::studioOptions() const {
         const auto actionList = choice["actions"].toArray();
         if (actionList.isEmpty() || ComponentSchema::action(actionList.first().toObject().toVariantMap()).isEmpty())
             return {};
-        if (choice.contains("aliases")) {
+        if (choice.contains("aliases"))
+        {
             if (!choice["aliases"].isArray() || choice["aliases"].toArray().size() > 8)
                 return {};
             for (const auto& alias : choice["aliases"].toArray())
@@ -362,14 +392,16 @@ QVariantMap HomeLayout::studioOptions() const {
                                   "open-folder",
                                   "open-url",
                                   "open-disc"};
-    for (const auto& value : actionCategories) {
+    for (const auto& value : actionCategories)
+    {
         const auto category = value.toObject();
         if (category.size() != 2 || !category["name"].isString() || category["name"].toString().trimmed().isEmpty() ||
             category["name"].toString().size() > 80 || !category["types"].isArray() ||
             category["types"].toArray().size() > pickerTypes.size())
             return {};
         QSet<QString> types;
-        for (const auto& type : category["types"].toArray()) {
+        for (const auto& type : category["types"].toArray())
+        {
             if (!type.isString() || !pickerTypes.contains(type.toString()) || types.contains(type.toString()))
                 return {};
             types.insert(type.toString());
@@ -378,7 +410,8 @@ QVariantMap HomeLayout::studioOptions() const {
     if (!actionCategories.first().toObject()["types"].toArray().isEmpty())
         return {};
     QSet<QString> ids;
-    for (const auto& entry : object["gridModes"].toArray()) {
+    for (const auto& entry : object["gridModes"].toArray())
+    {
         const auto mode = entry.toObject();
         const auto id = mode["id"].toString(), name = mode["name"].toString();
         if (!QStringList{"screen", "sections"}.contains(id) || ids.contains(id) || name.trimmed().isEmpty() ||
@@ -389,9 +422,13 @@ QVariantMap HomeLayout::studioOptions() const {
     if (ids.size() != 2 || !ids.contains(object["defaultGrid"].toObject()["mode"].toString()))
         return {};
     const QStringList overlayKeys{"surface", "overlayWidth", "overlayHeight", "overlayRows", "overlayPosition"};
-    if (guide.isEmpty() || std::any_of(overlayKeys.cbegin(), overlayKeys.cend(), [&guide](const QString& key) {
-            return !guide.contains(key);
-        })) {
+    if (guide.isEmpty() || std::any_of(overlayKeys.cbegin(),
+                                       overlayKeys.cend(),
+                                       [&guide](const QString& key)
+                                       {
+                                           return !guide.contains(key);
+                                       }))
+    {
         QFile packaged(":/config/studio-defaults.json");
         if (!packaged.open(QIODevice::ReadOnly) || packaged.size() > 128 * 1024)
             return {};
@@ -404,7 +441,8 @@ QVariantMap HomeLayout::studioOptions() const {
                 guide[it.key()] = it.value();
     }
     auto result = object.toVariantMap();
-    if (!ComponentSchema::validSettingsNavigation(result.value("settingsNavigation").toMap())) {
+    if (!ComponentSchema::validSettingsNavigation(result.value("settingsNavigation").toMap()))
+    {
         QFile packaged(":/config/studio-defaults.json");
         if (!packaged.open(QIODevice::ReadOnly) || packaged.size() > 128 * 1024)
             return {};
@@ -414,7 +452,8 @@ QVariantMap HomeLayout::studioOptions() const {
             return {};
         result["settingsNavigation"] = navigation;
     }
-    if (!result.contains("referenceViewport")) {
+    if (!result.contains("referenceViewport"))
+    {
         QFile packaged(":/config/studio-defaults.json");
         if (!packaged.open(QIODevice::ReadOnly) || packaged.size() > 128 * 1024)
             return {};
@@ -427,7 +466,9 @@ QVariantMap HomeLayout::studioOptions() const {
     return m_optionsCache;
 }
 
-QVariantMap HomeLayout::studioAppearance() const {
+QVariantMap
+HomeLayout::studioAppearance() const
+{
     auto result = appearance();
     const auto defaults = studioOptions().value("appearance").toMap();
     for (auto it = defaults.cbegin(); it != defaults.cend(); ++it)
@@ -437,7 +478,9 @@ QVariantMap HomeLayout::studioAppearance() const {
             result[it.key()] = it.value();
     return result;
 }
-bool HomeLayout::applyTheme(const QVariantMap& theme, bool includeSuggestedArtwork) {
+bool
+HomeLayout::applyTheme(const QVariantMap& theme, bool includeSuggestedArtwork)
+{
     auto presentation = appearanceDefaults();
     if (m_appearance.contains("surfaceThemes"))
         presentation["surfaceThemes"] = m_appearance["surfaceThemes"];
@@ -478,18 +521,21 @@ bool HomeLayout::applyTheme(const QVariantMap& theme, bool includeSuggestedArtwo
     m_backgroundEnd = endColor.name();
     m_tileRoundness = roundness;
     const auto suggestions = theme.value(QStringLiteral("suggestedArtwork")).toMap();
-    for (qsizetype i = 0; i < m_items.size(); ++i) {
+    for (qsizetype i = 0; i < m_items.size(); ++i)
+    {
         auto item = m_items.at(i).toObject();
         const auto kind = item.value(QStringLiteral("kind")).toString();
         if (kind != QStringLiteral("app") && kind != QStringLiteral("action"))
             continue;
         item.insert(QStringLiteral("opacity"), tileOpacity);
-        if (includeSuggestedArtwork) {
+        if (includeSuggestedArtwork)
+        {
             const QStringList keys{item.value(QStringLiteral("appId")).toString(),
                                    item.value(QStringLiteral("id")).toString(),
                                    item.value(QStringLiteral("sourceType")).toString(),
                                    item.value(QStringLiteral("name")).toString().toLower()};
-            for (const auto& key : keys) {
+            for (const auto& key : keys)
+            {
                 const auto suggestion = suggestions.value(key).toMap();
                 const QColor accent(suggestion.value(QStringLiteral("accent")).toString());
                 const auto symbol = suggestion.value(QStringLiteral("symbol")).toString().trimmed().left(3);
@@ -504,7 +550,8 @@ bool HomeLayout::applyTheme(const QVariantMap& theme, bool includeSuggestedArtwo
         m_items.replace(i, item);
     }
     QString validationError;
-    if (!validateStudioDocument(documentData(), &validationError, m_defaultTheme) || !save()) {
+    if (!validateStudioDocument(documentData(), &validationError, m_defaultTheme) || !save())
+    {
         if (!validationError.isEmpty())
             setError(validationError);
         m_themeKeys = previousKeys;
@@ -518,14 +565,19 @@ bool HomeLayout::applyTheme(const QVariantMap& theme, bool includeSuggestedArtwo
     emit layoutChanged();
     return true;
 }
-bool HomeLayout::resetToDefaults() {
-    if (!ProfileManager::allows("edit")) {
+bool
+HomeLayout::resetToDefaults()
+{
+    if (!ProfileManager::allows("edit"))
+    {
         setError(tr("Editing is restricted in Settings > Profiles."));
         return false;
     }
-    if (m_owner || !m_pages.isEmpty()) {
+    if (m_owner || !m_pages.isEmpty())
+    {
         QFile defaults(m_defaultPath);
-        if (!defaults.open(QIODevice::ReadOnly)) {
+        if (!defaults.open(QIODevice::ReadOnly))
+        {
             setError(tr("Unable to read defaults."));
             return false;
         }
@@ -534,8 +586,11 @@ bool HomeLayout::resetToDefaults() {
     QFile::remove(m_userPath);
     return load(m_defaultPath, m_userPath);
 }
-QObject* HomeLayout::beginStudio() {
-    if (m_studio) {
+QObject*
+HomeLayout::beginStudio()
+{
+    if (m_studio)
+    {
         m_studio->invalidate();
         m_studio->deleteLater();
     }
@@ -543,8 +598,11 @@ QObject* HomeLayout::beginStudio() {
     m_studio->bind(this);
     return m_studio;
 }
-bool HomeLayout::applyStudioDraft(const QByteArray& draft, const QString& focusComponentId) {
-    if (!ProfileManager::allows("edit")) {
+bool
+HomeLayout::applyStudioDraft(const QByteArray& draft, const QString& focusComponentId)
+{
+    if (!ProfileManager::allows("edit"))
+    {
         setError(tr("Editing is restricted in Settings > Profiles."));
         return false;
     }
@@ -565,14 +623,16 @@ bool HomeLayout::applyStudioDraft(const QByteArray& draft, const QString& focusC
     HomeLayout probe(m_registry);
     probe.m_defaultTheme = m_defaultTheme;
     probe.m_owner = m_owner;
-    if (!probe.loadDocument(draft, false)) {
+    if (!probe.loadDocument(draft, false))
+    {
         setError(probe.errorString().isEmpty() ? tr("The draft could not be applied — nothing changed.")
                                                : probe.errorString());
         return false;
     }
     m_items = probe.m_items;
     m_categories = probe.m_categories;
-    if (!m_owner) {
+    if (!m_owner)
+    {
         m_pages = probe.m_pages;
         m_homePageId = probe.m_homePageId;
         m_rootPage = probe.m_rootPage;
@@ -587,7 +647,8 @@ bool HomeLayout::applyStudioDraft(const QByteArray& draft, const QString& focusC
     m_brandVisible = probe.m_brandVisible;
     if (!focusComponentId.isEmpty())
         m_focusOrigin = focusComponentId;
-    if (!save()) {
+    if (!save())
+    {
         m_items = previousItems;
         m_categories = previousCategories;
         m_pages = previousPages;
@@ -604,7 +665,8 @@ bool HomeLayout::applyStudioDraft(const QByteArray& draft, const QString& focusC
         m_focusOrigin = previousFocus;
         syncPages();
         emit layoutChanged();
-        if (documentData() != previousBytes) {
+        if (documentData() != previousBytes)
+        {
             load(m_defaultPath, m_userPath);
             m_focusOrigin = previousFocus;
             emit layoutChanged();

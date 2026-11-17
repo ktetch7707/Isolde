@@ -5,48 +5,75 @@
 #include "app/StoreProvider.h"
 
 // One instance per ProfileRuntime. Creating it performs no network requests.
-class FdroidProvider final : public StoreProvider {
+class FdroidProvider final : public StoreProvider
+{
     Q_OBJECT
   public:
     explicit FdroidProvider(QObject* parent = nullptr);
     ~FdroidProvider() override;
-    QString providerId() const override {
+    QString
+    providerId() const override
+    {
         return QStringLiteral("fdroid");
     }
-    QString providerName() const override {
+    QString
+    providerName() const override
+    {
         return tr("F-Droid");
     }
-    bool isOnline() const override {
+    bool
+    isOnline() const override
+    {
         return true;
     }
-    QVariantList search(const QString& query) override;
-    void requestSearch(const QString& query) override;
-    void requestPage(int direction) override;
-    void requestUpdates(const QStringList& packages) override;
-    QVariantList updateResults() const override {
+    QVariantList
+    search(const QString& query) override;
+    void
+    requestSearch(const QString& query) override;
+    void
+    requestPage(int direction) override;
+    void
+    requestUpdates(const QStringList& packages) override;
+    QVariantList
+    updateResults() const override
+    {
         return m_updates;
     }
-    void cancel() override;
-    QString status() const override {
+    void
+    cancel() override;
+    QString
+    status() const override
+    {
         return m_status;
     }
-    bool hasNextPage() const override {
+    bool
+    hasNextPage() const override
+    {
         return m_next;
     }
-    bool hasPreviousPage() const override {
+    bool
+    hasPreviousPage() const override
+    {
         return m_previous;
     }
-    QUrl artifactUrl(const QString& storeId) const override;
-    QByteArray artifactHash(const QString& storeId) const override;
-    QString provenanceText(const QString& storeId) const override;
+    QUrl
+    artifactUrl(const QString& storeId) const override;
+    QByteArray
+    artifactHash(const QString& storeId) const override;
+    QString
+    provenanceText(const QString& storeId) const override;
 
   private:
-    void start(int page, bool updates = false);
-    QString resolveHelperPath() const;
-    void connectProcessSignals(QProcess* process, std::shared_ptr<QByteArray> output, int page, bool updates);
-    QStringList buildArguments(const QString& helper, const QString& cache, const QString& query,
-                               int page, bool updates) const;
-    QVariantMap result(const QString& storeId) const;
+    void
+    start(int page, bool updates = false);
+    QString
+    resolveHelperPath() const;
+    void
+    connectProcessSignals(QProcess* process, std::shared_ptr<QByteArray> output, int page, bool updates);
+    QStringList
+    buildArguments(const QString& helper, const QString& cache, const QString& query, int page, bool updates) const;
+    QVariantMap
+    result(const QString& storeId) const;
     QPointer<QProcess> m_process;
     QString m_query;
     QString m_status;

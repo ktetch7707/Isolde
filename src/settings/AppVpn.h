@@ -6,7 +6,8 @@
 #include <QVariantMap>
 
 // Rules are profile-owned. Connections affect the whole appliance.
-class AppVpn final : public QObject {
+class AppVpn final : public QObject
+{
     Q_OBJECT
     Q_PROPERTY(QVariantMap routes READ routes NOTIFY changed)
     Q_PROPERTY(QVariantList connections READ connections NOTIFY changed)
@@ -16,36 +17,58 @@ class AppVpn final : public QObject {
   public:
     explicit AppVpn(QString path, QString profile = "default", QString helper = {}, QObject* parent = nullptr);
     ~AppVpn() override;
-    QVariantMap routes() const {
+    QVariantMap
+    routes() const
+    {
         return m_routes;
     }
-    QVariantList connections() const {
+    QVariantList
+    connections() const
+    {
         return m_connections;
     }
-    bool busy() const {
+    bool
+    busy() const
+    {
         return m_busy;
     }
-    QString pendingApp() const {
+    QString
+    pendingApp() const
+    {
         return m_app;
     }
-    QString errorString() const {
+    QString
+    errorString() const
+    {
         return m_error;
     }
-    Q_INVOKABLE bool refresh();
-    Q_INVOKABLE bool setRoute(const QString& app, const QString& uuid);
-    Q_INVOKABLE void cancel();
-    bool prepare(const QString& app);
+    Q_INVOKABLE bool
+    refresh();
+    Q_INVOKABLE bool
+    setRoute(const QString& app, const QString& uuid);
+    Q_INVOKABLE void
+    cancel();
+    bool
+    prepare(const QString& app);
   signals:
-    void changed();
-    void ready(const QString& app);
-    void failed(const QString& app, const QString& message);
+    void
+    changed();
+    void
+    ready(const QString& app);
+    void
+    failed(const QString& app, const QString& message);
 
   private:
-    void start(const QString& action, const QString& target = {});
-    void finish(int code, QProcess::ExitStatus exit);
-    bool load();
-    static bool safeApp(const QString& id);
-    static bool safeUuid(const QString& id);
+    void
+    start(const QString& action, const QString& target = {});
+    void
+    finish(int code, QProcess::ExitStatus exit);
+    bool
+    load();
+    static bool
+    safeApp(const QString& id);
+    static bool
+    safeUuid(const QString& id);
     QString m_path, m_profile, m_helper, m_app, m_verifiedApp, m_error;
     QVariantMap m_routes;
     QVariantList m_connections;

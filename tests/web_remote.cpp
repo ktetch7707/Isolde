@@ -10,23 +10,33 @@
 #include <QtTest>
 #include "input/InputManager.h"
 
-class RemoteReport final : public QObject {
+class RemoteReport final : public QObject
+{
     Q_OBJECT
   public:
-    Q_INVOKABLE void result(const QVariant& value) {
+    Q_INVOKABLE void
+    result(const QVariant& value)
+    {
         emit reported(value);
     }
-    Q_INVOKABLE void ready() {
+    Q_INVOKABLE void
+    ready()
+    {
         emit loaded();
     }
   signals:
-    void reported(const QVariant& value);
-    void loaded();
+    void
+    reported(const QVariant& value);
+    void
+    loaded();
 };
-class WebRemoteTest final : public QObject {
+class WebRemoteTest final : public QObject
+{
     Q_OBJECT
   private slots:
-    void externalChromeRemoteBoundary() {
+    void
+    externalChromeRemoteBoundary()
+    {
         QProcess check;
         QTemporaryDir fallback;
         const auto artifacts = qEnvironmentVariable("ISOLDE_TEST_ARTIFACTS", fallback.path());
@@ -45,7 +55,9 @@ class WebRemoteTest final : public QObject {
         const auto message = diagnostics.readAll();
         QVERIFY2(check.exitCode() == 0, message.constData());
     }
-    void directionalActivationKeyboardCancelAndPageActions() {
+    void
+    directionalActivationKeyboardCancelAndPageActions()
+    {
         InputManager input;
         RemoteReport report;
         QQmlApplicationEngine engine;
@@ -57,20 +69,24 @@ class WebRemoteTest final : public QObject {
         auto* window = qobject_cast<QQuickWindow*>(engine.rootObjects().first());
         QVERIFY(window);
         QVERIFY(loaded.count() || loaded.wait(15000));
-        auto value = [&](const QString& script, int world = 0) {
+        auto value = [&](const QString& script, int world = 0)
+        {
             result.clear();
             QMetaObject::invokeMethod(window, "evaluate", Q_ARG(QVariant, script), Q_ARG(QVariant, world));
             if (result.isEmpty() && !result.wait(5000))
                 return QVariant();
             return result.first().first();
         };
-        auto key = [&](Qt::Key code) {
+        auto key = [&](Qt::Key code)
+        {
             QTest::keyClick(window, code);
             QTest::qWait(80);
         };
-        auto capture = [&](const QString& name) {
+        auto capture = [&](const QString& name)
+        {
             const auto dir = qEnvironmentVariable("ISOLDE_TEST_ARTIFACTS");
-            if (!dir.isEmpty()) {
+            if (!dir.isEmpty())
+            {
                 // Offscreen windows render synchronously during grabWindow and do
                 // not emit an on-screen swap. Drain the Chromium texture update
                 // between renders before saving the reviewed frame.
@@ -113,16 +129,18 @@ class WebRemoteTest final : public QObject {
         key(Qt::Key_Return);
         QVERIFY(value("document.getElementById('choice').checked").toBool());
         // Replacing controls and opening a modal must not strand remote focus.
-        value("document.body.insertAdjacentHTML('beforeend', '<dialog id=modal><button "
-              "id=modalCancel>Cancel</button><button "
-              "id=modalAccept>Accept</button></dialog>');document.getElementById('modal').showModal()");
+        value(
+            "document.body.insertAdjacentHTML('beforeend', '<dialog id=modal><button "
+            "id=modalCancel>Cancel</button><button "
+            "id=modalAccept>Accept</button></dialog>');document.getElementById('modal').showModal()");
         QTest::qWait(150);
         key(Qt::Key_Right);
         QCOMPARE(value("document.activeElement.id").toString(), QString("modalAccept"));
         capture("dialog");
         QVERIFY(value("document.getElementById('modal').querySelectorAll('div').length >= 2").toBool());
-        value("document.getElementById('modal').insertAdjacentHTML('beforeend','<input id=modalText "
-              "aria-label=Text>');document.getElementById('modalText').focus()");
+        value(
+            "document.getElementById('modal').insertAdjacentHTML('beforeend','<input id=modalText "
+            "aria-label=Text>');document.getElementById('modalText').focus()");
         QTest::qWait(100);
         key(Qt::Key_Return);
         QVERIFY(value("__isoldeRemote.state().keyboardOpen", 1).toBool());
@@ -132,10 +150,11 @@ class WebRemoteTest final : public QObject {
         QTest::qWait(150);
         QCOMPARE(value("document.activeElement.id").toString(), QString("one"));
         // A semantic card in a scrolling shelf needs no coordinate targeting.
-        value("document.body.insertAdjacentHTML('beforeend', '<div id=shelf "
-              "style=\"position:absolute;top:380px;left:40px;width:400px;height:100px;overflow:auto\"><div "
-              "style=\"height:300px\"></div><button id=last style=\"height:60px;width:160px\" "
-              "onclick=\"this.dataset.selected=1\">Last card</button></div>')");
+        value(
+            "document.body.insertAdjacentHTML('beforeend', '<div id=shelf "
+            "style=\"position:absolute;top:380px;left:40px;width:400px;height:100px;overflow:auto\"><div "
+            "style=\"height:300px\"></div><button id=last style=\"height:60px;width:160px\" "
+            "onclick=\"this.dataset.selected=1\">Last card</button></div>')");
         key(Qt::Key_Down);
         key(Qt::Key_Down);
         key(Qt::Key_Down);
@@ -146,7 +165,9 @@ class WebRemoteTest final : public QObject {
         capture("shelf");
     }
 };
-int main(int argc, char** argv) {
+int
+main(int argc, char** argv)
+{
     QtWebEngineQuick::initialize();
     QGuiApplication app(argc, argv);
     WebRemoteTest test;

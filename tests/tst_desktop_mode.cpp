@@ -16,7 +16,8 @@
 #include "input/InputManager.h"
 #include "sessions/DesktopMode.h"
 
-class Portal final : public QDBusVirtualObject {
+class Portal final : public QDBusVirtualObject
+{
   public:
     bool deny = false, empty = false, badSession = false, validBind = false;
     int delay = 0, registrationDelay = 0, registrations = 0, creates = 0;
@@ -26,25 +27,35 @@ class Portal final : public QDBusVirtualObject {
     QString shortcutId;
     QMap<QString, QString> savedTriggers;
     QStringList closed;
-    QString introspect(const QString&) const override {
+    QString
+    introspect(const QString&) const override
+    {
         return {};
     }
-    bool handleMessage(const QDBusMessage& message, const QDBusConnection& bus) override {
-        if (message.member() == "Register") {
+    bool
+    handleMessage(const QDBusMessage& message, const QDBusConnection& bus) override
+    {
+        if (message.member() == "Register")
+        {
             ++registrations;
             if (registered || rejectRegistration || message.signature() != "sa{sv}" ||
-                message.arguments().first().toString() != DesktopMode::ApplicationId) {
+                message.arguments().first().toString() != DesktopMode::ApplicationId)
+            {
                 bus.send(message.createErrorReply("org.freedesktop.portal.Error.NotAllowed",
                                                   "Invalid or duplicate identity"));
                 return true;
             }
             registered = true;
-            QTimer::singleShot(registrationDelay, this, [=] {
-                bus.send(message.createReply());
-            });
+            QTimer::singleShot(registrationDelay,
+                               this,
+                               [=]
+                               {
+                                   bus.send(message.createReply());
+                               });
             return true;
         }
-        if (message.member() == "Close") {
+        if (message.member() == "Close")
+        {
             closed.append(message.path());
             bus.send(message.createReply());
             return true;
@@ -52,7 +63,8 @@ class Portal final : public QDBusVirtualObject {
         const bool create = message.member() == "CreateSession";
         if (!create && message.member() != "BindShortcuts")
             return false;
-        if (!registered) {
+        if (!registered)
+        {
             bus.send(message.createErrorReply("org.freedesktop.portal.Error.NotAllowed", "An app id is required"));
             return true;
         }
@@ -65,12 +77,15 @@ class Portal final : public QDBusVirtualObject {
         const auto handle =
             "/org/freedesktop/portal/desktop/request/" + sender + "/" + options.value("handle_token").toString();
         QVariantMap result;
-        if (create) {
+        if (create)
+        {
             session = "/org/freedesktop/portal/desktop/session/" + sender + "/" +
                       options.value("session_handle_token").toString();
             result["session_handle"] = objectPathResult ? QVariant::fromValue(QDBusObjectPath(session))
                                                         : QVariant(badSession ? "/wrong/session" : session);
-        } else {
+        }
+        else
+        {
             const auto entries = qdbus_cast<QList<DesktopShortcut>>(message.arguments()[1]);
             shortcutId = entries.isEmpty() ? QString{} : entries.first().id;
             validBind = entries.size() == 1 && shortcutId.startsWith("return-home") &&
@@ -85,14 +100,20 @@ class Portal final : public QDBusVirtualObject {
         }
         bus.send(message.createReply(QVariant::fromValue(QDBusObjectPath(handle))));
         const auto code = deny ? uint(1) : uint(0);
-        QTimer::singleShot(delay, this, [=] {
-            auto response = QDBusMessage::createSignal(handle, "org.freedesktop.portal.Request", "Response");
-            response << code << result;
-            bus.send(response);
-        });
+        QTimer::singleShot(delay,
+                           this,
+                           [=]
+                           {
+                               auto response =
+                                   QDBusMessage::createSignal(handle, "org.freedesktop.portal.Request", "Response");
+                               response << code << result;
+                               bus.send(response);
+                           });
         return true;
     }
-    void activate(const QDBusConnection& bus, const QString& target = {}, const QString& id = {}) {
+    void
+    activate(const QDBusConnection& bus, const QString& target = {}, const QString& id = {})
+    {
         auto signal = QDBusMessage::createSignal(
             "/org/freedesktop/portal/desktop", "org.freedesktop.portal.GlobalShortcuts", "Activated");
         signal << QVariant::fromValue(QDBusObjectPath(target.isEmpty() ? session : target))
@@ -100,7 +121,8 @@ class Portal final : public QDBusVirtualObject {
         bus.send(signal);
     }
 };
-class DesktopTests final : public QObject {
+class DesktopTests final : public QObject
+{
     Q_OBJECT
   private:
     QProcess daemon;
@@ -109,7 +131,9 @@ class DesktopTests final : public QObject {
     std::unique_ptr<Portal> portal;
     QVariantMap options;
   private slots:
-    void init() {
+    void
+    init()
+    {
         QFile defaults(QStringLiteral(STUDIO_DEFAULTS));
         QVERIFY(defaults.open(QIODevice::ReadOnly));
         options = QJsonDocument::fromJson(defaults.readAll()).object()["desktop"].toObject().toVariantMap();
@@ -129,19 +153,24 @@ class DesktopTests final : public QObject {
         QVERIFY(
             server->registerVirtualObject("/org/freedesktop/portal/desktop", portal.get(), QDBusConnection::SubPath));
     }
-    void cleanup() {
+    void
+    cleanup()
+    {
         portal.reset();
         server.reset();
         client.reset();
         QDBusConnection::disconnectFromBus(serverName);
         QDBusConnection::disconnectFromBus(clientName);
         daemon.terminate();
-        if (!daemon.waitForFinished(1000)) {
+        if (!daemon.waitForFinished(1000))
+        {
             daemon.kill();
             daemon.waitForFinished(1000);
         }
     }
-    void grantedShortcutReturnsExactOrigin() {
+    void
+    grantedShortcutReturnsExactOrigin()
+    {
         DesktopMode mode(nullptr, *client);
         mode.setPresentation(options);
         QSignalSpy returned(&mode, &DesktopMode::returned);
@@ -162,7 +191,9 @@ class DesktopTests final : public QObject {
         QCOMPARE(returned.first().first().toString(), QString("page.origin"));
         QTRY_VERIFY(!portal->closed.isEmpty());
     }
-    void identityRegistrationCancelAndRetryRemainSingle() {
+    void
+    identityRegistrationCancelAndRetryRemainSingle()
+    {
         DesktopMode mode(nullptr, *client);
         mode.setPresentation(options);
         portal->registrationDelay = 80;
@@ -178,7 +209,9 @@ class DesktopTests final : public QObject {
         QTRY_VERIFY(mode.active());
         QCOMPARE(portal->registrations, 1);
     }
-    void nativeReturnRequiresGrantAndPreservesOrigin() {
+    void
+    nativeReturnRequiresGrantAndPreservesOrigin()
+    {
         QTemporaryDir bindingDir;
         InputManager input(bindingDir.filePath("bindings.json"));
         QVERIFY(input.beginBinding(InputManager::Home));
@@ -216,7 +249,9 @@ class DesktopTests final : public QObject {
         QVERIFY(!mode.active());
         QVERIFY(!mode.errorString().isEmpty());
     }
-    void remappingUsesDistinctPersistentPortalIdentity() {
+    void
+    remappingUsesDistinctPersistentPortalIdentity()
+    {
         DesktopMode mode(nullptr, *client);
         mode.setPresentation(options);
         mode.prepareNative("first");
@@ -247,7 +282,9 @@ class DesktopTests final : public QObject {
         QCOMPARE(portal->shortcutId, initialId);
         QCOMPARE(mode.shortcutDescription(), QString("Home"));
     }
-    void reportsActualPortalAssignment() {
+    void
+    reportsActualPortalAssignment()
+    {
         auto custom = options;
         custom["returnShortcut"] = "F10";
         portal->expectedTrigger = "F10";
@@ -262,7 +299,9 @@ class DesktopTests final : public QObject {
         QTRY_VERIFY(mode.active());
         QCOMPARE(mode.shortcutDescription(), QString("Other key"));
     }
-    void identityRejectionNeverCreatesSession() {
+    void
+    identityRejectionNeverCreatesSession()
+    {
         DesktopMode mode(nullptr, *client);
         mode.setPresentation(options);
         portal->rejectRegistration = true;
@@ -272,7 +311,9 @@ class DesktopTests final : public QObject {
         QCOMPARE(portal->creates, 0);
         QVERIFY(!mode.errorString().isEmpty());
     }
-    void portalRestartReturnsAndReregisters() {
+    void
+    portalRestartReturnsAndReregisters()
+    {
         DesktopMode mode(nullptr, *client);
         mode.setPresentation(options);
         mode.start("before");
@@ -287,13 +328,17 @@ class DesktopTests final : public QObject {
         QTRY_VERIFY(mode.active());
         QCOMPARE(portal->registrations, 2);
     }
-    void deniedOrInvalidPermissionNeverHidesShell_data() {
+    void
+    deniedOrInvalidPermissionNeverHidesShell_data()
+    {
         QTest::addColumn<int>("kind");
         QTest::newRow("denied") << 0;
         QTest::newRow("no-shortcut") << 1;
         QTest::newRow("foreign-session") << 2;
     }
-    void deniedOrInvalidPermissionNeverHidesShell() {
+    void
+    deniedOrInvalidPermissionNeverHidesShell()
+    {
         QFETCH(int, kind);
         portal->deny = kind == 0;
         portal->empty = kind == 1;
@@ -307,7 +352,9 @@ class DesktopTests final : public QObject {
         QVERIFY(!mode.errorString().isEmpty());
         QCOMPARE(returned.count(), 1);
     }
-    void cancelIgnoresLateGrant() {
+    void
+    cancelIgnoresLateGrant()
+    {
         DesktopMode mode(nullptr, *client);
         mode.setPresentation(options);
         portal->delay = 80;
@@ -324,7 +371,9 @@ class DesktopTests final : public QObject {
         mode.returnHome();
         QVERIFY(!mode.active());
     }
-    void returnWindowBackWorksAndPortalClosureRecovers() {
+    void
+    returnWindowBackWorksAndPortalClosureRecovers()
+    {
         DesktopMode mode(nullptr, *client);
         mode.setPresentation(options);
         mode.start("button");
@@ -360,7 +409,9 @@ class DesktopTests final : public QObject {
         QTRY_VERIFY(!mode.active());
         QVERIFY(!mode.errorString().isEmpty());
     }
-    void nativeReturnNoticeShowsActualGrant() {
+    void
+    nativeReturnNoticeShowsActualGrant()
+    {
         auto custom = options;
         custom["returnShortcut"] = "F10";
         portal->expectedTrigger = "F10";

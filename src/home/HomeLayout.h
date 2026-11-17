@@ -12,7 +12,8 @@
 class PageModel;
 class StudioSession;
 
-class HomeLayout final : public QObject {
+class HomeLayout final : public QObject
+{
     Q_OBJECT
     Q_PROPERTY(QVariantList items READ items NOTIFY layoutChanged)
     Q_PROPERTY(QVariantList components READ components NOTIFY layoutChanged)
@@ -76,67 +77,120 @@ class HomeLayout final : public QObject {
     static constexpr double MinFocusContrast = 3.0;
 
   public:
-    QString homePageId() const {
+    QString
+    homePageId() const
+    {
         return m_homePageId;
     }
-    QString rootPageName() const;
-    bool rootPageVisible() const {
+    QString
+    rootPageName() const;
+    bool
+    rootPageVisible() const
+    {
         return m_rootPage.value("visible").toBool(true);
     }
-    QVariantList studioPages() const;
-    QVariantMap studioAppearance() const;
-    QVariantMap homeAppearance() const;
-    Q_INVOKABLE QVariantMap resolvedSurfacePalette(const QVariantMap& appearance) const;
-    Q_INVOKABLE QVariantMap surfaceAppearance(const QString& surface, const QString& originId = {}) const;
-    bool load(const QString& defaultPath = {}, const QString& userPath = {});
-    Q_INVOKABLE bool addAppTile(const QString& appId);
-    Q_INVOKABLE bool addActionTile(const QString& name,
-                                   const QString& actionType,
-                                   const QString& target,
-                                   const QString& categoryId = {},
-                                   const QString& openWith = {});
-    Q_INVOKABLE bool removeAppTile(const QString& appId);
-    Q_INVOKABLE bool moveItem(const QString& id, int offset);
-    Q_INVOKABLE bool removeItem(const QString& id);
-    Q_INVOKABLE bool addWidget(const QString& widgetType);
-    Q_INVOKABLE bool setItemSize(const QString& id, const QString& size);
-    Q_INVOKABLE bool setItemOpacity(const QString& id, double opacity);
-    Q_INVOKABLE bool setTileOption(const QString& id, const QString& option, bool enabled);
-    Q_INVOKABLE bool setTileAppearance(const QString& id, const QString& symbol, const QString& accent);
-    Q_INVOKABLE bool setTileLogo(const QString& id, const QString& sourceUrl);
-    Q_INVOKABLE bool clearTileLogo(const QString& id);
-    Q_INVOKABLE QString addCategory(const QString& name);
-    Q_INVOKABLE bool renameCategory(const QString& categoryId, const QString& name);
-    Q_INVOKABLE bool removeCategory(const QString& categoryId);
-    Q_INVOKABLE bool moveCategory(const QString& categoryId, int offset);
-    Q_INVOKABLE bool assignItemCategory(const QString& itemId, const QString& categoryId);
-    Q_INVOKABLE bool setBrandVisible(bool visible);
-    Q_INVOKABLE bool setBackground(const QString& start, const QString& end);
-    Q_INVOKABLE bool setTileRoundness(double roundness);
-    Q_INVOKABLE bool applyTheme(const QVariantMap& theme, bool includeSuggestedArtwork = false);
-    Q_INVOKABLE bool resetToDefaults();
-    [[nodiscard]] QVariantList skins() const;
-    Q_INVOKABLE QString saveSkin(const QString& name);
-    Q_INVOKABLE bool applySkin(const QString& id);
-    Q_INVOKABLE QVariantList skinPageUpdates(const QString& id) const;
-    Q_INVOKABLE bool applySkinPageUpdates(const QString& id);
-    Q_INVOKABLE bool renameSkin(const QString& id, const QString& name);
-    Q_INVOKABLE bool deleteSkin(const QString& id);
-    QVariantList pages() const {
+    QVariantList
+    studioPages() const;
+    QVariantMap
+    studioAppearance() const;
+    QVariantMap
+    homeAppearance() const;
+    Q_INVOKABLE QVariantMap
+    resolvedSurfacePalette(const QVariantMap& appearance) const;
+    Q_INVOKABLE QVariantMap
+    surfaceAppearance(const QString& surface, const QString& originId = {}) const;
+    bool
+    load(const QString& defaultPath = {}, const QString& userPath = {});
+    Q_INVOKABLE bool
+    addAppTile(const QString& appId);
+    Q_INVOKABLE bool
+    addActionTile(const QString& name,
+                  const QString& actionType,
+                  const QString& target,
+                  const QString& categoryId = {},
+                  const QString& openWith = {});
+    Q_INVOKABLE bool
+    removeAppTile(const QString& appId);
+    Q_INVOKABLE bool
+    moveItem(const QString& id, int offset);
+    Q_INVOKABLE bool
+    removeItem(const QString& id);
+    Q_INVOKABLE bool
+    addWidget(const QString& widgetType);
+    Q_INVOKABLE bool
+    setItemSize(const QString& id, const QString& size);
+    Q_INVOKABLE bool
+    setItemOpacity(const QString& id, double opacity);
+    Q_INVOKABLE bool
+    setTileOption(const QString& id, const QString& option, bool enabled);
+    Q_INVOKABLE bool
+    setTileAppearance(const QString& id, const QString& symbol, const QString& accent);
+    Q_INVOKABLE bool
+    setTileLogo(const QString& id, const QString& sourceUrl);
+    Q_INVOKABLE bool
+    clearTileLogo(const QString& id);
+    Q_INVOKABLE QString
+    addCategory(const QString& name);
+    Q_INVOKABLE bool
+    renameCategory(const QString& categoryId, const QString& name);
+    Q_INVOKABLE bool
+    removeCategory(const QString& categoryId);
+    Q_INVOKABLE bool
+    moveCategory(const QString& categoryId, int offset);
+    Q_INVOKABLE bool
+    assignItemCategory(const QString& itemId, const QString& categoryId);
+    Q_INVOKABLE bool
+    setBrandVisible(bool visible);
+    Q_INVOKABLE bool
+    setBackground(const QString& start, const QString& end);
+    Q_INVOKABLE bool
+    setTileRoundness(double roundness);
+    Q_INVOKABLE bool
+    applyTheme(const QVariantMap& theme, bool includeSuggestedArtwork = false);
+    Q_INVOKABLE bool
+    resetToDefaults();
+    [[nodiscard]] QVariantList
+    skins() const;
+    Q_INVOKABLE QString
+    saveSkin(const QString& name);
+    Q_INVOKABLE bool
+    applySkin(const QString& id);
+    Q_INVOKABLE QVariantList
+    skinPageUpdates(const QString& id) const;
+    Q_INVOKABLE bool
+    applySkinPageUpdates(const QString& id);
+    Q_INVOKABLE bool
+    renameSkin(const QString& id, const QString& name);
+    Q_INVOKABLE bool
+    deleteSkin(const QString& id);
+    QVariantList
+    pages() const
+    {
         return m_pages.toVariantList();
     }
-    bool isPage() const {
+    bool
+    isPage() const
+    {
         return m_owner != nullptr;
     }
-    Q_INVOKABLE QString createPage(const QString& name, const QString& preset = "blank");
-    Q_INVOKABLE bool renamePage(const QString& id, const QString& name);
-    Q_INVOKABLE bool removePage(const QString& id);
-    Q_INVOKABLE QObject* pageModel(const QString& id);
-    Q_INVOKABLE bool linkPage(const QString& id, bool asTab);
-    Q_INVOKABLE QString addLibraryWidget(const QString& name, const QString& kind = "movies");
-    Q_INVOKABLE bool setItemAction(const QString& id, const QVariantList& actions);
-    Q_INVOKABLE bool setItemName(const QString& id, const QString& name);
-    Q_INVOKABLE bool addButton();
+    Q_INVOKABLE QString
+    createPage(const QString& name, const QString& preset = "blank");
+    Q_INVOKABLE bool
+    renamePage(const QString& id, const QString& name);
+    Q_INVOKABLE bool
+    removePage(const QString& id);
+    Q_INVOKABLE QObject*
+    pageModel(const QString& id);
+    Q_INVOKABLE bool
+    linkPage(const QString& id, bool asTab);
+    Q_INVOKABLE QString
+    addLibraryWidget(const QString& name, const QString& kind = "movies");
+    Q_INVOKABLE bool
+    setItemAction(const QString& id, const QVariantList& actions);
+    Q_INVOKABLE bool
+    setItemName(const QString& id, const QString& name);
+    Q_INVOKABLE bool
+    addButton();
 
     Q_PROPERTY(QString wallpaperSource READ wallpaperSource NOTIFY layoutChanged)
     Q_PROPERTY(QVariantList skins READ skins NOTIFY skinsChanged)
@@ -146,48 +200,86 @@ class HomeLayout final : public QObject {
 
   public:
     explicit HomeLayout(AppRegistry* registry, QObject* parent = nullptr);
-    [[nodiscard]] QVariantList items() const;
-    [[nodiscard]] QVariantList components() const;
-    void setCollections(const QVariantList& collections);
-    void setCaptureInputsReady(bool ready);
+    [[nodiscard]] QVariantList
+    items() const;
+    [[nodiscard]] QVariantList
+    components() const;
+    void
+    setCollections(const QVariantList& collections);
+    void
+    setCaptureInputsReady(bool ready);
     Q_INVOKABLE QVariantMap
     responsivePresentation(const QVariantMap& value, double width, double height, double unit = 1) const;
-    Q_INVOKABLE QVariantList sourceChoices(const QString& itemId) const;
-    Q_INVOKABLE bool rebindSource(const QString& itemId, const QString& sourceId);
-    [[nodiscard]] AppRegistry* registry() const {
+    Q_INVOKABLE QVariantList
+    sourceChoices(const QString& itemId) const;
+    Q_INVOKABLE bool
+    rebindSource(const QString& itemId, const QString& sourceId);
+    [[nodiscard]] AppRegistry*
+    registry() const
+    {
         return m_registry;
     }
-    [[nodiscard]] QVariantList categories() const;
-    [[nodiscard]] QVariantList sections() const;
-    [[nodiscard]] bool brandVisible() const;
-    [[nodiscard]] QString backgroundStart() const;
-    [[nodiscard]] QString backgroundEnd() const;
-    [[nodiscard]] double tileRoundness() const;
-    [[nodiscard]] QVariantMap appearance() const;
-    Q_INVOKABLE bool setAppearance(const QVariantMap& changes);
-    [[nodiscard]] QVariantMap composition() const {
+    [[nodiscard]] QVariantList
+    categories() const;
+    [[nodiscard]] QVariantList
+    sections() const;
+    [[nodiscard]] bool
+    brandVisible() const;
+    [[nodiscard]] QString
+    backgroundStart() const;
+    [[nodiscard]] QString
+    backgroundEnd() const;
+    [[nodiscard]] double
+    tileRoundness() const;
+    [[nodiscard]] QVariantMap
+    appearance() const;
+    Q_INVOKABLE bool
+    setAppearance(const QVariantMap& changes);
+    [[nodiscard]] QVariantMap
+    composition() const
+    {
         return m_composition;
     }
-    [[nodiscard]] QVariantList placements() const;
-    Q_INVOKABLE QVariantMap grid() const;
-    [[nodiscard]] QVariantMap studioOptions() const;
-    Q_INVOKABLE bool setGrid(const QVariantMap& value);
-    Q_INVOKABLE bool setItemPlacement(const QString& id, const QVariantMap& placement);
-    Q_INVOKABLE bool clearItemPlacement(const QString& id);
-    Q_INVOKABLE bool duplicateItem(const QString& id);
-    Q_INVOKABLE bool setItemPresentation(const QString& id, const QVariantMap& value);
-    Q_INVOKABLE bool setSectionPresentation(const QString& id, const QVariantMap& value);
-    Q_INVOKABLE QVariantList gridCollisions(const QString& itemId, const QVariantMap& placement) const;
-    [[nodiscard]] QString wallpaperSource() const;
-    Q_INVOKABLE QString resolveArtwork(const QString& relative) const;
-    Q_INVOKABLE QVariantList captureArtworkChoices() const;
-    Q_INVOKABLE QString captureArtworkSource(int input) const;
-    bool setCaptureInputArtwork(const QVariantMap& artwork);
-    Q_INVOKABLE QVariantMap artworkAnimation(const QString& relative, const QString& owner);
-    Q_INVOKABLE void releaseArtworkAnimation(const QString& owner);
-    Q_INVOKABLE bool setWallpaper(const QString& sourceUrl);
-    Q_INVOKABLE bool setComposition(const QVariantMap& value);
-    Q_INVOKABLE bool setGalleryFavorite(const QString& appId, bool favorite);
+    [[nodiscard]] QVariantList
+    placements() const;
+    Q_INVOKABLE QVariantMap
+    grid() const;
+    [[nodiscard]] QVariantMap
+    studioOptions() const;
+    Q_INVOKABLE bool
+    setGrid(const QVariantMap& value);
+    Q_INVOKABLE bool
+    setItemPlacement(const QString& id, const QVariantMap& placement);
+    Q_INVOKABLE bool
+    clearItemPlacement(const QString& id);
+    Q_INVOKABLE bool
+    duplicateItem(const QString& id);
+    Q_INVOKABLE bool
+    setItemPresentation(const QString& id, const QVariantMap& value);
+    Q_INVOKABLE bool
+    setSectionPresentation(const QString& id, const QVariantMap& value);
+    Q_INVOKABLE QVariantList
+    gridCollisions(const QString& itemId, const QVariantMap& placement) const;
+    [[nodiscard]] QString
+    wallpaperSource() const;
+    Q_INVOKABLE QString
+    resolveArtwork(const QString& relative) const;
+    Q_INVOKABLE QVariantList
+    captureArtworkChoices() const;
+    Q_INVOKABLE QString
+    captureArtworkSource(int input) const;
+    bool
+    setCaptureInputArtwork(const QVariantMap& artwork);
+    Q_INVOKABLE QVariantMap
+    artworkAnimation(const QString& relative, const QString& owner);
+    Q_INVOKABLE void
+    releaseArtworkAnimation(const QString& owner);
+    Q_INVOKABLE bool
+    setWallpaper(const QString& sourceUrl);
+    Q_INVOKABLE bool
+    setComposition(const QVariantMap& value);
+    Q_INVOKABLE bool
+    setGalleryFavorite(const QString& appId, bool favorite);
 
     // T16 Studio bridge: committed bytes + atomic draft apply + focus recap.
     // committedDocument() exposes the current bytes for session.open();
@@ -195,71 +287,123 @@ class HomeLayout final : public QObject {
     // persists through the existing atomic save() (temp → fsync → rename →
     // rollback), restoring the previous model on failure. focusOrigin()
     // restores the exact canvas origin after apply/recovery dialogs.
-    Q_INVOKABLE QByteArray committedDocument() const;
+    Q_INVOKABLE QByteArray
+    committedDocument() const;
     static bool
     validateStudioDocument(const QByteArray& data, QString* error = nullptr, const QVariantMap& defaults = {});
-    Q_INVOKABLE QObject* beginStudio();
-    Q_INVOKABLE bool pageAllowed(const QString& id) const;
-    Q_INVOKABLE bool applyStudioDraft(const QByteArray& draft, const QString& focusComponentId = {});
-    Q_INVOKABLE QString focusOrigin() const {
+    Q_INVOKABLE QObject*
+    beginStudio();
+    Q_INVOKABLE bool
+    pageAllowed(const QString& id) const;
+    Q_INVOKABLE bool
+    applyStudioDraft(const QByteArray& draft, const QString& focusComponentId = {});
+    Q_INVOKABLE QString
+    focusOrigin() const
+    {
         return m_focusOrigin;
     }
-    Q_INVOKABLE void setFocusOrigin(const QString& id) {
+    Q_INVOKABLE void
+    setFocusOrigin(const QString& id)
+    {
         m_focusOrigin = id;
     }
 
-    [[nodiscard]] QString errorString() const;
-    void setError(const QString& message);
+    [[nodiscard]] QString
+    errorString() const;
+    void
+    setError(const QString& message);
 
   signals:
-    void layoutChanged();
-    void skinsChanged();
-    void errorStringChanged();
+    void
+    layoutChanged();
+    void
+    skinsChanged();
+    void
+    errorStringChanged();
 
   private:
     friend class PageModel;
     friend class StudioSession;
-    bool loadDocument(const QByteArray& data, bool userDocument);
-    bool save();
-    QByteArray documentData() const;
-    QString skinDirectory() const;
-    QJsonObject skinSnapshot(const QString& id) const;
-    QVariantMap componentPresentation(const QVariantMap& authored) const;
-    bool applySkinDocument(QJsonObject document, const QJsonObject& assets, bool addMissingPages = false);
-    bool storePage(const QString& id, const QJsonObject& document);
-    void syncPages();
-    QString pageKey(const QString& id) const;
-    bool isPageId(const QString& id) const;
-    QSet<QString> computeHiddenIds() const;
-    bool appendItem(const QJsonValue& value, QVariantList& result, const QSet<QString>& hidden);
-    void setItemKindFields(QVariantMap& item, const QJsonObject& object);
-    void setItemAppFields(QVariantMap& item);
-    void setItemActionFields(QVariantMap& item);
-    void setItemLogo(QVariantMap& item, const QJsonObject& object, const QVariantList& actionList);
-    void setItemUnavailableReason(QVariantMap& item, const QJsonObject& object,
-                                  const QVariantList& actionList);
-    void unavailableReasonFromSchema(QVariantMap& item, const QVariantList& actionList);
-    void unavailableReasonFromSwitchInput(QVariantMap& item, const QVariantList& actionList);
-    void unavailableReasonFromCapability(QVariantMap& item, const QJsonObject& object);
-    QString unavailableReasonValue(const QVariantMap& item);
-    bool validateNumericKeyDefaults(const QString& key, const QVariantMap& defaults);
-    bool validateNumericValueType(const QVariant& value);
-    double numericRangeLow(const QString& key);
-    double numericRangeHigh(const QString& key);
-    bool isValidNumber(double number, bool ok, double low, double high, const QString& key);
-    bool validateSurfaceColors(QVariantMap values);
-    bool validateFocusColor(QVariantMap values);
-    void appendSourceChoicesForType(QVariantList& choices, const QString& type) const;
-    void appendHdmiInputChoices(QVariantList& choices) const;
-    void appendCollectionChoices(QVariantList& choices) const;
-    void appendAppChoices(QVariantList& choices, const QString& type) const;
-    bool sourceIsCompatible(const QString& itemId, const QString& sourceId) const;
-    bool rebindItemAt(qsizetype i, const QJsonObject& item, const QString& sourceId);
-    QJsonObject previousItem(qsizetype i) const;
-    void setAppId(QJsonObject& first, const QJsonObject& item, const QString& sourceId);
-    QVariantList resolveCategoryItems(const QVariantList& resolved, const QJsonObject& category) const;
-    QVariantList resolveUncategorized(const QVariantList& resolved) const;
-    void appendRootPage(QVariantList& result) const;
+    bool
+    loadDocument(const QByteArray& data, bool userDocument);
+    bool
+    save();
+    QByteArray
+    documentData() const;
+    QString
+    skinDirectory() const;
+    QJsonObject
+    skinSnapshot(const QString& id) const;
+    QVariantMap
+    componentPresentation(const QVariantMap& authored) const;
+    bool
+    applySkinDocument(QJsonObject document, const QJsonObject& assets, bool addMissingPages = false);
+    bool
+    storePage(const QString& id, const QJsonObject& document);
+    void
+    syncPages();
+    QString
+    pageKey(const QString& id) const;
+    bool
+    isPageId(const QString& id) const;
+    QSet<QString>
+    computeHiddenIds() const;
+    bool
+    appendItem(const QJsonValue& value, QVariantList& result, const QSet<QString>& hidden);
+    void
+    setItemKindFields(QVariantMap& item, const QJsonObject& object);
+    void
+    setItemAppFields(QVariantMap& item);
+    void
+    setItemActionFields(QVariantMap& item);
+    void
+    setItemLogo(QVariantMap& item, const QJsonObject& object, const QVariantList& actionList);
+    void
+    setItemUnavailableReason(QVariantMap& item, const QJsonObject& object, const QVariantList& actionList);
+    void
+    unavailableReasonFromSchema(QVariantMap& item, const QVariantList& actionList);
+    void
+    unavailableReasonFromSwitchInput(QVariantMap& item, const QVariantList& actionList);
+    void
+    unavailableReasonFromCapability(QVariantMap& item, const QJsonObject& object);
+    QString
+    unavailableReasonValue(const QVariantMap& item);
+    bool
+    validateNumericKeyDefaults(const QString& key, const QVariantMap& defaults);
+    bool
+    validateNumericValueType(const QVariant& value);
+    double
+    numericRangeLow(const QString& key);
+    double
+    numericRangeHigh(const QString& key);
+    bool
+    isValidNumber(double number, bool ok, double low, double high, const QString& key);
+    bool
+    validateSurfaceColors(QVariantMap values);
+    bool
+    validateFocusColor(QVariantMap values);
+    void
+    appendSourceChoicesForType(QVariantList& choices, const QString& type) const;
+    void
+    appendHdmiInputChoices(QVariantList& choices) const;
+    void
+    appendCollectionChoices(QVariantList& choices) const;
+    void
+    appendAppChoices(QVariantList& choices, const QString& type) const;
+    bool
+    sourceIsCompatible(const QString& itemId, const QString& sourceId) const;
+    bool
+    rebindItemAt(qsizetype i, const QJsonObject& item, const QString& sourceId);
+    QJsonObject
+    previousItem(qsizetype i) const;
+    void
+    setAppId(QJsonObject& first, const QJsonObject& item, const QString& sourceId);
+    QVariantList
+    resolveCategoryItems(const QVariantList& resolved, const QJsonObject& category) const;
+    QVariantList
+    resolveUncategorized(const QVariantList& resolved) const;
+    void
+    appendRootPage(QVariantList& result) const;
     QJsonArray m_pages;
     QString m_homePageId;
     QJsonObject m_rootPage;
@@ -297,6 +441,7 @@ class HomeLayout final : public QObject {
     QHash<QString, QString> m_assetPaths;
     QSet<QString> m_animationOwners;
     mutable QCache<QString, QString> m_gifStills{8 * 1024 * 1024};
-    QString managedArtworkSource(const QString& relative) const;
+    QString
+    managedArtworkSource(const QString& relative) const;
     StudioSession* m_studio = nullptr;
 };

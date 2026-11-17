@@ -11,7 +11,8 @@ class QNetworkAccessManager;
 class QNetworkReply;
 class SearchSettings;
 
-class OnlineDiscovery final : public QObject {
+class OnlineDiscovery final : public QObject
+{
     Q_OBJECT
     Q_PROPERTY(bool enabled READ enabled NOTIFY changed)
     Q_PROPERTY(bool configured READ configured NOTIFY changed)
@@ -29,45 +30,73 @@ class OnlineDiscovery final : public QObject {
                              const QString& readToken = {});
     ~OnlineDiscovery() override;
 
-    bool enabled() const;
-    bool configured() const {
+    bool
+    enabled() const;
+    bool
+    configured() const
+    {
         return !m_readToken.isEmpty();
     }
-    bool busy() const {
+    bool
+    busy() const
+    {
         return m_busy;
     }
-    QString status() const {
+    QString
+    status() const
+    {
         return m_status;
     }
-    QString region() const {
+    QString
+    region() const
+    {
         return m_region;
     }
-    QVariantList results() const {
+    QVariantList
+    results() const
+    {
         return m_results;
     }
-    QVariantList availability() const;
-    QString selectedTitle() const {
+    QVariantList
+    availability() const;
+    QString
+    selectedTitle() const
+    {
         return m_selectedTitle;
     }
 
-    Q_INVOKABLE void setRegion(const QString& region);
-    Q_INVOKABLE void search(const QString& query);
-    Q_INVOKABLE void loadAvailability(const QString& mediaType, int id, const QString& title);
-    Q_INVOKABLE QUrl providerLaunchUrl(int providerId) const;
-    Q_INVOKABLE bool launchProvider(int providerId);
-    Q_INVOKABLE void cancel();
-    Q_INVOKABLE void clearResults();
+    Q_INVOKABLE void
+    setRegion(const QString& region);
+    Q_INVOKABLE void
+    search(const QString& query);
+    Q_INVOKABLE void
+    loadAvailability(const QString& mediaType, int id, const QString& title);
+    Q_INVOKABLE QUrl
+    providerLaunchUrl(int providerId) const;
+    Q_INVOKABLE bool
+    launchProvider(int providerId);
+    Q_INVOKABLE void
+    cancel();
+    Q_INVOKABLE void
+    clearResults();
 
   signals:
-    void changed();
+    void
+    changed();
 
   private:
-    QUrl endpoint(const QString& path, const QMap<QString, QString>& query = {}) const;
-    QNetworkReply* get(const QUrl& url);
-    void settingsChanged();
-    void setError(const QString& message);
-    void parseSearchReply(QNetworkReply* reply, quint64 generation);
-    void parseAvailabilityReply(QNetworkReply* reply, quint64 generation, QString region);
+    QUrl
+    endpoint(const QString& path, const QMap<QString, QString>& query = {}) const;
+    QNetworkReply*
+    get(const QUrl& url);
+    void
+    settingsChanged();
+    void
+    setError(const QString& message);
+    void
+    parseSearchReply(QNetworkReply* reply, quint64 generation);
+    void
+    parseAvailabilityReply(QNetworkReply* reply, quint64 generation, QString region);
 
     SearchSettings* m_settings = nullptr;
     QNetworkAccessManager* m_network = nullptr;

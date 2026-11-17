@@ -8,7 +8,8 @@
 #include <QVariantMap>
 #include <QVector>
 
-class SubtitleService final : public QObject {
+class SubtitleService final : public QObject
+{
     Q_OBJECT
     Q_PROPERTY(QVariantList jobs READ jobs NOTIFY changed)
     Q_PROPERTY(QVariantList languagePacks READ languagePacks NOTIFY changed)
@@ -23,44 +24,65 @@ class SubtitleService final : public QObject {
                              const QString& localPythonExecutable = {});
     ~SubtitleService() override;
 
-    QVariantList jobs() const;
-    QVariantList languagePacks() const {
+    QVariantList
+    jobs() const;
+    QVariantList
+    languagePacks() const
+    {
         return m_languagePacks;
     }
-    bool languagePackBusy() const {
+    bool
+    languagePackBusy() const
+    {
         return m_languageProcess.state() != QProcess::NotRunning;
     }
-    QString languagePackStatus() const {
+    QString
+    languagePackStatus() const
+    {
         return m_languagePackStatus;
     }
-    QString status() const {
+    QString
+    status() const
+    {
         return m_status;
     }
-    QString errorString() const {
+    QString
+    errorString() const
+    {
         return m_error;
     }
 
     Q_INVOKABLE QString
     queueTranslation(const QString& sourceSrt, const QString& sourceLanguage, const QString& targetLanguage);
-    Q_INVOKABLE QString queueGeneration(const QString& mediaFile, const QString& localWhisperModel);
-    Q_INVOKABLE void cancel(const QString& jobId);
-    Q_INVOKABLE bool forgetJob(const QString& jobId);
-    Q_INVOKABLE QString reviewText(const QString& jobId);
-    Q_INVOKABLE bool saveReview(const QString& jobId, const QString& srtText);
-    Q_INVOKABLE void refreshLanguagePacks();
-    Q_INVOKABLE bool installLanguagePack(const QString& localPackagePath);
+    Q_INVOKABLE QString
+    queueGeneration(const QString& mediaFile, const QString& localWhisperModel);
+    Q_INVOKABLE void
+    cancel(const QString& jobId);
+    Q_INVOKABLE bool
+    forgetJob(const QString& jobId);
+    Q_INVOKABLE QString
+    reviewText(const QString& jobId);
+    Q_INVOKABLE bool
+    saveReview(const QString& jobId, const QString& srtText);
+    Q_INVOKABLE void
+    refreshLanguagePacks();
+    Q_INVOKABLE bool
+    installLanguagePack(const QString& localPackagePath);
     Q_INVOKABLE QString
     importOnlineSubtitle(const QString& title, const QString& language, const QString& srtText, int repositoryFileId);
 
   signals:
-    void changed();
+    void
+    changed();
 
   private:
-    struct Cue {
+    struct Cue
+    {
         QString header;
         QString text;
     };
-    struct Job {
+    struct Job
+    {
         QString id, mode, source, sourceLanguage, targetLanguage, output, error, provenance, modelPath;
         QString sourceHash, stagingDirectory;
         QVariantMap qualityReport;
@@ -72,21 +94,36 @@ class SubtitleService final : public QObject {
         QString state = QStringLiteral("Queued");
     };
 
-    static bool parseSrt(const QString& text, QVector<Cue>* cues, QString* error);
-    static QString serializeSrt(const QVector<Cue>& cues, const QStringList* translated = nullptr);
-    static bool validLanguage(const QString& language);
-    int jobIndex(const QString& id) const;
-    QString outputPath(const QString& sourcePath, const QString& targetLanguage, bool forceManagedCache = false) const;
-    bool writeOutput(Job& job, const QString& srtText, QString* error) const;
-    QVariantMap evaluateQuality(const Job& job, const QVector<Cue>& outputCues) const;
-    void startNext();
-    void startTranslationCue();
-    void startGeneration();
-    void processFinished(int exitCode, QProcess::ExitStatus exitStatus);
-    void failCurrent(const QString& message);
-    void finishCurrent(const QString& srtText);
-    void cleanStaging(const Job& job) const;
-    void finishLanguagePackProcess(int exitCode, QProcess::ExitStatus exitStatus);
+    static bool
+    parseSrt(const QString& text, QVector<Cue>* cues, QString* error);
+    static QString
+    serializeSrt(const QVector<Cue>& cues, const QStringList* translated = nullptr);
+    static bool
+    validLanguage(const QString& language);
+    int
+    jobIndex(const QString& id) const;
+    QString
+    outputPath(const QString& sourcePath, const QString& targetLanguage, bool forceManagedCache = false) const;
+    bool
+    writeOutput(Job& job, const QString& srtText, QString* error) const;
+    QVariantMap
+    evaluateQuality(const Job& job, const QVector<Cue>& outputCues) const;
+    void
+    startNext();
+    void
+    startTranslationCue();
+    void
+    startGeneration();
+    void
+    processFinished(int exitCode, QProcess::ExitStatus exitStatus);
+    void
+    failCurrent(const QString& message);
+    void
+    finishCurrent(const QString& srtText);
+    void
+    cleanStaging(const Job& job) const;
+    void
+    finishLanguagePackProcess(int exitCode, QProcess::ExitStatus exitStatus);
 
     QString m_cacheRoot, m_pythonExecutable;
     QString m_status = QStringLiteral("Offline subtitle tools are idle."), m_error;

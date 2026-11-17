@@ -3,40 +3,71 @@
 #include "../src/home/ThemeColors.h"
 #include "tst_component_common.h"
 
-class StudioSessionTests : public QObject {
+class StudioSessionTests : public QObject
+{
     Q_OBJECT
   private slots:
-    void studioSessionDraftUndoBoundsAndNoWrite();
-    void studioSessionCanonicalIdsAndRevisionConflict();
-    void studioApplyAtomicFailureAndFocusPreserved();
-    void studioCommandsAreAtomicAndProfileScoped();
-    void studioCollisionProposalsAndParity();
-    void studioSectionGridsAreIndependentAndAtomic();
-    void studioHomeDesignationIsAtomicAndProtected();
-    void studioArtworkUsesActiveProfileAndExpires();
-    void studioPageLifecycleRepairsLinksAndPreservesRoot();
-    void studioChromeRemainsReadableAndProfileLocal();
-    void studioHiddenAndLockedStatesAreRecoverable();
-    void studioScrollingPagesAreBoundedAndAtomic();
-    void studioShiftCascadesAreBoundedAndAtomic();
-    void studioSectionTransfersDuplicationAndOrdering();
-    void studioNestedGroupsValidateAndReparentAtomically();
-    void studioFiveColorThemeLinksOverridesAndInvalidRollback();
-    void studioCatalogLinksInspectorAndStagedArtwork();
-    void studioOrderedInsertionPreservesSlotsAndIsAtomic();
-    void studioOverlayMovementKeepsNeighborsAndBounds();
-    void studioHeaderValidationAndDraftRollback();
-    void studioPageDefaultsAreDraftOnlyAndScoped();
-    void studioShapesLabelsAndReplacementAreAtomic();
-    void studioButtonCollectionsAreBoundedAndAtomic();
-    void studioCollectionInstallDoesNotAuthorPlacements();
-    void studioIconCleanupRetainsOriginalAndCancelsPrivately();
-    void studioGifArtworkIsBoundedStagedAndProfileScoped();
-    void studioPastelPresetUsesEditableButtons();
-    void studioStartingStylesAreValidatedDraftData();
+    void
+    studioSessionDraftUndoBoundsAndNoWrite();
+    void
+    studioSessionCanonicalIdsAndRevisionConflict();
+    void
+    studioApplyAtomicFailureAndFocusPreserved();
+    void
+    studioCommandsAreAtomicAndProfileScoped();
+    void
+    studioCollisionProposalsAndParity();
+    void
+    studioSectionGridsAreIndependentAndAtomic();
+    void
+    studioHomeDesignationIsAtomicAndProtected();
+    void
+    studioArtworkUsesActiveProfileAndExpires();
+    void
+    studioPageLifecycleRepairsLinksAndPreservesRoot();
+    void
+    studioChromeRemainsReadableAndProfileLocal();
+    void
+    studioHiddenAndLockedStatesAreRecoverable();
+    void
+    studioScrollingPagesAreBoundedAndAtomic();
+    void
+    studioShiftCascadesAreBoundedAndAtomic();
+    void
+    studioSectionTransfersDuplicationAndOrdering();
+    void
+    studioNestedGroupsValidateAndReparentAtomically();
+    void
+    studioFiveColorThemeLinksOverridesAndInvalidRollback();
+    void
+    studioCatalogLinksInspectorAndStagedArtwork();
+    void
+    studioOrderedInsertionPreservesSlotsAndIsAtomic();
+    void
+    studioOverlayMovementKeepsNeighborsAndBounds();
+    void
+    studioHeaderValidationAndDraftRollback();
+    void
+    studioPageDefaultsAreDraftOnlyAndScoped();
+    void
+    studioShapesLabelsAndReplacementAreAtomic();
+    void
+    studioButtonCollectionsAreBoundedAndAtomic();
+    void
+    studioCollectionInstallDoesNotAuthorPlacements();
+    void
+    studioIconCleanupRetainsOriginalAndCancelsPrivately();
+    void
+    studioGifArtworkIsBoundedStagedAndProfileScoped();
+    void
+    studioPastelPresetUsesEditableButtons();
+    void
+    studioStartingStylesAreValidatedDraftData();
 };
 
-int main(int argc, char* argv[]) {
+int
+main(int argc, char* argv[])
+{
     QCoreApplication app(argc, argv);
     StudioSessionTests test;
     return QTest::qExec(&test, argc, argv);
@@ -44,7 +75,9 @@ int main(int argc, char* argv[]) {
 
 #include "tst_studio_session.moc"
 
-void StudioSessionTests::studioSessionDraftUndoBoundsAndNoWrite() {
+void
+StudioSessionTests::studioSessionDraftUndoBoundsAndNoWrite()
+{
     QTemporaryDir dir;
     const auto user = dir.filePath("profile.json");
     writeFile(user, legacy);
@@ -116,7 +149,8 @@ void StudioSessionTests::studioSessionDraftUndoBoundsAndNoWrite() {
     QCOMPARE(readFile(user), committed);
 
     session.revert();
-    for (int i = 0; i < StudioSession::kMaxUndoSteps; ++i) {
+    for (int i = 0; i < StudioSession::kMaxUndoSteps; ++i)
+    {
         QJsonDocument step = QJsonDocument::fromJson(session.draft());
         auto stepObject = step.object();
         auto stepTheme = stepObject.value("theme").toObject();
@@ -139,7 +173,9 @@ void StudioSessionTests::studioSessionDraftUndoBoundsAndNoWrite() {
     QCOMPARE(readFile(user), committed);
 }
 
-void StudioSessionTests::studioSessionCanonicalIdsAndRevisionConflict() {
+void
+StudioSessionTests::studioSessionCanonicalIdsAndRevisionConflict()
+{
     QTemporaryDir dir;
     const auto user = dir.filePath("profile.json");
     writeFile(user, legacy);
@@ -198,7 +234,9 @@ void StudioSessionTests::studioSessionCanonicalIdsAndRevisionConflict() {
     QCOMPARE(readFile(user2), committed2);
 }
 
-void StudioSessionTests::studioApplyAtomicFailureAndFocusPreserved() {
+void
+StudioSessionTests::studioApplyAtomicFailureAndFocusPreserved()
+{
     QTemporaryDir dir;
     const auto user = dir.filePath("profile.json");
     writeFile(user, legacy);
@@ -256,7 +294,9 @@ void StudioSessionTests::studioApplyAtomicFailureAndFocusPreserved() {
     QVERIFY(!session.isDirty());
 }
 
-void StudioSessionTests::studioCommandsAreAtomicAndProfileScoped() {
+void
+StudioSessionTests::studioCommandsAreAtomicAndProfileScoped()
+{
     QTemporaryDir dir;
     AppRegistry registry;
     QVERIFY(registry.loadFromData(apps));
@@ -306,12 +346,16 @@ void StudioSessionTests::studioCommandsAreAtomicAndProfileScoped() {
     const auto second = dir.filePath("two.json");
     writeFile(second, legacy);
     bool teardownAttempted = false, teardownAccepted = true;
-    connect(session, &StudioSession::changed, session, [&] {
-        if (teardownAttempted)
-            return;
-        teardownAttempted = true;
-        teardownAccepted = session->execute("remove", {{"id", "clock"}});
-    });
+    connect(session,
+            &StudioSession::changed,
+            session,
+            [&]
+            {
+                if (teardownAttempted)
+                    return;
+                teardownAttempted = true;
+                teardownAccepted = session->execute("remove", {{"id", "clock"}});
+            });
     QVERIFY(home.load(defaults, second));
     QVERIFY(teardownAttempted);
     QVERIFY(!teardownAccepted);
@@ -321,7 +365,9 @@ void StudioSessionTests::studioCommandsAreAtomicAndProfileScoped() {
     QCOMPARE(readFile(second), legacy);
 }
 
-void StudioSessionTests::studioCollisionProposalsAndParity() {
+void
+StudioSessionTests::studioCollisionProposalsAndParity()
+{
     QTemporaryDir dir;
     AppRegistry registry;
     HomeLayout home(&registry);
@@ -377,7 +423,9 @@ void StudioSessionTests::studioCollisionProposalsAndParity() {
     QCOMPARE(session->draft(), start);
 }
 
-void StudioSessionTests::studioSectionGridsAreIndependentAndAtomic() {
+void
+StudioSessionTests::studioSectionGridsAreIndependentAndAtomic()
+{
     QTemporaryDir dir;
     AppRegistry registry;
     HomeLayout home(&registry);
@@ -422,7 +470,9 @@ void StudioSessionTests::studioSectionGridsAreIndependentAndAtomic() {
     QVERIFY(!ComponentSchema::validPresentation({{"grid", QVariantMap{{"mode", "sections"}}}}, true));
 }
 
-void StudioSessionTests::studioHomeDesignationIsAtomicAndProtected() {
+void
+StudioSessionTests::studioHomeDesignationIsAtomicAndProtected()
+{
     QTemporaryDir dir;
     AppRegistry registry;
     HomeLayout home(&registry);
@@ -464,7 +514,9 @@ void StudioSessionTests::studioHomeDesignationIsAtomicAndProtected() {
     QCOMPARE(QJsonDocument::fromJson(session->draft()).object()["pages"].toArray().size(), 1);
 }
 
-void StudioSessionTests::studioArtworkUsesActiveProfileAndExpires() {
+void
+StudioSessionTests::studioArtworkUsesActiveProfileAndExpires()
+{
     QTemporaryDir dir;
     AppRegistry registry;
     auto document = QJsonDocument::fromJson(legacy).object();
@@ -484,7 +536,9 @@ void StudioSessionTests::studioArtworkUsesActiveProfileAndExpires() {
     QVERIFY(model->components().isEmpty());
 }
 
-void StudioSessionTests::studioPageLifecycleRepairsLinksAndPreservesRoot() {
+void
+StudioSessionTests::studioPageLifecycleRepairsLinksAndPreservesRoot()
+{
     QTemporaryDir dir;
     AppRegistry registry;
     HomeLayout home(&registry);
@@ -573,7 +627,9 @@ void StudioSessionTests::studioPageLifecycleRepairsLinksAndPreservesRoot() {
     QVERIFY(!qobject_cast<PageModel*>(visibleRoot.pageModel(another))->items().isEmpty());
 }
 
-void StudioSessionTests::studioChromeRemainsReadableAndProfileLocal() {
+void
+StudioSessionTests::studioChromeRemainsReadableAndProfileLocal()
+{
     QTemporaryDir dir;
     AppRegistry registry;
     HomeLayout home(&registry);
@@ -595,7 +651,8 @@ void StudioSessionTests::studioChromeRemainsReadableAndProfileLocal() {
     QCOMPARE(home.studioAppearance()["focusColor"].toString(), QString("#ffffff"));
     const auto colorBaseline = session->draft();
     const auto colorCount = session->changeCount();
-    const auto previewColor = [&](const QString& color) {
+    const auto previewColor = [&](const QString& color)
+    {
         return session->previewCommand("pagePatch",
                                        {{"scope", "theme"}, {"value", QVariantMap{{"backgroundStart", color}}}});
     };
@@ -613,7 +670,8 @@ void StudioSessionTests::studioChromeRemainsReadableAndProfileLocal() {
     QVERIFY(session->undo());
     QCOMPARE(session->draft(), colorBaseline);
     QVERIFY(session->redo());
-    for (int i = 0; i < 10; ++i) {
+    for (int i = 0; i < 10; ++i)
+    {
         const auto color = QString("#%1").arg(i, 6, 16, QChar('0'));
         QVERIFY(previewColor(color));
         QVERIFY(session->acceptColorPreview(color));
@@ -637,7 +695,8 @@ void StudioSessionTests::studioChromeRemainsReadableAndProfileLocal() {
                                                      "#000006",
                                                      "#000007",
                                                      "#000008",
-                                                     "#000009"}}) {
+                                                     "#000009"}})
+    {
         QVERIFY(!session->execute("studioAppearance", {{"value", QVariantMap{{"recentColors", bad}}}}));
         QCOMPARE(session->draft(), valid);
     }
@@ -662,7 +721,9 @@ void StudioSessionTests::studioChromeRemainsReadableAndProfileLocal() {
     QVERIFY(!home.committedDocument().contains("recentColors"));
 }
 
-void StudioSessionTests::studioHiddenAndLockedStatesAreRecoverable() {
+void
+StudioSessionTests::studioHiddenAndLockedStatesAreRecoverable()
+{
     QTemporaryDir dir;
     AppRegistry registry;
     HomeLayout home(&registry);
@@ -700,7 +761,9 @@ void StudioSessionTests::studioHiddenAndLockedStatesAreRecoverable() {
     QVERIFY(found);
 }
 
-void StudioSessionTests::studioScrollingPagesAreBoundedAndAtomic() {
+void
+StudioSessionTests::studioScrollingPagesAreBoundedAndAtomic()
+{
     QTemporaryDir dir;
     AppRegistry registry;
     HomeLayout home(&registry);
@@ -777,7 +840,9 @@ void StudioSessionTests::studioScrollingPagesAreBoundedAndAtomic() {
     QVERIFY(!ComponentSchema::validComposition(malformed));
 }
 
-void StudioSessionTests::studioShiftCascadesAreBoundedAndAtomic() {
+void
+StudioSessionTests::studioShiftCascadesAreBoundedAndAtomic()
+{
     QTemporaryDir dir;
     AppRegistry registry;
     HomeLayout home(&registry);
@@ -788,7 +853,8 @@ void StudioSessionTests::studioShiftCascadesAreBoundedAndAtomic() {
     document["composition"] = QJsonObject{{"schemaVersion", 1},
                                           {"enabled", true},
                                           {"grid", QJsonObject{{"columns", 4}, {"rows", 3}, {"mode", "screen"}}}};
-    const auto node = [](QString id, int x, int y, int width = 1) {
+    const auto node = [](QString id, int x, int y, int width = 1)
+    {
         return QJsonObject::fromVariantMap(ComponentSchema::component(
             QVariantMap{{"id", id},
                         {"kind", "widget"},
@@ -868,7 +934,9 @@ void StudioSessionTests::studioShiftCascadesAreBoundedAndAtomic() {
     QCOMPARE(session->draft(), bounded);
 }
 
-void StudioSessionTests::studioSectionTransfersDuplicationAndOrdering() {
+void
+StudioSessionTests::studioSectionTransfersDuplicationAndOrdering()
+{
     QTemporaryDir dir;
     AppRegistry registry;
     HomeLayout home(&registry);
@@ -912,7 +980,8 @@ void StudioSessionTests::studioSectionTransfersDuplicationAndOrdering() {
         QVERIFY(session->execute("orderRelative", {{"id", "movies"}, {"relativeId", "shows"}, {"before", false}}));
         const auto ordered = QJsonDocument::fromJson(session->draft()).object()["components"].toArray();
         int movies = -1, shows = -1;
-        for (int i = 0; i < ordered.size(); ++i) {
+        for (int i = 0; i < ordered.size(); ++i)
+        {
             const auto item = ordered[i].toObject();
             if (item["id"] == "movies")
                 movies = i;
@@ -1060,7 +1129,8 @@ void StudioSessionTests::studioNestedGroupsValidateAndReparentAtomically() {
             style["layout"] = local;
             group["presentation"] = style;
             QJsonArray deep;
-            for (int level = 0; level < 4; ++level) {
+            for (int level = 0; level < 4; ++level)
+            {
                 auto node = group;
                 node["id"] = QString("depth-%1").arg(level);
                 if (level)
@@ -1191,7 +1261,8 @@ void StudioSessionTests::studioCatalogLinksInspectorAndStagedArtwork() {
                                                 "tv-guide",
                                                 "carousel",
                                                 "app-bar",
-                                                "page-menu"}) {
+                                                "page-menu"})
+            {
                 const auto prototype = session->componentPrototype(type);
                 QVERIFY2(!prototype.isEmpty(), qPrintable(type + ": " + session->errorString()));
                 QCOMPARE(session->draft(), empty);
@@ -1306,13 +1377,15 @@ void StudioSessionTests::studioCatalogLinksInspectorAndStagedArtwork() {
                     QVERIFY(session->stageArtwork(pipe).isEmpty());
 #endif
                     QVERIFY(QDir().mkpath(dir.filePath("many")));
-                    for (int i = 0; i < 513; ++i) {
+                    for (int i = 0; i < 513; ++i)
+                    {
                         QFile f(dir.filePath("many/" + QString::number(i)));
                         QVERIFY(f.open(QIODevice::WriteOnly));
                     }
                     QVERIFY(session->browseArtwork(dir.filePath("many")).isEmpty());
                     QVERIFY(session->errorString().contains("512"));
-                    for (const auto& field : QStringList{"bodySize", "bodyPadding", "bodyLines", "bodyLineHeight"}) {
+                    for (const auto& field : QStringList{"bodySize", "bodyPadding", "bodyLines", "bodyLineHeight"})
+                    {
                         QVERIFY(!ComponentSchema::validPresentation({{field, "3"}}));
                         QVERIFY(!ComponentSchema::validPresentation({{field, -1}}));
                         QVERIFY(!ComponentSchema::validPresentation({{field, 1000}}));
@@ -1405,7 +1478,8 @@ void StudioSessionTests::studioCatalogLinksInspectorAndStagedArtwork() {
                                     {"enabled", true},
                                     {"grid", QJsonObject{{"columns", 4}, {"rows", 3}, {"mode", "screen"}}}};
                     QJsonArray nodes{group};
-                    for (int i = 0; i < 3; ++i) {
+                    for (int i = 0; i < 3; ++i)
+                    {
                         auto node = QJsonObject::fromVariantMap(
                             ComponentSchema::component({{"id", QString("ordered-%1").arg(i)},
                                                         {"kind", "widget"},
@@ -1444,7 +1518,8 @@ void StudioSessionTests::studioCatalogLinksInspectorAndStagedArtwork() {
                              QVariantMap{{"id", "ordered-0"}, {"relativeId", "outside"}, {"before", false}},
                              QVariantMap{{"id", "ordered-0"}, {"relativeId", "ordered-0"}, {"before", false}},
                              QVariantMap{{"id", "ordered-0"}, {"relativeId", "ordered-2"}, {"before", "false"}},
-                             QVariantMap{{"id", "outside"}, {"relativeId", "ordered-2"}, {"before", false}}}) {
+                             QVariantMap{{"id", "outside"}, {"relativeId", "ordered-2"}, {"before", false}}})
+                    {
                         QVERIFY(!session->execute("insertRelative", args.toMap()));
                         QVERIFY(!session->errorString().isEmpty());
                         QCOMPARE(session->draft(), before);
@@ -1459,7 +1534,8 @@ void StudioSessionTests::studioCatalogLinksInspectorAndStagedArtwork() {
                     const auto inserted = QJsonDocument::fromJson(session->draft()).object()["components"].toArray();
                     QCOMPARE(inserted[0], nodes[0]);
                     QCOMPARE(inserted[4], nodes[4]);
-                    for (int i = 0; i < 3; ++i) {
+                    for (int i = 0; i < 3; ++i)
+                    {
                         auto expected = nodes[i + 1].toObject(), p = expected["placement"].toObject();
                         p["x"] = i == 0 ? 4 : i == 1 ? 0 : 2;
                         expected["placement"] = p;
@@ -1500,7 +1576,8 @@ void StudioSessionTests::studioCatalogLinksInspectorAndStagedArtwork() {
                     const auto before = session->draft();
                     const auto count = session->changeCount();
                     const QVariantMap target{{"x", 1}, {"y", 0}, {"width", 1}, {"height", 1}};
-                    for (const auto& strategy : QStringList{"shift", "cancel"}) {
+                    for (const auto& strategy : QStringList{"shift", "cancel"})
+                    {
                         const auto proposal = session->placementProposal("clock", target, strategy);
                         QVERIFY2(proposal["valid"].toBool(), qPrintable(proposal["reason"].toString()));
                         QCOMPARE(proposal["placements"].toList().size(), 1);
@@ -1558,7 +1635,8 @@ void StudioSessionTests::studioCatalogLinksInspectorAndStagedArtwork() {
                                                  QVariantMap{{"position", "outside"}},
                                                  QVariantMap{{"backgroundColor", "transparent"}},
                                                  QVariantMap{{"script", "anything"}}};
-                    for (const auto& entry : malformed) {
+                    for (const auto& entry : malformed)
+                    {
                         auto invalid = composition;
                         invalid["header"] = entry;
                         QVERIFY(!ComponentSchema::validComposition(invalid));
@@ -1718,12 +1796,14 @@ void StudioSessionTests::studioCatalogLinksInspectorAndStagedArtwork() {
                                     {"grid", QJsonObject{{"columns", 8}, {"rows", 5}, {"mode", "screen"}}}};
                     QVERIFY(session->pushEdit(QJsonDocument(document).toJson()));
     QVERIFY(session->execute("addPlaced",{
-                    {"type", "button"}, {"placement", QVariantMap{{"x", 2}, {"y", 1}, {"width", 3}, {"height", 2}}}, {
+                    {"type", "button"}, {"placement", QVariantMap{{"x", 2}, {"y", 1}, {"width", 3}, {"height", 2}}},
+                    {
                         "configuration",
                             QVariantMap{{"name", "Library shortcut"},
                                         {"actions", QVariantList{QVariantMap{{"type", "settings"}, {"section", 1}}}}},
                         {
-                            "presentation", QVariantMap {{"visibleLabel","My library"}}
+                            "presentation", QVariantMap
+                            {{"visibleLabel","My library"}}
                         }
                     }}
                 }));
@@ -1830,7 +1910,8 @@ void StudioSessionTests::studioButtonCollectionsAreBoundedAndAtomic() {
 
 void StudioSessionTests::studioCollectionInstallDoesNotAuthorPlacements() {
             QCoreApplication::setApplicationVersion("0.0.1.2");
-            for (const auto& mode : QStringList{"all", "selected"}) {
+            for (const auto& mode : QStringList{"all", "selected"})
+            {
                 QTemporaryDir dir;
                 AppRegistry registry;
                 QVERIFY(registry.loadFromData(apps));
@@ -1926,9 +2007,11 @@ void StudioSessionTests::studioIconCleanupRetainsOriginalAndCancelsPrivately() {
 }
 
 void StudioSessionTests::studioGifArtworkIsBoundedStagedAndProfileScoped() {
-            const auto gif = [](int count, int delay = 10) {
+            const auto gif = [](int count, int delay = 10)
+            {
                 auto bytes = QByteArray::fromHex("47494638396101000100800000000000ffffff");
-                for (int i = 0; i < count; ++i) {
+                for (int i = 0; i < count; ++i)
+                {
                     bytes += QByteArray::fromHex("21f90400");
                     bytes += char(delay & 255);
                     bytes += char((delay >> 8) & 255);
@@ -2049,10 +2132,12 @@ void StudioSessionTests::studioPastelPresetUsesEditableButtons() {
             const auto layout = QJsonDocument::fromJson(packaged.readAll()).object()["layout"].toObject();
             QCOMPARE(layout, QJsonDocument::fromJson(fixture.readAll()).object());
             int buttons = 0, appCollections = 0, histories = 0;
-            for (const auto& value : layout["components"].toArray()) {
+            for (const auto& value : layout["components"].toArray())
+            {
                 const auto item = value.toObject();
                 QVERIFY(item["componentType"] != "launcher");
-                if (item["componentType"] == "button") {
+                if (item["componentType"] == "button")
+                {
                     ++buttons;
                     QCOMPARE(item["kind"].toString(), QString("widget"));
                     QCOMPARE(item["widgetType"].toString(), QString("button"));
@@ -2063,7 +2148,8 @@ void StudioSessionTests::studioPastelPresetUsesEditableButtons() {
                 }
                 if (item.contains("appCollection"))
                     ++appCollections;
-                if (item["family"] == "recently-viewed") {
+                if (item["family"] == "recently-viewed")
+                {
                     ++histories;
                     QCOMPARE(item["source"].toObject()["libraryKind"].toString(), QString("history"));
                 }
@@ -2074,7 +2160,8 @@ void StudioSessionTests::studioPastelPresetUsesEditableButtons() {
             const auto categories = layout["categories"].toArray();
             QJsonObject historyAction;
             for (const auto& value : categories)
-                if (value.toObject()["id"] == "recent") {
+                if (value.toObject()["id"] == "recent")
+                {
                     const auto style = value.toObject()["presentation"].toObject();
                     QCOMPARE(style["trailingLabel"].toString(), QString("See All"));
                     historyAction = style["trailingAction"].toObject();
@@ -2082,7 +2169,8 @@ void StudioSessionTests::studioPastelPresetUsesEditableButtons() {
             QCOMPARE(historyAction["type"].toString(), QString("open-page"));
             bool foundHistoryPage = false;
             for (const auto& value : layout["pages"].toArray())
-                if (value.toObject()["id"] == historyAction["pageId"]) {
+                if (value.toObject()["id"] == historyAction["pageId"])
+                {
                     const auto items = value.toObject()["layout"].toObject()["components"].toArray();
                     QCOMPARE(items.size(), 1);
                     const auto item = items.first().toObject();
@@ -2120,7 +2208,8 @@ void StudioSessionTests::studioStartingStylesAreValidatedDraftData() {
             const auto variants = home.studioOptions()["componentVariants"].toMap();
             QCOMPARE(variants.size(), 3);
             for (auto family = variants.cbegin(); family != variants.cend(); ++family)
-                for (const auto& value : family.value().toList()) {
+                for (const auto& value : family.value().toList())
+                {
                     const auto variant = value.toMap();
                     const auto prototype = session->componentPrototype(family.key(), {{"variant", variant["id"]}});
                     QVERIFY2(!prototype.isEmpty(), qPrintable(session->errorString()));

@@ -34,44 +34,79 @@
 #include "sessions/SessionManager.h"
 #include "settings/SearchSettings.h"
 
-class HomeNavigationTests : public QObject {
+class HomeNavigationTests : public QObject
+{
     Q_OBJECT
   private slots:
-    void retainsExactOriginAndRecoversWithoutHomeButton();
-    void customizeOpensStudioAndPreservesDirtyExit();
-    void studioRemoteDraftApplyAndCancel();
-    void studioRemotePointerAndInspectorParity();
-    void studioRemotePointerAndInspectorParity_data();
-    void studioPreservesLegacyGridMetadataWithoutConversion();
-    void studioSectionGeometryMatchesRuntime();
-    void studioPageMenuCreatesAndDesignatesHome();
-    void studioNamedPageViewportMatchesRuntime();
-    void studioRemoteGesturesCollisionsAndAnchors();
-    void studioRemoteSectionTransferAndCancel();
-    void studioLegacyRemoteOrdering();
-    void studioScrollingAddMoveAndCancel();
-    void repairsSourceWithRemoteAndCanCancel();
-    void televisionLibraryRemoteFlow();
-    void universalLocalSearchRemoteFlow();
-    void allAppsGalleryUsesLocalFilterAndRestoresOrigin();
-    void allAppsListNavigationUsesSingleRowStep();
-    void allAppsGridColumnsMatchRemoteNavigationStep();
-    void searchHeaderSwitchRemoteFocusAndStableResults();
-    void searchPreferenceProfileIsolationAndWriteFailure();
-    void appSuppliedIconsUseManagedArtwork();
-    void pageScopedSourcesAppearInSearch();
-    void kodiSettingsFollowUserTheme();
-    void appearancePreviewCancelAndApply();
-    void composedReferenceNavigationAndGeometry();
-    void pastelReferenceNavigationAndGeometry();
-    void skinsAndDesignAreReachableFromSettings();
-    void pageComposerAndIndependentKodiWidgets();
-    void gridEditorMoveResizeDuplicateRemove();
-    void studioNestedGroupCanvasAndRemoteScope();
-    void studioCatalogAndContextualInspector();
+    void
+    retainsExactOriginAndRecoversWithoutHomeButton();
+    void
+    customizeOpensStudioAndPreservesDirtyExit();
+    void
+    studioRemoteDraftApplyAndCancel();
+    void
+    studioRemotePointerAndInspectorParity();
+    void
+    studioRemotePointerAndInspectorParity_data();
+    void
+    studioPreservesLegacyGridMetadataWithoutConversion();
+    void
+    studioSectionGeometryMatchesRuntime();
+    void
+    studioPageMenuCreatesAndDesignatesHome();
+    void
+    studioNamedPageViewportMatchesRuntime();
+    void
+    studioRemoteGesturesCollisionsAndAnchors();
+    void
+    studioRemoteSectionTransferAndCancel();
+    void
+    studioLegacyRemoteOrdering();
+    void
+    studioScrollingAddMoveAndCancel();
+    void
+    repairsSourceWithRemoteAndCanCancel();
+    void
+    televisionLibraryRemoteFlow();
+    void
+    universalLocalSearchRemoteFlow();
+    void
+    allAppsGalleryUsesLocalFilterAndRestoresOrigin();
+    void
+    allAppsListNavigationUsesSingleRowStep();
+    void
+    allAppsGridColumnsMatchRemoteNavigationStep();
+    void
+    searchHeaderSwitchRemoteFocusAndStableResults();
+    void
+    searchPreferenceProfileIsolationAndWriteFailure();
+    void
+    appSuppliedIconsUseManagedArtwork();
+    void
+    pageScopedSourcesAppearInSearch();
+    void
+    kodiSettingsFollowUserTheme();
+    void
+    appearancePreviewCancelAndApply();
+    void
+    composedReferenceNavigationAndGeometry();
+    void
+    pastelReferenceNavigationAndGeometry();
+    void
+    skinsAndDesignAreReachableFromSettings();
+    void
+    pageComposerAndIndependentKodiWidgets();
+    void
+    gridEditorMoveResizeDuplicateRemove();
+    void
+    studioNestedGroupCanvasAndRemoteScope();
+    void
+    studioCatalogAndContextualInspector();
 };
 
-void HomeNavigationTests::allAppsGalleryUsesLocalFilterAndRestoresOrigin() {
+void
+HomeNavigationTests::allAppsGalleryUsesLocalFilterAndRestoresOrigin()
+{
     InputManager input;
     QQmlEngine engine;
     engine.rootContext()->setContextProperty("inputManager", &input);
@@ -102,7 +137,8 @@ void HomeNavigationTests::allAppsGalleryUsesLocalFilterAndRestoresOrigin() {
     QVERIFY(gallery->property("open").toBool());
     QCOMPARE(gallery->property("selectedId").toString(), QString("alpha"));
     QVERIFY(!gallery->property("keyboardOpen").toBool());
-    auto command = [&](int value) {
+    auto command = [&](int value)
+    {
         return QMetaObject::invokeMethod(gallery.get(), "handleCommand", Q_ARG(QVariant, value));
     };
     QVERIFY(command(InputManager::NavigateRight));
@@ -135,7 +171,9 @@ void HomeNavigationTests::allAppsGalleryUsesLocalFilterAndRestoresOrigin() {
     QCOMPARE(closed.size(), 1);
     QCOMPARE(closed.last().at(0).toString(), QString("home-card"));
 }
-void HomeNavigationTests::allAppsListNavigationUsesSingleRowStep() {
+void
+HomeNavigationTests::allAppsListNavigationUsesSingleRowStep()
+{
     InputManager input;
     QQmlEngine engine;
     engine.rootContext()->setContextProperty("inputManager", &input);
@@ -152,7 +190,8 @@ void HomeNavigationTests::allAppsListNavigationUsesSingleRowStep() {
          {"height", 720}}));
     QVERIFY2(gallery, qPrintable(component.errorString()));
     QVERIFY(QMetaObject::invokeMethod(gallery.get(), "showForOrigin", Q_ARG(QVariant, QString("page-apps"))));
-    auto command = [&](int value) {
+    auto command = [&](int value)
+    {
         return QMetaObject::invokeMethod(gallery.get(), "handleCommand", Q_ARG(QVariant, value));
     };
     QCOMPARE(gallery->property("selectedId").toString(), QString("alpha"));
@@ -174,7 +213,9 @@ void HomeNavigationTests::allAppsListNavigationUsesSingleRowStep() {
     gallery->setProperty("galleryPresentation", QVariantMap{{"layout", "list"}, {"density", "spacious"}});
     QTRY_VERIFY(rows->property("cellHeight").toReal() > standardHeight);
 }
-void HomeNavigationTests::allAppsGridColumnsMatchRemoteNavigationStep() {
+void
+HomeNavigationTests::allAppsGridColumnsMatchRemoteNavigationStep()
+{
     QTemporaryDir artwork;
     QImage logo(256, 256, QImage::Format_RGB32);
     logo.fill(QColor("#ee3355"));
@@ -186,7 +227,8 @@ void HomeNavigationTests::allAppsGridColumnsMatchRemoteNavigationStep() {
     QQmlComponent component(&engine, QUrl::fromLocalFile(QStringLiteral(APP_GALLERY_QML)));
     QVERIFY2(component.isReady(), qPrintable(component.errorString()));
     QVariantList apps;
-    for (int i = 0; i < 10; ++i) {
+    for (int i = 0; i < 10; ++i)
+    {
         const auto id = QString("app-%1").arg(i);
         apps.append(QVariantMap{{"id", id},
                                 {"name", QString("App %1").arg(i)},
@@ -212,7 +254,8 @@ void HomeNavigationTests::allAppsGridColumnsMatchRemoteNavigationStep() {
     const double gridWidth = grid->property("width").toReal();
     const double cellWidth = grid->property("cellWidth").toReal();
     QCOMPARE(static_cast<int>(std::floor(gridWidth / cellWidth + 0.00001)), 5);
-    auto command = [&](int value) {
+    auto command = [&](int value)
+    {
         return QMetaObject::invokeMethod(gallery.get(), "handleCommand", Q_ARG(QVariant, value));
     };
     QCOMPARE(gallery->property("selectedId").toString(), QString("app-0"));
@@ -222,7 +265,8 @@ void HomeNavigationTests::allAppsGridColumnsMatchRemoteNavigationStep() {
     QCOMPARE(gallery->property("selectedId").toString(), QString("app-0"));
     auto* surface = qobject_cast<QQuickItem*>(gallery.get());
     std::function<QQuickItem*(QQuickItem*, const std::function<bool(QQuickItem*)>&)> find;
-    find = [&](QQuickItem* item, const std::function<bool(QQuickItem*)>& predicate) -> QQuickItem* {
+    find = [&](QQuickItem* item, const std::function<bool(QQuickItem*)>& predicate) -> QQuickItem*
+    {
         if (predicate(item))
             return item;
         for (auto* child : item->childItems())
@@ -230,19 +274,25 @@ void HomeNavigationTests::allAppsGridColumnsMatchRemoteNavigationStep() {
                 return found;
         return nullptr;
     };
-    const auto named = [](const QString& name) {
-        return [name](QQuickItem* item) {
+    const auto named = [](const QString& name)
+    {
+        return [name](QQuickItem* item)
+        {
             return item->objectName() == name;
         };
     };
     QTRY_VERIFY(find(surface, named("allAppsTile")));
     auto* tile = find(surface, named("allAppsTile"));
-    auto* image = find(tile, [&](QQuickItem* item) {
-        return item->property("source").toUrl() == QUrl::fromLocalFile(logoPath);
-    });
-    auto* label = find(tile, [](QQuickItem* item) {
-        return item->property("text").toString() == "App 0";
-    });
+    auto* image = find(tile,
+                       [&](QQuickItem* item)
+                       {
+                           return item->property("source").toUrl() == QUrl::fromLocalFile(logoPath);
+                       });
+    auto* label = find(tile,
+                       [](QQuickItem* item)
+                       {
+                           return item->property("text").toString() == "App 0";
+                       });
     QVERIFY(image);
     QVERIFY(label);
     QTRY_VERIFY(image->isVisible());
@@ -276,9 +326,11 @@ void HomeNavigationTests::allAppsGridColumnsMatchRemoteNavigationStep() {
     QVERIFY(listIcon);
     QTRY_VERIFY(listIcon->isVisible());
     QCOMPARE(listIcon->property("source").toUrl(), QUrl::fromLocalFile(logoPath));
-    auto* listLabel = find(list, [](QQuickItem* item) {
-        return item->isVisible() && item->property("text").toString() == "App 0";
-    });
+    auto* listLabel = find(list,
+                           [](QQuickItem* item)
+                           {
+                               return item->isVisible() && item->property("text").toString() == "App 0";
+                           });
     QVERIFY(listLabel);
     QVERIFY(listIcon->mapToItem(list, QPointF(listIcon->width(), 0)).x() <= listLabel->mapToItem(list, QPointF()).x());
     gallery->setProperty("galleryPresentation",
@@ -298,7 +350,9 @@ void HomeNavigationTests::allAppsGridColumnsMatchRemoteNavigationStep() {
     if (!artifacts.isEmpty())
         QVERIFY(window.grabWindow().save(artifacts + "/studio-test-app-gallery-list.png"));
 }
-void HomeNavigationTests::customizeOpensStudioAndPreservesDirtyExit() {
+void
+HomeNavigationTests::customizeOpensStudioAndPreservesDirtyExit()
+{
     QTemporaryDir dir;
     AppRegistry registry;
     HomeLayout home(&registry);
@@ -324,7 +378,8 @@ void HomeNavigationTests::customizeOpensStudioAndPreservesDirtyExit() {
     QCOMPARE(studio->property("mode").toString(), QString("canvas"));
     QVERIFY(studio->property("toolbarFocus").toBool());
     QVERIFY(!root->findChild<QObject*>("designEditor"));
-    auto command = [&](int key) {
+    auto command = [&](int key)
+    {
         QVERIFY(QMetaObject::invokeMethod(root.get(), "handleCommand", Q_ARG(QVariant, key)));
         QCoreApplication::processEvents();
     };
@@ -360,7 +415,9 @@ void HomeNavigationTests::customizeOpensStudioAndPreservesDirtyExit() {
     QCOMPARE(studio->property("pageId").toString(), QString());
 }
 
-void HomeNavigationTests::pageComposerAndIndependentKodiWidgets() {
+void
+HomeNavigationTests::pageComposerAndIndependentKodiWidgets()
+{
     QTemporaryDir dir;
     QLocalServer server;
     QVERIFY(server.listen(dir.filePath("rpc.sock")));
@@ -372,81 +429,103 @@ void HomeNavigationTests::pageComposerAndIndependentKodiWidgets() {
     QBuffer buffer(&png);
     buffer.open(QIODevice::WriteOnly);
     image.save(&buffer, "PNG");
-    connect(&server, &QLocalServer::newConnection, &server, [&] {
-        while (server.hasPendingConnections()) {
-            auto* socket = server.nextPendingConnection();
-            connect(socket, &QLocalSocket::disconnected, socket, &QObject::deleteLater);
-            connect(socket, &QLocalSocket::readyRead, socket, [&, socket] {
-                const auto bytes = socket->property("input").toByteArray() + socket->readAll();
-                socket->setProperty("input", bytes);
-                if (!bytes.endsWith('\n'))
-                    return;
-                const auto request = QJsonDocument::fromJson(bytes).object();
-                const auto method = request["method"].toString();
-                QJsonObject result;
-                if (method == "JSONRPC.Version")
-                    result = {{"version", QJsonObject{{"major", 13}}}};
-                else if (method == "Isolde.GetArtwork") {
-                    if (rejectedArtwork > 0) {
-                        --rejectedArtwork;
+    connect(
+        &server,
+        &QLocalServer::newConnection,
+        &server,
+        [&]
+        {
+            while (server.hasPendingConnections())
+            {
+                auto* socket = server.nextPendingConnection();
+                connect(socket, &QLocalSocket::disconnected, socket, &QObject::deleteLater);
+                connect(
+                    socket,
+                    &QLocalSocket::readyRead,
+                    socket,
+                    [&, socket]
+                    {
+                        const auto bytes = socket->property("input").toByteArray() + socket->readAll();
+                        socket->setProperty("input", bytes);
+                        if (!bytes.endsWith('\n'))
+                            return;
+                        const auto request = QJsonDocument::fromJson(bytes).object();
+                        const auto method = request["method"].toString();
+                        QJsonObject result;
+                        if (method == "JSONRPC.Version")
+                            result = {{"version", QJsonObject{{"major", 13}}}};
+                        else if (method == "Isolde.GetArtwork")
+                        {
+                            if (rejectedArtwork > 0)
+                            {
+                                --rejectedArtwork;
+                                socket->write(QJsonDocument(QJsonObject{{"jsonrpc", "2.0"},
+                                                                        {"id", request["id"]},
+                                                                        {"error",
+                                                                         QJsonObject{{"code", -32000},
+                                                                                     {"message", "Kodi starting"}}}})
+                                                  .toJson(QJsonDocument::Compact) +
+                                              '\n');
+                                socket->disconnectFromServer();
+                                return;
+                            }
+                            result = {{"mime", "image/png"}, {"data", QString::fromLatin1(png.toBase64())}};
+                        }
+                        else if (method == "Isolde.PlayMovie" || method == "Isolde.PlayEpisode")
+                        {
+                            ++plays;
+                            played = request["params"].toObject();
+                            result = {{"state", "playing"}, {"home", false}};
+                        }
+                        else if (method.startsWith("Isolde.Playback"))
+                            result = {{"state", method == "Isolde.PlaybackControl" ? "ended" : "playing"},
+                                      {"home", false}};
+                        else
+                        {
+                            ++reads;
+                            if (rejectedReads > 0)
+                            {
+                                --rejectedReads;
+                                socket->write(QJsonDocument(QJsonObject{{"jsonrpc", "2.0"},
+                                                                        {"id", request["id"]},
+                                                                        {"error",
+                                                                         QJsonObject{{"code", -32000},
+                                                                                     {"message", "Kodi starting"}}}})
+                                                  .toJson(QJsonDocument::Compact) +
+                                              '\n');
+                                socket->disconnectFromServer();
+                                return;
+                            }
+                            const auto key = method == "VideoLibrary.GetTVShows"    ? "tvshows"
+                                             : method == "VideoLibrary.GetEpisodes" ? "episodes"
+                                                                                    : "movies";
+                            QJsonArray items;
+                            const int end = qMin(8, request["params"].toObject()["limits"].toObject()["end"].toInt(8));
+                            const bool newest =
+                                request["params"].toObject()["sort"].toObject()["method"] == "lastplayed";
+                            for (int offset = 0; offset < end; ++offset)
+                            {
+                                const int i = newest ? 8 - offset : offset + 1;
+                                items.append(QJsonObject{
+                                    {key == QString("movies")     ? "movieid"
+                                     : key == QString("episodes") ? "episodeid"
+                                                                  : "tvshowid",
+                                     i},
+                                    {"title", QString("Kodi title %1").arg(i)},
+                                    {"year", 2020 + i},
+                                    {"lastplayed", QString("2026-10-%1 12:00:00").arg(i, 2, 10, QChar('0'))},
+                                    {"resume", QJsonObject{{"position", i * 10}, {"total", 120}}}});
+                            }
+                            result = {{key, items}, {"limits", QJsonObject{{"start", 0}, {"end", end}, {"total", 8}}}};
+                        }
                         socket->write(
-                            QJsonDocument(
-                                QJsonObject{{"jsonrpc", "2.0"},
-                                            {"id", request["id"]},
-                                            {"error", QJsonObject{{"code", -32000}, {"message", "Kodi starting"}}}})
+                            QJsonDocument(QJsonObject{{"jsonrpc", "2.0"}, {"id", request["id"]}, {"result", result}})
                                 .toJson(QJsonDocument::Compact) +
                             '\n');
                         socket->disconnectFromServer();
-                        return;
-                    }
-                    result = {{"mime", "image/png"}, {"data", QString::fromLatin1(png.toBase64())}};
-                } else if (method == "Isolde.PlayMovie" || method == "Isolde.PlayEpisode") {
-                    ++plays;
-                    played = request["params"].toObject();
-                    result = {{"state", "playing"}, {"home", false}};
-                } else if (method.startsWith("Isolde.Playback"))
-                    result = {{"state", method == "Isolde.PlaybackControl" ? "ended" : "playing"}, {"home", false}};
-                else {
-                    ++reads;
-                    if (rejectedReads > 0) {
-                        --rejectedReads;
-                        socket->write(
-                            QJsonDocument(
-                                QJsonObject{{"jsonrpc", "2.0"},
-                                            {"id", request["id"]},
-                                            {"error", QJsonObject{{"code", -32000}, {"message", "Kodi starting"}}}})
-                                .toJson(QJsonDocument::Compact) +
-                            '\n');
-                        socket->disconnectFromServer();
-                        return;
-                    }
-                    const auto key = method == "VideoLibrary.GetTVShows"    ? "tvshows"
-                                     : method == "VideoLibrary.GetEpisodes" ? "episodes"
-                                                                            : "movies";
-                    QJsonArray items;
-                    const int end = qMin(8, request["params"].toObject()["limits"].toObject()["end"].toInt(8));
-                    const bool newest = request["params"].toObject()["sort"].toObject()["method"] == "lastplayed";
-                    for (int offset = 0; offset < end; ++offset) {
-                        const int i = newest ? 8 - offset : offset + 1;
-                        items.append(
-                            QJsonObject{{key == QString("movies")     ? "movieid"
-                                         : key == QString("episodes") ? "episodeid"
-                                                                      : "tvshowid",
-                                         i},
-                                        {"title", QString("Kodi title %1").arg(i)},
-                                        {"year", 2020 + i},
-                                        {"lastplayed", QString("2026-10-%1 12:00:00").arg(i, 2, 10, QChar('0'))},
-                                        {"resume", QJsonObject{{"position", i * 10}, {"total", 120}}}});
-                    }
-                    result = {{key, items}, {"limits", QJsonObject{{"start", 0}, {"end", end}, {"total", 8}}}};
-                }
-                socket->write(QJsonDocument(QJsonObject{{"jsonrpc", "2.0"}, {"id", request["id"]}, {"result", result}})
-                                  .toJson(QJsonDocument::Compact) +
-                              '\n');
-                socket->disconnectFromServer();
-            });
-        }
-    });
+                    });
+            }
+        });
     AppRegistry registry;
     HomeLayout home(&registry);
     QVERIFY(home.load(QFINDTESTDATA("../config/default-home-layout.json"), dir.filePath("home.json")));
@@ -468,7 +547,8 @@ void HomeNavigationTests::pageComposerAndIndependentKodiWidgets() {
                                                                             {"width", 1280},
                                                                             {"height", 800}}));
     QVERIFY(controls);
-    auto control = [&](int value) {
+    auto control = [&](int value)
+    {
         return QMetaObject::invokeMethod(controls.get(), "handleCommand", Q_ARG(QVariant, value));
     };
     controls->setProperty("actionIndex", 25);
@@ -536,7 +616,8 @@ void HomeNavigationTests::pageComposerAndIndependentKodiWidgets() {
     QTest::qWait(100);
     QCOMPARE(reads, 2);
     QCOMPARE(one->selectedIndex(), 3);
-    auto command = [&](int value) {
+    auto command = [&](int value)
+    {
         return QMetaObject::invokeMethod(root.get(), "handleCommand", Q_ARG(QVariant, value));
     };
     QVERIFY(command(InputManager::NavigateRight));
@@ -678,9 +759,12 @@ void HomeNavigationTests::pageComposerAndIndependentKodiWidgets() {
     QVERIFY(appHistory);
     QTRY_VERIFY(appHistory->connected());
     const auto disabledHistory = appHistory->items();
-    QVERIFY(std::none_of(disabledHistory.cbegin(), disabledHistory.cend(), [](const QVariant& item) {
-        return item.toMap()["mediaType"] == "app";
-    }));
+    QVERIFY(std::none_of(disabledHistory.cbegin(),
+                         disabledHistory.cend(),
+                         [](const QVariant& item)
+                         {
+                             return item.toMap()["mediaType"] == "app";
+                         }));
     QVERIFY(historySessions.launch(historyApp.id));
     QTRY_VERIFY(!appHistory->busy());
     historySessions.goHome();
@@ -698,9 +782,12 @@ void HomeNavigationTests::pageComposerAndIndependentKodiWidgets() {
     QVERIFY(registry.removeApp(historyApp.id));
     QTRY_VERIFY(!appHistory->busy());
     const auto withoutApp = appHistory->items();
-    QVERIFY(std::none_of(withoutApp.cbegin(), withoutApp.cend(), [](const QVariant& item) {
-        return item.toMap()["mediaType"] == "app";
-    }));
+    QVERIFY(std::none_of(withoutApp.cbegin(),
+                         withoutApp.cend(),
+                         [](const QVariant& item)
+                         {
+                             return item.toMap()["mediaType"] == "app";
+                         }));
     QVERIFY(registry.addApp(historyApp));
     QTRY_VERIFY(!appHistory->busy());
     QCOMPARE(appHistory->items()[0].toMap()["appId"].toString(), historyApp.id);
@@ -748,7 +835,8 @@ void HomeNavigationTests::pageComposerAndIndependentKodiWidgets() {
     QVERIFY2(legacyHome, qPrintable(legacy.errorString()));
     qobject_cast<QQuickItem*>(legacyHome.get())->setParentItem(window.contentItem());
     // Repeater delegates belong to the visual tree, not necessarily QObject's ownership tree.
-    std::function<QQuickItem*(QQuickItem*)> findText = [&](QQuickItem* item) -> QQuickItem* {
+    std::function<QQuickItem*(QQuickItem*)> findText = [&](QQuickItem* item) -> QQuickItem*
+    {
         if (item->objectName() == "legacyTextWidget-text")
             return item;
         for (auto* child : item->childItems())
@@ -761,7 +849,9 @@ void HomeNavigationTests::pageComposerAndIndependentKodiWidgets() {
     QVERIFY(!home.addLibraryWidget("Home movies", "movies").isEmpty());
     QVERIFY(home.composition()["enabled"].toBool());
 }
-void HomeNavigationTests::skinsAndDesignAreReachableFromSettings() {
+void
+HomeNavigationTests::skinsAndDesignAreReachableFromSettings()
+{
     QTemporaryDir dir;
     AppRegistry registry;
     HomeLayout home(&registry);
@@ -785,7 +875,8 @@ void HomeNavigationTests::skinsAndDesignAreReachableFromSettings() {
     window.resize(1280, 800);
     qobject_cast<QQuickItem*>(root.get())->setParentItem(window.contentItem());
     window.show();
-    auto command = [&](int value) {
+    auto command = [&](int value)
+    {
         return QMetaObject::invokeMethod(root.get(), "handleCommand", Q_ARG(QVariant, value));
     };
     auto* skins = root->findChild<QObject*>("skinLibrary");
@@ -815,13 +906,16 @@ void HomeNavigationTests::skinsAndDesignAreReachableFromSettings() {
     QVERIFY(!root->property("editing").toBool());
     root->setProperty("actionIndex", 24);
     QVERIFY(command(InputManager::Confirm));
-    auto listValue = [](const QVariant& v) {
+    auto listValue = [](const QVariant& v)
+    {
         return v.metaType() == QMetaType::fromType<QJSValue>() ? v.value<QJSValue>().toVariant().toList() : v.toList();
     };
-    auto select = [&](const QString& key) {
+    auto select = [&](const QString& key)
+    {
         const auto fields = listValue(editor->property("fields"));
         for (int i = 0; i < fields.size(); ++i)
-            if (fields[i].toMap()["key"] == key) {
+            if (fields[i].toMap()["key"] == key)
+            {
                 editor->setProperty("selected", i + 2);
                 return true;
             }
@@ -865,19 +959,23 @@ void HomeNavigationTests::skinsAndDesignAreReachableFromSettings() {
     QVERIFY(home.applySkin("builtin-lounge"));
     // The legacy editor retains coverage of both standing reference documents.
     for (const auto& fixture :
-         {QStringLiteral(REFERENCE_DIR), QStringLiteral(REFERENCE_DIR) + "/../home-pastel-reference"}) {
+         {QStringLiteral(REFERENCE_DIR), QStringLiteral(REFERENCE_DIR) + "/../home-pastel-reference"})
+    {
         QVERIFY(home.load(fixture + "/recreation-config.json", dir.filePath(QFileInfo(fixture).fileName() + ".json")));
-        for (int scope : {1, 2}) {
+        for (int scope : {1, 2})
+        {
             editor->setProperty("scope", scope);
             QSet<QString> keys;
             for (const auto& field : listValue(editor->property("fields")))
                 keys.insert(field.toMap()["key"].toString().section('.', 0, 0));
             const auto entries = scope == 1 ? home.categories() : home.components();
-            for (const auto& entry : entries) {
+            for (const auto& entry : entries)
+            {
                 const auto style = entry.toMap()["presentation"].toMap();
                 // Placed v2 fixture controls belong to Page Studio. The legacy
                 // inspector cannot edit grid/group/library composition data.
-                if (home.composition().contains("grid")) {
+                if (home.composition().contains("grid"))
+                {
                     QVERIFY(
                         ComponentSchema::validPresentation(style, true, entry.toMap()["componentType"] == "container"));
                     continue;
@@ -888,14 +986,17 @@ void HomeNavigationTests::skinsAndDesignAreReachableFromSettings() {
         }
     }
 }
-void HomeNavigationTests::retainsExactOriginAndRecoversWithoutHomeButton() {
+void
+HomeNavigationTests::retainsExactOriginAndRecoversWithoutHomeButton()
+{
     QQmlEngine engine;
     InputManager input;
     engine.rootContext()->setContextProperty("inputManager", &input);
     engine.rootContext()->setContextProperty("isoldeVersion", "0.0.1.2");
     QQmlComponent component(&engine, QUrl::fromLocalFile(QStringLiteral(HOME_QML)));
     QVERIFY2(component.isReady(), qPrintable(component.errorString()));
-    auto tile = [](const QString& id) -> QVariantMap {
+    auto tile = [](const QString& id) -> QVariantMap
+    {
         return {{"id", id},
                 {"kind", "action"},
                 {"name", id},
@@ -906,7 +1007,8 @@ void HomeNavigationTests::retainsExactOriginAndRecoversWithoutHomeButton() {
                 {"action", QVariantMap{{"type", "launch-app"}, {"appId", "shared-handler"}}}};
     };
     QVariantList items{tile("tile-a"), tile("tile-b"), tile("tile-c")};
-    const auto sections = [](const QVariantList& values) -> QVariantList {
+    const auto sections = [](const QVariantList& values) -> QVariantList
+    {
         return {QVariantMap{{"id", "test"}, {"name", "Test"}, {"items", values}}};
     };
     std::unique_ptr<QObject> root(component.createWithInitialProperties({{"items", items},
@@ -929,10 +1031,12 @@ void HomeNavigationTests::retainsExactOriginAndRecoversWithoutHomeButton() {
     QSignalSpy settings(root.get(), SIGNAL(settingsRequested(int)));
     QVERIFY(activated.isValid());
     QVERIFY(settings.isValid());
-    auto command = [&](int value) {
+    auto command = [&](int value)
+    {
         return QMetaObject::invokeMethod(root.get(), "handleCommand", Q_ARG(QVariant, value));
     };
-    auto restore = [&](const QString& id) {
+    auto restore = [&](const QString& id)
+    {
         return QMetaObject::invokeMethod(root.get(), "restoreFocus", Q_ARG(QVariant, id));
     };
     root->setProperty("focusedIndex", 1);
@@ -983,7 +1087,8 @@ void HomeNavigationTests::retainsExactOriginAndRecoversWithoutHomeButton() {
     auto* content = root->findChild<QQuickItem*>("homeContent");
     QVERIFY(content);
     for (const bool brand : {false, true})
-        for (const bool sources : {false, true}) {
+        for (const bool sources : {false, true})
+        {
             root->setProperty("brandVisible", brand);
             root->setProperty("hasContextualSources", false);
             QVERIFY(QMetaObject::invokeMethod(content->parentItem(), "forceLayout"));
@@ -1022,7 +1127,8 @@ void HomeNavigationTests::retainsExactOriginAndRecoversWithoutHomeButton() {
     QVERIFY(!controls.contains("edit"));
     QVERIFY(controls.contains("settings"));
     std::function<QQuickItem*(QQuickItem*)> settingsControl;
-    settingsControl = [&](QQuickItem* item) -> QQuickItem* {
+    settingsControl = [&](QQuickItem* item) -> QQuickItem*
+    {
         if (item->objectName() == "pageHeader-settings")
             return item;
         for (auto* child : item->childItems())
@@ -1037,7 +1143,9 @@ void HomeNavigationTests::retainsExactOriginAndRecoversWithoutHomeButton() {
     if (!artifacts.isEmpty())
         QVERIFY(window.grabWindow().save(artifacts + "/studio-test-home-settings-focus.png"));
 }
-void HomeNavigationTests::repairsSourceWithRemoteAndCanCancel() {
+void
+HomeNavigationTests::repairsSourceWithRemoteAndCanCancel()
+{
     QTemporaryDir dir;
     QFile defaults(dir.filePath("default.json"));
     QVERIFY(defaults.open(QIODevice::WriteOnly));
@@ -1066,7 +1174,8 @@ void HomeNavigationTests::repairsSourceWithRemoteAndCanCancel() {
                                                                          {"height", 720}}));
     QVERIFY2(root, qPrintable(component.errorString()));
     root->setProperty("actionIndex", 20);
-    auto command = [&](int value) {
+    auto command = [&](int value)
+    {
         return QMetaObject::invokeMethod(root.get(), "handleCommand", Q_ARG(QVariant, value));
     };
     QVERIFY(command(InputManager::Confirm));
@@ -1083,50 +1192,68 @@ void HomeNavigationTests::repairsSourceWithRemoteAndCanCancel() {
     QCOMPARE(home.items()[0].toMap()["size"].toString(), QString("wide"));
     QCOMPARE(home.items()[0].toMap()["opacity"].toDouble(), 0.4);
 }
-void HomeNavigationTests::universalLocalSearchRemoteFlow() {
+void
+HomeNavigationTests::universalLocalSearchRemoteFlow()
+{
     QTemporaryDir directory;
     QLocalServer server;
     QVERIFY(server.listen(directory.filePath("rpc.sock")));
-    connect(&server, &QLocalServer::newConnection, &server, [&server] {
-        while (server.hasPendingConnections()) {
-            auto* socket = server.nextPendingConnection();
-            connect(socket, &QLocalSocket::disconnected, socket, &QObject::deleteLater);
-            connect(socket, &QLocalSocket::readyRead, socket, [socket] {
-                const auto bytes = socket->property("input").toByteArray() + socket->readAll();
-                socket->setProperty("input", bytes);
-                if (!bytes.endsWith('\n'))
-                    return;
-                const auto request = QJsonDocument::fromJson(bytes).object();
-                const auto method = request.value("method").toString();
-                QJsonObject result;
-                if (method == "JSONRPC.Version")
-                    result = {{"version", QJsonObject{{"major", 13}}}};
-                else {
-                    const auto params = request.value("params").toObject();
-                    QCOMPARE(params.value("filter").toObject().value("field").toString(), QString("title"));
-                    QCOMPARE(params.value("filter").toObject().value("operator").toString(), QString("contains"));
-                    const auto key = method == "VideoLibrary.GetTVShows"    ? QString("tvshows")
-                                     : method == "VideoLibrary.GetEpisodes" ? QString("episodes")
-                                                                            : QString("movies");
-                    const auto idKey = method == "VideoLibrary.GetTVShows"    ? QString("tvshowid")
-                                       : method == "VideoLibrary.GetEpisodes" ? QString("episodeid")
-                                                                              : QString("movieid");
-                    QJsonObject item{{idKey, method == "VideoLibrary.GetTVShows" ? 2 : 5}, {"title", "Pilot " + key}};
-                    if (method == "VideoLibrary.GetEpisodes") {
-                        item.insert("showtitle", "Pilot Show");
-                        item.insert("season", 1);
-                        item.insert("episode", 2);
-                    }
-                    result = {{key, QJsonArray{item}}, {"limits", QJsonObject{{"start", 0}, {"end", 1}, {"total", 1}}}};
+    connect(&server,
+            &QLocalServer::newConnection,
+            &server,
+            [&server]
+            {
+                while (server.hasPendingConnections())
+                {
+                    auto* socket = server.nextPendingConnection();
+                    connect(socket, &QLocalSocket::disconnected, socket, &QObject::deleteLater);
+                    connect(socket,
+                            &QLocalSocket::readyRead,
+                            socket,
+                            [socket]
+                            {
+                                const auto bytes = socket->property("input").toByteArray() + socket->readAll();
+                                socket->setProperty("input", bytes);
+                                if (!bytes.endsWith('\n'))
+                                    return;
+                                const auto request = QJsonDocument::fromJson(bytes).object();
+                                const auto method = request.value("method").toString();
+                                QJsonObject result;
+                                if (method == "JSONRPC.Version")
+                                    result = {{"version", QJsonObject{{"major", 13}}}};
+                                else
+                                {
+                                    const auto params = request.value("params").toObject();
+                                    QCOMPARE(params.value("filter").toObject().value("field").toString(),
+                                             QString("title"));
+                                    QCOMPARE(params.value("filter").toObject().value("operator").toString(),
+                                             QString("contains"));
+                                    const auto key = method == "VideoLibrary.GetTVShows"    ? QString("tvshows")
+                                                     : method == "VideoLibrary.GetEpisodes" ? QString("episodes")
+                                                                                            : QString("movies");
+                                    const auto idKey = method == "VideoLibrary.GetTVShows"    ? QString("tvshowid")
+                                                       : method == "VideoLibrary.GetEpisodes" ? QString("episodeid")
+                                                                                              : QString("movieid");
+                                    QJsonObject item{{idKey, method == "VideoLibrary.GetTVShows" ? 2 : 5},
+                                                     {"title", "Pilot " + key}};
+                                    if (method == "VideoLibrary.GetEpisodes")
+                                    {
+                                        item.insert("showtitle", "Pilot Show");
+                                        item.insert("season", 1);
+                                        item.insert("episode", 2);
+                                    }
+                                    result = {{key, QJsonArray{item}},
+                                              {"limits", QJsonObject{{"start", 0}, {"end", 1}, {"total", 1}}}};
+                                }
+                                socket->write(QJsonDocument(QJsonObject{{"jsonrpc", "2.0"},
+                                                                        {"id", request.value("id")},
+                                                                        {"result", result}})
+                                                  .toJson(QJsonDocument::Compact) +
+                                              '\n');
+                                socket->disconnectFromServer();
+                            });
                 }
-                socket->write(
-                    QJsonDocument(QJsonObject{{"jsonrpc", "2.0"}, {"id", request.value("id")}, {"result", result}})
-                        .toJson(QJsonDocument::Compact) +
-                    '\n');
-                socket->disconnectFromServer();
             });
-        }
-    });
 
     KodiMedia movieSearch("search-ui", nullptr, directory.path());
     KodiMedia showSearch("search-ui", nullptr, directory.path());
@@ -1155,7 +1282,8 @@ void HomeNavigationTests::universalLocalSearchRemoteFlow() {
     const auto results = root->property("results").toList();
     bool sawMovie = false, sawShow = false, sawEpisode = false;
     int showResult = -1;
-    for (qsizetype index = 0; index < results.size(); ++index) {
+    for (qsizetype index = 0; index < results.size(); ++index)
+    {
         const auto result = results[index].toMap();
         if (result.value("kind") != "media")
             continue;
@@ -1205,7 +1333,8 @@ void HomeNavigationTests::universalLocalSearchRemoteFlow() {
     auto* scroller = root->findChild<QQuickItem*>("searchResultScroller");
     QVERIFY(scroller);
     std::function<QQuickItem*(QQuickItem*, const QString&)> findResultItem = [&](QQuickItem* parent,
-                                                                                 const QString& name) -> QQuickItem* {
+                                                                                 const QString& name) -> QQuickItem*
+    {
         if (parent->objectName() == name)
             return parent;
         for (auto* child : parent->childItems())
@@ -1219,13 +1348,17 @@ void HomeNavigationTests::universalLocalSearchRemoteFlow() {
     QTRY_VERIFY(selectedRow->mapToItem(scroller, QPointF()).y() >= -1);
     QTRY_VERIFY(selectedRow->mapToItem(scroller, QPointF(0, selectedRow->height())).y() <= scroller->height() + 1);
 }
-void HomeNavigationTests::appSuppliedIconsUseManagedArtwork() {
+void
+HomeNavigationTests::appSuppliedIconsUseManagedArtwork()
+{
     QTemporaryDir dir;
     const auto previousData = qgetenv("XDG_DATA_HOME"), previousCache = qgetenv("XDG_CACHE_HOME");
-    const auto restore = qScopeGuard([&] {
-        qputenv("XDG_DATA_HOME", previousData);
-        qputenv("XDG_CACHE_HOME", previousCache);
-    });
+    const auto restore = qScopeGuard(
+        [&]
+        {
+            qputenv("XDG_DATA_HOME", previousData);
+            qputenv("XDG_CACHE_HOME", previousCache);
+        });
     qputenv("XDG_DATA_HOME", dir.filePath("data").toUtf8());
     qputenv("XDG_CACHE_HOME", dir.filePath("cache").toUtf8());
     QVERIFY(QDir().mkpath(dir.filePath("data/applications")));
@@ -1236,8 +1369,9 @@ void HomeNavigationTests::appSuppliedIconsUseManagedArtwork() {
     QVERIFY(image.save(source));
     QFile desktop(dir.filePath("data/applications/provided-app.desktop"));
     QVERIFY(desktop.open(QIODevice::WriteOnly));
-    desktop.write("[Desktop Entry]\nType=Application\nName=Provided "
-                  "app\nIcon=provided-icon\nExec=/nonexistent/never-run-for-artwork\n");
+    desktop.write(
+        "[Desktop Entry]\nType=Application\nName=Provided "
+        "app\nIcon=provided-icon\nExec=/nonexistent/never-run-for-artwork\n");
     desktop.close();
     AppDefinition app;
     app.id = "provided-app";
@@ -1274,9 +1408,11 @@ void HomeNavigationTests::appSuppliedIconsUseManagedArtwork() {
     QVERIFY(home.load(QFINDTESTDATA("../config/default-home-layout.json"), dir.filePath("layout.json")));
     home.addAppTile(app.id);
     bool bound = false;
-    for (const auto& entry : home.items()) {
+    for (const auto& entry : home.items())
+    {
         const auto item = entry.toMap();
-        if (item["appId"] == app.id) {
+        if (item["appId"] == app.id)
+        {
             QCOMPARE(item["logoSource"].toString(), supplied);
             bound = true;
         }
@@ -1311,7 +1447,8 @@ void HomeNavigationTests::appSuppliedIconsUseManagedArtwork() {
                                       "app-store",
                                       "desktop-mode",
                                       "switch",
-                                      "switch2"}) {
+                                      "switch2"})
+    {
         AppDefinition bundled;
         bundled.id = id;
         bundled.name = id;
@@ -1335,7 +1472,8 @@ void HomeNavigationTests::appSuppliedIconsUseManagedArtwork() {
         if (!iconArtifacts.isEmpty())
             QVERIFY(artwork.save(iconArtifacts + "/studio-test-app-icon-" + id + ".png"));
         const auto item = bundledRegistry.apps().first().toMap();
-        for (const auto& role : QStringList{"cutoutLogoSource", "inkLogoSource"}) {
+        for (const auto& role : QStringList{"cutoutLogoSource", "inkLogoSource"})
+        {
             const QImage derived(QUrl(item[role].toString()).toLocalFile());
             QVERIFY2(!derived.isNull(), qPrintable(id + " " + role));
             QCOMPARE(derived.size(), QSize(512, 512));
@@ -1371,7 +1509,9 @@ void HomeNavigationTests::appSuppliedIconsUseManagedArtwork() {
     QTRY_COMPARE(background->property("source").toUrl(), QUrl(supplied));
     QVERIFY(!badge->property("visible").toBool());
 }
-void HomeNavigationTests::searchPreferenceProfileIsolationAndWriteFailure() {
+void
+HomeNavigationTests::searchPreferenceProfileIsolationAndWriteFailure()
+{
     QTemporaryDir dir;
     const auto path = dir.filePath("preferences.ini");
     const QString one = "11111111-1111-4111-8111-111111111111", two = "22222222-2222-4222-8222-222222222222";
@@ -1420,10 +1560,12 @@ void HomeNavigationTests::searchPreferenceProfileIsolationAndWriteFailure() {
     const auto settingsRoot = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
     QSettings::setPath(QSettings::NativeFormat, QSettings::UserScope, dir.path());
     QCoreApplication::setOrganizationName({});
-    const auto restore = qScopeGuard([&] {
-        QSettings::setPath(QSettings::NativeFormat, QSettings::UserScope, settingsRoot);
-        QCoreApplication::setOrganizationName(organization);
-    });
+    const auto restore = qScopeGuard(
+        [&]
+        {
+            QSettings::setPath(QSettings::NativeFormat, QSettings::UserScope, settingsRoot);
+            QCoreApplication::setOrganizationName(organization);
+        });
     const auto productionPath = QSettings().fileName();
     QVERIFY(productionPath.startsWith(dir.path() + "/"));
     SearchSettings production(nullptr, {}, "default");
@@ -1439,7 +1581,9 @@ void HomeNavigationTests::searchPreferenceProfileIsolationAndWriteFailure() {
     QSettings saved(productionPath, QSettings::IniFormat);
     QVERIFY(saved.value("search/webEnabled").toBool());
 }
-void HomeNavigationTests::searchHeaderSwitchRemoteFocusAndStableResults() {
+void
+HomeNavigationTests::searchHeaderSwitchRemoteFocusAndStableResults()
+{
     QTemporaryDir dir;
     SearchSettings preferences(nullptr, dir.filePath("search.ini"), "default");
     InputManager input;
@@ -1465,12 +1609,14 @@ void HomeNavigationTests::searchHeaderSwitchRemoteFocusAndStableResults() {
     window.resize(1280, 720);
     qobject_cast<QQuickItem*>(root.get())->setParentItem(window.contentItem());
     window.show();
-    auto command = [&](int value) {
+    auto command = [&](int value)
+    {
         QVERIFY(QMetaObject::invokeMethod(root.get(), "handleCommand", Q_ARG(QVariant, value)));
     };
     auto* toggle = root->findChild<QObject*>("searchWebToggle");
     QVERIFY(toggle);
-    auto list = [](const QVariant& v) {
+    auto list = [](const QVariant& v)
+    {
         return (v.metaType().id() == qMetaTypeId<QJSValue>() ? v.value<QJSValue>().toVariant() : v).toList();
     };
     const auto original = list(root->property("results"));
@@ -1548,7 +1694,8 @@ void HomeNavigationTests::searchHeaderSwitchRemoteFocusAndStableResults() {
                                                       {"mutedColor", "#625b73"},
                                                       {"surfaceColor", "#f5e7f4"},
                                                       {"focusColor", "#9b4568"},
-                                                      {"selectedColor", "#edd7ef"}}}) {
+                                                      {"selectedColor", "#edd7ef"}}})
+    {
         root->setProperty("appearance", theme);
         QTest::qWait(50);
         const auto artifact = qEnvironmentVariable("ISOLDE_TEST_ARTIFACTS");
@@ -1576,7 +1723,9 @@ void HomeNavigationTests::searchHeaderSwitchRemoteFocusAndStableResults() {
     command(InputManager::Back);
     QCOMPARE(closed.count(), 1);
 }
-void HomeNavigationTests::pageScopedSourcesAppearInSearch() {
+void
+HomeNavigationTests::pageScopedSourcesAppearInSearch()
+{
     InputManager input;
     QQmlEngine engine;
     engine.rootContext()->setContextProperty("inputManager", &input);
@@ -1597,7 +1746,8 @@ void HomeNavigationTests::pageScopedSourcesAppearInSearch() {
     root->setProperty("query", "keep");
     const auto results = root->property("results").toList();
     int pageIndex = -1;
-    for (qsizetype index = 0; index < results.size(); ++index) {
+    for (qsizetype index = 0; index < results.size(); ++index)
+    {
         const auto result = results[index].toMap();
         if (result.value("kind") == "pageSource" && result.value("pageSourceId").toString() == "library-1")
             pageIndex = static_cast<int>(index);
@@ -1611,7 +1761,9 @@ void HomeNavigationTests::pageScopedSourcesAppearInSearch() {
     QCOMPARE(pageSourceRequested[0][2].toString(), QString("movies"));
     QCOMPARE(pageSourceRequested[0][3].toString(), QString("continue"));
 }
-void HomeNavigationTests::kodiSettingsFollowUserTheme() {
+void
+HomeNavigationTests::kodiSettingsFollowUserTheme()
+{
     QTemporaryDir directory;
     InputManager input;
     AppRegistry registry;
@@ -1647,7 +1799,8 @@ void HomeNavigationTests::kodiSettingsFollowUserTheme() {
     qobject_cast<QQuickItem*>(root.get())->setParentItem(window.contentItem());
     window.show();
     std::function<QQuickItem*(QQuickItem*, const QString&)> findItem = [&](QQuickItem* parent,
-                                                                           const QString& name) -> QQuickItem* {
+                                                                           const QString& name) -> QQuickItem*
+    {
         if (!parent)
             return nullptr;
         if (parent->objectName() == name)
@@ -1735,7 +1888,8 @@ void HomeNavigationTests::kodiSettingsFollowUserTheme() {
     QTest::qWait(20);
     QCOMPARE(sources->property("selectedIndex").toInt(), 1);
     int reviewSteps = 0;
-    while (sources->property("selectedIndex").toInt() == 1 && reviewSteps < 40) {
+    while (sources->property("selectedIndex").toInt() == 1 && reviewSteps < 40)
+    {
         QVERIFY(QMetaObject::invokeMethod(
             sources, "handleCommand", Q_ARG(QVariant, QVariant(int(InputManager::NavigateDown)))));
         QTest::qWait(2);
@@ -1744,7 +1898,8 @@ void HomeNavigationTests::kodiSettingsFollowUserTheme() {
     QVERIFY(reviewSteps > 1);
     QVERIFY(reviewSteps < 40);
     QCOMPARE(sources->property("selectedIndex").toInt(), 2);
-    for (int i = 0; i < 4; ++i) {
+    for (int i = 0; i < 4; ++i)
+    {
         QVERIFY(QMetaObject::invokeMethod(
             sources, "handleCommand", Q_ARG(QVariant, QVariant(int(InputManager::NavigateUp)))));
         QTest::qWait(2);
@@ -1840,7 +1995,9 @@ void HomeNavigationTests::kodiSettingsFollowUserTheme() {
     QVERIFY(!busyPopup->property("pendingConfirm").toBool());
     busyPopup->setProperty("visible", false);
 }
-void HomeNavigationTests::appearancePreviewCancelAndApply() {
+void
+HomeNavigationTests::appearancePreviewCancelAndApply()
+{
     QTemporaryDir dir;
     QFile defaults(dir.filePath("default.json"));
     QVERIFY(defaults.open(QIODevice::WriteOnly));
@@ -1865,12 +2022,14 @@ void HomeNavigationTests::appearancePreviewCancelAndApply() {
                                                                          {"height", 720}}));
     QVERIFY2(root, qPrintable(component.errorString()));
     root->setProperty("actionIndex", 21);
-    auto command = [&](int value) {
+    auto command = [&](int value)
+    {
         return QMetaObject::invokeMethod(root.get(), "handleCommand", Q_ARG(QVariant, value));
     };
     auto* editor = root->findChild<QObject*>("appearanceEditor");
     QVERIFY(editor);
-    auto mapValue = [](const QVariant& value) {
+    auto mapValue = [](const QVariant& value)
+    {
         return value.metaType() == QMetaType::fromType<QJSValue>() ? value.value<QJSValue>().toVariant().toMap()
                                                                    : value.toMap();
     };
@@ -1904,7 +2063,9 @@ void HomeNavigationTests::appearancePreviewCancelAndApply() {
     QCOMPARE(home.appearance()["focusColor"].toString(), QString("#58a6bc"));
     QCOMPARE(home.appearance()["motionEnabled"].toBool(), false);
 }
-void HomeNavigationTests::composedReferenceNavigationAndGeometry() {
+void
+HomeNavigationTests::composedReferenceNavigationAndGeometry()
+{
     QTemporaryDir dir;
     AppRegistry registry;
     QVERIFY(registry.loadFromData(
@@ -1946,7 +2107,8 @@ void HomeNavigationTests::composedReferenceNavigationAndGeometry() {
     QVERIFY(content->property("contentHeight").toReal() <= content->height() + 2);
     QSignalSpy activated(root.get(), SIGNAL(actionActivated(QVariant, QString)));
     QVERIFY(activated.isValid());
-    auto command = [&](int value) {
+    auto command = [&](int value)
+    {
         return QMetaObject::invokeMethod(root.get(), "handleCommand", Q_ARG(QVariant, value));
     };
     QVERIFY(command(InputManager::NavigateRight));
@@ -1976,7 +2138,9 @@ void HomeNavigationTests::composedReferenceNavigationAndGeometry() {
     QVERIFY(command(InputManager::NavigateUp));
     QVERIFY(root->property("recoveryFocused").toBool());
 }
-void HomeNavigationTests::pastelReferenceNavigationAndGeometry() {
+void
+HomeNavigationTests::pastelReferenceNavigationAndGeometry()
+{
     const auto fixture = QStringLiteral(REFERENCE_DIR) + "/../home-pastel-reference";
     QTemporaryDir dir;
     AppRegistry registry;
@@ -2022,7 +2186,8 @@ void HomeNavigationTests::pastelReferenceNavigationAndGeometry() {
     QVERIFY(composed);
     QSignalSpy search(root.get(), SIGNAL(searchRequested())), settings(root.get(), SIGNAL(settingsRequested(int)));
     QSignalSpy activated(root.get(), SIGNAL(actionActivated(QVariant, QString)));
-    auto command = [&](int value) {
+    auto command = [&](int value)
+    {
         return QMetaObject::invokeMethod(root.get(), "handleCommand", Q_ARG(QVariant, value));
     };
     QCOMPARE(root->property("focusedItemId").toString(), QString("hdmi1"));
@@ -2032,7 +2197,8 @@ void HomeNavigationTests::pastelReferenceNavigationAndGeometry() {
     QCOMPARE(root->property("focusedItemId").toString(), QString("favorite-apps"));
     QVERIFY(command(InputManager::NavigateDown));
     QCOMPARE(composed->property("sectionActionId").toString(), QString("section-recent"));
-    std::function<QQuickItem*(QQuickItem*)> findApps = [&](QQuickItem* item) -> QQuickItem* {
+    std::function<QQuickItem*(QQuickItem*)> findApps = [&](QQuickItem* item) -> QQuickItem*
+    {
         if (item->objectName() == "placed-favorite-apps")
             return item;
         for (auto* child : item->childItems())
@@ -2079,90 +2245,115 @@ void HomeNavigationTests::pastelReferenceNavigationAndGeometry() {
     root->setProperty("wallpaperSource", home.wallpaperSource());
     QTRY_VERIFY(!root->property("hasWallpaper").toBool()); // fallback keeps the light palette readable
 }
-void HomeNavigationTests::televisionLibraryRemoteFlow() {
+void
+HomeNavigationTests::televisionLibraryRemoteFlow()
+{
     QTemporaryDir dir;
     QLocalServer server;
     QVERIFY(server.listen(dir.filePath("rpc.sock")));
     int requests = 0;
-    connect(&server, &QLocalServer::newConnection, &server, [&] {
-        while (server.hasPendingConnections()) {
-            auto* socket = server.nextPendingConnection();
-            connect(socket, &QLocalSocket::disconnected, socket, &QObject::deleteLater);
-            connect(socket, &QLocalSocket::readyRead, socket, [&, socket] {
-                const auto bytes = socket->property("input").toByteArray() + socket->readAll();
-                socket->setProperty("input", bytes);
-                if (!bytes.endsWith('\n'))
-                    return;
-                const auto request = QJsonDocument::fromJson(bytes).object();
-                const auto method = request["method"].toString();
-                ++requests;
-                if (server.property("rejectThemeRead").toBool() && method.startsWith("VideoLibrary.Get")) {
-                    server.setProperty("rejectThemeRead", false);
-                    socket->write(QJsonDocument(QJsonObject{{"jsonrpc", "2.0"},
-                                                            {"id", request["id"]},
-                                                            {"error",
-                                                             QJsonObject{{"code", -32000},
-                                                                         {"message", "Controlled theme outage"}}}})
-                                      .toJson(QJsonDocument::Compact) +
-                                  '\n');
-                    socket->disconnectFromServer();
-                    return;
-                }
-                QJsonObject result;
-                if (method == "JSONRPC.Version")
-                    result = {{"version", QJsonObject{{"major", 13}}}};
-                else if (method == "Isolde.CreatePlaylist") {
-                    const auto params = request["params"].toObject();
-                    server.setProperty("savedPlaylist", params.toVariantMap());
-                    result = {{"saved", true},
-                              {"name", params["name"]},
-                              {"kind", params["kind"]},
-                              {"playlistName", "Isolde-ui-fixture.xsp"}};
-                } else if (method == "AudioLibrary.GetAlbums")
-                    result = {
-                        {"albums",
-                         QJsonArray{QJsonObject{
-                             {"albumid", 31}, {"title", "Fixture album"}, {"artist", QJsonArray{"Fixture artist"}}}}},
-                        {"limits", QJsonObject{{"start", 0}, {"end", 1}, {"total", 1}}}};
-                else if (method == "AudioLibrary.GetSongs")
-                    result = {{"songs",
-                               QJsonArray{QJsonObject{{"songid", 32},
-                                                      {"title", "Fixture song"},
-                                                      {"album", "Fixture album"},
-                                                      {"artist", QJsonArray{"Fixture artist"}}}}},
-                              {"limits", QJsonObject{{"start", 0}, {"end", 1}, {"total", 1}}}};
-                else if (method == "Isolde.GetArtwork")
-                    result = {{"mime", ""}, {"data", ""}};
-                else if (method.startsWith("Isolde.Play")) {
-                    const auto state = method == "Isolde.PlaybackControl" ? "ended" : "playing";
-                    result = {{"state", state}, {"home", false}};
-                    if (method == "Isolde.PlayEpisode")
-                        server.setProperty("episode", request["params"].toObject().toVariantMap());
-                } else {
-                    const auto key = method == "VideoLibrary.GetTVShows"   ? "tvshows"
-                                     : method == "VideoLibrary.GetSeasons" ? "seasons"
-                                                                           : "episodes";
-                    QJsonObject item{{"title", "Synthetic library fixture"},
-                                     {"plot", "Kodi-backed television navigation"}};
-                    if (method == "VideoLibrary.GetTVShows")
-                        item["tvshowid"] = 7;
-                    else if (method == "VideoLibrary.GetSeasons") {
-                        item["seasonid"] = 8;
-                        item["season"] = 0;
-                    } else {
-                        item["episodeid"] = 9;
-                        item["season"] = 0;
-                        item["episode"] = 1;
-                    }
-                    result = {{key, QJsonArray{item}}, {"limits", QJsonObject{{"start", 0}, {"end", 1}, {"total", 1}}}};
-                }
-                socket->write(QJsonDocument(QJsonObject{{"jsonrpc", "2.0"}, {"id", request["id"]}, {"result", result}})
-                                  .toJson(QJsonDocument::Compact) +
-                              '\n');
-                socket->disconnectFromServer();
-            });
-        }
-    });
+    connect(
+        &server,
+        &QLocalServer::newConnection,
+        &server,
+        [&]
+        {
+            while (server.hasPendingConnections())
+            {
+                auto* socket = server.nextPendingConnection();
+                connect(socket, &QLocalSocket::disconnected, socket, &QObject::deleteLater);
+                connect(
+                    socket,
+                    &QLocalSocket::readyRead,
+                    socket,
+                    [&, socket]
+                    {
+                        const auto bytes = socket->property("input").toByteArray() + socket->readAll();
+                        socket->setProperty("input", bytes);
+                        if (!bytes.endsWith('\n'))
+                            return;
+                        const auto request = QJsonDocument::fromJson(bytes).object();
+                        const auto method = request["method"].toString();
+                        ++requests;
+                        if (server.property("rejectThemeRead").toBool() && method.startsWith("VideoLibrary.Get"))
+                        {
+                            server.setProperty("rejectThemeRead", false);
+                            socket->write(
+                                QJsonDocument(QJsonObject{{"jsonrpc", "2.0"},
+                                                          {"id", request["id"]},
+                                                          {"error",
+                                                           QJsonObject{{"code", -32000},
+                                                                       {"message", "Controlled theme outage"}}}})
+                                    .toJson(QJsonDocument::Compact) +
+                                '\n');
+                            socket->disconnectFromServer();
+                            return;
+                        }
+                        QJsonObject result;
+                        if (method == "JSONRPC.Version")
+                            result = {{"version", QJsonObject{{"major", 13}}}};
+                        else if (method == "Isolde.CreatePlaylist")
+                        {
+                            const auto params = request["params"].toObject();
+                            server.setProperty("savedPlaylist", params.toVariantMap());
+                            result = {{"saved", true},
+                                      {"name", params["name"]},
+                                      {"kind", params["kind"]},
+                                      {"playlistName", "Isolde-ui-fixture.xsp"}};
+                        }
+                        else if (method == "AudioLibrary.GetAlbums")
+                            result = {{"albums",
+                                       QJsonArray{QJsonObject{{"albumid", 31},
+                                                              {"title", "Fixture album"},
+                                                              {"artist", QJsonArray{"Fixture artist"}}}}},
+                                      {"limits", QJsonObject{{"start", 0}, {"end", 1}, {"total", 1}}}};
+                        else if (method == "AudioLibrary.GetSongs")
+                            result = {{"songs",
+                                       QJsonArray{QJsonObject{{"songid", 32},
+                                                              {"title", "Fixture song"},
+                                                              {"album", "Fixture album"},
+                                                              {"artist", QJsonArray{"Fixture artist"}}}}},
+                                      {"limits", QJsonObject{{"start", 0}, {"end", 1}, {"total", 1}}}};
+                        else if (method == "Isolde.GetArtwork")
+                            result = {{"mime", ""}, {"data", ""}};
+                        else if (method.startsWith("Isolde.Play"))
+                        {
+                            const auto state = method == "Isolde.PlaybackControl" ? "ended" : "playing";
+                            result = {{"state", state}, {"home", false}};
+                            if (method == "Isolde.PlayEpisode")
+                                server.setProperty("episode", request["params"].toObject().toVariantMap());
+                        }
+                        else
+                        {
+                            const auto key = method == "VideoLibrary.GetTVShows"   ? "tvshows"
+                                             : method == "VideoLibrary.GetSeasons" ? "seasons"
+                                                                                   : "episodes";
+                            QJsonObject item{{"title", "Synthetic library fixture"},
+                                             {"plot", "Kodi-backed television navigation"}};
+                            if (method == "VideoLibrary.GetTVShows")
+                                item["tvshowid"] = 7;
+                            else if (method == "VideoLibrary.GetSeasons")
+                            {
+                                item["seasonid"] = 8;
+                                item["season"] = 0;
+                            }
+                            else
+                            {
+                                item["episodeid"] = 9;
+                                item["season"] = 0;
+                                item["episode"] = 1;
+                            }
+                            result = {{key, QJsonArray{item}},
+                                      {"limits", QJsonObject{{"start", 0}, {"end", 1}, {"total", 1}}}};
+                        }
+                        socket->write(
+                            QJsonDocument(QJsonObject{{"jsonrpc", "2.0"}, {"id", request["id"]}, {"result", result}})
+                                .toJson(QJsonDocument::Compact) +
+                            '\n');
+                        socket->disconnectFromServer();
+                    });
+            }
+        });
     AppRegistry registry;
     QVERIFY(registry.loadFromData(
         R"([{"id":"settings","name":"Settings","type":"settings","section":"System","accent":"#556677"}])"));
@@ -2188,7 +2379,8 @@ void HomeNavigationTests::televisionLibraryRemoteFlow() {
     window.resize(1280, 720);
     qobject_cast<QQuickItem*>(root.get())->setParentItem(window.contentItem());
     window.show();
-    auto command = [&](int value) {
+    auto command = [&](int value)
+    {
         return QMetaObject::invokeMethod(root.get(), "handleCommand", Q_ARG(QVariant, value));
     };
     QVariant missingEpisodeSubtitle;
@@ -2228,7 +2420,8 @@ void HomeNavigationTests::televisionLibraryRemoteFlow() {
                              {"mutedColor", "#ffffff"},
                              {"focusColor", "#ffffff"},
                              {"highContrast", true},
-                             {"motionEnabled", false}}}) {
+                             {"motionEnabled", false}}})
+    {
         const auto tokens = ComponentSchema::surfacePalette(raw);
         QVERIFY(root->setProperty("appearance", tokens));
         QTest::qWait(50);
@@ -2260,7 +2453,8 @@ void HomeNavigationTests::televisionLibraryRemoteFlow() {
     auto* statusLine = root->findChild<QObject*>("libraryStatusLine");
     QVERIFY(statusLine);
     const auto outageRequests = requests;
-    for (const auto& background : QStringList{"#101014", "#f5edf3", "#ffffff"}) {
+    for (const auto& background : QStringList{"#101014", "#f5edf3", "#ffffff"})
+    {
         const auto tokens = ComponentSchema::surfacePalette({{"surfaceColor", "#000000"},
                                                              {"backgroundEnd", background},
                                                              {"textColor", "#ffffff"},
@@ -2361,7 +2555,9 @@ void HomeNavigationTests::televisionLibraryRemoteFlow() {
     QCOMPARE(searchReturn.count(), 1);
     QVERIFY(!root->property("open").toBool());
 }
-void HomeNavigationTests::gridEditorMoveResizeDuplicateRemove() {
+void
+HomeNavigationTests::gridEditorMoveResizeDuplicateRemove()
+{
     QTemporaryDir dir;
     QFile defaults(dir.filePath("default.json"));
     QVERIFY(defaults.open(QIODevice::WriteOnly));
@@ -2392,13 +2588,19 @@ void HomeNavigationTests::gridEditorMoveResizeDuplicateRemove() {
                                                                          {"width", 1280},
                                                                          {"height", 720}}));
     QVERIFY2(root, qPrintable(component.errorString()));
-    connect(&home, &HomeLayout::layoutChanged, root.get(), [&] {
-        root->setProperty("items", home.items());
-    });
-    auto command = [&](int value) {
+    connect(&home,
+            &HomeLayout::layoutChanged,
+            root.get(),
+            [&]
+            {
+                root->setProperty("items", home.items());
+            });
+    auto command = [&](int value)
+    {
         return QMetaObject::invokeMethod(root.get(), "handleCommand", Q_ARG(QVariant, value));
     };
-    auto items = [&]() {
+    auto items = [&]()
+    {
         return root->property("items").toList();
     };
 
@@ -2449,7 +2651,9 @@ void HomeNavigationTests::gridEditorMoveResizeDuplicateRemove() {
             gammaFound = true;
     QVERIFY(!gammaFound);
 }
-void HomeNavigationTests::studioPageMenuCreatesAndDesignatesHome() {
+void
+HomeNavigationTests::studioPageMenuCreatesAndDesignatesHome()
+{
     QTemporaryDir dir;
     AppRegistry registry;
     HomeLayout home(&registry);
@@ -2467,7 +2671,8 @@ void HomeNavigationTests::studioPageMenuCreatesAndDesignatesHome() {
         {{"layoutModel", QVariant::fromValue(&home)}, {"width", 1280}, {"height", 720}}));
     QVERIFY(root);
     QVERIFY(QMetaObject::invokeMethod(root.get(), "show", Q_ARG(QVariant, QString()), Q_ARG(QVariant, QString())));
-    auto command = [&](int key) {
+    auto command = [&](int key)
+    {
         QVERIFY(QMetaObject::invokeMethod(root.get(), "handleCommand", Q_ARG(QVariant, key)));
         QCoreApplication::processEvents();
     };
@@ -2483,7 +2688,8 @@ void HomeNavigationTests::studioPageMenuCreatesAndDesignatesHome() {
     QVERIFY(!id.isEmpty());
     QCOMPARE(root->property("mode").toString(), QString("canvas"));
     QVERIFY(!root->property("toolbarFocus").toBool());
-    auto manage = [&]() {
+    auto manage = [&]()
+    {
         QVERIFY(QMetaObject::invokeMethod(root.get(), "activateMenu", Q_ARG(QVariant, 0)));
         for (int i = 0; i < 100; ++i)
             command(InputManager::NavigateDown);
@@ -2543,7 +2749,9 @@ void HomeNavigationTests::studioPageMenuCreatesAndDesignatesHome() {
     QVERIFY(session->undo());
     QVERIFY(qobject_cast<HomeLayout*>(session->model())->rootPageVisible());
 }
-void HomeNavigationTests::studioNamedPageViewportMatchesRuntime() {
+void
+HomeNavigationTests::studioNamedPageViewportMatchesRuntime()
+{
     QTemporaryDir dir;
     AppRegistry registry;
     HomeLayout home(&registry);
@@ -2567,7 +2775,8 @@ void HomeNavigationTests::studioNamedPageViewportMatchesRuntime() {
     QQmlComponent editor(&engine, QUrl::fromLocalFile(qmlDir.filePath("PageStudioView.qml")));
     QVERIFY2(runtime.isReady(), qPrintable(runtime.errorString()));
     QVERIFY2(editor.isReady(), qPrintable(editor.errorString()));
-    for (const auto& navigation : QStringList{"left", "top", "none"}) {
+    for (const auto& navigation : QStringList{"left", "top", "none"})
+    {
         auto composition = page->composition();
         composition["pageNavigation"] = navigation;
         composition["sidebarWidth"] = 260;
@@ -2589,8 +2798,10 @@ void HomeNavigationTests::studioNamedPageViewportMatchesRuntime() {
              *preview = draft->findChild<QQuickItem*>("studioPreview");
         QVERIFY(content);
         QVERIFY(preview);
-        for (const auto size : {QSize(1280, 720), QSize(1920, 1080), QSize(3840, 2160)}) {
-            for (auto* view : {live.get(), draft.get()}) {
+        for (const auto size : {QSize(1280, 720), QSize(1920, 1080), QSize(3840, 2160)})
+        {
+            for (auto* view : {live.get(), draft.get()})
+            {
                 view->setProperty("width", size.width());
                 view->setProperty("height", size.height());
             }
@@ -2617,9 +2828,11 @@ void HomeNavigationTests::studioNamedPageViewportMatchesRuntime() {
             QCOMPARE(draftComposition->x(), compositionView->x());
             QCOMPARE(draftComposition->y(), compositionView->y());
         }
-        if (navigation != "none") {
+        if (navigation != "none")
+        {
             content->setProperty("recoveryFocused", true);
-            if (navigation == "left") {
+            if (navigation == "left")
+            {
                 content->setProperty("recoveryIndex", 1);
                 QVERIFY(QMetaObject::invokeMethod(content, "handleCommand", Q_ARG(QVariant, input.navigateLeft())));
                 QCOMPARE(content->property("recoveryIndex").toInt(), 0);
@@ -2658,7 +2871,9 @@ void HomeNavigationTests::studioNamedPageViewportMatchesRuntime() {
         qobject_cast<StudioSession*>(draft->property("session").value<QObject*>())->invalidate();
     }
 }
-void HomeNavigationTests::studioRemoteGesturesCollisionsAndAnchors() {
+void
+HomeNavigationTests::studioRemoteGesturesCollisionsAndAnchors()
+{
     QTemporaryDir dir;
     AppRegistry registry;
     HomeLayout home(&registry);
@@ -2708,12 +2923,14 @@ void HomeNavigationTests::studioRemoteGesturesCollisionsAndAnchors() {
     QVERIFY(
         QMetaObject::invokeMethod(root.get(), "show", Q_ARG(QVariant, QString()), Q_ARG(QVariant, QString("clock"))));
     QTest::qWait(50);
-    auto key = [&](int value) {
+    auto key = [&](int value)
+    {
         const bool ok = QMetaObject::invokeMethod(root.get(), "handleCommand", Q_ARG(QVariant, value));
         QCoreApplication::processEvents();
         return ok;
     };
-    auto map = [](const QVariant& value) {
+    auto map = [](const QVariant& value)
+    {
         return (value.metaType().id() == qMetaTypeId<QJSValue>() ? value.value<QJSValue>().toVariant() : value).toMap();
     };
     auto* session = qobject_cast<StudioSession*>(root->property("session").value<QObject*>());
@@ -2724,7 +2941,8 @@ void HomeNavigationTests::studioRemoteGesturesCollisionsAndAnchors() {
     QSignalSpy actions(preview, SIGNAL(actionActivated(QVariant, QString)));
     QVERIFY(actions.isValid());
     std::function<QQuickItem*(QQuickItem*, const QString&)> findNode = [&](QQuickItem* item,
-                                                                           const QString& name) -> QQuickItem* {
+                                                                           const QString& name) -> QQuickItem*
+    {
         if (item->objectName() == name)
             return item;
         for (auto* child : item->childItems())
@@ -2795,14 +3013,16 @@ void HomeNavigationTests::studioRemoteGesturesCollisionsAndAnchors() {
           InputManager::Confirm,
           InputManager::Confirm}} // App row is larger than this 4-column fixture.,
     };
-    for (const auto& entry : cancelCases) {
+    for (const auto& entry : cancelCases)
+    {
         for (int command : entry.second)
             QVERIFY(key(command));
         QCOMPARE(root->property("mode").toString(), entry.first);
         QVERIFY(key(InputManager::Back));
         if (entry.first == "keyboard" || entry.first == "collisionDetails")
             QVERIFY(key(InputManager::Back));
-        if (root->property("mode").toString() == "inspector") {
+        if (root->property("mode").toString() == "inspector")
+        {
             QVERIFY(key(InputManager::Back));
             QVERIFY(key(InputManager::Back));
         }
@@ -2897,7 +3117,8 @@ void HomeNavigationTests::studioRemoteGesturesCollisionsAndAnchors() {
     QVERIFY(key(InputManager::Confirm));
     const auto beforeAnchor = session->draft();
     QCOMPARE(session->changeCount(), 1);
-    for (bool accept : {false, true}) {
+    for (bool accept : {false, true})
+    {
         QVERIFY(QMetaObject::invokeMethod(root.get(), "beginGesture", Q_ARG(QVariant, true)));
         QVERIFY(key(InputManager::Menu));
         QCOMPARE(root->property("mode").toString(), QString("moveOptions"));
@@ -2912,7 +3133,8 @@ void HomeNavigationTests::studioRemoteGesturesCollisionsAndAnchors() {
         QCOMPARE(candidate["x"].toInt(), 2);
         QCOMPARE(candidate["width"].toInt(), 2);
         QVERIFY(key(accept ? InputManager::Confirm : InputManager::Back));
-        if (!accept) {
+        if (!accept)
+        {
             QCOMPARE(session->draft(), beforeAnchor);
             QCOMPARE(session->changeCount(), 1);
         }
@@ -2955,7 +3177,9 @@ void HomeNavigationTests::studioRemoteGesturesCollisionsAndAnchors() {
     QVERIFY(saved.open(QIODevice::ReadOnly));
     QCOMPARE(saved.readAll(), disk);
 }
-void HomeNavigationTests::studioRemoteSectionTransferAndCancel() {
+void
+HomeNavigationTests::studioRemoteSectionTransferAndCancel()
+{
     QTemporaryDir dir;
     AppRegistry registry;
     HomeLayout home(&registry);
@@ -2984,7 +3208,8 @@ void HomeNavigationTests::studioRemoteSectionTransferAndCancel() {
     QVERIFY(root);
     QVERIFY(
         QMetaObject::invokeMethod(root.get(), "show", Q_ARG(QVariant, QString()), Q_ARG(QVariant, QString("clock"))));
-    auto key = [&](int value) {
+    auto key = [&](int value)
+    {
         const bool ok = QMetaObject::invokeMethod(root.get(), "handleCommand", Q_ARG(QVariant, value));
         QCoreApplication::processEvents();
         return ok;
@@ -3000,7 +3225,8 @@ void HomeNavigationTests::studioRemoteSectionTransferAndCancel() {
                                      InputManager::NavigateDown,
                                      InputManager::NavigateDown,
                                      InputManager::Confirm};
-    const auto openDestination = [&]() {
+    const auto openDestination = [&]()
+    {
         for (int command : destinationKeys)
             if (!key(command))
                 return false;
@@ -3014,7 +3240,8 @@ void HomeNavigationTests::studioRemoteSectionTransferAndCancel() {
     QCOMPARE(root->property("scopeId").toString(), QString("widgets"));
     auto* viewport = root->findChild<QObject*>("studioPreview");
     QVERIFY(viewport);
-    for (bool accept : {false, true}) {
+    for (bool accept : {false, true})
+    {
         QCoreApplication::processEvents();
         const QVariantMap scroll{
             {"legacyY", 0}, {"composed", QVariantMap{{"y", 137}, {"navigationX", 0}}}, {"groups", QVariantMap{}}};
@@ -3030,7 +3257,8 @@ void HomeNavigationTests::studioRemoteSectionTransferAndCancel() {
             QVERIFY(key(InputManager::NavigateDown));
         QCOMPARE(session->draft(), start);
         QVERIFY(key(accept ? InputManager::Confirm : InputManager::Back));
-        if (!accept) {
+        if (!accept)
+        {
             QCOMPARE(root->property("scopeId").toString(), QString("widgets"));
             QCOMPARE(session->draft(), start);
             QCOMPARE(session->changeCount(), 0);
@@ -3057,7 +3285,9 @@ void HomeNavigationTests::studioRemoteSectionTransferAndCancel() {
     QVERIFY(saved.open(QIODevice::ReadOnly));
     QCOMPARE(saved.readAll(), disk);
 }
-void HomeNavigationTests::studioScrollingAddMoveAndCancel() {
+void
+HomeNavigationTests::studioScrollingAddMoveAndCancel()
+{
     QTemporaryDir dir;
     AppRegistry registry;
     HomeLayout home(&registry);
@@ -3070,7 +3300,8 @@ void HomeNavigationTests::studioScrollingAddMoveAndCancel() {
                                      {"enabled", true},
                                      {"grid", QJsonObject{{"columns", 4}, {"rows", 3}, {"mode", "screen"}}}};
     QJsonArray nodes;
-    for (int i = 0; i < 12; ++i) {
+    for (int i = 0; i < 12; ++i)
+    {
         const auto node = ComponentSchema::component(
             {{"id", QString("cell-%1").arg(i)},
              {"kind", "widget"},
@@ -3106,16 +3337,19 @@ void HomeNavigationTests::studioScrollingAddMoveAndCancel() {
     window.show();
     QVERIFY(
         QMetaObject::invokeMethod(root.get(), "show", Q_ARG(QVariant, QString()), Q_ARG(QVariant, QString("cell-0"))));
-    auto key = [&](int value) {
+    auto key = [&](int value)
+    {
         const auto ok = QMetaObject::invokeMethod(root.get(), "handleCommand", Q_ARG(QVariant, value));
         QCoreApplication::processEvents();
         return ok;
     };
-    const auto variant = [](const QVariant& v) {
+    const auto variant = [](const QVariant& v)
+    {
         return v.metaType().id() == qMetaTypeId<QJSValue>() ? v.value<QJSValue>().toVariant() : v;
     };
     std::function<QQuickItem*(QQuickItem*, const QString&)> findVisual = [&](QQuickItem* item,
-                                                                             const QString& name) -> QQuickItem* {
+                                                                             const QString& name) -> QQuickItem*
+    {
         if (item->objectName() == name)
             return item;
         for (auto* child : item->childItems())
@@ -3142,7 +3376,8 @@ void HomeNavigationTests::studioScrollingAddMoveAndCancel() {
     QVERIFY(pageHost);
     QTest::qWait(30);
     const auto initialCell = variant(composed->property("placementCell")).toMap();
-    for (bool accept : {false, true}) {
+    for (bool accept : {false, true})
+    {
         QVERIFY(QMetaObject::invokeMethod(
             root.get(), "startAddition", Q_ARG(QVariant, QString("text")), Q_ARG(QVariant, QVariantMap{})));
         QCOMPARE(root->property("mode").toString(), QString("noRoom"));
@@ -3154,7 +3389,8 @@ void HomeNavigationTests::studioScrollingAddMoveAndCancel() {
         QCOMPARE(session->draft(), start);
         QCOMPARE(session->changeCount(), 0);
         QVERIFY(key(accept ? InputManager::Confirm : InputManager::Back));
-        if (!accept) {
+        if (!accept)
+        {
             QTest::qWait(30);
             QCOMPARE(session->draft(), start);
             QVERIFY(!root->property("pendingScrollEnable").toBool());
@@ -3210,7 +3446,8 @@ void HomeNavigationTests::studioScrollingAddMoveAndCancel() {
     QCOMPARE(root->property("mode").toString(), QString("canvas"));
     const auto enabled = session->draft();
     QCOMPARE(variant(composed->property("placementCell")).toMap()["cellH"], initialCell["cellH"]);
-    for (bool accept : {false, true}) {
+    for (bool accept : {false, true})
+    {
         QVERIFY(QMetaObject::invokeMethod(root.get(), "beginGesture", Q_ARG(QVariant, false)));
         for (int i = 0; i < 12; ++i)
             QVERIFY(key(InputManager::NavigateDown));
@@ -3240,8 +3477,9 @@ void HomeNavigationTests::studioScrollingAddMoveAndCancel() {
         const auto viewportHostOrigin = flickable->mapToItem(pageHost, QPointF(0, 0));
         const auto hostOrigin = pageHost->mapToItem(preview, QPointF(0, 0));
         const auto viewportGeometry = composed->property("viewportGeometry").toString();
-        const auto detail = QString("target %1 + %2, viewport %3 + %4, scroll %5, origin %6, content %7/%8, rows %9, "
-                                    "extent %10, candidate %11 + %12, cell %13 + %14 gap %15 margin %16")
+        const auto detail = QString(
+                                "target %1 + %2, viewport %3 + %4, scroll %5, origin %6, content %7/%8, rows %9, "
+                                "extent %10, candidate %11 + %12, cell %13 + %14 gap %15 margin %16")
                                 .arg(visibleRect["y"].toReal())
                                 .arg(visibleRect["height"].toReal())
                                 .arg(viewport["y"].toReal())
@@ -3272,7 +3510,8 @@ void HomeNavigationTests::studioScrollingAddMoveAndCancel() {
                  qPrintable(diagnostic));
         QCOMPARE(variant(composed->property("placementCell")).toMap()["cellH"], initialCell["cellH"]);
         QVERIFY(key(accept ? InputManager::Confirm : InputManager::Back));
-        if (!accept) {
+        if (!accept)
+        {
             QTest::qWait(40);
             QCOMPARE(session->draft(), enabled);
             QCOMPARE(composed->property("scrollOffset").toInt(), 0);
@@ -3325,7 +3564,9 @@ void HomeNavigationTests::studioScrollingAddMoveAndCancel() {
                             .arg(viewport["y"].toReal())
                             .arg(viewport["height"].toReal())));
 }
-void HomeNavigationTests::studioLegacyRemoteOrdering() {
+void
+HomeNavigationTests::studioLegacyRemoteOrdering()
+{
     QTemporaryDir dir;
     AppRegistry registry;
     HomeLayout home(&registry);
@@ -3348,7 +3589,8 @@ void HomeNavigationTests::studioLegacyRemoteOrdering() {
     window.show();
     QVERIFY(
         QMetaObject::invokeMethod(root.get(), "show", Q_ARG(QVariant, QString()), Q_ARG(QVariant, QString("movies"))));
-    auto key = [&](int value) {
+    auto key = [&](int value)
+    {
         const bool ok = QMetaObject::invokeMethod(root.get(), "handleCommand", Q_ARG(QVariant, value));
         QCoreApplication::processEvents();
         return ok;
@@ -3397,7 +3639,9 @@ void HomeNavigationTests::studioLegacyRemoteOrdering() {
     QCOMPARE(session->draft(), start);
     QVERIFY(!session->proposalModel());
 }
-void HomeNavigationTests::studioSectionGeometryMatchesRuntime() {
+void
+HomeNavigationTests::studioSectionGeometryMatchesRuntime()
+{
     QTemporaryDir dir;
     AppRegistry registry;
     HomeLayout home(&registry);
@@ -3428,7 +3672,8 @@ void HomeNavigationTests::studioSectionGeometryMatchesRuntime() {
         QMetaObject::invokeMethod(root.get(), "show", Q_ARG(QVariant, QString()), Q_ARG(QVariant, QString("clock"))));
     auto* preview = root->findChild<QQuickItem*>("studioPreview");
     QVERIFY(preview);
-    std::function<QQuickItem*(QQuickItem*)> find = [&](QQuickItem* parent) -> QQuickItem* {
+    std::function<QQuickItem*(QQuickItem*)> find = [&](QQuickItem* parent) -> QQuickItem*
+    {
         if (parent->objectName() == "placed-clock")
             return parent;
         for (auto* child : parent->childItems())
@@ -3436,7 +3681,8 @@ void HomeNavigationTests::studioSectionGeometryMatchesRuntime() {
                 return found;
         return nullptr;
     };
-    for (const auto size : {QSize(1280, 720), QSize(1920, 1080), QSize(3840, 2160), QSize(1280, 800)}) {
+    for (const auto size : {QSize(1280, 720), QSize(1920, 1080), QSize(3840, 2160), QSize(1280, 800)})
+    {
         root->setProperty("width", size.width());
         root->setProperty("height", size.height());
         QTest::qWait(60);
@@ -3460,7 +3706,9 @@ void HomeNavigationTests::studioSectionGeometryMatchesRuntime() {
         QCOMPARE(preview->height(), qreal(size.height()));
     }
 }
-void HomeNavigationTests::studioRemoteDraftApplyAndCancel() {
+void
+HomeNavigationTests::studioRemoteDraftApplyAndCancel()
+{
     QTemporaryDir dir;
     AppRegistry registry;
     HomeLayout home(&registry);
@@ -3483,7 +3731,8 @@ void HomeNavigationTests::studioRemoteDraftApplyAndCancel() {
     window.show();
     QVERIFY(QMetaObject::invokeMethod(root.get(), "show", Q_ARG(QVariant, QString()), Q_ARG(QVariant, QString())));
     QTest::qWait(80);
-    auto command = [&](int key) {
+    auto command = [&](int key)
+    {
         QVERIFY(QMetaObject::invokeMethod(root.get(), "handleCommand", Q_ARG(QVariant, key)));
         QCoreApplication::processEvents();
     };
@@ -3500,7 +3749,8 @@ void HomeNavigationTests::studioRemoteDraftApplyAndCancel() {
     auto* preview = root->findChild<QQuickItem*>("studioPreview");
     QVERIFY(preview);
     std::function<QQuickItem*(QQuickItem*, const QString&)> findVisual = [&](QQuickItem* item,
-                                                                             const QString& name) -> QQuickItem* {
+                                                                             const QString& name) -> QQuickItem*
+    {
         if (item->objectName() == name)
             return item;
         for (auto* child : item->childItems())
@@ -3508,7 +3758,8 @@ void HomeNavigationTests::studioRemoteDraftApplyAndCancel() {
                 return found;
         return nullptr;
     };
-    for (const auto& size : {QSize(1280, 720), QSize(1920, 1080), QSize(3840, 2160), QSize(1280, 800)}) {
+    for (const auto& size : {QSize(1280, 720), QSize(1920, 1080), QSize(3840, 2160), QSize(1280, 800)})
+    {
         root->setProperty("width", size.width());
         root->setProperty("height", size.height());
         QCoreApplication::processEvents();
@@ -3580,9 +3831,12 @@ void HomeNavigationTests::studioRemoteDraftApplyAndCancel() {
         (labels.metaType().id() == qMetaTypeId<QJSValue>() ? labels.value<QJSValue>().toVariant() : labels)
             .toStringList();
     QVERIFY(!layerLabels.isEmpty());
-    const auto hidden = std::find_if(layerLabels.cbegin(), layerLabels.cend(), [](const QString& label) {
-        return label.contains("Hidden");
-    });
+    const auto hidden = std::find_if(layerLabels.cbegin(),
+                                     layerLabels.cend(),
+                                     [](const QString& label)
+                                     {
+                                         return label.contains("Hidden");
+                                     });
     QVERIFY(hidden != layerLabels.cend());
     for (int i = 0; i < std::distance(layerLabels.cbegin(), hidden); ++i)
         command(InputManager::NavigateDown);
@@ -3617,12 +3871,16 @@ void HomeNavigationTests::studioRemoteDraftApplyAndCancel() {
     command(InputManager::Back); // First Back restores the page menu; second exits.
     QVERIFY(!root->property("open").toBool());
 }
-void HomeNavigationTests::studioRemotePointerAndInspectorParity_data() {
+void
+HomeNavigationTests::studioRemotePointerAndInspectorParity_data()
+{
     QTest::addColumn<bool>("nested");
     QTest::newRow("page") << false;
     QTest::newRow("group") << true;
 }
-void HomeNavigationTests::studioRemotePointerAndInspectorParity() {
+void
+HomeNavigationTests::studioRemotePointerAndInspectorParity()
+{
     QFETCH(bool, nested);
     QTemporaryDir dir;
     AppRegistry registry;
@@ -3631,7 +3889,8 @@ void HomeNavigationTests::studioRemotePointerAndInspectorParity() {
     auto* setup = qobject_cast<StudioSession*>(home.beginStudio());
     QVERIFY(setup);
     QVERIFY(setup->execute("convertGrid", {{"value", QVariantMap{{"columns", 8}, {"rows", 5}}}}));
-    if (nested) {
+    if (nested)
+    {
         auto doc = QJsonDocument::fromJson(setup->draft()).object();
         auto group = QJsonObject::fromVariantMap(setup->componentPrototype("container")["root"].toMap());
         group["placement"] = QJsonObject{{"x", 0}, {"y", 0}, {"width", 4}, {"height", 4}};
@@ -3642,7 +3901,8 @@ void HomeNavigationTests::studioRemotePointerAndInspectorParity() {
         group["presentation"] = style;
         QJsonArray entries;
         entries.append(group);
-        for (const auto& type : QStringList{"clock", "text"}) {
+        for (const auto& type : QStringList{"clock", "text"})
+        {
             auto child = QJsonObject::fromVariantMap(setup->componentPrototype(type)["root"].toMap());
             child["id"] = type;
             child["parentId"] = group["id"];
@@ -3670,16 +3930,19 @@ void HomeNavigationTests::studioRemotePointerAndInspectorParity() {
     window.resize(1280, 720);
     qobject_cast<QQuickItem*>(root.get())->setParentItem(window.contentItem());
     window.show();
-    auto show = [&] {
+    auto show = [&]
+    {
         QVERIFY(QMetaObject::invokeMethod(
             root.get(), "show", Q_ARG(QVariant, QString()), Q_ARG(QVariant, QString("clock"))));
         QTest::qWait(80);
     };
-    auto command = [&](int key) {
+    auto command = [&](int key)
+    {
         QVERIFY(QMetaObject::invokeMethod(root.get(), "handleCommand", Q_ARG(QVariant, key)));
         QCoreApplication::processEvents();
     };
-    auto session = [&] {
+    auto session = [&]
+    {
         return qobject_cast<StudioSession*>(root->property("session").value<QObject*>());
     };
     show();
@@ -3699,7 +3962,8 @@ void HomeNavigationTests::studioRemotePointerAndInspectorParity() {
     command(InputManager::NavigateRight); // Collapse the page menu before direct dragging.
     auto* preview = root->findChild<QQuickItem*>("studioPreview");
     QVERIFY(preview);
-    auto center = [&](int row) {
+    auto center = [&](int row)
+    {
         QVariant result;
         QMetaObject::invokeMethod(preview,
                                   "placementRectFor",
@@ -3756,7 +4020,9 @@ void HomeNavigationTests::studioRemotePointerAndInspectorParity() {
     QCOMPARE(session()->draft(), remote);
     QCOMPARE(home.committedDocument(), baseline);
 }
-void HomeNavigationTests::studioPreservesLegacyGridMetadataWithoutConversion() {
+void
+HomeNavigationTests::studioPreservesLegacyGridMetadataWithoutConversion()
+{
     QTemporaryDir dir;
     AppRegistry registry;
     HomeLayout home(&registry);
@@ -3771,13 +4037,16 @@ void HomeNavigationTests::studioPreservesLegacyGridMetadataWithoutConversion() {
     QQmlComponent component(
         &engine, QUrl::fromLocalFile(QFileInfo(QStringLiteral(CUSTOMIZE_QML)).dir().filePath("PageStudioView.qml")));
     QVERIFY2(component.isReady(), qPrintable(component.errorString()));
-    for (int placedCount : {0, 1, 16}) {
+    for (int placedCount : {0, 1, 16})
+    {
         auto document = baseline;
         document["composition"] = QJsonObject{
             {"schemaVersion", 1}, {"enabled", placedCount != 16}, {"grid", QJsonObject{{"columns", 8}, {"rows", 5}}}};
-        if (placedCount) {
+        if (placedCount)
+        {
             auto entries = document["components"].toArray();
-            for (int i = 0; i < qMin(placedCount, int(entries.size())); ++i) {
+            for (int i = 0; i < qMin(placedCount, int(entries.size())); ++i)
+            {
                 auto entry = entries[i].toObject();
                 entry["placement"] = QJsonObject{{"x", i % 8}, {"y", i / 8}, {"width", 1}, {"height", 1}};
                 entries[i] = entry;
@@ -3885,7 +4154,9 @@ void HomeNavigationTests::studioPreservesLegacyGridMetadataWithoutConversion() {
                               : value.toList();
     QCOMPARE(rendered.size(), home.items().size());
 }
-void HomeNavigationTests::studioNestedGroupCanvasAndRemoteScope() {
+void
+HomeNavigationTests::studioNestedGroupCanvasAndRemoteScope()
+{
     QTemporaryDir dir;
     AppRegistry registry;
     HomeLayout home(&registry);
@@ -3923,11 +4194,13 @@ void HomeNavigationTests::studioNestedGroupCanvasAndRemoteScope() {
     auto* session = qobject_cast<StudioSession*>(root->property("session").value<QObject*>());
     QVERIFY(session);
     const auto baseline = session->draft();
-    auto key = [&](int value) {
+    auto key = [&](int value)
+    {
         return QMetaObject::invokeMethod(root.get(), "handleCommand", Q_ARG(QVariant, value));
     };
     std::function<QQuickItem*(QQuickItem*, const QString&)> find = [&](QQuickItem* parent,
-                                                                       const QString& name) -> QQuickItem* {
+                                                                       const QString& name) -> QQuickItem*
+    {
         if (parent->objectName() == name)
             return parent;
         for (auto* child : parent->childItems())
@@ -4020,7 +4293,9 @@ void HomeNavigationTests::studioNestedGroupCanvasAndRemoteScope() {
 QTEST_MAIN(HomeNavigationTests)
 #include "tst_home_navigation.moc"
 
-void HomeNavigationTests::studioCatalogAndContextualInspector() {
+void
+HomeNavigationTests::studioCatalogAndContextualInspector()
+{
     QTemporaryDir dir;
     AppRegistry registry;
     HomeLayout home(&registry);
@@ -4047,7 +4322,8 @@ void HomeNavigationTests::studioCatalogAndContextualInspector() {
     qobject_cast<QQuickItem*>(root.get())->setParentItem(window.contentItem());
     window.show();
     QVERIFY(QMetaObject::invokeMethod(root.get(), "show", Q_ARG(QVariant, pageId), Q_ARG(QVariant, QString())));
-    auto key = [&](int c) {
+    auto key = [&](int c)
+    {
         const auto ok = QMetaObject::invokeMethod(root.get(), "handleCommand", Q_ARG(QVariant, c));
         QCoreApplication::processEvents();
         return ok;
@@ -4059,15 +4335,19 @@ void HomeNavigationTests::studioCatalogAndContextualInspector() {
          *inspector = root->findChild<QObject*>("studioInspector");
     QVERIFY(catalog);
     QVERIFY(inspector);
-    auto list = [](const QVariant& v) {
+    auto list = [](const QVariant& v)
+    {
         return (v.metaType().id() == qMetaTypeId<QJSValue>() ? v.value<QJSValue>().toVariant() : v).toList();
     };
     QVERIFY(session->execute("newPage", {{"name", "Destination"}, {"preset", "blank"}}));
     QCoreApplication::processEvents();
     const auto namedActions = list(catalog->property("actions"));
-    QVERIFY(std::any_of(namedActions.cbegin(), namedActions.cend(), [](const QVariant& v) {
-        return v.toMap()["name"].toString().contains("Destination");
-    }));
+    QVERIFY(std::any_of(namedActions.cbegin(),
+                        namedActions.cend(),
+                        [](const QVariant& v)
+                        {
+                            return v.toMap()["name"].toString().contains("Destination");
+                        }));
     QVERIFY(session->undo());
     QCOMPARE(session->draft(), baseline);
     QVERIFY(key(InputManager::Search));
@@ -4075,7 +4355,8 @@ void HomeNavigationTests::studioCatalogAndContextualInspector() {
     QCOMPARE(list(catalog->property("families")).size(), 7);
     QCOMPARE(list(catalog->property("families")).last().toMap()["id"].toString(), QString("more"));
     // Inspect the content-bearing primary families; Clock places directly.
-    for (int i = 0; i < 5; ++i) {
+    for (int i = 0; i < 5; ++i)
+    {
         catalog->setProperty("selected", i);
         QVERIFY(key(InputManager::Confirm));
         QVERIFY(catalog->property("view").toString() != "families");
@@ -4164,7 +4445,8 @@ void HomeNavigationTests::studioCatalogAndContextualInspector() {
         QVERIFY(session->undo());
     QCOMPARE(session->draft(), baseline);
     std::function<QQuickItem*(QQuickItem*, const QString&)> find = [&](QQuickItem* item,
-                                                                       const QString& name) -> QQuickItem* {
+                                                                       const QString& name) -> QQuickItem*
+    {
         if (item->objectName() == name)
             return item;
         for (auto* child : item->childItems())
@@ -4172,7 +4454,8 @@ void HomeNavigationTests::studioCatalogAndContextualInspector() {
                 return match;
         return nullptr;
     };
-    for (const auto& family : QStringList{"button", "image", "library", "carousel", "app-bar"}) {
+    for (const auto& family : QStringList{"button", "image", "library", "carousel", "app-bar"})
+    {
         const auto prototype = session->componentPrototype(family);
         QVERIFY(!prototype.isEmpty());
         QVERIFY2(session->execute(

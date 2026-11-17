@@ -11,14 +11,20 @@
 #include "app/FdroidProvider.h"
 
 FdroidProvider::FdroidProvider(QObject* parent)
-    : StoreProvider(parent), m_profile(qApp->property("isoldeProfile").toString()) {}
+    : StoreProvider(parent), m_profile(qApp->property("isoldeProfile").toString())
+{
+}
 
-FdroidProvider::~FdroidProvider() {
+FdroidProvider::~FdroidProvider()
+{
     cancel();
 }
 
-void FdroidProvider::cancel() {
-    if (m_process) {
+void
+FdroidProvider::cancel()
+{
+    if (m_process)
+    {
         auto* process = m_process.data();
         m_process = nullptr;
         process->disconnect(this);
@@ -32,13 +38,18 @@ void FdroidProvider::cancel() {
     emit resultsChanged();
 }
 
-QVariantList FdroidProvider::search(const QString& query) {
+QVariantList
+FdroidProvider::search(const QString& query)
+{
     requestSearch(query);
     return m_results;
 }
 
-void FdroidProvider::requestSearch(const QString& query) {
-    if (query.size() > 128) {
+void
+FdroidProvider::requestSearch(const QString& query)
+{
+    if (query.size() > 128)
+    {
         emit providerError(tr("Use a search of at most 128 characters."));
         return;
     }
@@ -46,14 +57,18 @@ void FdroidProvider::requestSearch(const QString& query) {
     start(0);
 }
 
-void FdroidProvider::requestPage(int direction) {
+void
+FdroidProvider::requestPage(int direction)
+{
     if (m_process || (direction != 1 && direction != -1))
         return;
     if ((direction == 1 && m_next) || (direction == -1 && m_previous))
         start(m_page + direction);
 }
 
-void FdroidProvider::requestUpdates(const QStringList& packages) {
+void
+FdroidProvider::requestUpdates(const QStringList& packages)
+{
     if (packages.isEmpty() || packages.size() > 256)
         return;
     for (const auto& package : packages)
@@ -63,22 +78,27 @@ void FdroidProvider::requestUpdates(const QStringList& packages) {
     start(0, true);
 }
 
-void FdroidProvider::start(int page, bool updates) {
+void
+FdroidProvider::start(int page, bool updates)
+{
     cancel();
-    if (qApp->property("isoldeProfile").toString() != m_profile) {
+    if (qApp->property("isoldeProfile").toString() != m_profile)
+    {
         emit providerError(tr("The active profile changed. Reopen the Store."));
         return;
     }
     const auto profile = m_profile.isEmpty() ? QStringLiteral("default") : m_profile;
     if (profile != "default" &&
-        !QRegularExpression("^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$").match(profile).hasMatch()) {
+        !QRegularExpression("^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$").match(profile).hasMatch())
+    {
         emit providerError(tr("Invalid Store profile."));
         return;
     }
     const auto helper = resolveHelperPath();
     const auto base = QCoreApplication::applicationDirPath();
     const auto python = QStandardPaths::findExecutable("python3");
-    if (helper.isEmpty() || python.isEmpty()) {
+    if (helper.isEmpty() || python.isEmpty())
+    {
         emit providerError(tr("F-Droid browsing support is missing. Repair the Isolde installation."));
         return;
     }
@@ -99,8 +119,11 @@ void FdroidProvider::start(int page, bool updates) {
     process->start();
 }
 
-QVariantMap FdroidProvider::result(const QString& storeId) const {
-    for (const auto& value : m_results) {
+QVariantMap
+FdroidProvider::result(const QString& storeId) const
+{
+    for (const auto& value : m_results)
+    {
         const auto map = value.toMap();
         if (map.value("storeId").toString() == storeId)
             return map;
@@ -108,17 +131,25 @@ QVariantMap FdroidProvider::result(const QString& storeId) const {
     return {};
 }
 
-QUrl FdroidProvider::artifactUrl(const QString& storeId) const {
+QUrl
+FdroidProvider::artifactUrl(const QString& storeId) const
+{
     return QUrl(result(storeId).value("downloadUrl").toString());
 }
-QByteArray FdroidProvider::artifactHash(const QString& storeId) const {
+QByteArray
+FdroidProvider::artifactHash(const QString& storeId) const
+{
     return QByteArray::fromHex(result(storeId).value("sha256").toByteArray());
 }
-QString FdroidProvider::provenanceText(const QString& storeId) const {
+QString
+FdroidProvider::provenanceText(const QString& storeId) const
+{
     return result(storeId).value("provenance").toString();
 }
 
-QString FdroidProvider::resolveHelperPath() const {
+QString
+FdroidProvider::resolveHelperPath() const
+{
     const auto base = QCoreApplication::applicationDirPath();
     for (const auto& path : {base + "/../share/isolde/fdroid-store.py", base + "/share/isolde/fdroid-store.py"})
         if (QFileInfo(path).isFile())
@@ -126,29 +157,43 @@ QString FdroidProvider::resolveHelperPath() const {
     return {};
 }
 
-void FdroidProvider::connectProcessSignals(QProcess* process, std::shared_ptr<QByteArray> output, int page,
-                                            bool updates) {
-    connect(process, &QProcess::readyReadStandardOutput, this, [process, output] {
-        *output += process->readAllStandardOutput();
-        if (output->size() > 4 * 1024 * 1024)
-            process->kill();
-    });
-    connect(process, &QProcess::readyReadStandardError, this, [process] {
-        process->readAllStandardError();
-    });
-    connect(process, &QProcess::errorOccurred, this, [this, process](QProcess::ProcessError error) {
-        if (m_process != process || error != QProcess::FailedToStart)
-            return;
-        m_process = nullptr;
-        m_status.clear();
-        process->deleteLater();
-        emit providerError(tr("F-Droid could not start. Repair the Isolde installation."));
-        emit resultsChanged();
-    });
+void
+FdroidProvider::connectProcessSignals(QProcess* process, std::shared_ptr<QByteArray> output, int page, bool updates)
+{
+    connect(process,
+            &QProcess::readyReadStandardOutput,
+            this,
+            [process, output]
+            {
+                *output += process->readAllStandardOutput();
+                if (output->size() > 4 * 1024 * 1024)
+                    process->kill();
+            });
+    connect(process,
+            &QProcess::readyReadStandardError,
+            this,
+            [process]
+            {
+                process->readAllStandardError();
+            });
+    connect(process,
+            &QProcess::errorOccurred,
+            this,
+            [this, process](QProcess::ProcessError error)
+            {
+                if (m_process != process || error != QProcess::FailedToStart)
+                    return;
+                m_process = nullptr;
+                m_status.clear();
+                process->deleteLater();
+                emit providerError(tr("F-Droid could not start. Repair the Isolde installation."));
+                emit resultsChanged();
+            });
     connect(process,
             qOverload<int, QProcess::ExitStatus>(&QProcess::finished),
             this,
-            [this, process, output, page, updates](int code, QProcess::ExitStatus exit) {
+            [this, process, output, page, updates](int code, QProcess::ExitStatus exit)
+            {
                 if (m_process != process)
                     return;
                 m_process = nullptr;
@@ -161,13 +206,15 @@ void FdroidProvider::connectProcessSignals(QProcess* process, std::shared_ptr<QB
                     output->size() <= 4 * 1024 * 1024 ? QJsonDocument::fromJson(*output).object() : QJsonObject{};
                 const auto rows = document.value("results").toArray();
                 if (code || exit != QProcess::NormalExit || !document.value("results").isArray() ||
-                    rows.size() > (updates ? 256 : 50)) {
+                    rows.size() > (updates ? 256 : 50))
+                {
                     emit providerError(document.value("error").toString(
                         tr("F-Droid could not load or verify the repository. Search again to retry.")));
                     emit resultsChanged();
                     return;
                 }
-                if (updates) {
+                if (updates)
+                {
                     m_updates = document.value("results").toVariant().toList();
                     m_status = tr("Update check complete. Select an installed app to review its update.");
                     emit updatesChanged();
@@ -184,10 +231,12 @@ void FdroidProvider::connectProcessSignals(QProcess* process, std::shared_ptr<QB
             });
 }
 
-QStringList FdroidProvider::buildArguments(const QString& helper, const QString& cache, const QString& query,
-                                            int page, bool updates) const {
-    QStringList arguments{helper, "--cache", cache, "--query", updates ? QString() : query, "--page",
-                          QString::number(page)};
+QStringList
+FdroidProvider::buildArguments(
+    const QString& helper, const QString& cache, const QString& query, int page, bool updates) const
+{
+    QStringList arguments{
+        helper, "--cache", cache, "--query", updates ? QString() : query, "--page", QString::number(page)};
     if (updates)
         arguments << "--packages" << m_updateQuery.join(',');
     return arguments;

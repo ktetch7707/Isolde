@@ -1,33 +1,41 @@
-﻿#include "OpticalDiscSession.h"
-#include "OpticalDiscIdentity.h"
+﻿#include "OpticalDiscIdentity.h"
+#include "OpticalDiscSession.h"
 
 #include <QStorageInfo>
 
-QVariantMap OpticalDiscSession::latchSession(const QVariantMap& previous, QVariantMap current) {
+QVariantMap
+OpticalDiscSession::latchSession(const QVariantMap& previous, QVariantMap current)
+{
     const auto previousState = previous.value("state").toString();
-    if (current.value("state") == "pinned" && !previousState.isEmpty() && previousState != "pinned") {
+    if (current.value("state") == "pinned" && !previousState.isEmpty() && previousState != "pinned")
+    {
         current["state"] = "interrupted";
-        current["recovery"] = "The original session mount cannot be restored by reinsertion. Return Home and retry "
-                              "Play with the expected disc.";
+        current["recovery"] =
+            "The original session mount cannot be restored by reinsertion. Return Home and retry "
+            "Play with the expected disc.";
     }
     return current;
 }
 
-namespace {
-struct SwapSession {
+namespace
+{
+struct SwapSession
+{
     int expectedDiscNumber = 0;
     QString expectedMediaSetId;
     QString state; // "awaiting-swap", "swapped", "completed"
 };
-QMap<QString, SwapSession>& swapSessions() {
+QMap<QString, SwapSession>&
+swapSessions()
+{
     static QMap<QString, SwapSession> sessions;
     return sessions;
 }
 } // namespace
 
-QVariantMap OpticalDiscSwap::requestDiscSwap(const QString& sessionId,
-                                             int expectedDiscNumber,
-                                             const QString& expectedMediaSetId) {
+QVariantMap
+OpticalDiscSwap::requestDiscSwap(const QString& sessionId, int expectedDiscNumber, const QString& expectedMediaSetId)
+{
     if (sessionId.isEmpty() || expectedDiscNumber < 1 || expectedMediaSetId.isEmpty())
         return {{"state", "invalid"}};
     auto& sessions = swapSessions();
@@ -39,9 +47,9 @@ QVariantMap OpticalDiscSwap::requestDiscSwap(const QString& sessionId,
             {"discCount", 0}};
 }
 
-QVariantMap OpticalDiscSwap::completeDiscSwap(const QString& sessionId,
-                                              const QString& observationId,
-                                              const QString& device) {
+QVariantMap
+OpticalDiscSwap::completeDiscSwap(const QString& sessionId, const QString& observationId, const QString& device)
+{
     auto& sessions = swapSessions();
     auto it = sessions.find(sessionId);
     if (it == sessions.end())
@@ -50,14 +58,17 @@ QVariantMap OpticalDiscSwap::completeDiscSwap(const QString& sessionId,
     if (session.state != "awaiting-swap")
         return {{"state", "invalid"}};
     const auto current = OpticalDiscHash::mountedDiscs();
-    for (const auto& item : current) {
+    for (const auto& item : current)
+    {
         const auto disc = item.toMap();
         if (disc.value("state") != "mounted")
             continue;
-        if (disc.value("observationId") == observationId && disc.value("device") == device) {
+        if (disc.value("observationId") == observationId && disc.value("device") == device)
+        {
             const auto mediaSetId = disc.value("mediaSetId").toString();
             const auto discNumber = disc.value("discNumber").toInt();
-            if (mediaSetId == session.expectedMediaSetId && discNumber == session.expectedDiscNumber) {
+            if (mediaSetId == session.expectedMediaSetId && discNumber == session.expectedDiscNumber)
+            {
                 SwapSession updated = session;
                 updated.state = "swapped";
                 sessions.insert(sessionId, updated);
@@ -76,7 +87,9 @@ QVariantMap OpticalDiscSwap::completeDiscSwap(const QString& sessionId,
             {"expectedDisc", session.expectedDiscNumber}};
 }
 
-QVariantMap OpticalDiscSwap::swapSessionState(const QString& sessionId) {
+QVariantMap
+OpticalDiscSwap::swapSessionState(const QString& sessionId)
+{
     auto& sessions = swapSessions();
     auto it = sessions.find(sessionId);
     if (it == sessions.end())
@@ -84,21 +97,25 @@ QVariantMap OpticalDiscSwap::swapSessionState(const QString& sessionId) {
     return {{"schemaVersion", 1}, {"state", it.value().state}, {"sessionId", sessionId}};
 }
 
-namespace {
-struct OpticalSession {
+namespace
+{
+struct OpticalSession
+{
     QString mediaId;
     QString device;
     QString state; // "active"
 };
-QMap<QString, OpticalSession>& opticalSessions() {
+QMap<QString, OpticalSession>&
+opticalSessions()
+{
     static QMap<QString, OpticalSession> sessions;
     return sessions;
 }
 } // namespace
 
-QString OpticalDiscSession::registerOpticalSession(const QString& sessionId,
-                                                   const QString& mediaId,
-                                                   const QString& device) {
+QString
+OpticalDiscSession::registerOpticalSession(const QString& sessionId, const QString& mediaId, const QString& device)
+{
     if (sessionId.isEmpty() || mediaId.isEmpty() || device.isEmpty())
         return {};
     auto& sessions = opticalSessions();
@@ -106,18 +123,24 @@ QString OpticalDiscSession::registerOpticalSession(const QString& sessionId,
     return sessionId;
 }
 
-void OpticalDiscSession::releaseOpticalSession(const QString& sessionId) {
+void
+OpticalDiscSession::releaseOpticalSession(const QString& sessionId)
+{
     auto& sessions = opticalSessions();
     sessions.remove(sessionId);
 }
 
-QVariantMap OpticalDiscSession::opticalSessionArbitration(const QString& device) {
+QVariantMap
+OpticalDiscSession::opticalSessionArbitration(const QString& device)
+{
     if (device.isEmpty())
         return {{"state", "invalid"}};
     QVariantList blocking;
-    for (const auto& key : opticalSessions().keys()) {
+    for (const auto& key : opticalSessions().keys())
+    {
         const auto& session = opticalSessions().value(key);
-        if (session.device == device) {
+        if (session.device == device)
+        {
             blocking.append(QVariantMap{{"sessionId", key}, {"mediaId", session.mediaId}, {"state", session.state}});
         }
     }
@@ -125,4 +148,3 @@ QVariantMap OpticalDiscSession::opticalSessionArbitration(const QString& device)
         return {{"schemaVersion", 1}, {"state", "clear"}, {"device", device}};
     return {{"schemaVersion", 1}, {"state", "blocked"}, {"device", device}, {"blockingSessions", blocking}};
 }
-

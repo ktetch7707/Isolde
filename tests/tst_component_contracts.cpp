@@ -9,16 +9,23 @@
 #include "../src/sessions/SessionManager.h"
 #include "tst_component_common.h"
 
-class ComponentContractTests : public QObject {
+class ComponentContractTests : public QObject
+{
     Q_OBJECT
   private slots:
-    void validatesContracts();
-    void guideActionsValidateIdentityAndAppearance();
-    void captureAndAudioEditorActionsValidateAndDispatch();
-    void densePlacementValidationPreservesBoundsAndTouchingEdges();
+    void
+    validatesContracts();
+    void
+    guideActionsValidateIdentityAndAppearance();
+    void
+    captureAndAudioEditorActionsValidateAndDispatch();
+    void
+    densePlacementValidationPreservesBoundsAndTouchingEdges();
 };
 
-int main(int argc, char* argv[]) {
+int
+main(int argc, char* argv[])
+{
     QCoreApplication app(argc, argv);
     ComponentContractTests test;
     return QTest::qExec(&test, argc, argv);
@@ -26,7 +33,9 @@ int main(int argc, char* argv[]) {
 
 #include "tst_component_contracts.moc"
 
-void ComponentContractTests::validatesContracts() {
+void
+ComponentContractTests::validatesContracts()
+{
     for (const auto& value :
          QVariantList{QVariantMap{{"type", "shell"}, {"target", "touch /tmp/no"}},
                       QVariantMap{{"type", "launch-app"}, {"appId", "../bad"}},
@@ -38,7 +47,8 @@ void ComponentContractTests::validatesContracts() {
                       QVariantMap{{"type", "open-show"}, {"collectionId", "good"}, {"tvShowId", 0}},
                       QVariantMap{{"type", "switch-input"}, {"input", 9}},
                       QVariantMap{{"type", "switch-input"}, {"input", 2.5}},
-                      QVariantMap{{"type", "settings"}, {"section", 100}}}) {
+                      QVariantMap{{"type", "settings"}, {"section", 100}}})
+    {
         QString error;
         QVERIFY(ComponentSchema::action(value.toMap(), &error).isEmpty());
         QVERIFY(!error.isEmpty());
@@ -70,7 +80,9 @@ void ComponentContractTests::validatesContracts() {
     QCOMPARE(inputTile["source"].toMap()["id"].toString(), QString("4"));
 }
 
-void ComponentContractTests::guideActionsValidateIdentityAndAppearance() {
+void
+ComponentContractTests::guideActionsValidateIdentityAndAppearance()
+{
     QString error;
     QVERIFY(!ComponentSchema::action({{"schemaVersion", 1}, {"type", "open-guide"}}, &error).isEmpty());
     QCOMPARE(error, QString());
@@ -103,7 +115,8 @@ void ComponentContractTests::guideActionsValidateIdentityAndAppearance() {
                                       {"presentation", QVariantMap{{"guideSurface", "overlay"}}}},
                                      &error)
                  .isEmpty());
-    for (const auto& id : QVariantList{true, 123, QString("../other")}) {
+    for (const auto& id : QVariantList{true, 123, QString("../other")})
+    {
         QVERIFY(ComponentSchema::action({{"schemaVersion", 1}, {"type", "open-guide"}, {"focusChannelId", id}}, &error)
                     .isEmpty());
         QVERIFY(ComponentSchema::action({{"schemaVersion", 1}, {"type", "tune-channel"}, {"channelId", id}}, &error)
@@ -136,7 +149,9 @@ void ComponentContractTests::guideActionsValidateIdentityAndAppearance() {
     QVERIFY(!ComponentSchema::validPresentation({{"guideOverlayPosition", "offscreen"}}));
 }
 
-void ComponentContractTests::captureAndAudioEditorActionsValidateAndDispatch() {
+void
+ComponentContractTests::captureAndAudioEditorActionsValidateAndDispatch()
+{
     QVariantMap labels;
     for (int input = 1; input <= 8; ++input)
         labels.insert(QString::number(input), QString("HDMI %1").arg(input));
@@ -208,9 +223,12 @@ void ComponentContractTests::captureAndAudioEditorActionsValidateAndDispatch() {
     QVERIFY(ComponentSchema::action({{"type", "capture-artwork-apply"}, {"artwork", validArtwork}}).isEmpty());
     const QJsonObject artworkDocument{
         {"composition", QJsonObject{{"captureInputArtwork", QJsonObject{{"1", "artwork/a.png"}}}}}};
-    const auto rewritten = HomeDesignData::artwork(artworkDocument, [](const QString&) {
-                               return QString("artwork/imported.png");
-                           }).toObject();
+    const auto rewritten = HomeDesignData::artwork(artworkDocument,
+                                                   [](const QString&)
+                                                   {
+                                                       return QString("artwork/imported.png");
+                                                   })
+                               .toObject();
     QCOMPARE(rewritten.value("composition").toObject().value("captureInputArtwork").toObject().value("1").toString(),
              QString("artwork/imported.png"));
 
@@ -235,7 +253,9 @@ void ComponentContractTests::captureAndAudioEditorActionsValidateAndDispatch() {
     QCOMPARE(rejected.size(), 3);
 }
 
-void ComponentContractTests::densePlacementValidationPreservesBoundsAndTouchingEdges() {
+void
+ComponentContractTests::densePlacementValidationPreservesBoundsAndTouchingEdges()
+{
     QVariantMap grid{{"columns", 16}, {"rows", 10}, {"overlap", false}};
     QJsonArray items;
     for (int i = 0; i < 160; ++i)
@@ -250,7 +270,8 @@ void ComponentContractTests::densePlacementValidationPreservesBoundsAndTouchingE
     QVERIFY(ComponentSchema::placementsFit(items, grid));
     items.append(QJsonObject{{"placement", QJsonObject{{"x", 16}, {"y", 0}, {"width", 1}, {"height", 1}}}});
     QVERIFY(!ComponentSchema::placementsFit(items, grid)); // Overlap never permits out-of-bounds data.
-    for (const double coordinate : {-1e30, 1e30, 2147483647.0}) {
+    for (const double coordinate : {-1e30, 1e30, 2147483647.0})
+    {
         QVERIFY(!ComponentSchema::validPlacement({{"x", coordinate}, {"y", 0}, {"width", 1}, {"height", 1}}, 16, 10));
         QVERIFY(!ComponentSchema::validPlacement({{"x", 0}, {"y", coordinate}, {"width", 1}, {"height", 1}}, 16, 10));
         QVERIFY(!ComponentSchema::validPlacement({{"x", 0}, {"y", 0}, {"width", coordinate}, {"height", 1}}, 16, 10));
