@@ -314,23 +314,127 @@ class GameLibrary final : public QObject
                      const QString& kind,
                      const QString& filterType = {},
                      const QString& filterValue = {});
+    bool
+    createCollectionValidName(const QString& clean, const QString& name);
+    bool
+    createCollectionValidKind(const QString& kind, const QString& filterType,
+                              const QString& filterValue);
+    bool
+    createCollectionValidManual(const QString& filterType, const QString& filterValue);
+    bool
+    createCollectionValidSmart(const QString& filterType, const QString& filterValue);
+    bool
+    createCollectionEnsureSchema(const QString& filterType);
+    bool
+    createCollectionCheckLimit();
+    QVariantMap
+    createCollectionInsert(const QString& clean, const QString& kind, const QString& filterType,
+                           const QString& filterValue);
     Q_INVOKABLE bool
     updateCollection(const QString& collectionId,
                      const QString& name,
                      const QString& filterType = {},
                      const QString& filterValue = {});
+    bool
+    updateCollectionValidArgs(const QString& id, const QString& clean, const QString& name);
+    bool
+    updateCollectionValidKind(const QString& kind, const QString& filterType,
+                              const QString& filterValue);
+    bool
+    updateCollectionValidManual(const QString& filterType, const QString& filterValue);
+    bool
+    updateCollectionValidSmart(const QString& filterType, const QString& filterValue);
+    bool
+    updateCollectionSave(const QString& id, const QString& clean, const QString& filterType,
+                         const QString& filterValue);
     Q_INVOKABLE bool
     removeCollection(const QString& collectionId);
     Q_INVOKABLE bool
     setCollectionMember(const QString& collectionId, const QString& gameId, bool member);
     Q_INVOKABLE bool
     moveCollectionMember(const QString& collectionId, const QString& gameId, int direction);
+    bool
+    moveCollectionValidArgs(const QString& collectionId, const QString& gameId, int direction);
+    bool
+    moveCollectionLoadMembers(const QString& collectionId, QList<QPair<QString, int>>& members);
+    bool
+    moveCollectionSwap(const QString& collectionId, const QString& gameId,
+                       const QList<QPair<QString, int>>& members, int index, qsizetype target);
     Q_INVOKABLE bool
     collectionContains(const QString& collectionId, const QString& gameId);
     Q_INVOKABLE QVariantList
     pageCollection(const QString& collectionId, int offset = 0);
+    bool
+    pageCollectionValidArgs(const QString& id, int offset);
+    QString
+    pageCollectionBaseSql(bool hasRichMetadata, bool hasArtwork);
+    bool
+    pageCollectionBuildWhere(const QString& kind, const QString& filter, const QString& filterValue,
+                             bool hasEditions, QString& sql);
+    void
+    pageCollectionBindValues(const QString& kind, const QString& filter, const QString& filterValue,
+                             bool hasEditions, const QString& id, int offset, QSqlQuery& query);
     Q_INVOKABLE bool
     exportCatalog(const QString& destination);
+    bool
+    exportCatalogValidateDestination(const QString& destination);
+    bool
+    exportCatalogReadGames(QSqlQuery& query, QJsonArray& games, qsizetype& estimatedArchiveBytes);
+    bool
+    exportCatalogReadCollections(QSqlQuery& query, QJsonArray& collectionArray, qsizetype& estimatedArchiveBytes);
+    bool
+    exportCatalogReadProvenance(QSqlQuery& query, QJsonArray& provenanceArray, qsizetype& estimatedArchiveBytes);
+    bool
+    exportCatalogReadGameTags(const QByteArray& data, QJsonArray& tags);
+    bool
+    exportCatalogReadGameAliases(const QByteArray& data, QJsonArray& aliases);
+    bool
+    exportCatalogValidateGameSummary(const QVariant& franchise, const QVariant& summary);
+    bool
+    exportCatalogReadGameArtwork(const QString& hash, QString& encodedArtwork);
+    bool
+    exportCatalogWriteFile(const QString& destination, const QByteArray& bytes);
+    bool
+    restoreCatalogValidateArgs(const QString& source, bool confirmed);
+    bool
+    restoreCatalogValidateArchive(const QJsonObject& archive, QSet<QString>& ids, QSet<QString>& gameIds,
+                                  QSet<QString>& editionIds, QSet<QString>& platforms, QSet<QString>& names,
+                                  QSet<QString>& installations, QMap<QString, int>& editionCounts,
+                                  QList<QVariantMap>& games, QList<QVariantMap>& editionsData,
+                                  QList<QVariantMap>& collectionsData, QList<QVariantMap>& provenanceData,
+                                  qint64& restoreArtworkBytes);
+    bool
+    restoreCatalogReadGames(const QJsonArray& gamesArray, int archiveVersion, QSet<QString>& ids,
+                            QSet<QString>& gameIds, QSet<QString>& platforms, QSet<QString>& installations,
+                            QList<QVariantMap>& games, QMap<QString, int>& editionCounts,
+                            qint64& restoreArtworkBytes);
+    bool
+    restoreCatalogReadEditions(const QJsonArray& editionsArray, int archiveVersion, QSet<QString>& gameIds,
+                               QSet<QString>& ids, QSet<QString>& editionIds, QSet<QString>& installations,
+                               QSet<QString>& platforms, QMap<QString, int>& editionCounts,
+                               QList<QVariantMap>& editionsData);
+    bool
+    restoreCatalogReadCollections(const QJsonArray& collectionsArray, int archiveVersion, QSet<QString>& gameIds,
+                                  QSet<QString>& ids, QSet<QString>& names,
+                                  QList<QVariantMap>& collectionsData);
+    bool
+    restoreCatalogReadProvenance(const QJsonArray& provenanceArray, QSet<QString>& gameIds,
+                                 QSet<QString>& editionIds, QSet<QString>& ids,
+                                 QList<QVariantMap>& provenanceData);
+    bool
+    restoreCatalogApply(QSqlQuery& query, QList<QVariantMap>& games,
+                        QList<QVariantMap>& editionsData, QList<QVariantMap>& collectionsData,
+                        QList<QVariantMap>& provenanceData, const QString& backupPath);
+    bool
+    restoreCatalogApplyGame(QSqlQuery& query, const QVariantMap& game);
+    bool
+    restoreCatalogApplyEdition(QSqlQuery& query, const QVariantMap& edition);
+    bool
+    restoreCatalogApplyCollection(QSqlQuery& query, const QVariantMap& collection);
+    bool
+    restoreCatalogApplyProvenanceRecord(QSqlQuery& query, const QVariantMap& record);
+    bool
+    restoreCatalogApplyFinal(QSqlQuery& query, bool ok, bool hasProvenance, const QString& backupPath);
     Q_INVOKABLE bool
     restoreCatalog(const QString& source, bool confirmed);
     Q_INVOKABLE QVariantMap

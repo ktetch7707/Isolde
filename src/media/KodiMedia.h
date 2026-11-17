@@ -71,6 +71,26 @@ class KodiMedia final : public QObject
     }
     QString
     browseTitle() const;
+    QString
+    browseTitlePlaylists() const;
+    QString
+    browseTitlePlaylistView() const;
+    QString
+    browseTitleHistory() const;
+    QString
+    browseTitleMusic() const;
+    QString
+    browseTitleChannels() const;
+    QString
+    browseTitleManual() const;
+    QString
+    browseTitleMoviesShows() const;
+    QString
+    browseTitleSeasons() const;
+    QString
+    browseTitleEpisodes() const;
+    QString
+    browseTitleDefault() const;
     int
     selectedIndex() const
     {
@@ -125,8 +145,34 @@ class KodiMedia final : public QObject
     openPlaylists();
     static bool
     validPlaylistName(const QString& name);
+    bool
+    activateCanProceed(int index);
+    void
+    activateAlbum(const QVariantMap& item);
+    void
+    activateShowSeason(const QVariantMap& item);
     Q_INVOKABLE void
     openView(const QString& kind, const QString& view, const QString& value = {});
+    bool
+    openViewValid(const QString& kind, const QString& view, const QString& value);
+    bool
+    openViewCanNavigate() const;
+    bool
+    openViewValidKind(const QString& kind);
+    bool
+    openViewValidView(const QString& view);
+    bool
+    openViewValidPlaylist(const QString& kind, const QString& view, const QString& value);
+    bool
+    openViewValidAlbumsChannels(const QString& kind, const QString& view, const QString& value);
+    bool
+    openViewValidHistory(const QString& kind, const QString& view, const QString& value);
+    bool
+    openViewValidEpisodes(const QString& kind, const QString& view);
+    bool
+    openViewValidValueLength(const QString& value);
+    bool
+    openViewValidTagGenre(const QString& value, const QString& view);
     void
     openHistory(int count);
     void
@@ -407,10 +453,54 @@ class KodiMedia final : public QObject
     consume();
     void
     fail(const QString& message, bool forceDisconnect = false);
+    bool
+    failSourcePreview(const QString& message, bool forceDisconnect);
+    bool
+    failPlaybackOptions(const QString& message, bool forceDisconnect);
+    bool
+    failSubtitle(const QString& message, bool forceDisconnect);
+    void
+    failPlaylist(const QString& message);
+    void
+    failScan(const QString& message);
+    void
+    failRestoreHistory();
     void
     releaseSocket();
     void
     loadPage(int start);
+    QString
+    loadPageMethodFields(const QString& mediaKind, QString& method, QJsonArray& fields);
+    void
+    loadPageHistoryFields(const QString& mediaKind, QJsonArray& fields);
+    QString
+    loadPageSort(const QString& mediaKind, const QString& viewKind);
+    QString
+    loadPageSortOrder(const QString& viewKind);
+    int
+    loadPageLimit(const QString& mediaKind);
+    void
+    loadPageViewFilter(const QString& viewKind, const QString& viewValue, QJsonObject& params);
+    void
+    loadPageTvShowId(const QString& mediaKind, int showId, QJsonObject& params);
+    void
+    loadPageSeason(const QString& mediaKind, int season, QJsonObject& params);
+    void
+    loadPageAlbumId(const QString& mediaKind, const QString& viewValue, QJsonObject& params);
+    void
+    loadPageChannels(const QString& mediaKind, QJsonObject& params);
+    void
+    finishManualPage();
+    void
+    finishManualPendingMovie();
+    void
+    finishManualPendingShow();
+    bool
+    setViewCanProceed(const QString& kind, const QString& value);
+    QString
+    setViewViewValue(const QString& kind, const QString& text);
+    void
+    setViewShowsToEpisodes(const QString& kind);
     void
     loadManualPage(int start);
     void
