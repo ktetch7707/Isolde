@@ -550,135 +550,9 @@ ActionDispatcher::dispatch(const QVariantMap& input, const QString& originId)
     const auto previous = m_origin;
     m_origin = originId;
     QScopedValueRollback<bool> dispatching(m_dispatching, true);
-    bool accepted = false;
-    if (type == "root-page")
-    {
-        if (m_layout && m_layout->rootPageVisible())
-        {
-            emit pageRequested(QString(), originId);
-            accepted = true;
-        }
-        else
-            emit rejected("This page was removed. Repair its link in Skin Studio.");
-    }
-    else if (type == "open-page")
-    {
-        const auto id = value.value("pageId").toString();
-        if (m_layout && m_layout->pageModel(id))
-        {
-            emit pageRequested(id, originId);
-            accepted = true;
-        }
-        else
-            emit rejected("This page was removed. Open Settings → Home → Pages to repair its link.");
-    }
-    else if (type == "open-guide")
-    {
-        emit guideRequested(originId, value.value("presentation").toMap(), value.value("focusChannelId").toString());
-        accepted = true;
-    }
-    else if (type == "tune-channel")
-    {
-        if (!m_guide)
-            emit rejected("The guide is unavailable for this profile.");
-        else
-            accepted = m_guide->tune(value.value("channelId").toString(), originId);
-    }
-    else if (type == "app-drawer" || type == "open-apps")
-    {
-        emit allAppsRequested(originId);
-        if (type == "app-drawer")
-            emit drawerRequested();
-        accepted = true;
-    }
-    else if (type == "open-search")
-    {
-        emit searchRequested(originId);
-        accepted = true;
-    }
-    else if (type == "launch-app")
-        accepted = launchApp(value.value("appId").toString());
-    else if (type == "launch-game")
-    {
-        const auto gameId = value.value("gameId").toString();
-        auto resolved = m_games ? m_games->resolveLaunch(gameId, value.value("editionId").toString()) : QVariantMap();
-        if (!resolved.isEmpty())
-        {
-            m_pendingGameId = gameId;
-            m_pendingGameProfile = qApp->property("isoldeProfile").toString();
-            m_pendingSteamGame = resolved.value("type") == "steam-game";
-            m_pendingSteamIdentity = resolved.value("steamAppId").toString();
-            m_pendingSteamObserved = false;
-        }
-        if (resolved.isEmpty())
-            emit rejected(m_games ? m_games->errorString() : tr("Games is unavailable in this profile."));
-        else if (resolved.value("type") == "launch-app")
-            accepted = launchApp(resolved.value("appId").toString());
-        else if (resolved.value("type") == "steam-game")
-            accepted = m_sessions->launchSteamGame(resolved.value("steamAppId").toString());
-        else
-        {
-            const auto root = resolved.take("sourceRoot").toString();
-            accepted = m_sessions->launchGameFile(resolved, root);
-        }
-        if (!accepted)
-        {
-            m_pendingGameId.clear();
-            m_pendingGameProfile.clear();
-            m_pendingSteamIdentity.clear();
-            m_pendingSteamGame = false;
-            m_pendingSteamObserved = false;
-        }
-    }
-    else if (type == "settings")
-    {
-        accepted = launchApp("settings");
-        if (accepted)
-            emit settingsRequested(value.value("section").toInt());
-    }
-    else if (type == "open-collection" || type == "play-movie" || type == "open-show")
-    {
-        if (m_service->frontend() == "kodi")
-            accepted = launchApp("kodi");
-        else
-        {
-            emit libraryRequested(type == "play-movie");
-            const auto id = value.value("collectionId").toString();
-            if (type == "play-movie")
-                m_media->playCollectionMovie(id, value.value("movieId").toInt());
-            else if (type == "open-show")
-                m_media->openCollectionShow(id, value.value("tvShowId").toInt());
-            else
-                m_media->openCollection(id);
-            accepted = true;
-        }
-    }
-    else if (type == "switch-input")
-    {
-        const auto input = value.value("input").toInt();
-        if (!m_capture)
-            emit rejected("Capture input support is not installed.");
-        else if (!m_capture->canSwitchInput(input))
-            emit rejected(m_capture->switchStatus());
-        else
-        {
-            emit captureSessionRequested(input, originId);
-            accepted = true;
-        }
-    }
-    else if (type == "desktop-mode")
-    {
-        emit desktopRequested(originId);
-        accepted = true;
-    }
-    else
-        accepted = m_sessions->launchAction(value);
-    if (!accepted)
-        m_origin = previous;
-    return accepted;
+    return dispatchSingleAction(value, originId);
 }
 
-bool
 ActionDispatcher::dispatchEditorAction(const QVariantMap& input)
 {
     QString error;
@@ -770,4 +644,161 @@ ActionDispatcher::dispatchEditorAction(const QVariantMap& input)
         emit rejected(error);
     }
     return accepted;
+}
+
+bool
+ActionDispatcher::dispatchSingleAction(const QVariantMap& value, const QString& originId)
+{
+    const auto previous = m_origin;
+    m_origin = originId;
+    const auto type = value.value("type").toString();
+    bool accepted = false;
+    if (handleNavigationAction(value, originId))
+        return true;
+    if (handleMediaAction(value, originId))
+        return true;
+    else if (type == "app-drawer" || type == "open-apps")
+    {
+        emit allAppsRequested(originId);
+        if (type == "app-drawer")
+            emit drawerRequested();
+        accepted = true;
+    }
+    else if (type == "open-search")
+    {
+        emit searchRequested(originId);
+        accepted = true;
+    }
+    else if (type == "launch-app")
+        accepted = launchApp(value.value("appId").toString());
+    else if (type == "launch-game")
+        accepted = handleLaunchGame(value, originId);
+    else if (type == "settings")
+    {
+        accepted = launchApp("settings");
+        if (accepted)
+            emit settingsRequested(value.value("section").toInt());
+    }
+
+    else if (type == "switch-input")
+    {
+        const auto input = value.value("input").toInt();
+        if (!m_capture)
+            emit rejected("Capture input support is not installed.");
+        else if (!m_capture->canSwitchInput(input))
+            emit rejected(m_capture->switchStatus());
+        else
+        {
+            emit captureSessionRequested(input, originId);
+            accepted = true;
+        }
+    }
+    else if (type == "desktop-mode")
+    {
+        emit desktopRequested(originId);
+        accepted = true;
+    }
+    else
+        accepted = m_sessions->launchAction(value);
+    if (!accepted)
+        m_origin = previous;
+    return accepted;
+}
+
+bool
+ActionDispatcher::handleLaunchGame(const QVariantMap& value, const QString& originId)
+{
+    Q_UNUSED(originId);
+    const auto gameId = value.value("gameId").toString();
+    auto resolved = m_games ? m_games->resolveLaunch(gameId, value.value("editionId").toString()) : QVariantMap();
+    if (!resolved.isEmpty())
+    {
+        m_pendingGameId = gameId;
+        m_pendingGameProfile = qApp->property("isoldeProfile").toString();
+        m_pendingSteamGame = resolved.value("type") == "steam-game";
+        m_pendingSteamIdentity = resolved.value("steamAppId").toString();
+        m_pendingSteamObserved = false;
+    }
+    if (resolved.isEmpty())
+    {
+        emit rejected(m_games ? m_games->errorString() : tr("Games is unavailable for this profile."));
+        return false;
+    }
+    if (resolved.value("type") == "launch-app")
+        return launchApp(resolved.value("appId").toString());
+    if (resolved.value("type") == "steam-game")
+        return m_sessions->launchSteamGame(resolved.value("steamAppId").toString());
+    const auto root = resolved.take("sourceRoot").toString();
+    return m_sessions->launchGameFile(resolved, root);
+}
+
+bool
+ActionDispatcher::handleNavigationAction(const QVariantMap& value, const QString& originId)
+{
+    const auto type = value.value("type").toString();
+    if (type == "root-page")
+    {
+        if (m_layout && m_layout->rootPageVisible())
+        {
+            emit pageRequested(QString(), originId);
+            return true;
+        }
+        emit rejected("This page was removed. Repair its link in Skin Studio.");
+        return false;
+    }
+    if (type == "open-page")
+        return handleOpenPage(value, originId);
+    if (type == "open-guide")
+    {
+        emit guideRequested(originId, value.value("presentation").toMap(), value.value("focusChannelId").toString());
+        return true;
+    }
+    return false;
+}
+
+bool
+ActionDispatcher::handleMediaAction(const QVariantMap& value, const QString& originId)
+{
+    const auto type = value.value("type").toString();
+    if (type == "tune-channel")
+    {
+        if (!m_guide)
+        {
+            emit rejected("The guide is unavailable for this profile.");
+            return false;
+        }
+        return m_guide->tune(value.value("channelId").toString(), originId);
+    }
+    if (type == "open-collection" || type == "play-movie" || type == "open-show")
+        return handleOpenCollection(value, originId);
+    return false;
+}
+
+bool
+ActionDispatcher::handleOpenPage(const QVariantMap& value, const QString& originId)
+{
+    const auto id = value.value("pageId").toString();
+    if (m_layout && m_layout->pageModel(id))
+    {
+        emit pageRequested(id, originId);
+        return true;
+    }
+    emit rejected("This page was removed. Open Settings → Home → Pages to repair its link.");
+    return false;
+}
+
+bool
+ActionDispatcher::handleOpenCollection(const QVariantMap& value, const QString& originId)
+{
+    if (m_service->frontend() == "kodi")
+        return launchApp("kodi");
+    emit libraryRequested(value.value("type").toString() == "play-movie");
+    const auto id = value.value("collectionId").toString();
+    if (value.value("type").toString() == "play-movie")
+        m_media->playCollectionMovie(id, value.value("movieId").toInt());
+    else if (value.value("type").toString() == "open-show")
+        m_media->openCollectionShow(id, value.value("tvShowId").toInt());
+    else
+        m_media->openCollection(id);
+    return true;
 }

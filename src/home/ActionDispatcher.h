@@ -89,6 +89,18 @@ class ActionDispatcher final : public QObject
   private:
     bool
     launchApp(const QString& id);
+    bool
+    dispatchSingleAction(const QVariantMap& value, const QString& originId);
+    bool
+    handleLaunchGame(const QVariantMap& value, const QString& originId);
+    bool
+    handleNavigationAction(const QVariantMap& value, const QString& originId);
+    bool
+    handleOpenPage(const QVariantMap& value, const QString& originId);
+    bool
+    handleMediaAction(const QVariantMap& value, const QString& originId);
+    bool
+    handleOpenCollection(const QVariantMap& value, const QString& originId);
     void
     clearGuidePlayback();
     AppRegistry* m_apps;
