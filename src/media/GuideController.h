@@ -292,6 +292,15 @@ class GuideController final : public QObject
     void
     consumePvr(const QVariantMap& result);
     bool
+    validateGuidePage(const QVariantMap& result, const QVariantMap& limits, const QJsonArray& items, int start, int end,
+                      int total, int skipped);
+    bool
+    processGuideItems(const QJsonArray& items, QVariantList& candidates, QVariantMap& previewDefinition,
+                      qint64& snapshotBytes, int& skipped);
+    void
+    finalizeGuideLoad(QVariantList& candidates, int& page, int& kindIndex, int& sourceIndex, bool& previewReady,
+                      qint64& snapshotBytes, int end, int total, int skipped);
+    bool
     validatePvrPage(const QVariantMap& result, const QVariantMap& limits);
     bool
     processNewPvrChannel(const QVariantMap& item, QVariantMap& source, QString& id, int& number, QVariantMap& definition, QSet<int>& used);
