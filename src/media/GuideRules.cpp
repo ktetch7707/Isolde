@@ -406,8 +406,18 @@ GuideRules::matches(const QVariantMap& rule, const QVariantMap& metadata)
             if (op == "all" && !match)
                 return false;
             if (op == "any" && match)
-                return true;
-        }
+    return true;
+}
+
+bool
+GuideRules::validateScheduleRules(const QVariantMap& policy, QString* error)
+{
+    for (const auto& key : QStringList{"fillerRule", "bumperRule"})
+        if (policy.contains(key) && (policy.value(key).metaType().id() != QMetaType::QVariantMap ||
+                                     guideRule(policy.value(key).toMap()).isEmpty()))
+            return reject(error, "Choose valid filler and bumper rules.");
+    return true;
+}
         return op == "all";
     }
     const auto field = rule.value("field").toString();
@@ -489,10 +499,8 @@ GuideRules::validateChannelSchedule(const QVariantMap& v, QString* error)
     const auto policy = v.value("schedule").toMap();
     if (!validateSchedulePolicy(policy, error))
         return false;
-    for (const auto& key : QStringList{"fillerRule", "bumperRule"})
-        if (policy.contains(key) && (policy.value(key).metaType().id() != QMetaType::QVariantMap ||
-                                     guideRule(policy.value(key).toMap()).isEmpty()))
-            return reject(error, "Choose valid filler and bumper rules.");
+    if (!validateScheduleRules(policy, error))
+        return false;
     if (!policy.contains("blocks"))
         return true;
     if (!validateChannelScheduleBlocks(policy.value("blocks").toList(), error))

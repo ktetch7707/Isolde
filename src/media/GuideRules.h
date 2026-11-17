@@ -22,6 +22,8 @@ validateChannelScheduleBlocks(const QVariantList& blocks, QString* error);
 bool
 validateSchedulePolicy(const QVariantMap& policy, QString* error);
 bool
+validateScheduleRules(const QVariantMap& policy, QString* error);
+bool
 validateChannelGroups(const QVariantMap& v, QString* error);
 bool
 validateGuideFeedOwner(const QVariantMap& v, QString* error);
