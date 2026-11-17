@@ -1313,16 +1313,9 @@ GuideController::consumePvr(const QVariantMap& result)
     const auto limits = result.value("limits").toMap();
     const auto key = m_sourceIndex < 0 ? QString("channels") : QString("broadcasts");
     const auto items = result.value(key).toList();
-    const int start = limits.value("start", -1).toInt(), end = limits.value("end", -1).toInt(),
-              total = limits.value("total", -1).toInt();
-    if (!integer(limits.value("start"), 0, 1024) || !integer(limits.value("end"), 0, 1024) ||
-        !integer(limits.value("total"), 0, 1024) || result.value(key).metaType().id() != QMetaType::QVariantList ||
-        start != m_page || end != start + items.size() || items.size() > 50 || total < end ||
-        total > (m_sourceIndex < 0 ? 1024 : 1000) || (end == start && total > end))
-    {
-        readFailure(tr("Kodi returned an invalid or oversized PVR page. Cached listings were preserved."));
+    const int end = limits.value("end", -1).toInt(), total = limits.value("total", -1).toInt();
+    if (!validatePvrPage(result, limits))
         return;
-    }
     if (m_sourceIndex < 0)
     {
         QSet<int> used;
@@ -1333,65 +1326,12 @@ GuideController::consumePvr(const QVariantMap& result)
         for (const auto& v : items)
         {
             const auto item = v.toMap();
-            if (item.value("locked").metaType().id() != QMetaType::Bool ||
-                item.value("hidden").metaType().id() != QMetaType::Bool)
-            {
-                readFailure(tr("Kodi did not report PVR availability safely."));
-                return;
-            }
-            if (item.value("locked").toBool() || item.value("hidden").toBool())
-            {
-                ++m_skipped;
-                continue;
-            }
-            const auto source = QVariantMap{{"instance", "kodi-pvr"},
-                                            {"channelId", item.value("channelid")},
-                                            {"clientId", item.value("clientid")},
-                                            {"uniqueId", item.value("uniqueid")},
-                                            {"number", item.value("channelnumber")}};
-            const auto id =
-                "pvr-" +
-                QString::fromLatin1(QCryptographicHash::hash(
-                                        QByteArray("kodi-pvr:") + QByteArray::number(source.value("clientId").toInt()) +
-                                            ":" + QByteArray::number(source.value("uniqueId").toInt()),
-                                        QCryptographicHash::Sha256)
-                                        .toHex());
+            QString id;
             int number = item.value("channelnumber").toInt();
-            const auto existing = std::find_if(m_channels.cbegin(),
-                                               m_channels.cend(),
-                                               [&id](const QVariant& c)
-                                               {
-                                                   return c.toMap().value("id") == id;
-                                               });
-            if (existing != m_channels.cend())
-                number = existing->toMap().value("number").toInt();
-            else if (number < 1 || used.contains(number))
-            {
-                number = 1;
-                while (used.contains(number) && number < 99999)
-                    ++number;
-            }
-            QVariantMap definition{
-                {"schemaVersion", 1},
-                {"id", id},
-                {"owner", "kodi-pvr"},
-                {"source", source},
-                {"number", number},
-                {"name", existing == m_channels.cend() ? item.value("label") : existing->toMap().value("name")},
-                {"sourceAvailable", true},
-                {"refreshedUtc", m_sourceRefreshed}};
-            QString error;
-            if (ComponentSchema::guideChannel(definition, &error).isEmpty() ||
-                std::any_of(m_sourcePreview.cbegin(),
-                            m_sourcePreview.cend(),
-                            [&id](const QVariant& c)
-                            {
-                                return c.toMap().value("definition").toMap().value("id") == id;
-                            }))
-            {
-                readFailure(tr("Invalid or ambiguous PVR channel identity. Cached listings were preserved."));
+            QVariantMap definition;
+            QVariantMap source;
+            if (!processNewPvrChannel(item, source, id, number, definition, used))
                 return;
-            }
             used.insert(number);
             m_sourcePreview.append(QVariantMap{{"definition", definition}, {"programs", QVariantList()}});
             m_snapshotBytes += QJsonDocument::fromVariant(definition).toJson(QJsonDocument::Compact).size() + 40;
@@ -1401,78 +1341,9 @@ GuideController::consumePvr(const QVariantMap& result)
     {
         auto entry = m_sourcePreview[m_sourceIndex].toMap();
         auto programs = entry.value("programs").toList();
-        for (const auto& v : items)
-        {
-            const auto p = v.toMap();
-            const auto from = pvrUtc(p.value("starttime")), to = pvrUtc(p.value("endtime"));
-            if (from < 0 || to <= from || to - from > 7 * 86400 || !integer(p.value("broadcastid"), 1, 2147483647) ||
-                p.value("title").metaType().id() != QMetaType::QString ||
-                p.value("title").toString().trimmed().isEmpty() || p.value("title").toString().size() > 512)
-            {
-                readFailure(tr("Invalid PVR broadcast interval or identity. Cached listings were preserved."));
-                return;
-            }
-            if (to < m_sourceRefreshed - 7 * 86400 || from > m_sourceRefreshed + 30 * 86400)
-                continue;
-            QVariantMap program{{"broadcastId", p.value("broadcastid").toString()},
-                                {"title", p.value("title")},
-                                {"startUtc", from},
-                                {"endUtc", to}};
-            programs.append(program);
-            m_snapshotBytes += QJsonDocument::fromVariant(program).toJson(QJsonDocument::Compact).size() + 1;
-        }
-        std::sort(programs.begin(),
-                  programs.end(),
-                  [](const QVariant& a, const QVariant& b)
-                  {
-                      return a.toMap().value("startUtc").toLongLong() < b.toMap().value("startUtc").toLongLong();
-                  });
-        entry["programs"] = programs;
-        m_sourcePreview[m_sourceIndex] = entry;
+        processPvrPrograms(items, entry, programs, m_sourceRefreshed, m_snapshotBytes);
     }
-    closeBridge();
-    if (m_snapshotBytes > 4 * 1024 * 1024 - 4096)
-    {
-        readFailure(tr("PVR preview exceeds the 4 MiB cache generation limit."));
-        return;
-    }
-    if (end < total)
-        m_page = end;
-    else
-    {
-        m_page = 0;
-        ++m_sourceIndex;
-        if (m_sourceIndex == 0 && m_sourcePreview.isEmpty())
-        {
-            readFailure(
-                tr("No unlocked, visible PVR channels are configured in this Kodi profile. Set up a PVR "
-                   "source, then retry."));
-            return;
-        }
-    }
-    if (m_sourceIndex >= 0 && m_sourceIndex >= m_sourcePreview.size())
-    {
-        m_catalogDeadline.stop();
-        m_reading = m_busy = m_pvrReading = false;
-        m_sourcePreviewReady = true;
-        m_status =
-            tr("%1 PVR channels ready for mapping review · %2 hidden/locked channels skipped. Nothing imported yet.")
-                .arg(m_sourcePreview.size())
-                .arg(m_skipped);
-        emit changed();
-        return;
-    }
-    m_status =
-        tr("Reading PVR listings · channel %1 of %2").arg(std::max(0, m_sourceIndex) + 1).arg(m_sourcePreview.size());
-    emit changed();
-    const auto generation = m_catalogGeneration;
-    QTimer::singleShot(0,
-                       this,
-                       [this, generation]
-                       {
-                           if (m_valid && m_reading && generation == m_catalogGeneration)
-                               requestPage();
-                       });
+    finalizePvrLoad(m_page, m_sourceIndex, m_sourcePreviewReady, end, total);
 }
 bool
 GuideController::importPvr()
@@ -1996,5 +1867,167 @@ GuideController::setSourceEnabled(const QString& instance, const QVariant& enabl
         {
             return outcome(store.setSourceEnabled(instance, enabled.toBool(), revisions), store);
         });
+}
+bool
+GuideController::validatePvrPage(const QVariantMap& result, const QVariantMap& limits)
+{
+    const auto key = result.value("limits").toMap().isEmpty() ? QString("channels") : QString("broadcasts");
+    const int start = limits.value("start", -1).toInt(), end = limits.value("end", -1).toInt(),
+              total = limits.value("total", -1).toInt();
+    const auto items = result.value(key).toList();
+    if (!integer(limits.value("start"), 0, 1024) || !integer(limits.value("end"), 0, 1024) ||
+        !integer(limits.value("total"), 0, 1024) || result.value(key).metaType().id() != QMetaType::QVariantList ||
+        start != m_page || end != start + items.size() || items.size() > 50 || total < end ||
+        total > (m_sourceIndex < 0 ? 1024 : 1000) || (end == start && total > end))
+    {
+        readFailure(tr("Kodi returned an invalid or oversized PVR page. Cached listings were preserved."));
+        return false;
+    }
+    return true;
+}
+bool
+GuideController::processNewPvrChannel(const QVariantMap& item, QVariantMap& source, QString& id, int& number,
+                                      QVariantMap& definition, QSet<int>& used)
+{
+    if (item.value("locked").metaType().id() != QMetaType::Bool ||
+        item.value("hidden").metaType().id() != QMetaType::Bool)
+    {
+        readFailure(tr("Kodi did not report PVR availability safely."));
+        return false;
+    }
+    if (item.value("locked").toBool() || item.value("hidden").toBool())
+    {
+        ++m_skipped;
+        return false;
+    }
+    source = QVariantMap{{"instance", "kodi-pvr"},
+                         {"channelId", item.value("channelid")},
+                         {"clientId", item.value("clientid")},
+                         {"uniqueId", item.value("uniqueid")},
+                         {"number", item.value("channelnumber")}};
+    id =
+        "pvr-" +
+        QString::fromLatin1(QCryptographicHash::hash(
+                                QByteArray("kodi-pvr:") + QByteArray::number(source.value("clientId").toInt()) +
+                                    ":" + QByteArray::number(source.value("uniqueId").toInt()),
+                                QCryptographicHash::Sha256)
+                                .toHex());
+    number = item.value("channelnumber").toInt();
+    const auto existing = std::find_if(m_channels.cbegin(),
+                                       m_channels.cend(),
+                                       [&id](const QVariant& c)
+                                       {
+                                           return c.toMap().value("id") == id;
+                                       });
+    if (existing != m_channels.cend())
+        number = existing->toMap().value("number").toInt();
+    else if (number < 1 || used.contains(number))
+    {
+        number = 1;
+        while (used.contains(number) && number < 99999)
+            ++number;
+    }
+    definition = QVariantMap{
+        {"schemaVersion", 1},
+        {"id", id},
+        {"owner", "kodi-pvr"},
+        {"source", source},
+        {"number", number},
+        {"name", existing == m_channels.cend() ? item.value("label") : existing->toMap().value("name")},
+        {"sourceAvailable", true},
+        {"refreshedUtc", m_sourceRefreshed}};
+    QString error;
+    if (ComponentSchema::guideChannel(definition, &error).isEmpty() ||
+        std::any_of(m_sourcePreview.cbegin(),
+                    m_sourcePreview.cend(),
+                    [&id](const QVariant& c)
+                    {
+                        return c.toMap().value("definition").toMap().value("id") == id;
+                    }))
+    {
+        readFailure(tr("Invalid or ambiguous PVR channel identity. Cached listings were preserved."));
+        return false;
+    }
+    return true;
+}
+void
+GuideController::processPvrPrograms(const QVariantList& items, QVariantMap& entry, QVariantList& programs,
+                                    qint64& sourceRefreshed, qint64& snapshotBytes)
+{
+    for (const auto& v : items)
+    {
+        const auto p = v.toMap();
+        const auto from = pvrUtc(p.value("starttime")), to = pvrUtc(p.value("endtime"));
+        if (from < 0 || to <= from || to - from > 7 * 86400 || !integer(p.value("broadcastid"), 1, 2147483647) ||
+            p.value("title").metaType().id() != QMetaType::QString ||
+            p.value("title").toString().trimmed().isEmpty() || p.value("title").toString().size() > 512)
+        {
+            readFailure(tr("Invalid PVR broadcast interval or identity. Cached listings were preserved."));
+            return;
+        }
+        if (to < sourceRefreshed - 7 * 86400 || from > sourceRefreshed + 30 * 86400)
+            continue;
+        QVariantMap program{{"broadcastId", p.value("broadcastid").toString()},
+                            {"title", p.value("title")},
+                            {"startUtc", from},
+                            {"endUtc", to}};
+        programs.append(program);
+        snapshotBytes += QJsonDocument::fromVariant(program).toJson(QJsonDocument::Compact).size() + 1;
+    }
+    std::sort(programs.begin(),
+              programs.end(),
+              [](const QVariant& a, const QVariant& b)
+              {
+                  return a.toMap().value("startUtc").toLongLong() < b.toMap().value("startUtc").toLongLong();
+              });
+    entry["programs"] = programs;
+    m_sourcePreview[m_sourceIndex] = entry;
+}
+void
+GuideController::finalizePvrLoad(int& page, int& sourceIndex, bool& sourcePreviewReady)
+{
+    closeBridge();
+    if (m_snapshotBytes > 4 * 1024 * 1024 - 4096)
+    {
+        readFailure(tr("PVR preview exceeds the 4 MiB cache generation limit."));
+        return;
+    }
+    if (end < total)
+        page = end;
+    else
+    {
+        page = 0;
+        ++sourceIndex;
+        if (sourceIndex == 0 && m_sourcePreview.isEmpty())
+        {
+            readFailure(
+                tr("No unlocked, visible PVR channels are configured in this Kodi profile. Set up a PVR "
+                   "source, then retry."));
+            return;
+        }
+    }
+    if (sourceIndex >= 0 && sourceIndex >= m_sourcePreview.size())
+    {
+        m_catalogDeadline.stop();
+        m_reading = m_busy = m_pvrReading = false;
+        sourcePreviewReady = true;
+        m_status =
+            tr("%1 PVR channels ready for mapping review · %2 hidden/locked channels skipped. Nothing imported yet.")
+                .arg(m_sourcePreview.size())
+                .arg(m_skipped);
+        emit changed();
+        return;
+    }
+    m_status =
+        tr("Reading PVR listings · channel %1 of %2").arg(std::max(0, sourceIndex) + 1).arg(m_sourcePreview.size());
+    emit changed();
+    const auto generation = m_catalogGeneration;
+    QTimer::singleShot(0,
+                       this,
+                       [this, generation]
+                       {
+                           if (m_valid && m_reading && generation == m_catalogGeneration)
+                               requestPage();
+                       });
 }
 #include "GuideController.moc"

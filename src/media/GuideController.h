@@ -284,6 +284,14 @@ class GuideController final : public QObject
     consume();
     void
     consumePvr(const QVariantMap& result);
+    bool
+    validatePvrPage(const QVariantMap& result, const QVariantMap& limits);
+    bool
+    processNewPvrChannel(const QVariantMap& item, QVariantMap& source, QString& id, int& number, QVariantMap& definition, QSet<int>& used);
+    void
+    processPvrPrograms(const QVariantList& items, QVariantMap& entry, QVariantList& programs, qint64& m_sourceRefreshed, qint64& m_snapshotBytes);
+    void
+    finalizePvrLoad(int& m_page, int& m_sourceIndex, bool& m_sourcePreviewReady, bool& m_sourcePreviewIsEmpty);
     void
     closeBridge();
     void
