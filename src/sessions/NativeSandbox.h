@@ -41,4 +41,22 @@ class NativeSandbox
             const QString& managedGameRoot = {},
             const QString& opticalMediaId = {},
             const QString& opticalObservationId = {});
+  private:
+    static bool
+    validateProfileAndApp(const QString& profileId, const QString& appId);
+    static bool
+    validateSandboxDeps(NativeSandboxPlan& plan);
+    static bool
+    validateBinaryAndOptical(NativeSandboxPlan& plan, const QString& executable,
+                             const QString& managedGameRoot, const QString& gameSourceRoot,
+                             const QString& profileId, const QString& opticalMediaId,
+                             const QString& opticalObservationId, bool& nativeGame);
+    static bool
+    prepareStorageDirectories(NativeSandboxPlan& plan, const QString& storageRoot,
+                              const QString& profileId, const QString& appId);
+    static void
+    buildSandboxArguments(NativeSandboxPlan& plan, const QProcessEnvironment& host,
+                          const QString& emulatorRuntime, const QString& steamGameId,
+                          const QString& gameSourceRoot, const QString& managedGameRoot,
+                          const QString& opticalMediaId, bool nativeGame, bool gameSession);
 };

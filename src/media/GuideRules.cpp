@@ -292,23 +292,47 @@ ComponentSchema::guideRule(const QVariantMap& value, QString* error)
 QVariantMap
 ComponentSchema::guideChannel(const QVariantMap& v, QString* error)
 {
-    if (QJsonDocument::fromVariant(v).toJson(QJsonDocument::Compact).size() > 131072)
-        return reject(error, "Channel definitions must fit within 128 KiB.");
-    if (v.contains("schedule") && !validateChannelSchedule(v, error))
+    if (!validateChannelSize(v, error))
         return v;
-    if (v.contains("description") && !text(v.value("description"), 512, true))
-        return reject(error, "Use a plain-text channel description of at most 512 characters.");
-    if (!validateChannelBasics(v, error))
+    if (!validateChannelDescription(v, error))
         return v;
-    if (!validateChannelOwner(v, error))
-        return v;
-    if (!validateChannelTiming(v, error))
-        return v;
-    if (!validateLocalChannel(v, error))
+    if (!validateChannelContent(v, error))
         return v;
     if (error)
         error->clear();
     return v;
+}
+
+bool
+GuideRules::validateChannelContent(const QVariantMap& v, QString* error)
+{
+    if (v.contains("schedule") && !validateChannelSchedule(v, error))
+        return false;
+    if (!validateChannelBasics(v, error))
+        return false;
+    if (!validateChannelOwner(v, error))
+        return false;
+    if (!validateChannelTiming(v, error))
+        return false;
+    if (!validateLocalChannel(v, error))
+        return false;
+    return true;
+}
+
+bool
+GuideRules::validateChannelSize(const QVariantMap& v, QString* error)
+{
+    if (QJsonDocument::fromVariant(v).toJson(QJsonDocument::Compact).size() > 131072)
+        return reject(error, "Channel definitions must fit within 128 KiB.");
+    return true;
+}
+
+bool
+GuideRules::validateChannelDescription(const QVariantMap& v, QString* error)
+{
+    if (v.contains("description") && !text(v.value("description"), 512, true))
+        return reject(error, "Use a plain-text channel description of at most 512 characters.");
+    return true;
 }
 
 bool

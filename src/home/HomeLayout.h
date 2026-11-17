@@ -447,6 +447,24 @@ class HomeLayout final : public QObject
     bool
     rebindItemAt(qsizetype i, const QJsonObject& item, const QString& sourceId);
     QJsonObject
+    validateStudioCatalog(const QVariantArray& catalog, const QVariantMap& presets);
+    bool
+    validateStudioActions(const QVariantArray& actions);
+    bool
+    validateStudioActionCategories(const QVariantArray& categories);
+    bool
+    validateStudioGridModes(const QVariantArray& modes, const QVariantMap& defaultGrid);
+    bool
+    validateStudioOverlayKeys(const QVariantArray& overlayKeys, const QVariantMap& guide);
+    validateStudioCatalog(const QVariantArray& catalog, const QVariantMap& presets);
+    bool
+    validateStudioActions(const QVariantArray& actions, const QVariantMap& listings);
+    bool
+    validateStudioActionCategories(const QVariantArray& categories, const QVariantMap& listings);
+    bool
+    validateStudioGridModes(const QVariantArray& modes, const QVariantMap& defaultGrid);
+    bool
+    validateStudioOverlayKeys(const QVariantArray& overlayKeys, const QVariantMap& guide);
     previousItem(qsizetype i) const;
     void
     setAppId(QJsonObject& first, const QJsonObject& item, const QString& sourceId);

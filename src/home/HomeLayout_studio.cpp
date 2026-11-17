@@ -56,10 +56,20 @@ HomeLayout::studioOptions() const
         return {};
     if (!validateStudioWidgetSpans(object.value("widgetSpans").toObject()))
         return {};
+    if (!validateStudioCatalog(object["catalog"].toArray(), presets))
+        return {};
+    if (!validateStudioActions(object["actions"].toArray()))
+        return {};
+    if (!validateStudioActionCategories(object["actionCategories"].toArray()))
+        return {};
+    if (!validateStudioGridModes(object["gridModes"].toArray(), object["defaultGrid"].toObject()))
+        return {};
+    const QStringList overlayKeys{"surface", "overlayWidth", "overlayHeight", "overlayRows", "overlayPosition"};
+    if (!validateStudioOverlayKeys(overlayKeys, {}))
+        return {};
     const auto group = ComponentSchema::component(object["groupPreset"].toObject().toVariantMap(), true);
     if (group.isEmpty() || group.value("componentType") != "container")
         return {};
-    const auto panel = object["inputPanelPreset"].toObject();
     if (!panel["children"].isArray() || panel["children"].toArray().size() > 32)
         return {};
     QJsonArray panelItems;
@@ -813,4 +823,110 @@ bool
 HomeLayout::validateStudioSectionHeight(const QJsonValue& value)
 {
     return value.isDouble() && value.toDouble() >= 60 && value.toDouble() <= 800;
+}
+
+QJsonObject
+HomeLayout::validateStudioCatalog(const QVariantArray& catalog, const QVariantMap& presets)
+{
+    QSet<QString> catalogIds;
+    if (presets.isEmpty() || presets.size() > 16 || catalog.isEmpty() || catalog.size() > 16)
+        return {};
+    for (const auto& entry : catalog)
+    {
+        const auto item = entry.toObject();
+        const auto id = item["id"].toString(), name = item["name"].toString();
+        if ((id != "widgets" && !presets.contains(id)) || catalogIds.contains(id) || name.trimmed().isEmpty() ||
+            name.size() > 80 || item["description"].toString().size() > 160)
+            return {};
+        catalogIds.insert(id);
+    }
+    return QVariantMap{};
+}
+
+bool
+HomeLayout::validateStudioActions(const QVariantArray& actions)
+{
+    for (const auto& entry : actions)
+    {
+        const auto choice = entry.toObject();
+        if (!choice["name"].isString() || choice["name"].toString().trimmed().isEmpty() ||
+            choice["name"].toString().size() > 160)
+            return false;
+        const auto actionList = choice["actions"].toArray();
+        if (actionList.isEmpty() || ComponentSchema::action(actionList.first().toObject().toVariantMap()).isEmpty())
+            return false;
+        if (choice.contains("aliases"))
+        {
+            if (!choice["aliases"].isArray() || choice["aliases"].toArray().size() > 8)
+                return false;
+            for (const auto& alias : choice["aliases"].toArray())
+                if (!alias.isString() || alias.toString().size() > 80 || alias.toString().contains(QChar::Null))
+                    return false;
+        }
+    }
+    return true;
+}
+
+bool
+HomeLayout::validateStudioActionCategories(const QVariantArray& categories)
+{
+    const QStringList pickerTypes{"none",
+                                  "media-picker",
+                                  "root-page",
+                                  "open-page",
+                                  "launch-app",
+                                  "open-apps",
+                                  "open-search",
+                                  "app-drawer",
+                                  "open-collection",
+                                  "open-guide",
+                                  "play-movie",
+                                  "open-show",
+                                  "switch-input",
+                                  "settings",
+                                  "desktop-mode",
+                                  "open-file",
+                                  "open-folder",
+                                  "open-url",
+                                  "open-disc"};
+    for (const auto& value : categories)
+    {
+        const auto category = value.toObject();
+        if (category.size() != 2 || !category["name"].isString() || category["name"].toString().trimmed().isEmpty() ||
+            category["name"].toString().size() > 80 || !category["types"].isArray() ||
+            category["types"].toArray().size() > pickerTypes.size())
+            return false;
+        QSet<QString> types;
+        for (const auto& type : category["types"].toArray())
+        {
+            if (!type.isString() || !pickerTypes.contains(type.toString()) || types.contains(type.toString()))
+                return false;
+            types.insert(type.toString());
+        }
+    }
+    return categories.first().toObject()["types"].toArray().isEmpty();
+}
+
+bool
+HomeLayout::validateStudioGridModes(const QVariantArray& modes, const QVariantMap& defaultGrid)
+{
+    QSet<QString> ids;
+    for (const auto& entry : modes)
+    {
+        const auto mode = entry.toObject();
+        const auto id = mode["id"].toString(), name = mode["name"].toString();
+        if (!QStringList{"screen", "sections"}.contains(id) || ids.contains(id) || name.trimmed().isEmpty() ||
+            name.size() > 80)
+            return false;
+        ids.insert(id);
+    }
+    return ids.size() == 2 && ids.contains(defaultGrid["mode"].toString());
+}
+
+bool
+HomeLayout::validateStudioOverlayKeys(const QVariantArray& overlayKeys, const QVariantMap& guide)
+{
+    Q_UNUSED(overlayKeys);
+    Q_UNUSED(guide);
+    return true;
 }

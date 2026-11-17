@@ -36,6 +36,12 @@ validateLocalChannelMediaKinds(const QVariantMap& v, QString* error);
 bool
 validateChannelBasics(const QVariantMap& v, QString* error);
 bool
+validateChannelContent(const QVariantMap& v, QString* error);
+bool
+validateChannelDescription(const QVariantMap& v, QString* error);
+bool
+validateChannelSize(const QVariantMap& v, QString* error);
+bool
 validateChannelOwner(const QVariantMap& v, QString* error);
 bool
 validateChannelTiming(const QVariantMap& v, QString* error);
