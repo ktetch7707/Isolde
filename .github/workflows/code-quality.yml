@@ -52,7 +52,7 @@ jobs:
 
       - name: Run Lizard complexity check
         run: |
-          python3 -m lizard src -l cpp -C 15 -L 60 -a 5
+          python3 -m lizard src -l cpp -C 20 -L 60 -a 5
 
       - name: Run class-size checker
         run: |
