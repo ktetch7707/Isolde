@@ -26,6 +26,10 @@ class DesktopSession final : public AppSession
     resume() override;
     void
     exit() override;
+    bool
+    applyLaunchConfiguration(QJsonObject& configuration, const QString& steamGame, const QString& managedGame,
+                             const QJsonObject& resolvedLaunch, const NativeSandboxPlan& sandbox,
+                             QStringList& launchArguments);
 
   private:
     bool

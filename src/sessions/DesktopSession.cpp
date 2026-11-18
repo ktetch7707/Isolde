@@ -398,86 +398,24 @@ DesktopSession::launch()
     auto resolvedLaunch = launch;
     const auto steamGame = definition().launchConfiguration.value("steamGameId").toString();
     const auto managedGame = definition().launchConfiguration.value("managedGameExecutable").toString();
-    if (!managedGame.isEmpty())
-    {
-        resolvedLaunch.program = managedGame;
-        resolvedLaunch.arguments.clear();
-    }
-    else if (!steamGame.isEmpty())
-    {
-        resolvedLaunch.program = "/usr/bin/python3";
-        resolvedLaunch.arguments = {"/run/steam-games.py", "--launch", steamGame};
-        m_steamOutput = std::make_unique<SteamSessionOutput>(steamGame);
-    }
-    const auto sandbox =
-        NativeSandbox::prepare(qApp->property("isoldeProfile").toString(),
-                               definition().id,
-                               resolvedLaunch.program,
-                               environment,
-                               definition().launchConfiguration.value("actionTarget").toString(),
-                               {},
-                               definition().launchConfiguration.value("emulatorRuntime").toString(),
-                               definition().launchConfiguration.value("gameSourceRoot").toString(),
-                               steamGame,
-                               definition().launchConfiguration.value("managedGameRoot").toString(),
-                               definition().launchConfiguration.value("opticalMediaId").toString(),
-                               definition().launchConfiguration.value("opticalObservationId").toString());
-    if (!sandbox.error.isEmpty())
-    {
-        setError(sandbox.error);
-        setState(State::Exited);
+    const auto configuration = definition().launchConfiguration;
+    auto sandbox = NativeSandbox::prepare(qApp->property("isoldeProfile").toString(),
+                                          definition().id,
+                                          resolvedLaunch.program,
+                                          environment,
+                                          configuration.value("actionTarget").toString(),
+                                          {},
+                                          definition().launchConfiguration.value("emulatorRuntime").toString(),
+                                          definition().launchConfiguration.value("gameSourceRoot").toString(),
+                                          steamGame,
+                                          definition().launchConfiguration.value("managedGameRoot").toString(),
+                                          definition().launchConfiguration.value("opticalMediaId").toString(),
+                                          definition().launchConfiguration.value("opticalObservationId").toString());
+    QStringList launchArguments;
+    if (!applyLaunchConfiguration(configuration, steamGame, managedGame, resolvedLaunch, sandbox,
+                                  launchArguments))
         return;
-    }
-    auto configuration = definition().launchConfiguration;
-    if (definition().id == "kodi" || definition().id == "steam")
-    {
-        m_kodiLock = std::make_unique<QLockFile>(sandbox.homeDirectory + "/.isolde-managed.lock");
-        if (!m_kodiLock->tryLock())
-        {
-            setError(definition().name +
-                     " is already using this profile. Exit it normally before opening another instance.");
-            setState(State::Exited);
-            return;
-        }
-    }
-    if (configuration.contains("actionTarget"))
-        configuration["actionTarget"] = sandbox.actionTarget;
-    QString actionError;
-    if (managedGame.isEmpty() && !appendActionArguments(&resolvedLaunch, configuration, &actionError))
-    {
-        setError(actionError);
-        qWarning() << "Desktop bridge refused action launch" << definition().id << actionError;
-        setState(State::Exited);
-        return;
-    }
-    if (!managedGame.isEmpty())
-        resolvedLaunch.program = sandbox.actionTarget;
-    if (!steamGame.isEmpty())
-        for (const auto& library : sandbox.steamLibraryRoots)
-            resolvedLaunch.arguments << "--library" << library;
-
-    const auto emulator = configuration.value("emulatorRuntime").toString();
-    if (!emulator.isEmpty())
-        resolvedLaunch.arguments = {"/run/emulator-session.py", "--runtime", emulator, sandbox.actionTarget};
     qInfo() << "Isolated native session launching" << definition().id << "profile" << qApp->property("isoldeProfile");
-    m_launcher.setProcessEnvironment(sandbox.environment);
-    m_launcher.setProgram(sandbox.program);
-    auto launchArguments = sandbox.arguments;
-    if (definition().presentationMode == "web-kiosk")
-    {
-        const auto appearance = qApp->property("isoldeRemoteAppearance").toMap();
-        if (!appearance.contains("focusColor"))
-        {
-            setError("The app's remote appearance is unavailable. Return Home and retry.");
-            setState(State::Exited);
-            return;
-        }
-        const auto index = launchArguments.lastIndexOf("--");
-        launchArguments.insert(index, "--web-remote");
-        launchArguments.insert(
-            index + 1,
-            QString::fromLatin1(QJsonDocument::fromVariant(appearance).toJson(QJsonDocument::Compact).toBase64()));
-    }
     m_launcher.setArguments(launchArguments + resolvedLaunch.arguments);
     connect(&m_launcher, &QProcess::readyReadStandardError, this, &DesktopSession::readDiagnostics);
     connect(&m_launcher,
@@ -520,6 +458,46 @@ DesktopSession::launch()
         QTimer::singleShot(12000, this, &DesktopSession::applyContainment);
         QTimer::singleShot(20000, this, &DesktopSession::applyContainment);
     }
+}
+
+bool
+DesktopSession::applyLaunchConfiguration(QJsonObject& configuration, const QString& steamGame,
+                                         const QString& managedGame, const QJsonObject& resolvedLaunch,
+                                         const NativeSandboxPlan& sandbox, QStringList& launchArguments)
+{
+    if (definition().id == "kodi" || definition().id == "steam")
+    {
+        m_kodiLock = std::make_unique<QLockFile>(sandbox.homeDirectory + "/.isolde-managed.lock");
+        if (!m_kodiLock->tryLock())
+        {
+            setError(definition().name +
+                     " is already using this profile. Exit it normally before opening another instance.");
+            setState(State::Exited);
+            return false;
+        }
+    }
+    if (configuration.contains("actionTarget"))
+        configuration["actionTarget"] = sandbox.actionTarget;
+    QString actionError;
+    if (managedGame.isEmpty() && !appendActionArguments(&resolvedLaunch, configuration, &actionError))
+    {
+        setError(actionError);
+        qWarning() << "Desktop bridge refused action launch" << definition().id << actionError;
+        setState(State::Exited);
+        return false;
+    }
+    if (!managedGame.isEmpty())
+        resolvedLaunch.program = sandbox.actionTarget;
+    if (!steamGame.isEmpty())
+        for (const auto& library : sandbox.steamLibraryRoots)
+            launchArguments << "--library" << library;
+
+    const auto emulator = configuration.value("emulatorRuntime").toString();
+    if (!emulator.isEmpty())
+        resolvedLaunch.arguments = {"/run/emulator-session.py", "--runtime", emulator, sandbox.actionTarget};
+
+    launchArguments = sandbox.arguments;
+    return true;
 }
 
 void
