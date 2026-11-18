@@ -216,6 +216,12 @@ validateRuleLeafValue(const QVariant& value, bool numeric, const QString& op)
     const auto scalar = validateScalar(value, numeric);
     if (!scalar)
         return false;
+    return validateRuleLeafComparison(value, numeric, op);
+}
+
+bool
+validateRuleLeafComparison(const QVariant& value, bool numeric, const QString& op)
+{
     if (op == "is" || op == "is-not")
         return true;
     if (numeric)

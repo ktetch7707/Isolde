@@ -700,15 +700,8 @@ NativeSandbox::buildSandboxArguments(NativeSandboxPlan& plan, const QProcessEnvi
     if (opticalNoExec)
     {
         auto helperRoot = QCoreApplication::applicationDirPath() + "/share/isolde";
-        if (!QFileInfo(helperRoot + "/optical-exec.py").isReadable())
-            helperRoot = QCoreApplication::applicationDirPath() + "/../share/isolde";
-        const auto helper = helperRoot + "/optical-exec.py";
-        if (!QFileInfo(helper).isReadable() || !QFileInfo("/usr/bin/python3").isExecutable())
-        {
-            plan.error = "The optical no-exec adapter is unavailable. Repair Isolde and retry.";
+        if (!bindOpticalExec(plan, helperRoot))
             return;
-        }
-        args << "--ro-bind" << helper << "/run/isolde-optical-exec.py";
     }
     args << "--" << dbus << "--config-file=/run/isolde-session-bus.conf" << "--" << "/run/isolde-native-host";
     if (gameSessionLocal)
@@ -720,6 +713,21 @@ NativeSandbox::buildSandboxArguments(NativeSandboxPlan& plan, const QProcessEnvi
         args << "/usr/bin/python3" << "/run/isolde-optical-exec.py" << plan.actionTarget;
     else
         args << (nativeGame ? plan.actionTarget : executable);
+}
+
+bool
+NativeSandbox::bindOpticalExec(NativeSandboxPlan& plan, const QString& helperRoot)
+{
+    if (!QFileInfo(helperRoot + "/optical-exec.py").isReadable())
+        helperRoot = QCoreApplication::applicationDirPath() + "/../share/isolde";
+    const auto helper = helperRoot + "/optical-exec.py";
+    if (!QFileInfo(helper).isReadable() || !QFileInfo("/usr/bin/python3").isExecutable())
+    {
+        plan.error = "The optical no-exec adapter is unavailable. Repair Isolde and retry.";
+        return false;
+    }
+    args << "--ro-bind" << helper << "/run/isolde-optical-exec.py";
+    return true;
 }
 NativeSandboxPlan
 NativeSandbox::prepare(const QString& profileId,

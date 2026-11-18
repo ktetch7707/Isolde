@@ -53,12 +53,13 @@ shouldUsePackagedIcon(const AppDefinition& app, const QString& packaged)
     return app.type != "web" && app.type != "desktop" && app.type != "android" && !QFile::exists(packaged);
 }
 static QString
+static QString
 appIcon(const AppDefinition& app, int role = 0)
 {
     if (!qobject_cast<QGuiApplication*>(QCoreApplication::instance()))
         return {};
     const auto packaged = ":/config/app-icons/" + app.launchConfiguration.value("icon", app.id).toString() + ".svg";
-    if (!shouldUsePackagedIcon(app, packaged))
+    if (app.type != "web" && app.type != "desktop" && app.type != "android" && !QFile::exists(packaged))
         return {};
     static const QRegularExpression desktopName("^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$");
     const auto name = resolveAppIconName(app, desktopName);
@@ -91,6 +92,7 @@ appIcon(const AppDefinition& app, int role = 0)
         return {};
     return QUrl::fromLocalFile(path).toString();
 }
+
 
                     return false;
                 excluded.append(colour);
@@ -373,7 +375,7 @@ AppRegistry::loadFromFile(const QString& resolvedPath)
     return loadFromData(file.readAll());
 }
 
-bool
+QVector<AppDefinition>
 AppRegistry::loadFromData(const QByteArray& data)
 {
     QJsonParseError parseError;
@@ -381,106 +383,143 @@ AppRegistry::loadFromData(const QByteArray& data)
     if (parseError.error != QJsonParseError::NoError || !document.isArray())
     {
         setError(tr("Invalid app configuration: %1").arg(parseError.errorString()));
-        return false;
+        return {};
     }
 
     QVector<AppDefinition> loaded;
     QSet<QString> ids;
     for (const auto& value : document.array())
     {
-        if (!value.isObject())
-        {
-            setError(tr("Every app entry must be an object."));
-            return false;
-        }
-        const auto object = value.toObject();
-        AppDefinition app;
-        app.id = object.value("id").toString().trimmed();
-        app.name = object.value("name").toString().trimmed();
-        app.type = object.value("type").toString().trimmed();
-        app.presentationMode = object.value("presentationMode").toString(QStringLiteral("native-tv")).trimmed();
-        app.networkRequirement =
-            object.value("networkRequirement")
-                .toString(app.type == QStringLiteral("web") ? QStringLiteral("internet") : QStringLiteral("none"))
-                .trimmed();
-        app.handledActions = readStringArray(object.value(QStringLiteral("handledActions")).toArray());
-        app.section = object.value("section").toString().trimmed();
-        app.symbol = object.value("symbol").toString().trimmed();
-        app.accent = QColor(object.value("accent").toString("#64748B"));
-        app.launchConfiguration = object.toVariantMap();
-        static const QSet<QString> presentationModes{QStringLiteral("native-tv"),
-                                                     QStringLiteral("web-kiosk"),
-                                                     QStringLiteral("media"),
-                                                     QStringLiteral("capture"),
-                                                     QStringLiteral("game-hub"),
-                                                     QStringLiteral("game"),
-                                                     QStringLiteral("disc-media"),
-                                                     QStringLiteral("disc-game"),
-                                                     QStringLiteral("utility-desktop"),
-                                                     QStringLiteral("desktop-bridge")};
-        static const QSet<QString> networkRequirements{
-            QStringLiteral("none"), QStringLiteral("local-network"), QStringLiteral("internet")};
-        static const QSet<QString> handledActionTypes{QStringLiteral("open-folder"),
-                                                      QStringLiteral("open-file"),
-                                                      QStringLiteral("open-url"),
-                                                      QStringLiteral("open-disc")};
-        const auto url = QUrl(object.value(QStringLiteral("url")).toString());
-        bool validOrigins = true;
-        for (const auto& origin : object.value(QStringLiteral("allowedOrigins")).toArray())
-            validOrigins = validOrigins && isSafeWebOrigin(origin.toString());
-        const bool validWeb = app.type != QStringLiteral("web") || (isSafeWebUrl(url) && validOrigins);
-        if (!app.isValid() || ids.contains(app.id) || !app.accent.isValid() ||
-            !presentationModes.contains(app.presentationMode) || !validWeb)
-        {
-            setError(
-                tr("App entries require unique IDs, names, types, valid accent colors, known presentation/network "
-                   "modes, and safe web URLs/origins."));
-            return false;
-        }
-        if (!networkRequirements.contains(app.networkRequirement))
-        {
-            setError(tr("App entries require a known network requirement."));
-            return false;
-        }
-        for (const auto& handledAction : app.handledActions)
-        {
-            if (!handledActionTypes.contains(handledAction))
-            {
-                setError(tr("App entries require known handled action types."));
-                return false;
-            }
-        }
-        if (!validIconName(app))
-        {
-            setError(tr("Choose a local registered app icon name."));
-            return false;
-        }
-        app.iconSource = appIcon(app);
-        app.cutoutIconSource = appIcon(app, 1);
-        app.inkIconSource = appIcon(app, 2);
-        app.iconContrastBackdrop = iconRole(app)["contrastBackdrop"].toString();
-        app.iconOpticalScale = qBound(.5, iconRole(app)["opticalScale"].toDouble(1), 1.4);
-        ids.insert(app.id);
-        for (const auto& alias : app.legacyIds())
-        {
-            if (ids.contains(alias))
-            {
-                setError(tr("App compatibility IDs must be unique."));
-                return false;
-            }
-            ids.insert(alias);
-        }
-        loaded.append(app);
+        if (!validateAppEntry(value, loaded, ids))
+            return {};
     }
     if (loaded.isEmpty())
     {
         setError(tr("App configuration contains no apps."));
-        return false;
+        return {};
     }
 
     m_apps = std::move(loaded);
     setError({});
     emit appsChanged();
+    return loaded;
+}
+
+bool
+AppRegistry::validateAppEntry(const QVariant& value, QVector<AppDefinition>& loaded, QSet<QString>& ids)
+{
+    if (!value.isObject())
+    {
+        setError(tr("Every app entry must be an object."));
+        return false;
+    }
+    const auto object = value.toObject();
+    AppDefinition app;
+    app.id = object.value("id").toString().trimmed();
+    app.name = object.value("name").toString().trimmed();
+    app.type = object.value("type").toString().trimmed();
+    app.presentationMode = object.value("presentationMode").toString(QStringLiteral("native-tv")).trimmed();
+    app.networkRequirement =
+        object.value("networkRequirement")
+            .toString(app.type == QStringLiteral("web") ? QStringLiteral("internet") : QStringLiteral("none"))
+            .trimmed();
+    app.handledActions = readStringArray(object.value(QStringLiteral("handledActions")).toArray());
+    app.section = object.value("section").toString().trimmed();
+    app.symbol = object.value("symbol").toString().trimmed();
+    app.accent = QColor(object.value("accent").toString("#64748B"));
+    app.launchConfiguration = object.toVariantMap();
+    if (!validateAppEntryFields(app, object))
+        return false;
+    if (!validateAppEntryOrigin(app, object))
+        return false;
+    loaded.append(app);
+    ids.insert(app.id);
+    for (const auto& alias : app.legacyIds())
+    {
+        if (ids.contains(alias))
+        {
+            setError(tr("App compatibility IDs must be unique."));
+            return false;
+        }
+        ids.insert(alias);
+    }
+    return true;
+}
+
+bool
+AppRegistry::validateAppEntryFields(AppDefinition& app, const QJsonObject& object)
+{
+    static const QSet<QString> presentationModes{QStringLiteral("native-tv"),
+                                                 QStringLiteral("web-kiosk"),
+                                                 QStringLiteral("media"),
+                                                 QStringLiteral("capture"),
+                                                 QStringLiteral("game-hub"),
+                                                 QStringLiteral("game"),
+                                                 QStringLiteral("disc-media"),
+                                                 QStringLiteral("disc-game"),
+                                                 QStringLiteral("utility-desktop"),
+                                                 QStringLiteral("desktop-bridge")};
+    static const QSet<QString> networkRequirements{
+        QStringLiteral("none"), QStringLiteral("local-network"), QStringLiteral("internet")};
+    static const QSet<QString> handledActionTypes{QStringLiteral("open-folder"),
+                                                  QStringLiteral("open-file"),
+                                                  QStringLiteral("open-url"),
+                                                  QStringLiteral("open-disc")};
+    const auto url = QUrl(object.value(QStringLiteral("url")).toString());
+    bool validOrigins = true;
+    for (const auto& origin : object.value(QStringLiteral("allowedOrigins")).toArray())
+        validOrigins = validOrigins && isSafeWebOrigin(origin.toString());
+    const bool validWeb = app.type != QStringLiteral("web") || (isSafeWebUrl(url) && validOrigins);
+    if (!app.isValid() || !app.accent.isValid() || !presentationModes.contains(app.presentationMode) ||
+        !validWeb)
+    {
+        setError(
+            tr("App entries require unique IDs, names, types, valid accent colors, known presentation/network "
+               "modes, and safe web URLs/origins."));
+        return false;
+    }
+    if (!networkRequirements.contains(app.networkRequirement))
+    {
+        setError(tr("App entries require a known network requirement."));
+        return false;
+    }
+    for (const auto& handledAction : app.handledActions)
+    {
+        if (!handledActionTypes.contains(handledAction))
+        {
+            setError(tr("App entries require known handled action types."));
+            return false;
+        }
+    }
+    return true;
+}
+
+bool
+AppRegistry::validateAppEntryOrigin(AppDefinition& app, const QJsonObject& object)
+{
+    const auto url = QUrl(object.value(QStringLiteral("url")).toString());
+    bool validOrigins = true;
+    for (const auto& origin : object.value(QStringLiteral("allowedOrigins")).toArray())
+        validOrigins = validOrigins && isSafeWebOrigin(origin.toString());
+    const bool validWeb = app.type != QStringLiteral("web") || (isSafeWebUrl(url) && validOrigins);
+    if (!validWeb)
+    {
+        setError(
+            tr("App entries require unique IDs, names, types, valid accent colors, known presentation/network "
+               "modes, and safe web URLs/origins."));
+        return false;
+    }
+    if (object.contains("allowedOrigins"))
+    {
+        for (const auto& origin : object.value(QStringLiteral("allowedOrigins")).toArray())
+        {
+            if (!isSafeWebOrigin(origin.toString()))
+            {
+                setError(tr("App entries require valid web origins."));
+                return false;
+            }
+        }
+    }
     return true;
 }
 
