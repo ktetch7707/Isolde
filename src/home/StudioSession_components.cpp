@@ -447,54 +447,88 @@ StudioSession::replacementProposal(const QString& id, const QString& type, const
         return fail(tr("Reopen Studio before replacing a component."));
     if (!QStringList{"button", "image", "text", "shape", "container"}.contains(type))
         return fail(tr("Choose a compatible component type."));
-    auto document = QJsonDocument::fromJson(m_draft).object(), page = document;
-    int pageIndex = -1;
+    QJsonObject document;
+    QJsonArray entries, pages;
+    int pageIndex = -1, index = -1;
+    bool hasChildren = false;
+    if (!findReplacementTarget(id, pageId, document, entries, pageIndex, index, hasChildren))
+    {
+        if (hasChildren)
+            return fail(tr("This container has children. Edit its contents or make an independent copy first."));
+        return fail(tr("The page or component no longer exists."));
+    }
+    const auto original = entries[index].toObject();
+    if (!validateComponentReplaceable(original, entries, id, type))
+        return fail(tr("Choose an unlocked component to replace."));
+    QJsonObject replacement;
+    QStringList losses;
+    if (!buildReplacementPrototype(type, original, replacement, losses))
+        return fail(errorString());
+    if (!validateReplacementResult(replacement))
+        return fail(tr("These properties do not fit the replacement. Keep the original or choose another type."));
+    entries[index] = QJsonObject::fromVariantMap(ComponentSchema::component(replacement.toVariantMap(), true));
+    QJsonObject page = document["pages"].toArray().value(pageIndex).toObject()["layout"].toObject();
+    page["components"] = entries;
+    if (!updateReplacementDocument(document, entries, pages, pageIndex, page))
+        return fail(tr("Replacement document failed validation."));
+    return {{"valid", true}, {"document", document.toVariantMap()}, {"losses", losses}};
+}
+
+bool
+StudioSession::findReplacementTarget(const QString& id, const QString& pageId, QJsonObject& document,
+                                     QJsonArray& entries, int& pageIndex, int& index, bool& hasChildren)
+{
+    document = QJsonDocument::fromJson(m_draft).object();
     auto pages = document["pages"].toArray();
+    pageIndex = -1;
     if (!pageId.isEmpty())
     {
         for (int i = 0; i < pages.size(); ++i)
             if (pages[i].toObject()["id"] == pageId)
             {
                 pageIndex = i;
-                page = pages[i].toObject()["layout"].toObject();
                 break;
             }
         if (pageIndex < 0)
-            return fail(tr("The page no longer exists."));
+            return false;
     }
-    auto entries = page["components"].toArray();
-    int index = -1;
+    auto page = document["pages"].toArray().value(pageIndex).toObject()["layout"].toObject();
+    entries = page["components"].toArray();
+    index = -1;
+    hasChildren = false;
     for (int i = 0; i < entries.size(); ++i)
     {
         const auto entry = entries[i].toObject();
         if (entry["id"] == id)
             index = i;
         if (entry["parentId"] == id)
-            return fail(tr("This container has children. Edit its contents or make an independent copy first."));
+            hasChildren = true;
     }
-    if (index < 0 || ComponentSchema::positionLocked(entries, id))
-        return fail(tr("Choose an unlocked component to replace."));
-    const auto original = entries[index].toObject();
-    if (!QStringList{"button", "image", "text", "shape", "container"}.contains(original["componentType"].toString()) ||
-        original.contains("family") || original.contains("appCollection"))
-        return fail(
-            tr("This source owns its contents. Replace a single button, image, text, shape or empty container."));
+    return index >= 0;
+}
+
+bool
+StudioSession::validateComponentReplaceable(const QJsonObject& original, const QJsonArray& entries, const QString& id,
+                                            const QString& type)
+{
+    if (ComponentSchema::positionLocked(entries, id))
+        return false;
+    const auto compType = original["componentType"].toString();
+    if (!QStringList{"button", "image", "text", "shape", "container"}.contains(compType))
+        return false;
+    return !original.contains("family") && !original.contains("appCollection");
+}
+
+bool
+StudioSession::buildReplacementPrototype(const QString& type, const QJsonObject& original,
+                                         QJsonObject& replacement, QStringList& losses)
+{
     const auto prototype = componentPrototype(type);
     if (prototype.isEmpty())
-        return fail(errorString());
-    auto replacement = QJsonObject::fromVariantMap(prototype["root"].toMap());
-    QStringList losses;
-    for (const auto& key : QStringList{"id",
-                                       "name",
-                                       "placement",
-                                       "parentId",
-                                       "categoryId",
-                                       "hidden",
-                                       "locked",
-                                       "opacity",
-                                       "accessibility",
-                                       "showTitle",
-                                       "showLogo"})
+        return false;
+    replacement = QJsonObject::fromVariantMap(prototype["root"].toMap());
+    for (const auto& key : QStringList{"id", "name", "placement", "parentId", "categoryId", "hidden", "locked",
+                                       "opacity", "accessibility", "showTitle", "showLogo"})
         if (original.contains(key))
             replacement[key] = original[key];
     auto presentation = replacement["presentation"].toObject();
@@ -502,18 +536,10 @@ StudioSession::replacementProposal(const QString& id, const QString& type, const
     for (auto it = oldStyle.begin(); it != oldStyle.end(); ++it)
     {
         const auto key = it.key();
-        const bool semantic = key.startsWith("library") || key.startsWith("guide") ||
-                              (key.startsWith("body") && type != "text") ||
-                              (key == "animateArtwork" && type != "image") ||
-                              (key == "shape" && type != "shape" &&
-                               (type != "container" || it.value() == "ellipse" || it.value() == "divider"));
-        if (semantic ||
+        if (isSemanticStyleKey(key, it.value(), type) ||
             !ComponentSchema::validPresentation({{key, it.value().toVariant()}}, false, type == "container"))
         {
-            losses.append(key == "layout"     ? tr("Container layout")
-                          : key == "shape"    ? tr("Shape outline")
-                          : key == "bodyText" ? tr("Text body")
-                                              : tr("Presentation: %1").arg(key));
+            losses.append(lossMessageForKey(key));
             continue;
         }
         presentation[key] = it.value();
@@ -535,25 +561,55 @@ StudioSession::replacementProposal(const QString& id, const QString& type, const
         else
             losses.append(tr("Image artwork"));
     }
-    const auto normalized = ComponentSchema::component(replacement.toVariantMap(), true);
-    if (normalized.isEmpty())
-        return fail(tr("These properties do not fit the replacement. Keep the original or choose another type."));
-    entries[index] = QJsonObject::fromVariantMap(normalized);
-    page["components"] = entries;
+    return true;
+}
+
+bool
+StudioSession::isSemanticStyleKey(const QString& key, const QVariant& value, const QString& type)
+{
+    return key.startsWith("library") || key.startsWith("guide") ||
+           (key.startsWith("body") && type != "text") ||
+           (key == "animateArtwork" && type != "image") ||
+           (key == "shape" && type != "shape" &&
+            (type != "container" || value.toString() == "ellipse" || value.toString() == "divider"));
+}
+
+QString
+StudioSession::lossMessageForKey(const QString& key)
+{
+    if (key == "layout")
+        return tr("Container layout");
+    if (key == "shape")
+        return tr("Shape outline");
+    if (key == "bodyText")
+        return tr("Text body");
+    return tr("Presentation: %1").arg(key);
+}
+
+bool
+StudioSession::validateReplacementResult(const QJsonObject& replacement)
+{
+    return !ComponentSchema::component(replacement.toVariantMap(), true).isEmpty();
+}
+
+bool
+StudioSession::updateReplacementDocument(QJsonObject& document, const QJsonArray& entries,
+                                         const QJsonArray& pages, int pageIndex, const QJsonObject& page)
+{
+    QJsonObject updatedPage = page;
+    updatedPage["components"] = entries;
     if (pageIndex < 0)
-        document = page;
+        document = updatedPage;
     else
     {
         auto entry = pages[pageIndex].toObject();
-        entry["layout"] = page;
+        entry["layout"] = updatedPage;
         pages[pageIndex] = entry;
         document["pages"] = pages;
     }
     HomeLayout validator(m_live->registry());
     configureWorker(validator);
-    if (!validator.loadDocument(QJsonDocument(document).toJson(), false))
-        return fail(validator.errorString());
-    return {{"valid", true}, {"document", document.toVariantMap()}, {"losses", losses}};
+    return validator.loadDocument(QJsonDocument(document).toJson(), false);
 }
 
 QVariantMap

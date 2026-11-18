@@ -247,25 +247,76 @@ InterfaceSounds::validWave(const QByteArray& bytes)
 QVariantMap
 InterfaceSounds::readKodiTheme(const QString& directory, QString* error, bool includeAudio)
 {
-    const auto fail = [&](const QString& message) -> QVariantMap
+    QString root;
+    QByteArray addon;
+    if (!validateThemeDirectory(directory, root, addon, error))
+        return {};
+    QString id, name;
+    if (!validateAddonIdentity(addon, root, id, name, error))
+        return {};
+    if (!findSoundResourceExtension(addon, error))
+        return {};
+    QMap<QString, QString> files;
+    if (!parseSoundMappings(root, files, error))
+        return {};
+    QVariantMap sounds;
+    if (!validateAndLoadSounds(root, files, sounds, includeAudio, error))
+        return {};
+    if (error)
+        error->clear();
+    return {{"id", id}, {"name", name}, {"sounds", sounds}};
+}
+
+bool
+InterfaceSounds::validateThemeDirectory(const QString& directory, QString& root, QByteArray& addon,
+                                        QString* error)
+{
+    const auto fail = [&](const QString& message) -> bool
     {
         if (error)
             *error = message;
-        return {};
+        return false;
     };
-    const auto root = QDir::cleanPath(QFileInfo(directory).absoluteFilePath());
+    root = QDir::cleanPath(QFileInfo(directory).absoluteFilePath());
     if (!QFileInfo(root).isDir() || !unlinked(root))
         return fail("The sound theme directory is unavailable or redirected.");
-    const auto addon = xmlFile(root + "/addon.xml");
+    addon = xmlFile(root + "/addon.xml");
     if (addon.isEmpty())
         return fail("The sound theme manifest is invalid or too large.");
+    return true;
+}
+
+bool
+InterfaceSounds::validateAddonIdentity(const QByteArray& addon, const QString& root, QString& id, QString& name,
+                                       QString* error)
+{
+    const auto fail = [&](const QString& message) -> bool
+    {
+        if (error)
+            *error = message;
+        return false;
+    };
     QXmlStreamReader manifest(addon);
     if (!manifest.readNextStartElement() || manifest.name() != QLatin1String("addon"))
         return fail("Expected a Kodi sound resource add-on.");
-    const auto id = manifest.attributes().value("id").toString(), name = manifest.attributes().value("name").toString();
+    id = manifest.attributes().value("id").toString();
+    name = manifest.attributes().value("name").toString();
     if (!QRegularExpression("^resource\\.uisounds\\.[a-z0-9][a-z0-9.-]{0,79}\\z").match(id).hasMatch() ||
         QFileInfo(root).fileName() != id || !label(name, 80))
         return fail("Invalid Kodi sound theme identity.");
+    return true;
+}
+
+bool
+InterfaceSounds::findSoundResourceExtension(const QByteArray& addon, QString* error)
+{
+    const auto fail = [&](const QString& message) -> bool
+    {
+        if (error)
+            *error = message;
+        return false;
+    };
+    QXmlStreamReader manifest(addon);
     bool soundResource = false;
     while (manifest.readNextStartElement())
     {
@@ -274,7 +325,8 @@ InterfaceSounds::readKodiTheme(const QString& directory, QString* error, bool in
             const auto point = manifest.attributes().value("point");
             if (point == QLatin1String("kodi.resource.uisounds"))
                 soundResource = true;
-            else if (point != QLatin1String("kodi.addon.metadata") && point != QLatin1String("xbmc.addon.metadata"))
+            else if (point != QLatin1String("kodi.addon.metadata") &&
+                     point != QLatin1String("xbmc.addon.metadata"))
                 return fail("Only declarative Kodi sound resource packs are supported.");
         }
         manifest.skipCurrentElement();
@@ -283,13 +335,24 @@ InterfaceSounds::readKodiTheme(const QString& directory, QString* error, bool in
         manifest.readNext();
     if (manifest.hasError() || !soundResource)
         return fail("The add-on is not a valid Kodi UI sound resource.");
+    return true;
+}
+
+bool
+InterfaceSounds::parseSoundMappings(const QString& root, QMap<QString, QString>& files, QString* error)
+{
+    const auto fail = [&](const QString& message) -> bool
+    {
+        if (error)
+            *error = message;
+        return false;
+    };
     const auto mapping = xmlFile(root + "/resources/sounds.xml");
     if (mapping.isEmpty())
         return fail("The sound mapping is invalid or too large.");
     QXmlStreamReader xml(mapping);
     if (!xml.readNextStartElement() || xml.name() != QLatin1String("sounds"))
         return fail("Expected Kodi sounds.xml.");
-    QMap<QString, QString> files;
     int count = 0;
     while (xml.readNextStartElement())
     {
@@ -302,32 +365,75 @@ InterfaceSounds::readKodiTheme(const QString& directory, QString* error, bool in
                 (group == "actions" ? xml.name() != QLatin1String("action") : xml.name() != QLatin1String("window")))
                 return fail("Invalid or excessive sound mappings.");
             QMap<QString, QString> fields;
-            while (xml.readNextStartElement())
-            {
-                const auto key = xml.name().toString();
-                if (fields.contains(key) || !QStringList{"name", "file", "activate", "deactivate"}.contains(key))
-                    return fail("Invalid sound mapping fields.");
-                fields[key] = xml.readElementText();
-            }
+            if (!parseSoundFields(xml, fields, error))
+                return false;
             auto action = fields.value("name"), file = fields.value("file");
-            if (group == "windows")
-            {
-                if (action != "notification")
-                    continue;
-                file = fields.value("activate");
-            }
-            if (!KodiActions.contains(action) || file.isEmpty())
-                continue;
-            if (files.contains(action))
-                return fail("Duplicate sound action.");
-            files[action] = file;
+            if (!processSoundAction(group, fields, files, error))
+                return false;
         }
     }
     while (!xml.atEnd())
         xml.readNext();
     if (xml.hasError() || files.isEmpty())
         return fail("The sound pack has no supported action mappings.");
-    QVariantMap sounds;
+    return true;
+}
+
+bool
+InterfaceSounds::parseSoundFields(QXmlStreamReader& xml, QMap<QString, QString>& fields, QString* error)
+{
+    const auto fail = [&](const QString& message) -> bool
+    {
+        if (error)
+            *error = message;
+        return false;
+    };
+    while (xml.readNextStartElement())
+    {
+        const auto key = xml.name().toString();
+        if (fields.contains(key) || !QStringList{"name", "file", "activate", "deactivate"}.contains(key))
+            return fail("Invalid sound mapping fields.");
+        fields[key] = xml.readElementText();
+    }
+    return true;
+}
+
+bool
+InterfaceSounds::processSoundAction(const QString& group, const QMap<QString, QString>& fields,
+                                    QMap<QString, QString>& files, QString* error)
+{
+    const auto fail = [&](const QString& message) -> bool
+    {
+        if (error)
+            *error = message;
+        return false;
+    };
+    const auto action = fields.value("name");
+    auto file = fields.value("file");
+    if (group == "windows")
+    {
+        if (action != "notification")
+            return true;
+        file = fields.value("activate");
+    }
+    if (!KodiActions.contains(action) || file.isEmpty())
+        return true;
+    if (files.contains(action))
+        return fail("Duplicate sound action.");
+    files[action] = file;
+    return true;
+}
+
+bool
+InterfaceSounds::validateAndLoadSounds(const QString& root, const QMap<QString, QString>& files,
+                                       QVariantMap& sounds, bool includeAudio, QString* error)
+{
+    const auto fail = [&](const QString& message) -> bool
+    {
+        if (error)
+            *error = message;
+        return false;
+    };
     for (auto it = files.cbegin(); it != files.cend(); ++it)
     {
         const auto path = inside(root + "/resources", it.value());
@@ -336,8 +442,6 @@ InterfaceSounds::readKodiTheme(const QString& directory, QString* error, bool in
         const QFileInfo info(path);
         if (!info.isFile() || info.size() < 44 || info.size() > MaxWave)
             return fail("A mapped sound file is missing or too large.");
-        // Discovery reads bounded metadata only. Full decoding validation and
-        // private caching happen before selecting or previewing a theme.
         if (!includeAudio)
             continue;
         const auto wave = boundedFile(path, MaxWave);
@@ -345,9 +449,7 @@ InterfaceSounds::readKodiTheme(const QString& directory, QString* error, bool in
             return fail("A theme sound is missing or is not a bounded PCM WAV (maximum two seconds).");
         sounds[it.key()] = wave;
     }
-    if (error)
-        error->clear();
-    return {{"id", id}, {"name", name}, {"sounds", sounds}};
+    return true;
 }
 
 InterfaceSounds::InterfaceSounds(const QString& settingsPath,

@@ -352,6 +352,22 @@ class HomeLayout final : public QObject
     bool
     buildAppearance(const QJsonObject& theme, QVariantMap& presentation);
     bool
+    validateShellReadability(const QJsonArray& pages, const QJsonValue& homePage,
+                             const QVariantMap& presentation, const QColor& start, const QColor& end);
+    bool
+    extractThemeColors(const QJsonObject& theme, QColor& start, QColor& end);
+    bool
+    validateRootPageCondition(const QJsonObject& object, const QJsonObject& rootPage,
+                              const QJsonArray& pages, const QSet<QString>& pageIds,
+                              const QJsonValue& homePage);
+    bool
+    validateDocumentPrerequisites(const QJsonObject& object, const QJsonArray& pages,
+                                  const QSet<QString>& pageIds, const QJsonValue& homePage);
+    bool
+    validateCategoriesAndComponents(const QByteArray& data, int version,
+                                    const QJsonArray& categoryArray, const QJsonArray& entries,
+                                    QJsonArray& components);
+    bool
     validateCategories(const QJsonArray& categoryArray, QSet<QString>& categoryIds);
     bool
     validateComponents(const QJsonArray& entries, int version, const QSet<QString>& categoryIds,

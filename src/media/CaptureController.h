@@ -198,6 +198,34 @@ class CaptureController final : public QObject
     selectInput(int input);
     Q_INVOKABLE bool
     applyConfiguration(const QVariantMap& configuration);
+    bool
+    validateSerialNotBusy();
+    bool
+    validateCaptureTypes(const QVariantMap& configuration);
+    bool
+    validateCaptureDevices(const QVariantMap& configuration, bool& captureFound, bool& formatFound,
+                           bool& audioFound, bool& portFound);
+    bool
+    validateCaptureCommand(const QVariantMap& configuration, bool& commandValid, QString& commandError);
+    bool
+    validateCaptureLabels(const QVariantMap& configuration, bool& labelsValid);
+    bool
+    validateCaptureConditions(const QVariantMap& configuration, bool captureFound, bool formatFound,
+                              bool audioFound, bool portFound, bool commandValid, bool labelsValid,
+                              const QString& commandError);
+    bool
+    configurationIsValid(const QVariantMap& configuration, bool captureFound, bool formatFound,
+                         bool audioFound, bool portFound, bool commandValid, bool labelsValid);
+    bool
+    reportCaptureConfigurationError(bool commandValid, const QString& commandError);
+    bool
+    applyCaptureConfigurationValues(const QVariantMap& configuration, int baud, int selectedInput, int duration,
+                                    const QString& captureId, const QString& format, const QString& audioId,
+                                    const QString& portName, const QString& commandTemplate,
+                                    const QString& transition, const QString& returnPolicy,
+                                    const QVariantMap& labels);
+    static bool
+    exactIntValue(const QVariant& value, int* result);
     Q_INVOKABLE bool
     canSwitchInput(int input) const;
     Q_INVOKABLE bool

@@ -155,4 +155,26 @@ class PageModel final : public QObject
     themeDefaults() const;
     bool
     setItemField(const QString& id, std::function<void(QJsonObject&)> mutate);
+    bool
+    validateAppearanceKey(const QString& key, const QVariant& value, const QVariantMap& defaults);
+    bool
+    isColorAppearanceKey(const QString& key);
+    bool
+    validateColorThemeValue(const QVariant& value);
+    bool
+    validateSourcePolicyValue(const QVariant& value);
+    bool
+    validateSurfaceThemesValue(const QVariant& value);
+    bool
+    validateColorValue(const QVariant& value);
+    bool
+    validateFontFamilyValue(const QVariant& value);
+    bool
+    validateBooleanValue(const QVariant& value);
+    bool
+    validateNumericValue(const QString& key, const QVariant& value);
+    bool
+    validateNumericRange(const QString& key, double number, bool ok);
+    bool
+    isKnownAppearanceKey(const QString& key, const QVariantMap& defaults);
 };

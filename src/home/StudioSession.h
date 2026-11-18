@@ -395,6 +395,24 @@ class StudioSession final : public QObject
     allocateNodeIdentities(QJsonArray& nodes, const QString& type, QHash<QString, QString>& remap);
     bool
     remapNodeParentIds(QJsonArray& nodes, const QHash<QString, QString>& remap);
+    bool
+    findReplacementTarget(const QString& id, const QString& pageId, QJsonObject& document,
+                          QJsonArray& entries, int& pageIndex, int& index, bool& hasChildren);
+    bool
+    validateComponentReplaceable(const QJsonObject& original, const QJsonArray& entries, const QString& id,
+                                 const QString& type);
+    bool
+    buildReplacementPrototype(const QString& type, const QJsonObject& original, QJsonObject& replacement,
+                              QStringList& losses);
+    bool
+    isSemanticStyleKey(const QString& key, const QVariant& value, const QString& type);
+    QString
+    lossMessageForKey(const QString& key);
+    bool
+    validateReplacementResult(const QJsonObject& replacement);
+    bool
+    updateReplacementDocument(QJsonObject& document, const QJsonArray& entries, const QJsonArray& pages,
+                              int pageIndex, const QJsonObject& page);
     void
     setError(const QString& message);
 

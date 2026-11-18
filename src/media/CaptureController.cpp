@@ -665,13 +665,130 @@ CaptureController::selectInput(int input)
 bool
 CaptureController::applyConfiguration(const QVariantMap& configuration)
 {
+    if (!validateSerialNotBusy())
+        return false;
+    bool captureFound = false, formatFound = false, audioFound = false, portFound = false;
+    if (!validateCaptureDevices(configuration, captureFound, formatFound, audioFound, portFound))
+        return false;
+    QString commandError;
+    bool commandValid = false;
+    if (!validateCaptureCommand(configuration, commandValid, commandError))
+        return false;
+    bool labelsValid = false;
+    if (!validateCaptureLabels(configuration, labelsValid))
+        return false;
+    int baud = 0, selectedInput = 0, duration = 0;
+    const bool integerTypesValid = exactIntValue(configuration.value("baudRate"), &baud) &&
+                                    exactIntValue(configuration.value("selectedInput"), &selectedInput) &&
+                                    exactIntValue(configuration.value("transitionDuration"), &duration);
+    const auto labels = configuration.value("inputLabels").toMap();
+    const auto captureId = configuration.value("captureDeviceId").toString();
+    const auto format = configuration.value("videoFormatKey").toString();
+    const auto audioId = configuration.value("audioDeviceId").toString();
+    const auto portName = configuration.value("serialPortName").toString();
+    const auto commandTemplate = configuration.value("commandTemplate").toString();
+    const auto transition = configuration.value("sessionTransition").toString();
+    const auto returnPolicy = configuration.value("sessionReturn").toString();
+    if (!validateCaptureTypes(configuration, integerTypesValid))
+        return false;
+    if (!validateCaptureConditions(configuration, captureFound, formatFound, audioFound, portFound,
+                                   commandValid, labelsValid, commandError))
+        return false;
+    return applyCaptureConfigurationValues(configuration, baud, selectedInput, duration, captureId, format, audioId,
+                                           portName, commandTemplate, transition, returnPolicy, labels);
+}
+
+bool
+CaptureController::validateSerialNotBusy()
+{
     if (m_serial.isOpen() || m_serialWriter.isSending())
     {
         m_switchStatus = "Wait for the current switch command to finish before applying capture settings.";
         emit changed();
         return false;
     }
+    return true;
+}
 
+bool
+CaptureController::validateCaptureTypes(const QVariantMap& configuration, bool integerTypesValid)
+{
+    const bool typesValid = configuration.value("captureDeviceId").metaType().id() == QMetaType::QString &&
+                            configuration.value("videoFormatKey").metaType().id() == QMetaType::QString &&
+                            configuration.value("audioDeviceId").metaType().id() == QMetaType::QString &&
+                            configuration.value("serialPortName").metaType().id() == QMetaType::QString &&
+                            configuration.value("commandTemplate").metaType().id() == QMetaType::QString &&
+                            configuration.value("sessionTransition").metaType().id() == QMetaType::QString &&
+                            configuration.value("sessionReturn").metaType().id() == QMetaType::QString &&
+                            integerTypesValid &&
+                            configuration.value("inputLabels").metaType().id() == QMetaType::QVariantMap;
+    if (!typesValid)
+    {
+        m_switchState = "error";
+        m_switchStatus = "Capture settings changed or are invalid. Refresh devices and review the draft.";
+        emit changed();
+        return false;
+    }
+    return true;
+}
+
+bool
+CaptureController::validateCaptureDevices(const QVariantMap& configuration, bool& captureFound, bool& formatFound,
+                                          bool& audioFound, bool& portFound)
+{
+    const auto captureId = configuration.value("captureDeviceId").toString();
+    const auto format = configuration.value("videoFormatKey").toString();
+    const auto audioId = configuration.value("audioDeviceId").toString();
+    const auto portName = configuration.value("serialPortName").toString();
+    captureFound = hasDevice(m_videoDevices, captureId);
+    formatFound = hasVideoFormat(captureId, format);
+    audioFound = hasDevice(m_audioDevices, audioId);
+    portFound = portName.isEmpty();
+    portFound |= m_serialPortNames.contains(portName);
+    return true;
+}
+
+bool
+CaptureController::validateCaptureCommand(const QVariantMap& configuration, bool& commandValid,
+                                          QString& commandError)
+{
+    const auto commandTemplate = configuration.value("commandTemplate").toString();
+    commandValid =
+        commandTemplate.isEmpty() || !commandForInput(commandTemplate, 1, &commandError).isEmpty();
+    return true;
+}
+
+bool
+CaptureController::validateCaptureLabels(const QVariantMap& configuration, bool& labelsValid)
+{
+    const auto labels = configuration.value("inputLabels").toMap();
+    labelsValid = labels.size() == 8;
+    for (int input = 1; input <= 8 && labelsValid; ++input)
+    {
+        const auto label = labels.value(QString::number(input)).toString().trimmed();
+        labelsValid = isValidInputLabel(label);
+    }
+    return true;
+}
+
+bool
+CaptureController::validateCaptureConditions(const QVariantMap& configuration, bool captureFound, bool formatFound,
+                                             bool audioFound, bool portFound, bool commandValid, bool labelsValid,
+                                             const QString& commandError)
+{
+    if (!configurationIsValid(configuration, captureFound, formatFound, audioFound, portFound, commandValid,
+                              labelsValid))
+    {
+        reportCaptureConfigurationError(commandValid, commandError);
+        return false;
+    }
+    return true;
+}
+
+bool
+CaptureController::configurationIsValid(const QVariantMap& configuration, bool captureFound, bool formatFound,
+                                        bool audioFound, bool portFound, bool commandValid, bool labelsValid)
+{
     const QStringList expectedKeys{"audioDeviceId",
                                    "baudRate",
                                    "captureDeviceId",
@@ -683,74 +800,34 @@ CaptureController::applyConfiguration(const QVariantMap& configuration)
                                    "sessionTransition",
                                    "transitionDuration",
                                    "videoFormatKey"};
-    const auto captureId = configuration.value("captureDeviceId").toString();
-    const auto format = configuration.value("videoFormatKey").toString();
-    const auto audioId = configuration.value("audioDeviceId").toString();
-    const auto portName = configuration.value("serialPortName").toString();
-    const auto commandTemplate = configuration.value("commandTemplate").toString();
-    const auto exactInt = [](const QVariant& value, int* result)
-    {
-        const auto type = value.metaType().id();
-        if (type == QMetaType::Int)
-        {
-            *result = value.toInt();
-            return true;
-        }
-        if (type != QMetaType::Double)
-            return false;
-        bool ok = false;
-        const auto number = value.toDouble(&ok);
-        if (!ok || !std::isfinite(number) || std::floor(number) != number || number < std::numeric_limits<int>::min() ||
-            number > std::numeric_limits<int>::max())
-            return false;
-        *result = static_cast<int>(number);
-        return true;
-    };
-    const auto transition = configuration.value("sessionTransition").toString();
-    const auto returnPolicy = configuration.value("sessionReturn").toString();
-    int baud = 0, selectedInput = 0, duration = 0;
-    const bool integerTypesValid = exactInt(configuration.value("baudRate"), &baud) &&
-                                   exactInt(configuration.value("selectedInput"), &selectedInput) &&
-                                   exactInt(configuration.value("transitionDuration"), &duration);
-    const auto labels = configuration.value("inputLabels").toMap();
+    return configuration.keys() == expectedKeys && captureFound && formatFound && audioFound && portFound &&
+           SupportedBaudRates.contains(configuration.value("baudRate").toInt()) &&
+           configuration.value("selectedInput").toInt() >= 1 &&
+           configuration.value("selectedInput").toInt() <= 8 &&
+           QStringList{"instant", "fade", "slide", "expand"}.contains(
+               configuration.value("sessionTransition").toString()) &&
+           QStringList{"origin", "home"}.contains(configuration.value("sessionReturn").toString()) &&
+           QList<int>{200, 250, 300, 350}.contains(configuration.value("transitionDuration").toInt()) &&
+           commandValid && labelsValid;
+}
 
-    const bool captureFound = hasDevice(m_videoDevices, captureId);
-    const bool formatFound = hasVideoFormat(captureId, format);
-    const bool audioFound = hasDevice(m_audioDevices, audioId);
-    bool portFound = portName.isEmpty();
-    portFound |= m_serialPortNames.contains(portName);
-    QString commandError;
-    const bool commandValid =
-        commandTemplate.isEmpty() || !commandForInput(commandTemplate, 1, &commandError).isEmpty();
-    bool labelsValid = labels.size() == 8;
-    for (int input = 1; input <= 8 && labelsValid; ++input)
-    {
-        const auto label = labels.value(QString::number(input)).toString().trimmed();
-        labelsValid = isValidInputLabel(label);
-    }
-    const bool typesValid = configuration.value("captureDeviceId").metaType().id() == QMetaType::QString &&
-                            configuration.value("videoFormatKey").metaType().id() == QMetaType::QString &&
-                            configuration.value("audioDeviceId").metaType().id() == QMetaType::QString &&
-                            configuration.value("serialPortName").metaType().id() == QMetaType::QString &&
-                            configuration.value("commandTemplate").metaType().id() == QMetaType::QString &&
-                            configuration.value("sessionTransition").metaType().id() == QMetaType::QString &&
-                            configuration.value("sessionReturn").metaType().id() == QMetaType::QString &&
-                            integerTypesValid &&
-                            configuration.value("inputLabels").metaType().id() == QMetaType::QVariantMap;
-    if (configuration.keys() != expectedKeys || !typesValid || !captureFound || !formatFound || !audioFound ||
-        !portFound || !SupportedBaudRates.contains(baud) || selectedInput < 1 || selectedInput > 8 ||
-        !QStringList{"instant", "fade", "slide", "expand"}.contains(transition) ||
-        !QStringList{"origin", "home"}.contains(returnPolicy) || !QList<int>{200, 250, 300, 350}.contains(duration) ||
-        !commandValid || !labelsValid)
-    {
-        m_switchState = "error";
-        m_switchStatus = !commandValid && !commandError.isEmpty()
-                             ? commandError
-                             : "Capture settings changed or are invalid. Refresh devices and review the draft.";
-        emit changed();
-        return false;
-    }
+bool
+CaptureController::reportCaptureConfigurationError(bool commandValid, const QString& commandError)
+{
+    m_switchState = "error";
+    m_switchStatus = !commandValid && !commandError.isEmpty() ? commandError
+                                                              : "Capture settings changed or are invalid. Refresh "
+                                                                "devices and review the draft.";
+    emit changed();
+}
 
+bool
+CaptureController::applyCaptureConfigurationValues(const QVariantMap& configuration, int baud, int selectedInput,
+                                                   int duration, const QString& captureId, const QString& format,
+                                                   const QString& audioId, const QString& portName,
+                                                   const QString& commandTemplate, const QString& transition,
+                                                   const QString& returnPolicy, const QVariantMap& labels)
+{
     QMap<QString, QVariant> values{{"capture/device", captureId},
                                    {"capture/format", format},
                                    {"capture/audio", audioId},
@@ -789,6 +866,26 @@ CaptureController::applyConfiguration(const QVariantMap& configuration)
                          : "Capture settings saved. Send a test and visually verify the selected source.";
     updateStatusForConfiguration();
     emit changed();
+    return true;
+}
+
+bool
+CaptureController::exactIntValue(const QVariant& value, int* result)
+{
+    const auto type = value.metaType().id();
+    if (type == QMetaType::Int)
+    {
+        *result = value.toInt();
+        return true;
+    }
+    if (type != QMetaType::Double)
+        return false;
+    bool ok = false;
+    const auto number = value.toDouble(&ok);
+    if (!ok || !std::isfinite(number) || std::floor(number) != number || number < std::numeric_limits<int>::min() ||
+        number > std::numeric_limits<int>::max())
+        return false;
+    *result = static_cast<int>(number);
     return true;
 }
 

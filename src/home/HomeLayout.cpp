@@ -1153,54 +1153,18 @@ HomeLayout::loadDocument(const QByteArray& data, bool userDocument)
     const QJsonObject rootPage = object.value("rootPage").toObject();
     if (object.contains("studioAppearance"))
         editorAppearance = object.value("studioAppearance").toObject().toVariantMap();
-    if (!validateStudioAppearance(object, editorAppearance))
+    if (!validateDocumentPrerequisites(object, pages, pageIds, homePage))
         return false;
-    if (object.contains("rootPage"))
-    {
-        if (!validateRootPage(object, rootPage, pages, pageIds, homePage))
-            return false;
-    }
-    else if (!m_owner && pages.size() >= 64)
-    {
-        setError(tr("The interface exceeds the 64-page limit including Home."));
-        return false;
-    }
     if (!validateHomePage(object, homePage, pageIds))
         return false;
     QVariantMap composition = object.value("composition").toObject().toVariantMap();
     if (!validateComposition(object, composition))
         return false;
     const QJsonObject theme = object.value("theme").toObject();
-    QColor start(theme.contains("backgroundStart")
-                     ? theme.value("backgroundStart").toString()
-                     : m_defaultTheme.value("backgroundStart", m_initialBackgroundStart).toString());
-    QColor end(theme.contains("backgroundEnd")
-                   ? theme.value("backgroundEnd").toString()
-                   : m_defaultTheme.value("backgroundEnd", m_initialBackgroundEnd).toString());
-    if (!start.isValid() || !end.isValid())
-    {
-        setError(tr("Home theme contains invalid colors."));
+    QColor start, end;
+    if (!extractThemeColors(theme, start, end))
         return false;
-    }
-    QVariantMap presentation = appearanceDefaults();
-    for (auto it = presentation.begin(); it != presentation.end(); ++it)
-        if (m_defaultTheme.contains(it.key()))
-            it.value() = m_defaultTheme.value(it.key());
-    for (auto it = presentation.begin(); it != presentation.end(); ++it)
-        if (theme.contains(it.key()))
-            it.value() = theme.value(it.key()).toVariant();
-    if (m_defaultTheme.contains("surfaceThemes"))
-        presentation["surfaceThemes"] = m_defaultTheme["surfaceThemes"];
-    if (theme.contains("surfaceThemes"))
-        presentation["surfaceThemes"] = theme["surfaceThemes"].toVariant();
-    if (theme.contains("sourcePolicy"))
-        presentation["sourcePolicy"] = theme["sourcePolicy"];
-    if (theme.contains("colorTheme"))
-        presentation["colorTheme"] = theme["colorTheme"].toVariant();
-    for (const auto& keys : ThemeColors::roles())
-        for (const auto& key : keys)
-            if (theme.contains(key))
-                presentation[key] = theme[key].toVariant();
+    QVariantMap presentation = buildAppearance(theme);
     if (!normalizeAppearance(presentation))
     {
         setError(tr("Home appearance contains invalid values."));
@@ -1208,54 +1172,13 @@ HomeLayout::loadDocument(const QByteArray& data, bool userDocument)
     }
     if (!m_owner)
     {
-        auto shellBase = presentation;
-        shellBase["backgroundStart"] = start.name();
-        shellBase["backgroundEnd"] = end.name();
-        auto home = shellBase;
-        for (const auto& entry : pages)
-            if (entry.toObject()["id"] == homePage)
-            {
-                const auto values = entry.toObject()["layout"].toObject()["theme"].toObject().toVariantMap();
-                for (auto it = values.cbegin(); it != values.cend(); ++it)
-                {
-                    if (it.key() == "surfaceThemes")
-                    {
-                        auto policies = home.value(it.key()).toMap();
-                        const auto local = it.value().toMap();
-                        for (auto policy = local.cbegin(); policy != local.cend(); ++policy)
-                            policies[policy.key()] = policy.value();
-                        home[it.key()] = policies;
-                    }
-                    else
-                        home[it.key()] = it.value();
-                }
-        }
-        const auto readable = [&](const QVariantMap& theme)
-        {
-            auto origin = home;
-            for (auto it = theme.cbegin(); it != theme.cend(); ++it)
-                origin[it.key()] = it.value();
-            return ComponentSchema::readableSurfaceThemes(home, origin);
-        };
-        if (!readable(shellBase))
-        {
-            setError(tr("Shell custom colors must keep text, status and focus readable."));
+        if (!validateShellReadability(pages, homePage, presentation, start, end))
             return false;
-        }
-        for (const auto& entry : pages)
-            if (!readable(entry.toObject()["layout"].toObject()["theme"].toObject().toVariantMap()))
-            {
-                setError(tr("A page has unreadable shell custom colors."));
-                return false;
-            }
     }
     QSet<QString> categoryIds;
     const auto categoryArray = object.value("categories").toArray();
-    if (!validateCategories(categoryArray, categoryIds))
-        return false;
     QJsonArray components;
-    QSet<QString> ids;
-    if (!validateComponents(entries, version, categoryIds, ids, components))
+    if (!validateCategoriesAndComponents(data, version, categoryArray, entries, components))
         return false;
     QString hierarchyError;
     if (!ComponentSchema::hierarchyFits(components, composition, categoryArray, &hierarchyError))
@@ -1281,6 +1204,129 @@ HomeLayout::loadDocument(const QByteArray& data, bool userDocument)
     m_backgroundEnd = end.name();
     m_tileRoundness = qBound(0.0, theme.value("tileRoundness").toDouble(0.18), 1.0);
     setError({});
+    return true;
+}
+
+bool
+HomeLayout::validateShellReadability(const QJsonArray& pages, const QJsonValue& homePage,
+                                     const QVariantMap& presentation, const QColor& start, const QColor& end)
+{
+    auto shellBase = presentation;
+    shellBase["backgroundStart"] = start.name();
+    shellBase["backgroundEnd"] = end.name();
+    auto home = shellBase;
+    for (const auto& entry : pages)
+        if (entry.toObject()["id"] == homePage)
+        {
+            const auto values = entry.toObject()["layout"].toObject()["theme"].toObject().toVariantMap();
+            for (auto it = values.cbegin(); it != values.cend(); ++it)
+            {
+                if (it.key() == "surfaceThemes")
+                {
+                    auto policies = home.value(it.key()).toMap();
+                    const auto local = it.value().toMap();
+                    for (auto policy = local.cbegin(); policy != local.cend(); ++policy)
+                        policies[policy.key()] = policy.value();
+                    home[it.key()] = policies;
+                }
+                else
+                    home[it.key()] = it.value();
+            }
+        }
+    const auto readable = [&](const QVariantMap& theme)
+    {
+        auto origin = home;
+        for (auto it = theme.cbegin(); it != theme.cend(); ++it)
+            origin[it.key()] = it.value();
+        return ComponentSchema::readableSurfaceThemes(home, origin);
+    };
+    if (!readable(shellBase))
+    {
+        setError(tr("Shell custom colors must keep text, status and focus readable."));
+        return false;
+    }
+    for (const auto& entry : pages)
+        if (!readable(entry.toObject()["layout"].toObject()["theme"].toObject().toVariantMap()))
+        {
+            setError(tr("A page has unreadable shell custom colors."));
+            return false;
+        }
+    return true;
+}
+
+QVariantMap
+HomeLayout::buildAppearance(const QJsonObject& theme)
+{
+    auto presentation = appearanceDefaults();
+    for (auto it = presentation.begin(); it != presentation.end(); ++it)
+        if (m_defaultTheme.contains(it.key()))
+            it.value() = m_defaultTheme.value(it.key());
+    for (auto it = presentation.begin(); it != presentation.end(); ++it)
+        if (theme.contains(it.key()))
+            it.value() = theme.value(it.key()).toVariant();
+    if (m_defaultTheme.contains("surfaceThemes"))
+        presentation["surfaceThemes"] = m_defaultTheme["surfaceThemes"];
+    if (theme.contains("surfaceThemes"))
+        presentation["surfaceThemes"] = theme["surfaceThemes"].toVariant();
+    if (theme.contains("sourcePolicy"))
+        presentation["sourcePolicy"] = theme["sourcePolicy"];
+    if (theme.contains("colorTheme"))
+        presentation["colorTheme"] = theme["colorTheme"].toVariant();
+    for (const auto& keys : ThemeColors::roles())
+        for (const auto& key : keys)
+            if (theme.contains(key))
+                presentation[key] = theme[key].toVariant();
+    return presentation;
+}
+
+bool
+HomeLayout::extractThemeColors(const QJsonObject& theme, QColor& start, QColor& end)
+{
+    start = QColor(theme.contains("backgroundStart")
+                       ? theme.value("backgroundStart").toString()
+                       : m_defaultTheme.value("backgroundStart", m_initialBackgroundStart).toString());
+    end = QColor(theme.contains("backgroundEnd")
+                     ? theme.value("backgroundEnd").toString()
+                     : m_defaultTheme.value("backgroundEnd", m_initialBackgroundEnd).toString());
+    if (!start.isValid() || !end.isValid())
+    {
+        setError(tr("Home theme contains invalid colors."));
+        return false;
+    }
+    return true;
+}
+
+bool
+HomeLayout::validateDocumentPrerequisites(const QJsonObject& object, const QJsonArray& pages,
+                                          const QSet<QString>& pageIds, const QJsonValue& homePage)
+{
+    QString designError;
+    if (!m_owner && !DesignSystem::validDocument(object, &designError))
+    {
+        setError(designError);
+        return false;
+    }
+    QVariantMap editorAppearance;
+    if (object.contains("studioAppearance"))
+        editorAppearance = object.value("studioAppearance").toObject().toVariantMap();
+    if (!validateStudioAppearance(object, editorAppearance))
+        return false;
+    const QJsonObject rootPage = object.value("rootPage").toObject();
+    return validateRootPageCondition(object, rootPage, pages, pageIds, homePage);
+}
+
+bool
+HomeLayout::validateRootPageCondition(const QJsonObject& object, const QJsonObject& rootPage,
+                                      const QJsonArray& pages, const QSet<QString>& pageIds,
+                                      const QJsonValue& homePage)
+{
+    if (object.contains("rootPage"))
+        return validateRootPage(object, rootPage, pages, pageIds, homePage);
+    if (!m_owner && pages.size() >= 64)
+    {
+        setError(tr("The interface exceeds the 64-page limit including Home."));
+        return false;
+    }
     return true;
 }
 
@@ -1423,6 +1469,66 @@ HomeLayout::validateCategories(const QJsonArray& categoryArray, QSet<QString>& c
             return false;
         }
         categoryIds.insert(id);
+    }
+    return true;
+}
+
+bool
+HomeLayout::validateCategoriesAndComponents(const QByteArray& data, int version,
+                                            const QJsonArray& categoryArray, const QJsonArray& entries,
+                                            QJsonArray& components)
+{
+    QSet<QString> categoryIds;
+    if (categoryArray.size() > HomeLayout::MaxLayoutCategories)
+    {
+        setError(tr("Too many Home categories."));
+        return false;
+    }
+    for (const auto& value : categoryArray)
+    {
+        const auto category = value.toObject();
+        const auto id = category.value("id").toString();
+        if (id.isEmpty() || category.value("name").toString().trimmed().isEmpty() || categoryIds.contains(id) ||
+            (category.contains("presentation") &&
+             (!category["presentation"].isObject() ||
+              !ComponentSchema::validPresentation(category["presentation"].toObject().toVariantMap(), true))))
+        {
+            setError(tr("Home layout contains an invalid or duplicate category."));
+            return false;
+        }
+        categoryIds.insert(id);
+    }
+    QSet<QString> ids;
+    for (const auto& value : entries.toArray())
+    {
+        QString componentError;
+        const auto normalized =
+            ComponentSchema::component(value.toObject().toVariantMap(), version == 1, &componentError);
+        const auto item = QJsonObject::fromVariantMap(normalized);
+        const auto kind = item.value("kind").toString();
+        const auto id = item.value("id").toString();
+        const auto actionType = [&item]()
+        {
+            if (item.contains("actions") && item["actions"].isArray() && !item["actions"].toArray().isEmpty())
+                return item["actions"].toArray().first().toObject().value("type").toString();
+            return QString();
+        }();
+        if (normalized.isEmpty() || item.value("componentType") == "media-shelf" || ids.contains(id) ||
+            (kind != "app" && kind != "widget" && kind != "action") ||
+            (kind == "app" && actionType == QStringLiteral("launch-app") && item.value("appId").toString().isEmpty()) ||
+            (kind == "action" && item.value("name").toString().trimmed().isEmpty()) ||
+            (kind == "widget" && item.value("widgetType").toString().isEmpty()) ||
+            (!item.value("categoryId").toString().isEmpty() &&
+             !categoryIds.contains(item.value("categoryId").toString())) ||
+            (!actionType.isEmpty() && normalizedActionForItem(item).isEmpty()) ||
+            (item.contains("opacity") && (!item.value("opacity").isDouble() || item.value("opacity").toDouble() < 0.0 ||
+                                          item.value("opacity").toDouble() > 1.0)))
+        {
+            setError(tr("Home layout contains an invalid or duplicate item."));
+            return false;
+        }
+        ids.insert(id);
+        components.append(item);
     }
     return true;
 }

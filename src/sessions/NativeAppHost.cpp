@@ -12,6 +12,7 @@
 #include <QSocketNotifier>
 #include <QTimer>
 #include <memory>
+#include <functional>
 #include "sessions/ChromiumRemotePipe.h"
 #include "sessions/GamepadTopology.h"
 #ifdef Q_OS_UNIX
@@ -157,187 +158,85 @@ reportGamepadStatus(const QVariantMap& status)
 }
 } // namespace
 
+struct
+LaunchConfig
+{
+    bool steamSession = false;
+    bool gameSession = false;
+    QVariantMap remoteAppearance;
+    QString program;
+    QStringList arguments;
+};
+
+bool
+validateLaunchPreconditions(bool gameSession, const QStringList& arguments);
+LaunchConfig
+parseLaunchArguments(QCoreApplication& app);
+
+QVariantMap
+parseWebRemoteAppearance(const QStringList& arguments);
+
+void
+configureChildProcess(QProcess& child, bool gameSession);
+
+void
+setupGamepadMonitoring(QCoreApplication& app, QTimer& gamepadTimer, bool gameSession,
+                       QSet<QString>& boundAtLaunch, QVariantMap& lastStatus,
+                       QMap<QString, quint64>& createdNodes);
+
+auto
+makeStopHandler(QProcess& child, QCoreApplication& app, qint64& childGroup,
+                bool& stopping, bool steamSession);
+
+auto
+makeChildFinishedHandler(QProcess& child, QCoreApplication& app, qint64& childGroup,
+                         bool& stopping, bool& remoteFailed, bool steamSession);
+
+#ifdef Q_OS_LINUX
+bool
+setupChromiumRemote(QCoreApplication& app, QProcess& child, const QVariantMap& remoteAppearance,
+                    const QString& program, QStringList& arguments, std::unique_ptr<ChromiumRemotePipe>& remote,
+                    bool& remoteFailed, const std::function<void()>& stop);
+#endif
+
 int
 main(int argc, char** argv)
-{
-    QCoreApplication app(argc, argv);
+{    QCoreApplication app(argc, argv);
 #ifdef Q_OS_LINUX
     ::signal(SIGPIPE, SIG_IGN);
 #endif
-    auto arguments = app.arguments();
-    bool steamSession = false, gameSession = false;
-    while (arguments.size() > 1)
-    {
-        const auto flag = arguments.at(1);
-        if (flag == "--steam-session")
-        {
-            if (steamSession)
-                return 2;
-            steamSession = true;
-        }
-        else if (flag == "--game-session")
-        {
-            if (gameSession)
-                return 2;
-            gameSession = true;
-        }
-        else
-            break;
-        arguments.removeAt(1);
-    }
-#ifdef Q_OS_LINUX
-    if (gameSession && ::prctl(PR_SET_DUMPABLE, 0, 0, 0, 0) != 0)
-        return 2;
-#endif
-    QVariantMap remoteAppearance;
-    if (arguments.size() > 3 && arguments.at(1) == "--web-remote")
-    {
-        if (arguments.at(2).size() > 16384)
-            return 2;
-        remoteAppearance =
-            QJsonDocument::fromJson(QByteArray::fromBase64(arguments.at(2).toLatin1())).toVariant().toMap();
-        arguments.removeAt(1);
-        arguments.removeAt(1);
-        if (remoteAppearance.isEmpty())
-            return 2;
-    }
-    if (arguments.size() < 3 || arguments.at(1) != "--")
+    auto config = parseLaunchArguments(app);
+    bool& steamSession = config.steamSession;
+    bool& gameSession = config.gameSession;
+    auto& remoteAppearance = config.remoteAppearance;
+    auto& program = config.program;
+    auto& arguments = config.arguments;
+if (!validateLaunchPreconditions(gameSession, arguments))
         return 2;
     arguments.removeFirst();
     arguments.removeFirst();
-    const auto program = arguments.takeFirst();
+    program = arguments.takeFirst();
     QProcess child;
-    child.setProcessChannelMode(QProcess::ForwardedChannels);
-#ifdef Q_OS_UNIX
-    child.setChildProcessModifier(
-        [gameSession]
-        {
-#ifdef Q_OS_LINUX
-            if (gameSession)
-            {
-                if (::prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0)
-                    ::_exit(126);
-                __user_cap_header_struct header{_LINUX_CAPABILITY_VERSION_3, 0};
-                __user_cap_data_struct capabilities[2]{};
-                if (::syscall(SYS_capset, &header, capabilities) != 0)
-                    ::_exit(126);
-            }
-#else
-            Q_UNUSED(gameSession);
-#endif
-            ::setsid();
-        });
-#endif
+    configureChildProcess(child, gameSession);
     bool stopping = false;
     bool remoteFailed = false;
     qint64 childGroup = 0;
     QTimer gamepadTimer;
-    if (gameSession)
-    {
-        QSet<QString> boundAtLaunch;
-        const auto bound = qEnvironmentVariable("ISOLDE_GAMEPAD_BOUND_EVENTS").split(',', Qt::SkipEmptyParts);
-        for (const auto& name : bound)
-            if (QRegularExpression("^event[0-9]{1,3}$").match(name).hasMatch())
-                boundAtLaunch.insert(name);
-        QVariantMap lastStatus;
-        QMap<QString, quint64> createdNodes;
-        const auto updateGamepads = [&]
-        {
-            const auto connected = connectedGamepadEvents();
-            const auto dynamicEvents = attachGamepadNodes(connectedGamepadNodes(), boundAtLaunch, &createdNodes);
-            const auto status = GamepadTopology::summarize(connected, boundAtLaunch, dynamicEvents);
-            if (status != lastStatus)
-            {
-                lastStatus = status;
-                reportGamepadStatus(status);
-            }
-        };
-        gamepadTimer.setInterval(1000);
-        QObject::connect(&gamepadTimer, &QTimer::timeout, &app, updateGamepads);
-        updateGamepads();
-        gamepadTimer.start();
-    }
-    const auto stop = [&]
-    {
-        if (stopping)
-            return;
-        stopping = true;
-#ifdef Q_OS_UNIX
-        // Let the main application coordinate its own worker shutdown first.
-        if (child.state() != QProcess::NotRunning)
-            ::kill(pid_t(child.processId()), SIGTERM);
-#else
-        child.terminate();
-#endif
-        QTimer::singleShot(steamSession ? 14000 : 2000,
-                           &app,
-                           [&]
-                           {
-#ifdef Q_OS_UNIX
-                               if (child.state() != QProcess::NotRunning)
-                                   ::kill(-pid_t(childGroup), SIGKILL);
-#else
-            child.kill();
-#endif
-                           });
-    };
+    QSet<QString> boundAtLaunch;
+    QVariantMap lastStatus;
+    QMap<QString, quint64> createdNodes;
+    setupGamepadMonitoring(app, gamepadTimer, gameSession, boundAtLaunch, lastStatus, createdNodes);
+    auto stop = makeStopHandler(child, app, childGroup, stopping, steamSession);
     QObject::connect(
         &child,
         qOverload<int, QProcess::ExitStatus>(&QProcess::finished),
         &app,
-        [&](int code, QProcess::ExitStatus status)
-        {
-            if (!stopping)
-            {
-                app.exit(status == QProcess::NormalExit ? code : 1);
-                return;
-            }
-#ifdef Q_OS_UNIX
-            // A launcher script may have exited before the real app underneath it.
-            ::kill(-pid_t(childGroup), SIGTERM);
-#endif
-            QTimer::singleShot(
-                1500,
-                &app,
-                [&, code, status]
-                {
-#ifdef Q_OS_UNIX
-                    ::kill(-pid_t(childGroup), SIGKILL);
-#endif
-                    app.exit(remoteFailed || (steamSession && (status != QProcess::NormalExit || code != 0)) ? 1 : 0);
-                });
-        });
+        makeChildFinishedHandler(child, app, childGroup, stopping, remoteFailed, steamSession));
 #ifdef Q_OS_LINUX
     std::unique_ptr<ChromiumRemotePipe> remote;
-    if (!remoteAppearance.isEmpty())
-    {
-        const auto name = QFileInfo(program).fileName();
-        if (!QStringList{"google-chrome-stable", "google-chrome", "chrome", "chromium", "chromium-browser"}.contains(
-                name))
-            return 2;
-        if (qEnvironmentVariable("ISOLDE_NATIVE_NAMESPACE") != "1")
-            return 2;
-        // A separate app-private browser profile. Existing Chrome profiles are
-        // never inspected, copied, renamed, or supplied to the control bridge.
-        const auto data = QDir::homePath() + "/.config/isolde-remote-web";
-        if (QFileInfo(data).isSymLink() || QFileInfo(QFileInfo(data).absolutePath()).isSymLink())
-            return 2;
-        if (!QDir().mkpath(data))
-            return 2;
-        arguments << "--remote-debugging-pipe" << "--user-data-dir=" + data;
-        remote = std::make_unique<ChromiumRemotePipe>(
-            app,
-            child,
-            remoteAppearance,
-            [&]
-            {
-                remoteFailed = true;
-                stop();
-            },
-            stop);
-        if (!remote->valid)
-            return 2;
-    }
+    if (!remoteAppearance.isEmpty() && !setupChromiumRemote(app, child, remoteAppearance, program, arguments, remote,
+                                                            remoteFailed, stop))
+        return 2;
 #endif
     child.start(program, arguments);
     if (!child.waitForStarted(5000))
@@ -347,7 +246,7 @@ main(int argc, char** argv)
     if (remote)
         remote->started();
 #endif
-#ifdef Q_OS_UNIX
+    #ifdef Q_OS_UNIX
     QSocketNotifier input(STDIN_FILENO, QSocketNotifier::Read);
     QByteArray commands;
     QObject::connect(&input,
@@ -372,3 +271,212 @@ main(int argc, char** argv)
 #endif
     return app.exec();
 }
+
+bool
+validateLaunchPreconditions(bool gameSession, const QStringList& arguments)
+{
+#ifdef Q_OS_LINUX
+    if (gameSession && ::prctl(PR_SET_DUMPABLE, 0, 0, 0, 0) != 0)
+        return false;
+#endif
+    if (arguments.size() < 3 || arguments.at(1) != "--")
+        return false;
+    return true;
+}
+
+LaunchConfig
+parseLaunchArguments(QCoreApplication& app)
+{
+    LaunchConfig config;
+    auto arguments = app.arguments();
+    bool steamSession = false, gameSession = false;
+    while (arguments.size() > 1)
+    {
+        const auto flag = arguments.at(1);
+        if (flag == "--steam-session")
+        {
+            if (steamSession)
+            {
+                config.steamSession = true;
+                return config;
+            }
+            steamSession = true;
+        }
+        else if (flag == "--game-session")
+        {
+            if (gameSession)
+            {
+                config.gameSession = true;
+                return config;
+            }
+            gameSession = true;
+        }
+        else
+            break;
+        arguments.removeAt(1);
+    }
+    config.steamSession = steamSession;
+    config.gameSession = gameSession;
+    config.arguments = arguments;
+    return config;
+}
+
+QVariantMap
+parseWebRemoteAppearance(const QStringList& arguments)
+{
+    QVariantMap remoteAppearance;
+    if (arguments.size() > 3 && arguments.at(1) == "--web-remote")
+    {
+        if (arguments.at(2).size() > 16384)
+            return {};
+        remoteAppearance =
+            QJsonDocument::fromJson(QByteArray::fromBase64(arguments.at(2).toLatin1())).toVariant().toMap();
+        if (remoteAppearance.isEmpty())
+            return {};
+    }
+    return remoteAppearance;
+}
+
+void
+configureChildProcess(QProcess& child, bool gameSession)
+{
+    child.setProcessChannelMode(QProcess::ForwardedChannels);
+#ifdef Q_OS_UNIX
+    child.setChildProcessModifier(
+        [gameSession]
+        {
+#ifdef Q_OS_LINUX
+            if (gameSession)
+            {
+                if (::prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0)
+                    ::_exit(126);
+                __user_cap_header_struct header{_LINUX_CAPABILITY_VERSION_3, 0};
+                __user_cap_data_struct capabilities[2]{};
+                if (::syscall(SYS_capset, &header, capabilities) != 0)
+                    ::_exit(126);
+            }
+#else
+            Q_UNUSED(gameSession);
+#endif
+            ::setsid();
+        });
+#endif
+}
+
+void
+setupGamepadMonitoring(QCoreApplication& app, QTimer& gamepadTimer, bool gameSession,
+                       QSet<QString>& boundAtLaunch, QVariantMap& lastStatus,
+                       QMap<QString, quint64>& createdNodes)
+{
+    if (!gameSession)
+        return;
+    const auto bound = qEnvironmentVariable("ISOLDE_GAMEPAD_BOUND_EVENTS").split(',', Qt::SkipEmptyParts);
+    for (const auto& name : bound)
+        if (QRegularExpression("^event[0-9]{1,3}$").match(name).hasMatch())
+            boundAtLaunch.insert(name);
+    const auto updateGamepads = [&]
+    {
+        const auto connected = connectedGamepadEvents();
+        const auto dynamicEvents = attachGamepadNodes(connectedGamepadNodes(), boundAtLaunch, &createdNodes);
+        const auto status = GamepadTopology::summarize(connected, boundAtLaunch, dynamicEvents);
+        if (status != lastStatus)
+        {
+            lastStatus = status;
+            reportGamepadStatus(status);
+        }
+    };
+    gamepadTimer.setInterval(1000);
+    QObject::connect(&gamepadTimer, &QTimer::timeout, &app, updateGamepads);
+    updateGamepads();
+    gamepadTimer.start();
+}
+
+auto
+makeStopHandler(QProcess& child, QCoreApplication& app, qint64& childGroup, bool& stopping, bool steamSession)
+{
+    return [&]
+    {
+        if (stopping)
+            return;
+        stopping = true;
+#ifdef Q_OS_UNIX
+        if (child.state() != QProcess::NotRunning)
+            ::kill(pid_t(child.processId()), SIGTERM);
+#else
+        child.terminate();
+#endif
+        QTimer::singleShot(steamSession ? 14000 : 2000,
+                           &app,
+                           [&]
+                           {
+#ifdef Q_OS_UNIX
+                               if (child.state() != QProcess::NotRunning)
+                                   ::kill(-pid_t(childGroup), SIGKILL);
+#else
+                               child.kill();
+#endif
+                           });
+    };
+}
+
+auto
+makeChildFinishedHandler(QProcess& child, QCoreApplication& app, qint64& childGroup,
+                         bool& stopping, bool& remoteFailed, bool steamSession)
+{
+    return [&](int code, QProcess::ExitStatus status)
+    {
+        if (!stopping)
+        {
+            app.exit(status == QProcess::NormalExit ? code : 1);
+            return;
+        }
+#ifdef Q_OS_UNIX
+        ::kill(-pid_t(childGroup), SIGTERM);
+#endif
+        QTimer::singleShot(
+            1500,
+            &app,
+            [&, code, status]
+            {
+#ifdef Q_OS_UNIX
+                ::kill(-pid_t(childGroup), SIGKILL);
+#endif
+                app.exit(remoteFailed || (steamSession && (status != QProcess::NormalExit || code != 0)) ? 1 : 0);
+            });
+    };
+}
+
+#ifdef Q_OS_LINUX
+bool
+setupChromiumRemote(QCoreApplication& app, QProcess& child, const QVariantMap& remoteAppearance,
+                    const QString& program, QStringList& arguments, std::unique_ptr<ChromiumRemotePipe>& remote,
+                    bool& remoteFailed, const std::function<void()>& stop)
+{
+    if (remoteAppearance.isEmpty())
+        return true;
+    const auto name = QFileInfo(program).fileName();
+    if (!QStringList{"google-chrome-stable", "google-chrome", "chrome", "chromium", "chromium-browser"}.contains(
+            name))
+        return false;
+    if (qEnvironmentVariable("ISOLDE_NATIVE_NAMESPACE") != "1")
+        return false;
+    const auto data = QDir::homePath() + "/.config/isolde-remote-web";
+    if (QFileInfo(data).isSymLink() || QFileInfo(QFileInfo(data).absolutePath()).isSymLink())
+        return false;
+    if (!QDir().mkpath(data))
+        return false;
+    arguments << "--remote-debugging-pipe" << "--user-data-dir=" + data;
+    remote = std::make_unique<ChromiumRemotePipe>(
+        app,
+        child,
+        remoteAppearance,
+        [&]
+        {
+            remoteFailed = true;
+            stop();
+        },
+        stop);
+    return remote->valid;
+}
+#endif
+

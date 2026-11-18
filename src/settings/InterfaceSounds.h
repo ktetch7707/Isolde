@@ -119,6 +119,23 @@ class InterfaceSounds final : public QObject
     static QVariantMap
     readKodiTheme(const QString& directory, QString* error = nullptr, bool includeAudio = true);
     static bool
+    validateThemeDirectory(const QString& directory, QString& root, QByteArray& addon, QString* error);
+    static bool
+    validateAddonIdentity(const QByteArray& addon, const QString& root, QString& id, QString& name,
+                          QString* error);
+    static bool
+    findSoundResourceExtension(const QByteArray& addon, QString* error);
+    static bool
+    parseSoundMappings(const QString& root, QMap<QString, QString>& files, QString* error);
+    static bool
+    parseSoundFields(QXmlStreamReader& xml, QMap<QString, QString>& fields, QString* error);
+    static bool
+    processSoundAction(const QString& group, const QMap<QString, QString>& fields,
+                       QMap<QString, QString>& files, QString* error);
+    static bool
+    validateAndLoadSounds(const QString& root, const QMap<QString, QString>& files, QVariantMap& sounds,
+                          bool includeAudio, QString* error);
+    static bool
     validOptions(const QVariantMap& options);
     static bool
     validWave(const QByteArray& bytes);

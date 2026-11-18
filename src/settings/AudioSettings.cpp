@@ -649,143 +649,191 @@ AudioSettings::completeCommand(int exitCode, QProcess::ExitStatus status)
     const QString output = QString::fromUtf8(m_output).trimmed();
     bool readComplete = false, mute = false;
     if (command == "status")
-    {
-        QVariantList outputs;
-        bool audio = false, sinks = false, sawSinks = false;
-        QString current;
-        for (const auto& line : output.split('\n'))
-        {
-            if (line == "Audio")
-            {
-                audio = true;
-                continue;
-            }
-            if (line == "Video" || line == "Settings")
-                break;
-            if (!audio)
-                continue;
-            if (line.contains("Sinks:"))
-            {
-                sinks = true;
-                sawSinks = true;
-                continue;
-            }
-            if (line.contains("Sources:") || line.contains("Filters:") || line.contains("Streams:"))
-                sinks = false;
-            if (!sinks)
-                continue;
-            const auto match = QRegularExpression("([*]?)\\s+([0-9]+)\\.\\s+(.+?)\\s+\\[vol:").match(line);
-            if (!match.hasMatch())
-                continue;
-            const auto id = match.captured(2);
-            const bool active = match.captured(1) == "*";
-            if (active)
-                current = id;
-            outputs.append(QVariantMap{{"id", id}, {"name", match.captured(3).trimmed()}, {"active", active}});
-        }
-        m_outputs = outputs;
-        if (!sawSinks)
-            m_outputStatus = "Cannot read outputs from this WirePlumber version.";
-        else if (outputs.isEmpty())
-            m_outputStatus = "No audio outputs detected.";
-        else if (!m_requestedOutput.isEmpty() && current != m_requestedOutput)
-            m_outputStatus = "Output change was not confirmed. Refresh and retry.";
-        else
-            m_outputStatus = "Choose with ← →, Enter applies. Restart playback if it stays on the old output.";
-        m_requestedOutput.clear();
-        emit changed();
-    }
+        readComplete = handleStatusCommand(output);
     else if (command == "list")
-    {
-        QVariantList outputs;
-        QString id, name;
-        const auto appendOutput = [&]
-        {
-            if (id.isEmpty() || id.size() > 256 || outputs.size() >= 128 ||
-                !QRegularExpression("^[A-Za-z0-9_.:-]+$").match(id).hasMatch())
-                return;
-            const auto displayName = name.isEmpty() || name.size() > 256 ? id : name;
-            outputs.append(QVariantMap{{"id", id}, {"name", displayName}, {"active", false}});
-        };
-        for (const auto& line : output.split('\n'))
-        {
-            const auto trimmed = line.trimmed();
-            if (trimmed.startsWith("Sink #"))
-            {
-                appendOutput();
-                id.clear();
-                name.clear();
-            }
-            else if (trimmed.startsWith("Name:"))
-            {
-                id = trimmed.mid(5).trimmed();
-            }
-            else if (trimmed.startsWith("Description:"))
-            {
-                name = trimmed.mid(12).trimmed();
-            }
-        }
-        appendOutput();
-        m_outputs = outputs;
-        m_outputStatus = !m_requestedOutput.isEmpty() ? "Switching output…"
-                         : outputs.isEmpty()
-                             ? "No audio outputs detected."
-                             : "Choose with ← →, Enter applies. Restart playback if it stays on the old output.";
-        emit changed();
-    }
+        readComplete = handleListCommand(output);
     else if (command == "get-default-sink")
-    {
-        bool found = false;
-        const auto current = output;
-        for (auto& entry : m_outputs)
-        {
-            auto item = entry.toMap();
-            const bool active = item.value("id").toString() == current;
-            item.insert("active", active);
-            found |= active;
-            entry = item;
-        }
-        if (!found)
-            m_outputStatus = "The current default output is not in the playback device list.";
-        else if (!m_requestedOutput.isEmpty() && current != m_requestedOutput)
-            m_outputStatus = "Output change was not confirmed. Refresh and retry.";
-        else
-            m_outputStatus = "Choose with ← →, Enter applies. Restart playback if it stays on the old output.";
-        m_requestedOutput.clear();
-        emit changed();
-    }
+        readComplete = handleGetDefaultSinkCommand(output);
     else if (command == "get-volume")
-    {
-        const auto match = QRegularExpression("^Volume: ([0-9]+(?:\\.[0-9]+)?)(?: (\\[MUTED\\]))?$").match(output);
-        if (!match.hasMatch())
-        {
-            mixerFailed("Invalid mixer volume response.");
-            return;
-        }
-        m_readVolume = qRound(match.captured(1).toDouble() * 100);
-        mute = !match.captured(2).isEmpty();
-        readComplete = true;
-    }
+        readComplete = handleGetVolumeCommand(output, mute);
     else if (command == "get-sink-volume")
-    {
-        const auto match = QRegularExpression("([0-9]+)%").match(output);
-        if (!match.hasMatch())
-        {
-            mixerFailed("Invalid mixer volume response.");
-            return;
-        }
-        m_readVolume = match.captured(1).toInt();
-    }
+        readComplete = handleGetSinkVolumeCommand(output);
     else if (command == "get-sink-mute")
+        readComplete = handleGetSinkMuteCommand(output, mute);
+    finalizeCommand(readComplete, mute);
+    runNext();
+}
+
+bool
+AudioSettings::handleStatusCommand(const QString& output)
+{
+    QVariantList outputs;
+    bool audio = false, sinks = false, sawSinks = false;
+    QString current;
+    for (const auto& line : output.split('\n'))
     {
-        if (output != "Mute: yes" && output != "Mute: no")
+        if (line == "Audio")
         {
-            mixerFailed("Invalid mixer mute response.");
-            return;
+            audio = true;
+            continue;
         }
-        mute = output == "Mute: yes";
-        readComplete = true;
+        if (line == "Video" || line == "Settings")
+            break;
+        if (!audio)
+            continue;
+        if (!processStatusLine(line, audio, sinks, sawSinks, current, outputs))
+            continue;
     }
+    m_outputs = outputs;
+    if (!sawSinks)
+        m_outputStatus = "Cannot read outputs from this WirePlumber version.";
+    else if (outputs.isEmpty())
+        m_outputStatus = "No audio outputs detected.";
+    else if (!m_requestedOutput.isEmpty() && current != m_requestedOutput)
+        m_outputStatus = "Output change was not confirmed. Refresh and retry.";
+    else
+        m_outputStatus = "Choose with ← →, Enter applies. Restart playback if it stays on the old output.";
+    m_requestedOutput.clear();
+    emit changed();
+    return true;
+}
+
+bool
+AudioSettings::processStatusLine(const QString& line, bool& audio, bool& sinks, bool& sawSinks, QString& current,
+                                 QVariantList& outputs)
+{
+    Q_UNUSED(audio);
+    if (line.contains("Sinks:"))
+    {
+        sinks = true;
+        sawSinks = true;
+        return false;
+    }
+    if (line.contains("Sources:") || line.contains("Filters:") || line.contains("Streams:"))
+    {
+        sinks = false;
+        return false;
+    }
+    if (!sinks)
+        return false;
+    const auto match = QRegularExpression("([*]?)\\s+([0-9]+)\\.\\s+(.+?)\\s+\\[vol:").match(line);
+    if (!match.hasMatch())
+        return false;
+    const auto id = match.captured(2);
+    const bool active = match.captured(1) == "*";
+    if (active)
+        current = id;
+    outputs.append(QVariantMap{{"id", id}, {"name", match.captured(3).trimmed()}, {"active", active}});
+    return true;
+}
+
+bool
+AudioSettings::handleListCommand(const QString& output)
+{
+    QVariantList outputs;
+    QString id, name;
+    const auto appendOutput = [&]
+    {
+        if (id.isEmpty() || id.size() > 256 || outputs.size() >= 128 ||
+            !QRegularExpression("^[A-Za-z0-9_.:-]+$").match(id).hasMatch())
+            return;
+        const auto displayName = name.isEmpty() || name.size() > 256 ? id : name;
+        outputs.append(QVariantMap{{"id", id}, {"name", displayName}, {"active", false}});
+    };
+    for (const auto& line : output.split('\n'))
+    {
+        const auto trimmed = line.trimmed();
+        if (trimmed.startsWith("Sink #"))
+        {
+            appendOutput();
+            id.clear();
+            name.clear();
+        }
+        else if (trimmed.startsWith("Name:"))
+        {
+            id = trimmed.mid(5).trimmed();
+        }
+        else if (trimmed.startsWith("Description:"))
+        {
+            name = trimmed.mid(12).trimmed();
+        }
+    }
+    appendOutput();
+    m_outputs = outputs;
+    m_outputStatus = !m_requestedOutput.isEmpty() ? "Switching output…"
+                             : outputs.isEmpty()
+                                 ? "No audio outputs detected."
+                                 : "Choose with ← →, Enter applies. Restart playback if it stays on the old output.";
+    emit changed();
+    return true;
+}
+
+bool
+AudioSettings::handleGetDefaultSinkCommand(const QString& output)
+{
+    bool found = false;
+    const auto current = output;
+    for (auto& entry : m_outputs)
+    {
+        auto item = entry.toMap();
+        const bool active = item.value("id").toString() == current;
+        item.insert("active", active);
+        found |= active;
+        entry = item;
+    }
+    if (!found)
+        m_outputStatus = "The current default output is not in the playback device list.";
+    else if (!m_requestedOutput.isEmpty() && current != m_requestedOutput)
+        m_outputStatus = "Output change was not confirmed. Refresh and retry.";
+    else
+        m_outputStatus = "Choose with ← →, Enter applies. Restart playback if it stays on the old output.";
+    m_requestedOutput.clear();
+    emit changed();
+    return true;
+}
+
+bool
+AudioSettings::handleGetVolumeCommand(const QString& output, bool& mute)
+{
+    const auto match = QRegularExpression("^Volume: ([0-9]+(?:\\.[0-9]+)?)(?: (\\[MUTED\\]))?$").match(output);
+    if (!match.hasMatch())
+    {
+        mixerFailed("Invalid mixer volume response.");
+        return false;
+    }
+    m_readVolume = qRound(match.captured(1).toDouble() * 100);
+    mute = !match.captured(2).isEmpty();
+    return true;
+}
+
+bool
+AudioSettings::handleGetSinkVolumeCommand(const QString& output)
+{
+    const auto match = QRegularExpression("([0-9]+)%").match(output);
+    if (!match.hasMatch())
+    {
+        mixerFailed("Invalid mixer volume response.");
+        return false;
+    }
+    m_readVolume = match.captured(1).toInt();
+    return true;
+}
+
+bool
+AudioSettings::handleGetSinkMuteCommand(const QString& output, bool& mute)
+{
+    if (output != "Mute: yes" && output != "Mute: no")
+    {
+        mixerFailed("Invalid mixer mute response.");
+        return false;
+    }
+    mute = output == "Mute: yes";
+    return true;
+}
+
+void
+AudioSettings::finalizeCommand(bool readComplete, bool mute)
+{
     if (readComplete)
     {
         m_startupAttempts = 0;
@@ -796,5 +844,4 @@ AudioSettings::completeCommand(int exitCode, QProcess::ExitStatus status)
         save();
         emit changed();
     }
-    runNext();
 }

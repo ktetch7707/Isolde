@@ -465,87 +465,8 @@ PageModel::setAppearance(const QVariantMap& changes)
     const auto defaults = themeDefaults();
     for (auto it = normalized.begin(); it != normalized.end(); ++it)
     {
-        const auto key = it.key();
-        if (key == "colorTheme")
-        {
-            if (!ThemeColors::valid(it.value()))
-                return false;
-            continue;
-        }
-        if (key == "sourcePolicy")
-        {
-            if (it.value().metaType().id() != QMetaType::QVariantMap ||
-                !ComponentSchema::validSourcePolicy(it.value().toMap()))
-            {
-                m_owner->setError(tr("Invalid source display policy."));
-                return false;
-            }
-            continue;
-        }
-        if (key == "surfaceThemes")
-        {
-            if (!ComponentSchema::validSurfaceThemes(it.value()))
-            {
-                m_owner->setError(tr("Invalid shell appearance policy."));
-                return false;
-            }
-            continue;
-        }
-        if (key.endsWith("Color") || key == "backgroundStart" || key == "backgroundEnd")
-        {
-            const QColor color(it.value().toString());
-            if (!color.isValid() || color.alpha() != 255)
-            {
-                m_owner->setError(tr("Choose valid opaque colors and appearance values within the displayed ranges."));
-                return false;
-            }
-            it.value() = color.name();
-        }
-        else if (key == "fontFamily")
-        {
-            if (it.value().metaType().id() != QMetaType::QString || it.value().toString().trimmed().isEmpty() ||
-                it.value().toString().size() > 80 || it.value().toString().contains(QChar::Null))
-            {
-                m_owner->setError(tr("Invalid font family."));
-                return false;
-            }
-        }
-        else if (key == "motionEnabled" || key == "highContrast")
-        {
-            if (it.value().metaType().id() != QMetaType::Bool)
-            {
-                m_owner->setError(tr("Motion and contrast choices must be boolean values."));
-                return false;
-            }
-        }
-        else
-        {
-            if (!defaults.contains(key) && key != "tileRoundness")
-            {
-                m_owner->setError(tr("Unknown appearance key."));
-                return false;
-            }
-            if (it.value().metaType().id() == QMetaType::QString || it.value().metaType().id() == QMetaType::Bool)
-            {
-                m_owner->setError(tr("Appearance value must be a number."));
-                return false;
-            }
-            bool ok = false;
-            const double number = it.value().toDouble(&ok);
-            const double low = key == "typographyScale" ? 0.8 : key == "homeColumns" ? 2 : key == "spacing" ? 8 : 0;
-            const double high = key == "typographyScale" ? 1.3 : key == "homeColumns" ? 6 : key == "spacing" ? 40 : 1;
-            if (!ok || !qIsFinite(number) || number < low || number > high ||
-                ((key == "homeColumns" || key == "spacing") && number != qFloor(number)))
-            {
-                m_owner->setError(tr("Appearance value out of range."));
-                return false;
-            }
-        }
-        if (!defaults.contains(key) && !ThemeColors::role(key) && key != "tileRoundness")
-        {
-            m_owner->setError(tr("Unknown appearance key."));
+        if (!validateAppearanceKey(it.key(), it.value(), defaults))
             return false;
-        }
     }
     const auto previous = m_pageDocument;
     QJsonObject theme;
@@ -567,6 +488,138 @@ PageModel::setAppearance(const QVariantMap& changes)
     }
     m_documentLoaded = true;
     emit presentationChanged();
+    return true;
+}
+
+bool
+PageModel::validateAppearanceKey(const QString& key, const QVariant& value, const QVariantMap& defaults)
+{
+    if (key == "colorTheme")
+        return validateColorThemeValue(value);
+    if (key == "sourcePolicy")
+        return validateSourcePolicyValue(value);
+    if (key == "surfaceThemes")
+        return validateSurfaceThemesValue(value);
+    if (isColorAppearanceKey(key))
+        return validateColorValue(value);
+    if (key == "fontFamily")
+        return validateFontFamilyValue(value);
+    if (key == "motionEnabled" || key == "highContrast")
+        return validateBooleanValue(value);
+    return validateNumericValue(key, value);
+}
+
+bool
+PageModel::validateColorThemeValue(const QVariant& value)
+{
+    if (!ThemeColors::valid(value))
+    {
+        m_owner->setError(tr("Invalid color theme."));
+        return false;
+    }
+    return true;
+}
+
+bool
+PageModel::validateSourcePolicyValue(const QVariant& value)
+{
+    if (value.metaType().id() != QMetaType::QVariantMap ||
+        !ComponentSchema::validSourcePolicy(value.toMap()))
+    {
+        m_owner->setError(tr("Invalid source display policy."));
+        return false;
+    }
+    return true;
+}
+
+bool
+PageModel::validateSurfaceThemesValue(const QVariant& value)
+{
+    if (!ComponentSchema::validSurfaceThemes(value))
+    {
+        m_owner->setError(tr("Invalid shell appearance policy."));
+        return false;
+    }
+    return true;
+}
+
+bool
+PageModel::isColorAppearanceKey(const QString& key)
+{
+    return key.endsWith("Color") || key == "backgroundStart" || key == "backgroundEnd";
+}
+
+bool
+PageModel::validateColorValue(const QVariant& value)
+{
+    const QColor color(value.toString());
+    if (!color.isValid() || color.alpha() != 255)
+    {
+        m_owner->setError(tr("Choose valid opaque colors and appearance values within the displayed ranges."));
+        return false;
+    }
+    return true;
+}
+
+bool
+PageModel::validateFontFamilyValue(const QVariant& value)
+{
+    if (value.metaType().id() != QMetaType::QString || value.toString().trimmed().isEmpty() ||
+        value.toString().size() > 80 || value.toString().contains(QChar::Null))
+    {
+        m_owner->setError(tr("Invalid font family."));
+        return false;
+    }
+    return true;
+}
+
+bool
+PageModel::validateBooleanValue(const QVariant& value)
+{
+    if (value.metaType().id() != QMetaType::Bool)
+    {
+        m_owner->setError(tr("Motion and contrast choices must be boolean values."));
+        return false;
+    }
+    return true;
+}
+
+bool
+PageModel::validateNumericValue(const QString& key, const QVariant& value)
+{
+    const auto defaults = themeDefaults();
+    if (!isKnownAppearanceKey(key, defaults))
+        return false;
+    if (value.metaType().id() == QMetaType::QString || value.metaType().id() == QMetaType::Bool)
+    {
+        m_owner->setError(tr("Appearance value must be a number."));
+        return false;
+    }
+    bool ok = false;
+    const double number = value.toDouble(&ok);
+    if (!validateNumericRange(key, number, ok))
+        return false;
+    return true;
+}
+
+bool
+PageModel::validateNumericRange(const QString& key, double number, bool ok)
+{
+    if (!ok || !qIsFinite(number))
+        return false;
+    const double low = key == "typographyScale" ? 0.8 : key == "homeColumns" ? 2 : key == "spacing" ? 8 : 0;
+    const double high = key == "typographyScale" ? 1.3 : key == "homeColumns" ? 6 : key == "spacing" ? 40 : 1;
+    if (number < low || number > high ||
+        ((key == "homeColumns" || key == "spacing") && number != qFloor(number)))
+        return false;
+    return true;
+}
+
+bool
+PageModel::isKnownAppearanceKey(const QString& key, const QVariantMap& defaults)
+{
+    if (!defaults.contains(key) && key != "tileRoundness")
+        return false;
     return true;
 }
 

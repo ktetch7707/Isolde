@@ -131,6 +131,23 @@ class AudioSettings final : public QObject
     runNext();
     void
     completeCommand(int exitCode, QProcess::ExitStatus status);
+    bool
+    handleStatusCommand(const QString& output);
+    bool
+    processStatusLine(const QString& line, bool& audio, bool& sinks, bool& sawSinks, QString& current,
+                      QVariantList& outputs);
+    bool
+    handleListCommand(const QString& output);
+    bool
+    handleGetDefaultSinkCommand(const QString& output);
+    bool
+    handleGetVolumeCommand(const QString& output);
+    bool
+    handleGetSinkVolumeCommand(const QString& output);
+    bool
+    handleGetSinkMuteCommand(const QString& output);
+    void
+    finalizeCommand(bool readComplete, bool mute);
     void
     mixerFailed(const QString& reason);
     void
