@@ -328,17 +328,47 @@ StudioSession::readVersions(QJsonArray& entries, QJsonObject* assets)
     }
     QJsonParseError error;
     const auto object = QJsonDocument::fromJson(input.readAll(), &error).object();
-    entries = object["versions"].toArray();
-    if (error.error != QJsonParseError::NoError || object.size() != 3 || object["schemaVersion"].toInt() != 1 ||
-        !object["assets"].isObject() || !object["versions"].isArray() || entries.size() > VersionCount)
+    if (!validateVersionArchive(object, error))
     {
-        setError(tr("Unsupported or damaged version archive. Nothing was replaced."));
+        setError(error);
         return false;
     }
     const auto storedAssets = object["assets"].toObject();
+    if (!validateStoredAssets(storedAssets, error))
+    {
+        setError(error);
+        return false;
+    }
+    if (assets)
+        *assets = storedAssets;
+    QSet<QString> ids;
+    entries = object["versions"].toArray();
+    if (!validateVersionEntries(entries, ids, error))
+    {
+        setError(error);
+        return false;
+    }
+    return true;
+}
+
+bool
+StudioSession::validateVersionArchive(const QJsonObject& object, QString& error)
+{
+    if (error.error != QJsonParseError::NoError || object.size() != 3 || object["schemaVersion"].toInt() != 1 ||
+        !object["assets"].isObject() || !object["versions"].isArray())
+    {
+        error = QObject::tr("Unsupported or damaged version archive. Nothing was replaced.");
+        return false;
+    }
+    return true;
+}
+
+bool
+StudioSession::validateStoredAssets(const QJsonObject& storedAssets, QString& error)
+{
     if (storedAssets.size() > 128)
     {
-        setError(tr("The version artwork budget is 128 images."));
+        error = QObject::tr("The version artwork budget is 128 images.");
         return false;
     }
     qint64 decodedBytes = 0;
@@ -346,26 +376,29 @@ StudioSession::readVersions(QJsonArray& entries, QJsonObject* assets)
     {
         if (!HomeDesignData::safeArtwork(it.key()) || !it.value().isString())
         {
-            setError(tr("Invalid version artwork."));
+            error = QObject::tr("Invalid version artwork.");
             return false;
         }
         const auto bytes =
             QByteArray::fromBase64Encoding(it.value().toString().toLatin1(), QByteArray::AbortOnBase64DecodingErrors);
         if (!bytes || bytes.decoded.isEmpty() || bytes.decoded.size() > 20 * 1024 * 1024)
         {
-            setError(tr("Invalid version image."));
+            error = QObject::tr("Invalid version image.");
             return false;
         }
         decodedBytes += bytes.decoded.size();
         if (decodedBytes > AssetBytes)
         {
-            setError(tr("The version artwork budget is 64 MiB."));
+            error = QObject::tr("The version artwork budget is 64 MiB.");
             return false;
         }
     }
-    if (assets)
-        *assets = storedAssets;
-    QSet<QString> ids;
+    return true;
+}
+
+bool
+StudioSession::validateVersionEntries(const QJsonArray& entries, QSet<QString>& ids, QString& error)
+{
     qint64 layoutBytes = 0;
     for (const auto& value : entries)
     {
@@ -376,13 +409,13 @@ StudioSession::readVersions(QJsonArray& entries, QJsonObject* assets)
             !entry["created"].isString() ||
             QJsonDocument(entry["document"].toObject()).toJson().size() > kMaxDocumentBytes)
         {
-            setError(tr("A saved version is invalid. Nothing was replaced."));
+            error = QObject::tr("A saved version is invalid. Nothing was replaced.");
             return false;
         }
         layoutBytes += QJsonDocument(entry["document"].toObject()).toJson(QJsonDocument::Compact).size();
         if (layoutBytes > VersionBytes)
         {
-            setError(tr("Version layouts exceed 40 MiB."));
+            error = QObject::tr("Version layouts exceed 40 MiB.");
             return false;
         }
         ids.insert(id);

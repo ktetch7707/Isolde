@@ -109,6 +109,19 @@ class HomeLayout final : public QObject
                   const QString& target,
                   const QString& categoryId = {},
                   const QString& openWith = {});
+    bool
+    validateActionTileParams(const QString& name, const QString& actionType, const QString& target,
+                             const QString& categoryId, const QString& openWith) const;
+    bool
+    validateActionTileTarget(const QString& openWith, const QString& actionType) const;
+    bool
+    validateCategoryIdExists(const QString& categoryId) const;
+    bool
+    validateActionTileBasic(const QString& cleanName, const QString& cleanTarget,
+                            const QString& cleanActionType, const bool captureInput) const;
+    QJsonObject
+    buildActionTile(const QString& name, const QString& actionType, const QString& target,
+                    const QString& categoryId, const QJsonObject& normalizedAction);
     Q_INVOKABLE bool
     removeAppTile(const QString& appId);
     Q_INVOKABLE bool

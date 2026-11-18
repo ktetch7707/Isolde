@@ -1589,33 +1589,15 @@ HomeLayout::validateComponents(const QJsonArray& entries, int version, const QSe
 {
     for (const auto& value : entries.toArray())
     {
+        QJsonObject item;
         QString componentError;
-        const auto normalized =
-            ComponentSchema::component(value.toObject().toVariantMap(), version == 1, &componentError);
-        const auto item = QJsonObject::fromVariantMap(normalized);
-        const auto kind = item.value("kind").toString();
-        const auto id = item.value("id").toString();
-        const auto actionType = [&item]()
+        if (!validateComponentItem(value.toObject(), version, categoryIds, ids, item, componentError))
         {
-            if (item.contains("actions") && item["actions"].isArray() && !item["actions"].toArray().isEmpty())
-                return item["actions"].toArray().first().toObject().value("type").toString();
-            return QString();
-        }();
-        if (normalized.isEmpty() || item.value("componentType") == "media-shelf" || ids.contains(id) ||
-            (kind != "app" && kind != "widget" && kind != "action") ||
-            (kind == "app" && actionType == QStringLiteral("launch-app") && item.value("appId").toString().isEmpty()) ||
-            (kind == "action" && item.value("name").toString().trimmed().isEmpty()) ||
-            (kind == "widget" && item.value("widgetType").toString().isEmpty()) ||
-            (!item.value("categoryId").toString().isEmpty() &&
-             !categoryIds.contains(item.value("categoryId").toString())) ||
-            (!actionType.isEmpty() && normalizedActionForItem(item).isEmpty()) ||
-            (item.contains("opacity") && (!item.value("opacity").isDouble() || item.value("opacity").toDouble() < 0.0 ||
-                                          item.value("opacity").toDouble() > 1.0)))
-        {
-            setError(tr("Home layout contains an invalid or duplicate item."));
+            setError(componentError.isEmpty() ? tr("Home layout contains an invalid or duplicate item.")
+                                              : componentError);
             return false;
         }
-        ids.insert(id);
+        ids.insert(item.value("id").toString());
         components.append(item);
     }
     return true;
@@ -1677,11 +1659,31 @@ HomeLayout::addActionTile(const QString& name,
                           const QString& categoryId,
                           const QString& openWith)
 {
+    if (!validateActionTileParams(name, actionType, target, categoryId, openWith))
+        return false;
+    const auto actionList = QJsonArray{normalizedAction};
+    const auto tile = buildActionTile(name, actionType, target, categoryId, normalizedAction);
+    m_items.append(tile);
+    if (!save())
+    {
+        m_items.removeLast();
+        return false;
+    }
+    emit layoutChanged();
+    return true;
+}
+
+bool
+HomeLayout::validateActionTileParams(const QString& name, const QString& actionType, const QString& target,
+                                     const QString& categoryId, const QString& openWith) const
+{
     const auto cleanName = name.trimmed().left(80);
     const auto cleanActionType = actionType.trimmed();
     const auto cleanTarget = target.trimmed();
     const auto cleanOpenWith = openWith.trimmed();
     const bool captureInput = cleanActionType == QStringLiteral("switch-input");
+    if (!validateActionTileBasic(cleanName, cleanTarget, cleanActionType, captureInput))
+        return false;
     QVariantMap requestedAction{{"type", cleanActionType}};
     if (captureInput)
         requestedAction["input"] = cleanTarget.toInt();
@@ -1693,6 +1695,18 @@ HomeLayout::addActionTile(const QString& name,
     const auto normalizedAction = ComponentSchema::action(requestedAction);
     if (normalizedAction.isEmpty())
         return false;
+    if (!captureInput && !cleanOpenWith.isEmpty() && cleanOpenWith != QStringLiteral("system") &&
+        !m_registry->find(cleanOpenWith)->handledActions.contains(cleanActionType))
+        return false;
+    if (!categoryId.isEmpty() && !validateCategoryIdExists(categoryId))
+        return false;
+    return true;
+}
+
+bool
+HomeLayout::validateActionTileBasic(const QString& cleanName, const QString& cleanTarget,
+                                    const QString& cleanActionType, const bool captureInput) const
+{
     if (cleanName.isEmpty() || cleanTarget.isEmpty() || !isSupportedActionType(cleanActionType) ||
         cleanActionType == QStringLiteral("launch-app") || cleanActionType == QStringLiteral("desktop-mode") ||
         (captureInput && !cleanOpenWith.isEmpty()) ||
@@ -1700,26 +1714,49 @@ HomeLayout::addActionTile(const QString& name,
          (!isSafeActionId(cleanOpenWith) ||
           (!cleanOpenWith.isEmpty() && cleanOpenWith != QStringLiteral("system") && !m_registry->find(cleanOpenWith)))))
         return false;
-    if (!captureInput && !cleanOpenWith.isEmpty() && cleanOpenWith != QStringLiteral("system") &&
-        !m_registry->find(cleanOpenWith)->handledActions.contains(cleanActionType))
+    return true;
+}
+
+bool
+HomeLayout::validateActionTileTarget(const QString& openWith, const QString& actionType) const
+{
+    if (openWith.isEmpty() || openWith == QStringLiteral("system"))
+        return true;
+    const auto* app = m_registry->find(openWith);
+    return app && app->handledActions.contains(actionType);
+}
+
+bool
+HomeLayout::validateCategoryIdExists(const QString& categoryId) const
+{
+    for (const auto& value : m_categories)
+        if (value.toObject().value("id").toString() == categoryId)
+            return true;
+    return false;
+}
+
+QJsonObject
+HomeLayout::buildActionTile(const QString& name, const QString& actionType, const QString& target,
+                            const QString& categoryId, const QJsonObject& normalizedAction)
+{
+    const auto cleanName = name.trimmed().left(80);
+    const auto cleanTarget = target.trimmed();
+    const auto cleanOpenWith = target.trimmed();
+    const bool captureInput = actionType == QStringLiteral("switch-input");
+    QVariantMap requestedAction{{"type", actionType}};
+    if (captureInput)
+        requestedAction["input"] = cleanTarget.toInt();
+    else
     {
-        return false;
+        requestedAction["target"] = cleanTarget;
+        requestedAction["openWith"] = cleanOpenWith;
     }
-    if (!categoryId.isEmpty())
-    {
-        bool found = false;
-        for (const auto& value : m_categories)
-            if (value.toObject().value("id").toString() == categoryId)
-                found = true;
-        if (!found)
-            return false;
-    }
-    auto base = cleanName.toLower();
-    base.replace(QRegularExpression(QStringLiteral("[^a-z0-9]+")), QStringLiteral("-"));
-    base.remove(QRegularExpression(QStringLiteral("^-|-$")));
-    if (base.isEmpty())
-        base = QStringLiteral("tile");
-    QString id = base;
+    const auto base = cleanName.toLower();
+    auto baseCopy = base;
+    baseCopy.replace(QRegularExpression(QStringLiteral("[^a-z0-9]+")), QStringLiteral("-"));
+    baseCopy.remove(QRegularExpression(QStringLiteral("^-|-$")));
+    auto resultBase = baseCopy.isEmpty() ? QStringLiteral("tile") : baseCopy;
+    auto resultId = resultBase;
     int suffix = 2;
     const auto idExists = [this](const QString& candidate)
     {
@@ -1728,21 +1765,14 @@ HomeLayout::addActionTile(const QString& name,
                 return true;
         return false;
     };
-    while (idExists(id))
-        id = base + QStringLiteral("-") + QString::number(suffix++);
-    const QJsonObject action = QJsonObject::fromVariantMap(normalizedAction);
+    while (idExists(resultId))
+        resultId = resultBase + QStringLiteral("-") + QString::number(suffix++);
     QJsonObject tile{
-        {"kind", "action"}, {"id", id}, {"name", cleanName}, {"size", "standard"}, {"actions", QJsonArray{action}}};
+        {"kind", "action"}, {"id", resultId}, {"name", cleanName}, {"size", "standard"},
+        {"actions", QJsonArray{normalizedAction}}};
     if (!categoryId.isEmpty())
         tile.insert(QStringLiteral("categoryId"), categoryId);
-    m_items.append(tile);
-    if (!save())
-    {
-        m_items.removeLast();
-        return false;
-    }
-    emit layoutChanged();
-    return true;
+    return tile;
 }
 bool
 HomeLayout::removeAppTile(const QString& appId)

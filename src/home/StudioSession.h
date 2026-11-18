@@ -391,6 +391,12 @@ class StudioSession final : public QObject
     archiveVersion(const QString& name, const QByteArray& document);
     bool
     readVersions(QJsonArray& entries, QJsonObject* assets = nullptr);
+    bool
+    readVersionArchive(QJsonObject& object, QString& error);
+    bool
+    validateStoredAssets(const QJsonObject& storedAssets, QString& error);
+    bool
+    validateVersionEntries(const QJsonArray& entries, QSet<QString>& ids, QString& error);
     void
     configureWorker(HomeLayout& worker, bool assetPaths = false) const;
     QVariantMap

@@ -233,37 +233,12 @@ QString
 importSetupAsset(const QString& root, const QString& sourcePath, const QString& kind, QString* error)
 {
     const QFileInfo source(sourcePath);
-    const qint64 maximum = kind == "xbox-bootset" ? 128LL * 1024 * 1024 : 512LL * 1024 * 1024;
-    if (!MediaGrants::validate(source.absolutePath()).isEmpty() || !source.isFile() || !source.isReadable() ||
-        source.canonicalFilePath() != sourcePath || source.size() < 16 || source.size() > maximum)
-    {
-        *error = "Choose a bounded readable firmware file in an approved folder.";
+    if (!validateSetupAssetSource(source, kind, error))
         return {};
-    }
-    QFile input(sourcePath);
-    if (!input.open(QIODevice::ReadOnly) || !setupAssetHeader(input.peek(16), kind))
-    {
-        *error = "The selected file does not match this runtime's firmware format.";
-        return {};
-    }
     QCryptographicHash hash(QCryptographicHash::Sha256);
     qint64 total = 0;
-    while (!input.atEnd())
-    {
-        const auto block = input.read(1024 * 1024);
-        total += block.size();
-        if (block.isEmpty() || total > maximum)
-        {
-            *error = "Firmware read failed or exceeded its byte limit.";
-            return {};
-        }
-        hash.addData(block);
-    }
-    if (input.error() != QFile::NoError || total != source.size())
-    {
-        *error = "Firmware changed while reading; retry the import.";
+    if (!readAndHashAsset(source, kind == "xbox-bootset" ? 128LL * 1024 * 1024 : 512LL * 1024 * 1024, hash, total))
         return {};
-    }
     const auto name = QString::fromLatin1(hash.result().toHex()) + ".bin";
     const auto directory = root + "/firmware";
     const auto destination = directory + '/' + name;
@@ -274,14 +249,66 @@ importSetupAsset(const QString& root, const QString& sourcePath, const QString& 
         *error = "Private firmware storage is redirected, unavailable or full.";
         return {};
     }
-    QSaveFile output(destination);
-    output.setDirectWriteFallback(false);
-    if (!input.seek(0) || !output.open(QIODevice::WriteOnly))
+    QCryptographicHash second(QCryptographicHash::Sha256);
+    if (!writeAndVerifyAsset(source, destination, kind == "xbox-bootset" ? 128LL * 1024 * 1024 : 512LL * 1024 * 1024,
+                             hash.result(), second, error))
+        return {};
+    QFile::setPermissions(destination, QFile::ReadOwner | QFile::WriteOwner);
+    return name;
+}
+
+bool
+validateSetupAssetSource(const QFileInfo& source, const QString& kind, QString* error)
+{
+    const qint64 maximum = kind == "xbox-bootset" ? 128LL * 1024 * 1024 : 512LL * 1024 * 1024;
+    if (!MediaGrants::validate(source.absolutePath()).isEmpty() || !source.isFile() || !source.isReadable() ||
+        source.canonicalFilePath() != source.absoluteFilePath() || source.size() < 16 ||
+        source.size() > maximum)
+    {
+        *error = "Choose a bounded readable firmware file in an approved folder.";
+        return false;
+    }
+    return true;
+}
+
+bool
+readAndHashAsset(const QFileInfo& source, const qint64 maximum, QCryptographicHash& hash, qint64& total)
+{
+    QFile input(source.absoluteFilePath());
+    if (!input.open(QIODevice::ReadOnly) || !setupAssetHeader(input.peek(16), kindFromPath(source)))
+    {
+        return false;
+    }
+    while (!input.atEnd())
+    {
+        const auto block = input.read(1024 * 1024);
+        total += block.size();
+        if (block.isEmpty() || total > maximum)
+        {
+            return false;
+        }
+        hash.addData(block);
+    }
+    return input.error() == QFile::NoError && total == source.size();
+}
+
+bool
+writeAndVerifyAsset(const QFileInfo& source, const QString& destination, const qint64 maximum,
+                    const QByteArray& firstHash, QCryptographicHash& second, QString* error)
+{
+    QFile input(source.absoluteFilePath());
+    if (!input.seek(0))
     {
         *error = "Cannot stage a private firmware copy.";
-        return {};
+        return false;
     }
-    QCryptographicHash second(QCryptographicHash::Sha256);
+    QSaveFile output(destination);
+    output.setDirectWriteFallback(false);
+    if (!output.open(QIODevice::WriteOnly))
+    {
+        *error = "Cannot stage a private firmware copy.";
+        return false;
+    }
     total = 0;
     while (!input.atEnd())
     {
@@ -290,18 +317,23 @@ importSetupAsset(const QString& root, const QString& sourcePath, const QString& 
         if (block.isEmpty() || total > maximum || output.write(block) != block.size())
         {
             *error = "Cannot copy firmware; previous settings were preserved.";
-            return {};
+            return false;
         }
         second.addData(block);
     }
-    if (input.error() != QFile::NoError || total != source.size() || second.result() != hash.result() ||
+    if (input.error() != QFile::NoError || total != source.size() || second.result() != firstHash ||
         !output.commit())
     {
         *error = "Firmware changed or its private copy could not be saved. Previous settings were preserved.";
-        return {};
+        return false;
     }
-    QFile::setPermissions(destination, QFile::ReadOwner | QFile::WriteOwner);
-    return name;
+    return true;
+}
+
+QString
+kindFromPath(const QFileInfo& source)
+{
+    return source.suffix().toLower();
 }
 } // namespace
 QVariantList

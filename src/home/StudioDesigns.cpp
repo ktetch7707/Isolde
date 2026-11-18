@@ -216,10 +216,42 @@ portableValue(const QJsonValue& value, QString& error, int depth = 0)
     return true;
 }
 bool
-portableLayout(const QJsonObject& document, QString& error, bool nestedPage = false)
+validateLayoutStructure(const QJsonObject& document, bool nestedPage, QString& error);
+bool
+validateLayoutFields(const QJsonObject& document, QString& error);
+bool
+validateComponentFields(const QJsonObject& node, QString& error);
+bool
+validateComponentAction(const QJsonObject& node, QString& error);
+bool
+validateDesignLibraryPrototypes(const QJsonObject& document, QString& error);
+bool
+validatePageEntries(const QJsonObject& document, QString& error);
+bool
+portableLayout(const QJsonObject& document, QString& error, bool nestedPage)
 {
-    const QSet<QString> keys{
-        "schemaVersion", "theme", "composition", "categories", "components", "pages", "homePageId", "rootPage"};
+    if (!validateLayoutStructure(document, nestedPage, error))
+        return false;
+    if (!validateLayoutFields(document, error))
+        return false;
+    for (const auto& value : document["components"].toArray())
+    {
+        const auto node = value.toObject();
+        if (!validateComponentFields(node, error))
+            return false;
+        if (!validateComponentAction(node, error))
+            return false;
+    }
+    if (!validateDesignLibraryPrototypes(document, error))
+        return false;
+    if (!validatePageEntries(document, error))
+        return false;
+    return portableValue(document, error);
+}
+
+bool
+validateLayoutStructure(const QJsonObject& document, bool nestedPage, QString& error)
+{
     if (document["schemaVersion"].toDouble(-1) != 2 || !document["components"].isArray() ||
         document["components"].toArray().size() > 1024 || document["pages"].toArray().size() > 64 ||
         (nestedPage &&
@@ -229,12 +261,26 @@ portableLayout(const QJsonObject& document, QString& error, bool nestedPage = fa
         error = QObject::tr("Portable designs require layout version 2.");
         return false;
     }
+    return true;
+}
+
+bool
+validateLayoutFields(const QJsonObject& document, QString& error)
+{
+    const QSet<QString> keys{
+        "schemaVersion", "theme", "composition", "categories", "components", "pages", "homePageId", "rootPage"};
     for (auto it = document.begin(); it != document.end(); ++it)
         if (!keys.contains(it.key()))
         {
             error = QObject::tr("Unknown portable layout field '%1'.").arg(it.key());
             return false;
         }
+    return true;
+}
+
+bool
+validateComponentFields(const QJsonObject& node, QString& error)
+{
     const QSet<QString> componentKeys{"schemaVersion", "id",
                                       "kind",          "componentType",
                                       "widgetType",    "family",
@@ -249,47 +295,60 @@ portableLayout(const QJsonObject& document, QString& error, bool nestedPage = fa
                                       "accent",        "showTitle",
                                       "showType",      "requiredCapability",
                                       "linkedDesign",  "designNode"};
-    for (const auto& value : document["components"].toArray())
-    {
-        const auto node = value.toObject();
-        for (auto it = node.begin(); it != node.end(); ++it)
-            if (!componentKeys.contains(it.key()))
-            {
-                error = QObject::tr("Unknown portable component field '%1'.").arg(it.key());
-                return false;
-            }
-        // Machine grants, local media identities and provider collections are not portable capabilities.
-        const auto actionVal =
-            node.contains("actions") && node["actions"].isArray() && !node["actions"].toArray().isEmpty()
-                ? node["actions"].toArray().first().toObject()
-                : node["action"].toObject();
-        const auto type = actionVal["type"].toString();
-        const auto provider = node["source"].toObject()["provider"].toString();
-        if (QStringList{"open-file",
-                        "open-folder",
-                        "open-disc",
-                        "play-movie",
-                        "play-episode",
-                        "open-show",
-                        "open-collection",
-                        "play-music",
-                        "play-game"}
-                .contains(type) ||
-            node["source"].toObject().contains("collectionId") || provider == "games")
+    for (auto it = node.begin(); it != node.end(); ++it)
+        if (!componentKeys.contains(it.key()))
         {
-            error = QObject::tr(
-                        "'%1' uses a machine-specific media or game source. Choose a portable app, page or "
-                        "library role first.")
-                        .arg(node["name"].toString());
+            error = QObject::tr("Unknown portable component field '%1'.").arg(it.key());
             return false;
         }
+    return true;
+}
+
+bool
+validateComponentAction(const QJsonObject& node, QString& error)
+{
+    const auto actionVal =
+        node.contains("actions") && node["actions"].isArray() && !node["actions"].toArray().isEmpty()
+            ? node["actions"].toArray().first().toObject()
+            : node["action"].toObject();
+    const auto type = actionVal["type"].toString();
+    const auto provider = node["source"].toObject()["provider"].toString();
+    if (QStringList{"open-file",
+                    "open-folder",
+                    "open-disc",
+                    "play-movie",
+                    "play-episode",
+                    "open-show",
+                    "open-collection",
+                    "play-music",
+                    "play-game"}
+            .contains(type) ||
+        node["source"].toObject().contains("collectionId") || provider == "games")
+    {
+        error = QObject::tr(
+                    "'%1' uses a machine-specific media or game source. Choose a portable app, page or "
+                    "library role first.")
+                    .arg(node["name"].toString());
+        return false;
     }
+    return true;
+}
+
+bool
+validateDesignLibraryPrototypes(const QJsonObject& document, QString& error)
+{
     for (const auto& entry : document["composition"].toObject()["designLibrary"].toObject()["components"].toArray())
     {
         const QJsonObject prototype{{"schemaVersion", 2}, {"components", entry.toObject()["nodes"]}};
         if (!portableLayout(prototype, error, true))
             return false;
     }
+    return true;
+}
+
+bool
+validatePageEntries(const QJsonObject& document, QString& error)
+{
     for (const auto& value : document["pages"].toArray())
     {
         const auto page = value.toObject();
@@ -301,8 +360,9 @@ portableLayout(const QJsonObject& document, QString& error, bool nestedPage = fa
             return false;
         }
     }
-    return portableValue(document, error);
+    return true;
 }
+
 QJsonValue
 remapApps(QJsonValue value, const QVariantMap& mapping)
 {
