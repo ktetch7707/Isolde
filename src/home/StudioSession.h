@@ -287,6 +287,8 @@ class StudioSession final : public QObject
                                  bool enableScrolling, const QString& parentId,
                                  const QString& categoryId);
     bool
+    applyPlacementProposals(QJsonArray& entries, const QVariantList& placements);
+    bool
     validateAdditionProposalPreconditions(HomeLayout& temporary, QJsonObject& root, QJsonArray& pages,
                                           QJsonObject& document, int& pageIndex);
     bool

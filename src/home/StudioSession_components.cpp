@@ -774,25 +774,8 @@ StudioSession::additionProposal(const QString& type,
     if (!proposal.value("valid").toBool())
         return proposal;
     proposal["id"] = identity;
-    for (const auto& change : proposal["placements"].toList())
-    {
-        const auto value = change.toMap();
-        for (int i = 0; i < entries.size(); ++i)
-            if (entries[i].toObject()["id"] == value["id"].toString())
-            {
-                auto entry = entries[i].toObject();
-                entry["placement"] = QJsonObject::fromVariantMap(value["placement"].toMap());
-                for (const auto& key : QStringList{"parentId", "categoryId"})
-                {
-                    const auto destination = value.value(key).toString();
-                    if (destination.isEmpty())
-                        entry.remove(key);
-                    else
-                        entry[key] = destination;
-                }
-                entries[i] = entry;
-            }
-    }
+    if (!applyPlacementProposals(entries, proposal["placements"].toList()))
+        return proposal;
     document["components"] = entries;
     store();
     QString error;
@@ -827,6 +810,31 @@ StudioSession::validatePlacementProposalInputs(const QString& strategy, const QV
             setError(tr("Choose a valid destination section or group."));
             return false;
         }
+    return true;
+}
+
+bool
+StudioSession::applyPlacementProposals(QJsonArray& entries, const QVariantList& placements)
+{
+    for (const auto& change : placements)
+    {
+        const auto value = change.toMap();
+        for (int i = 0; i < entries.size(); ++i)
+            if (entries[i].toObject()["id"] == value["id"].toString())
+            {
+                auto entry = entries[i].toObject();
+                entry["placement"] = QJsonObject::fromVariantMap(value["placement"].toMap());
+                for (const auto& key : QStringList{"parentId", "categoryId"})
+                {
+                    const auto destination = value.value(key).toString();
+                    if (destination.isEmpty())
+                        entry.remove(key);
+                    else
+                        entry[key] = destination;
+                }
+                entries[i] = entry;
+            }
+    }
     return true;
 }
 
