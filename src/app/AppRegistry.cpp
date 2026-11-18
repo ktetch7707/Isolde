@@ -47,48 +47,21 @@ iconRole(const AppDefinition& app)
     }();
     return roles[app.launchConfiguration.value("icon", app.id).toString()].toObject();
 }
+static bool
+shouldUsePackagedIcon(const AppDefinition& app, const QString& packaged)
+{
+    return app.type != "web" && app.type != "desktop" && app.type != "android" && !QFile::exists(packaged);
+}
 static QString
 appIcon(const AppDefinition& app, int role = 0)
 {
     if (!qobject_cast<QGuiApplication*>(QCoreApplication::instance()))
         return {};
     const auto packaged = ":/config/app-icons/" + app.launchConfiguration.value("icon", app.id).toString() + ".svg";
-    if (app.type != "web" && app.type != "desktop" && app.type != "android" && !QFile::exists(packaged))
+    if (!shouldUsePackagedIcon(app, packaged))
         return {};
-    auto name = app.launchConfiguration.value("icon", app.id).toString();
-    const auto roots = QStandardPaths::standardLocations(QStandardPaths::GenericDataLocation);
-    const auto desktopName = QRegularExpression("^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$");
-    // Desktop entries are app-supplied metadata. Never execute their Exec line
-    // while resolving artwork and never accept a remote Icon URL.
-    auto desktopId = app.launchConfiguration.value("desktopId").toString();
-    QStringList desktopIds{desktopId};
-    if (app.id != desktopId)
-        desktopIds.append(app.id);
-    bool suppliedIcon = false;
-    for (auto candidateId : desktopIds)
-        if (desktopName.match(candidateId).hasMatch())
-        {
-            if (!candidateId.endsWith(".desktop"))
-                candidateId += ".desktop";
-            for (const auto& root : roots)
-            {
-                const auto entry = QDir(root).filePath("applications/" + candidateId);
-                if (!safeFile(entry))
-                    continue;
-                QSettings settings(entry, QSettings::IniFormat);
-                const auto supplied = settings.value("Desktop Entry/Icon").toString().trimmed();
-                static const QSet<QString> genericIcons{
-                    "application-x-executable", "application-default-icon", "package-x-generic", "system-run"};
-                if (!supplied.isEmpty() && !genericIcons.contains(supplied))
-                {
-                    name = supplied;
-                    suppliedIcon = true;
-                    break;
-                }
-            }
-            if (suppliedIcon)
-                break;
-        }
+    static const QRegularExpression desktopName("^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$");
+    const auto name = resolveAppIconName(app, desktopName);
     QIcon icon;
     if (QFile::exists(packaged))
     {
@@ -104,7 +77,7 @@ appIcon(const AppDefinition& app, int role = 0)
     {
         if (!desktopName.match(name).hasMatch())
             return {};
-        if (!resolveThemeIcon(name, roots, icon))
+        if (!resolveThemeIcon(name, QStandardPaths::standardLocations(QStandardPaths::GenericDataLocation), icon))
             return {};
     }
     QByteArray bytes;
@@ -119,42 +92,6 @@ appIcon(const AppDefinition& app, int role = 0)
     return QUrl::fromLocalFile(path).toString();
 }
 
-bool
-AppRegistry::resolvePackagedIcon(const AppDefinition& app, int role, QIcon& icon)
-{
-    const auto packaged = ":/config/app-icons/" + app.launchConfiguration.value("icon", app.id).toString() + ".svg";
-    if (role)
-    {
-        const auto metadata = iconRole(app);
-        const auto relative = metadata["foreground"].toString();
-        if (!QRegularExpression("^foreground/[a-z0-9][a-z0-9-]{0,127}\\.svg$").match(relative).hasMatch())
-            return role == 2;
-        QFile file(":/config/app-icons/" + relative);
-        if (!file.open(QIODevice::ReadOnly))
-            return false;
-        auto svg = file.read(64 * 1024 + 1);
-        svg.replace("\r\n", "\n");
-        if (svg.size() > 64 * 1024 ||
-            QString::fromLatin1(QCryptographicHash::hash(svg, QCryptographicHash::Sha256).toHex()) !=
-                metadata["foregroundSha256"].toString())
-            return false;
-        QBuffer buffer(&svg);
-        buffer.open(QIODevice::ReadOnly);
-        QImageReader reader(&buffer, "svg");
-        reader.setScaledSize(QSize(512, 512));
-        auto foreground = reader.read();
-        if (foreground.isNull())
-            return false;
-        if (role == 2)
-        {
-            const QColor ink(metadata["inkColour"].toString());
-            QList<QColor> excluded;
-            if (!ink.isValid() || metadata["inkExclude"].toArray().size() > 4)
-                return false;
-            for (const auto& value : metadata["inkExclude"].toArray())
-            {
-                const QColor colour(value.toString());
-                if (!colour.isValid())
                     return false;
                 excluded.append(colour);
             }

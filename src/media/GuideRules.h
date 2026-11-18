@@ -45,4 +45,8 @@ bool
 validateChannelOwner(const QVariantMap& v, QString* error);
 bool
 validateChannelTiming(const QVariantMap& v, QString* error);
+bool
+validateRuleList(const QVariant& value, bool numeric, const QString& op);
+bool
+validateScalar(const QVariant& value, bool numeric);
 } // namespace GuideRules

@@ -211,36 +211,43 @@ validateRuleLeaf(const QVariantMap& v, const QString& op)
 bool
 validateRuleLeafValue(const QVariant& value, bool numeric, const QString& op)
 {
-    const auto scalar = [numeric](const QVariant& item)
-    {
-        if (!numeric)
-            return text(item, 256);
-        const auto type = item.metaType().id();
-        if (type == QMetaType::Bool || type == QMetaType::QString)
-            return false;
-        bool ok = false;
-        const auto n = item.toDouble(&ok);
-        return ok && std::isfinite(n) && n >= 0 && n <= 10000000;
-    };
     if (op == "one-of" || op == "in-range")
-    {
-        if (value.metaType().id() != QMetaType::QVariantList)
-            return false;
-        const auto values = value.toList();
-        if (values.isEmpty() || values.size() > 32 || (op == "in-range" && (!numeric || values.size() != 2)))
-            return false;
-        for (const auto& item : values)
-            if (!scalar(item))
-                return false;
-        return op != "in-range" || values[0].toDouble() <= values[1].toDouble();
-    }
-    if (!scalar(value))
+        return validateRuleList(value, numeric, op);
+    const auto scalar = validateScalar(value, numeric);
+    if (!scalar)
         return false;
     if (op == "is" || op == "is-not")
         return true;
     if (numeric)
         return op == "before" || op == "after";
     return op == "contains" || op == "does-not-contain" || op == "starts-with";
+}
+
+bool
+validateRuleList(const QVariant& value, bool numeric, const QString& op)
+{
+    if (value.metaType().id() != QMetaType::QVariantList)
+        return false;
+    const auto values = value.toList();
+    if (values.isEmpty() || values.size() > 32 || (op == "in-range" && (!numeric || values.size() != 2)))
+        return false;
+    for (const auto& v : values)
+        if (!validateScalar(v, numeric))
+            return false;
+    return op != "in-range" || values[0].toDouble() <= values[1].toDouble();
+}
+
+bool
+validateScalar(const QVariant& item, bool numeric)
+{
+    if (!numeric)
+        return text(item, 256);
+    const auto type = item.metaType().id();
+    if (type == QMetaType::Bool || type == QMetaType::QString)
+        return false;
+    bool ok = false;
+    const auto n = item.toDouble(&ok);
+    return ok && std::isfinite(n) && n >= 0 && n <= 10000000;
 }
 
 bool

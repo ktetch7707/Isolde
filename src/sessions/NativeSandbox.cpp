@@ -381,56 +381,6 @@ NativeSandbox::isActionTargetDenied(const QString& canonical, const QString& req
 }
 
 bool
-NativeSandbox::resolveActionTarget(NativeSandboxPlan& plan, const QString& target,
-                                   const QString& userHome, const QString& managedGameRoot,
-                                   const QString& profileId, const QString& gameSourceRoot,
-                                   const QString& opticalMediaId, const QString& opticalObservationId,
-                                   bool opticalExecutable, const QString& binary, const QString& base)
-{
-    plan.actionTarget = target;
-    const QUrl url(target);
-    if (!validateActionTargetScheme(url, plan.error))
-        return false;
-    const auto requested = url.isLocalFile() ? url.toLocalFile() : target;
-    const QFileInfo canonical(requested);
-    bool privateHomePath = false, systemPath = false;
-    if (!validateCanonicalPath(canonical, base, QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation),
-                               QStandardPaths::writableLocation(QStandardPaths::AppDataLocation),
-                               privateHomePath, systemPath, userHome))
-        return false;
-    const bool managedTarget = !managedGameRoot.isEmpty() &&
-                               ManagedGamePaths::isInstallRoot(profileId, managedGameRoot) &&
-                               inside(canonical, managedGameRoot);
-    const bool opticalTarget = opticalExecutable && canonical == binary;
-    bool optical = false;
-    QSet<QString> opticalMediaIds;
-    if (!validateGameSourceRoot(canonical, binary, gameSourceRoot, opticalMediaId, opticalObservationId,
-                                optical, opticalMediaIds, profileId))
-        return false;
-    if (isActionTargetDenied(canonical, requested, privateHomePath, systemPath, managedTarget,
-                             opticalTarget, base, QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation),
-                             QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)))
-    {
-        plan.error = QStringLiteral("Choose a media file or folder, not a profile, account, or system folder.");
-        return false;
-    }
-    auto& args = plan.arguments;
-    if (!gameSourceRoot.isEmpty())
-    {
-        plan.actionTarget = "/media/games/" + QDir(gameSourceRoot).relativeFilePath(canonical);
-        args << "--ro-bind" << gameSourceRoot << "/media/games";
-        if (managedTarget || optical)
-            args << "--chdir" << "/media/games";
-    }
-    else
-    {
-        plan.actionTarget = "/media/selected/" + QFileInfo(canonical).fileName();
-        args << "--ro-bind" << canonical << plan.actionTarget;
-    }
-    return true;
-}
-
-bool
 NativeSandbox::validateActionTargetScheme(const QUrl& url, QString& error)
 {
     if (!(url.isLocalFile() || url.scheme().isEmpty()))
