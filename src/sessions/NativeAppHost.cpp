@@ -86,56 +86,15 @@ attachGamepadNodes(const QSet<QString>& connected,
 #ifdef Q_OS_LINUX
     for (auto it = createdNodes->begin(); it != createdNodes->end();)
     {
-        const auto path = QString("/dev/input/") + it.key();
-        struct stat info{};
-        const auto encodedPath = path.toLocal8Bit();
-        const bool sameDevice =
-            ::lstat(encodedPath.constData(), &info) == 0 && S_ISCHR(info.st_mode) && info.st_rdev == dev_t(it.value());
-        if (connected.contains(it.key()))
-        {
-            if (sameDevice && it.key().startsWith("event"))
-                dynamicEvents.insert(it.key());
-            if (sameDevice)
-            {
-                ++it;
-                continue;
-            }
-        }
-        else if (sameDevice)
-        {
-            ::unlink(encodedPath.constData());
-        }
-        it = createdNodes->erase(it);
+        if (attachExistingGamepadNode(it, connected, dynamicEvents))
+            ++it;
+        else
+            it = createdNodes->erase(it);
     }
     const QDir sysInput("/sys/class/input");
     for (const auto& name : connected)
     {
-        if (boundAtLaunch.contains(name) || createdNodes->contains(name))
-            continue;
-        QFile deviceInfo(sysInput.filePath(name + "/dev"));
-        if (!deviceInfo.open(QIODevice::ReadOnly))
-            continue;
-        uint major = 0, minor = 0;
-        if (!GamepadTopology::deviceNumber(name, QString::fromLatin1(deviceInfo.read(32)).trimmed(), &major, &minor))
-            continue;
-        const auto path = QString("/dev/input/") + name;
-        const auto encodedPath = path.toLocal8Bit();
-        struct stat info{};
-        if (::lstat(encodedPath.constData(), &info) == 0 || errno != ENOENT)
-            continue;
-        const auto number = ::makedev(major, minor);
-        if (::mknod(encodedPath.constData(), S_IFCHR | S_IRUSR | S_IWUSR, number) != 0)
-            continue;
-        if (::lstat(encodedPath.constData(), &info) == 0 && S_ISCHR(info.st_mode) && info.st_rdev == number)
-        {
-            createdNodes->insert(name, quint64(number));
-            if (name.startsWith("event"))
-                dynamicEvents.insert(name);
-        }
-        else
-        {
-            ::unlink(encodedPath.constData());
-        }
+        attachGamepadNode(connected, boundAtLaunch, createdNodes, dynamicEvents, name);
     }
 #else
     Q_UNUSED(connected);
@@ -143,6 +102,68 @@ attachGamepadNodes(const QSet<QString>& connected,
     Q_UNUSED(createdNodes);
 #endif
     return dynamicEvents;
+}
+
+bool
+attachGamepadNode(const QSet<QString>& connected,
+                  const QSet<QString>& boundAtLaunch,
+                  QMap<QString, quint64>* createdNodes,
+                  QSet<QString>& dynamicEvents,
+                  const QString& name)
+{
+    if (boundAtLaunch.contains(name) || createdNodes->contains(name))
+        return false;
+    QFile deviceInfo(sysInput.filePath(name + "/dev"));
+    if (!deviceInfo.open(QIODevice::ReadOnly))
+        return false;
+    uint major = 0, minor = 0;
+    if (!GamepadTopology::deviceNumber(name, QString::fromLatin1(deviceInfo.read(32)).trimmed(), &major, &minor))
+        return false;
+    const auto path = QString("/dev/input/") + name;
+    const auto encodedPath = path.toLocal8Bit();
+    struct stat info{};
+    if (::lstat(encodedPath.constData(), &info) == 0 || errno != ENOENT)
+        return false;
+    const auto number = ::makedev(major, minor);
+    if (::mknod(encodedPath.constData(), S_IFCHR | S_IRUSR | S_IWUSR, number) != 0)
+        return false;
+    if (::lstat(encodedPath.constData(), &info) == 0 && S_ISCHR(info.st_mode) && info.st_rdev == number)
+    {
+        createdNodes->insert(name, quint64(number));
+        if (name.startsWith("event"))
+            dynamicEvents.insert(name);
+        return true;
+    }
+    ::unlink(encodedPath.constData());
+    return false;
+}
+
+bool
+attachExistingGamepadNode(QMap<QString, quint64>::iterator& it,
+                          QMap<QString, quint64>* createdNodes,
+                          const QSet<QString>& connected,
+                          QSet<QString>& dynamicEvents)
+{
+    const auto path = QString("/dev/input/") + it.key();
+    struct stat info{};
+    const auto encodedPath = path.toLocal8Bit();
+    const bool sameDevice =
+        ::lstat(encodedPath.constData(), &info) == 0 && S_ISCHR(info.st_mode) && info.st_rdev == dev_t(it.value());
+    if (connected.contains(it.key()))
+    {
+        if (sameDevice && it.key().startsWith("event"))
+            dynamicEvents.insert(it.key());
+        if (sameDevice)
+        {
+            ++it;
+            return true;
+        }
+    }
+    else if (sameDevice)
+    {
+        ::unlink(encodedPath.constData());
+    }
+    return false;
 }
 
 void

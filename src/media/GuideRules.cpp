@@ -129,6 +129,18 @@ GuideRules::validateChannelScheduleBlocks(const QVariantList& blocks, QString* e
 bool
 validateScheduleBlock(const QVariantMap& b, QString* error)
 {
+    if (!validateScheduleBlockFields(b, error))
+        return false;
+    if (!validateScheduleBlockDays(b, error))
+        return false;
+    if (!validateScheduleBlockDates(b, error))
+        return false;
+    return true;
+}
+
+bool
+validateScheduleBlockFields(const QVariantMap& b, QString* error)
+{
     if (b.metaType().id() != QMetaType::QVariantMap ||
         !keys(b, {"name", "days", "startMinute", "endMinute", "fromDate", "toDate", "rule"}) ||
         !text(b.value("name"), 80) || !integer(b.value("startMinute"), 0, 1439) ||
@@ -138,6 +150,12 @@ validateScheduleBlock(const QVariantMap& b, QString* error)
         b.value("days").toList().size() > 7 || b.value("rule").metaType().id() != QMetaType::QVariantMap ||
         guideRule(b.value("rule").toMap()).isEmpty())
         return reject(error, "Calendar blocks need a name, weekdays, increasing times and matching rules.");
+    return true;
+}
+
+bool
+validateScheduleBlockDays(const QVariantMap& b, QString* error)
+{
     QSet<int> days;
     for (const auto& day : b.value("days").toList())
     {
@@ -145,6 +163,12 @@ validateScheduleBlock(const QVariantMap& b, QString* error)
             return reject(error, "Choose unique weekdays, Monday 1 through Sunday 7.");
         days.insert(day.toInt());
     }
+    return true;
+}
+
+bool
+validateScheduleBlockDates(const QVariantMap& b, QString* error)
+{
     for (const auto& key : QStringList{"fromDate", "toDate"})
         if (b.contains(key) &&
             (!text(b.value(key), 10) ||

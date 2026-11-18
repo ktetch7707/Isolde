@@ -516,7 +516,7 @@ StudioSession::findFreePlacement(QJsonObject& destination, QJsonObject layout, c
             QVariantMap proposed{{"x", x}, {"y", y}, {"width", width}, {"height", height}};
             if (!ComponentSchema::validPlacement(proposed, grid.value("columns", 8).toInt(), grid.value("rows", 5).toInt()))
                 continue;
-            if (placementFits(destination, proposed, layout))
+            if (placeComponentAt(destination, layout, proposed))
             {
                 destination["placement"] = QJsonObject::fromVariantMap(proposed);
                 return true;
@@ -524,6 +524,23 @@ StudioSession::findFreePlacement(QJsonObject& destination, QJsonObject layout, c
         }
     }
     return false;
+}
+
+bool
+StudioSession::placeComponentAt(const QJsonObject& destination, const QVariantMap& layout,
+                                const QVariantMap& proposed) const
+{
+    QVariantMap proposedVariantMap = proposed.toVariantMap();
+    for (const auto& value : layout["components"].toArray())
+    {
+        const auto node = value.toObject();
+        if (node["parentId"].toString() != destination.value("parentId").toString() &&
+            node["categoryId"].toString() != destination.value("categoryId").toString())
+            continue;
+        if (ComponentSchema::placementsOverlap(proposedVariantMap, node["placement"].toObject().toVariantMap()))
+            return false;
+    }
+    return true;
 }
 
 bool

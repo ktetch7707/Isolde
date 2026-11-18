@@ -67,39 +67,13 @@ profileFile(const QString& path)
 }
 } // namespace
 
-QVariantList
+bool
 StudioSession::changeSummary() const
 {
     QVariantList result;
     const auto before = QJsonDocument::fromJson(m_committed).object();
     const auto after = QJsonDocument::fromJson(m_draft).object();
-    const auto append = [&](const QString& id, const QString& name, const QString& change)
-    {
-        auto previous = pageDocument(before, id), next = pageDocument(after, id);
-        QHash<QString, QJsonObject> oldNodes, newNodes;
-        for (const auto& value : previous["components"].toArray())
-            oldNodes.insert(value.toObject()["id"].toString(), value.toObject());
-        for (const auto& value : next["components"].toArray())
-            newNodes.insert(value.toObject()["id"].toString(), value.toObject());
-        int added = 0, removed = 0, changed = 0;
-        for (auto it = oldNodes.begin(); it != oldNodes.end(); ++it)
-        {
-            if (!newNodes.contains(it.key()))
-                ++removed;
-            else if (newNodes.value(it.key()) != it.value())
-                ++changed;
-        }
-        for (auto it = newNodes.begin(); it != newNodes.end(); ++it)
-            if (!oldNodes.contains(it.key()))
-                ++added;
-        previous.remove("components");
-        next.remove("components");
-        const auto detail = tr("%1 added, %2 removed, %3 changed").arg(added).arg(removed).arg(changed) +
-                            (previous != next ? tr("; page settings changed") : QString());
-        result.append(QVariantMap{{"pageId", id}, {"name", name}, {"change", change}, {"details", detail}});
-    };
-    if (pageDocument(before, {}) != pageDocument(after, {}) || before["rootPage"] != after["rootPage"])
-        append({}, m_model ? m_model->rootPageName() : tr("Home"), tr("Changed"));
+    QVariantMap homeChanges;
     QSet<QString> seen;
     int previousIndex = 0;
     const auto nextPages = after["pages"].toArray();
@@ -118,22 +92,49 @@ StudioSession::changeSummary() const
                 break;
             }
         if (entry != next)
-            append(id, entry["name"].toString(), next.isEmpty() ? tr("Removed") : tr("Changed"));
+            appendPageChange(result, id, entry["name"].toString(), next.isEmpty() ? tr("Removed") : tr("Changed"),
+                             entry, next);
         else if (previousIndex != nextIndex)
-            append(id, entry["name"].toString(), tr("Reordered"));
+            appendPageChange(result, id, entry["name"].toString(), tr("Reordered"), {}, {});
         ++previousIndex;
     }
     for (const auto& value : after["pages"].toArray())
     {
         const auto entry = value.toObject();
         if (!seen.contains(entry["id"].toString()))
-            append(entry["id"].toString(), entry["name"].toString(), tr("Added"));
+            appendPageChange(result, entry["id"].toString(), entry["name"].toString(), tr("Added"), {}, {});
     }
     if (before["homePageId"] != after["homePageId"])
-        append(after["homePageId"].toString(), tr("Startup page"), tr("Changed"));
+        appendPageChange(result, after["homePageId"].toString(), tr("Startup page"), tr("Changed"), {}, {});
     if (before["studioAppearance"] != after["studioAppearance"])
-        append({}, tr("Editor appearance"), tr("Changed"));
+        appendPageChange(result, {}, tr("Editor appearance"), tr("Changed"), {}, {});
     return result;
+}
+
+void
+StudioSession::appendPageChange(QVariantList& result, const QString& id, const QString& name,
+                                const QString& change, const QVariantMap& previous,
+                                const QVariantMap& next) const
+{
+    QHash<QString, QJsonObject> oldNodes, newNodes;
+    for (const auto& value : previous["components"].toArray())
+        oldNodes.insert(value.toObject()["id"].toString(), value.toObject());
+    for (const auto& value : next["components"].toArray())
+        newNodes.insert(value.toObject()["id"].toString(), value.toObject());
+    int added = 0, removed = 0, changed = 0;
+    for (auto it = oldNodes.begin(); it != oldNodes.end(); ++it)
+    {
+        if (!newNodes.contains(it.key()))
+            ++removed;
+        else if (newNodes.value(it.key()) != it.value())
+            ++changed;
+    }
+    for (auto it = newNodes.begin(); it != newNodes.end(); ++it)
+        if (!oldNodes.contains(it.key()))
+            ++added;
+    const auto detail = tr("%1 added, %2 removed, %3 changed").arg(added).arg(removed).arg(changed) +
+                        (previous != next ? tr("; page settings changed") : QString());
+    result.append(QVariantMap{{"pageId", id}, {"name", name}, {"change", change}, {"details", detail}});
 }
 
 QVariantList
