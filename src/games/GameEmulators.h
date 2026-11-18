@@ -22,14 +22,22 @@ bool
 validateEmulatorGenerations(const QVariantMap& generations);
 bool
 validateEmulatorRuntimes(const QVariantList& runtimes, QSet<QString>& actualPlatforms);
-bool
-validateEmulatorRuntimeItem(const QVariantMap& item, QSet<QString>& ids, QSet<QString>& actualPlatforms);
-bool
-validateEmulatorRuntimeSetup(const QVariantMap& item);
-bool
-validateEmulatorRuntimePackages(const QString& engine, const QVariantMap& item, const QStringList& packages);
-QSet<QString>
-expectedPackageSet(const QString& engine);
+    bool
+    validateEmulatorRuntimeItem(const QVariantMap& item, QSet<QString>& ids, QSet<QString>& actualPlatforms);
+    bool
+    validateEmulatorRuntimeItemFields(const QVariantMap& item, QSet<QString>& ids);
+    bool
+    validateEmulatorRuntimeItem(const QVariantMap& item, QSet<QString>& ids, QSet<QString>& actualPlatforms);
+    bool
+    validateEmulatorRuntimeItemCore(const QVariantMap& item, QSet<QString>& ids);
+    bool
+    validateEmulatorRuntimeItemOptical(const QVariantMap& item);
+    bool
+    validateEmulatorRuntimePackages(const QString& engine, const QVariantMap& item, const QStringList& packages);
+    bool
+    validateEmulatorCoverage(const QVariantMap& coverage, const QSet<QString>& integratedSet);
+    QSet<QString>
+    expectedPackageSet(const QString& engine);
 bool
 validateEmulatorCoverage(const QVariantMap& coverage, const QSet<QString>& integratedSet);
 QString

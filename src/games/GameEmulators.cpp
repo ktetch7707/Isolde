@@ -454,35 +454,13 @@ GameEmulators::validateEmulatorRuntimes(const QVariantList& runtimes, QSet<QStri
 bool
 GameEmulators::validateEmulatorRuntimeItem(const QVariantMap& item, QSet<QString>& ids, QSet<QString>& actualPlatforms)
 {
-    const auto itemKeys = item.keys();
-    const QSet<QString> allowedFields{
-        "id", "name", "engine", "platforms", "formats", "binary", "core", "packages", "firmwareRequired", "setup"};
-    for (const auto& key : itemKeys)
-        if (!allowedFields.contains(key))
-            return false;
-    const auto id = item.value("id").toString(), engine = item.value("engine").toString();
+    if (!validateEmulatorRuntimeItemCore(item, ids))
+        return false;
+    const auto engine = item.value("engine").toString();
     const auto packages = item.value("packages").toStringList();
     const auto formats = item.value("formats").toStringList();
     const auto platforms = item.value("platforms").toStringList();
-    static const QSet<QString> engines{
-        "ppsspp", "dolphin", "pcsx2", "retroarch", "rpcs3", "shadps4", "vita3k", "xemu", "xenia", "cemu"};
-    static const QMap<QString, QString> expandedKinds{{"rpcs3", "ps3-pup"},
-                                                      {"shadps4", "none"},
-                                                      {"vita3k", "vita-pup"},
-                                                      {"xemu", "xbox-bootset"},
-                                                      {"xenia", "none"},
-                                                      {"cemu", "none"}};
-    if (expandedKinds.contains(engine) &&
-        (id != engine || !item.contains("setup") ||
-         item.value("setup").toMap().value("firmwareKind").toString() != expandedKinds.value(engine)))
-        return false;
-    if (!validateEmulatorRuntimeSetup(item))
-        return false;
-    if (item.isEmpty() || !QRegularExpression("^[a-z0-9-]{1,48}$").match(id).hasMatch() || ids.contains(id) ||
-        !engines.contains(engine) || item.value("binary").toString().isEmpty() ||
-        !QDir::isAbsolutePath(item.value("binary").toString()) || packages.isEmpty() || platforms.isEmpty() ||
-        formats.isEmpty() || item.value("firmwareRequired").metaType().id() != QMetaType::Bool ||
-        (item.contains("core") && !QDir::isAbsolutePath(item.value("core").toString())))
+    if (!validateEmulatorRuntimeItemOptical(item))
         return false;
     if (!validateEmulatorRuntimePackages(engine, item, packages))
         return false;
@@ -496,6 +474,52 @@ GameEmulators::validateEmulatorRuntimeItem(const QVariantMap& item, QSet<QString
     for (const auto& platform : platforms)
         actualPlatforms.insert(platform);
     return true;
+}
+
+bool
+GameEmulators::validateEmulatorRuntimeItemCore(const QVariantMap& item, QSet<QString>& ids)
+{
+    const auto id = item.value("id").toString();
+    const auto engine = item.value("engine").toString();
+    if (item.isEmpty() || !QRegularExpression("^[a-z0-9-]{1,48}$").match(id).hasMatch() || ids.contains(id) ||
+        !engines.contains(engine) || item.value("binary").toString().isEmpty() ||
+        !QDir::isAbsolutePath(item.value("binary").toString()))
+        return false;
+    static const QSet<QString> engines{
+        "ppsspp", "dolphin", "pcsx2", "retroarch", "rpcs3", "shadps4", "vita3k", "xemu", "xenia", "cemu"};
+    static const QMap<QString, QString> expandedKinds{{"rpcs3", "ps3-pup"},
+                                                      {"shadps4", "none"},
+                                                      {"vita3k", "vita-pup"},
+                                                      {"xemu", "xbox-bootset"},
+                                                      {"xenia", "none"},
+                                                      {"cemu", "none"}};
+    if (expandedKinds.contains(engine) &&
+        (id != engine || !item.contains("setup") ||
+         item.value("setup").toMap().value("firmwareKind").toString() != expandedKinds.value(engine)))
+        return false;
+    return true;
+}
+
+bool
+GameEmulators::validateEmulatorRuntimeItemOptical(const QVariantMap& item)
+{
+    if (item.value("firmwareRequired").metaType().id() != QMetaType::Bool ||
+        (item.contains("core") && !QDir::isAbsolutePath(item.value("core").toString())))
+        return false;
+    return true;
+}
+
+bool
+GameEmulators::validateEmulatorRuntimeItemFields(const QVariantMap& item, QSet<QString>& ids)
+{
+    const auto itemKeys = item.keys();
+    const QSet<QString> allowedFields{
+        "id", "name", "engine", "platforms", "formats", "binary", "core", "packages", "firmwareRequired", "setup"};
+    for (const auto& key : itemKeys)
+        if (!allowedFields.contains(key))
+            return false;
+    const auto id = item.value("id").toString();
+    return QRegularExpression("^[a-z0-9-]{1,48}$").match(id).hasMatch() && !ids.contains(id);
 }
 
 bool
