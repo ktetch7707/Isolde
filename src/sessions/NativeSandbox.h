@@ -49,16 +49,37 @@ class NativeSandbox
                         QString& busConfig);
     static bool
     validateBinaryAndOptical(NativeSandboxPlan& plan, const QString& executable,
-                             const QString& target, const QString& managedGameRoot,
-                             const QString& gameSourceRoot, const QString& profileId,
-                             const QString& opticalMediaId, const QString& opticalObservationId,
-                             QString& binary, bool& nativeGame, bool& opticalExecutable);
+                              const QString& target, const QString& managedGameRoot,
+                              const QString& gameSourceRoot, const QString& profileId,
+                              const QString& opticalMediaId, const QString& opticalObservationId,
+                              QString& binary, bool& nativeGame, bool& opticalExecutable);
+    bool
+    validateOpticalExecutable(const QString& binary, const QString& gameSourceRoot,
+                              const QString& opticalMediaId, const QString& opticalObservationId,
+                              bool& opticalExecutable);
+    static bool
+    validateManagedExecutable(const QString& binary, const QString& managedGameRoot,
+                              const QString& gameSourceRoot, const QString& profileId,
+                              bool& managedExecutable);
     static bool
     prepareStorageDirectories(NativeSandboxPlan& plan, const QString& storageRoot,
                               const QString& profileId, const QString& appId);
     static bool
     opticalDirectPlayMount(const QString& gameSourceRoot, const QString& opticalMediaId,
                            const QString& opticalObservationId);
+    static bool
+    validateActionTargetScheme(const QUrl& url, QString& error);
+    static bool
+    validateCanonicalPath(const QFileInfo& canonical, const QString& base, const QString& config,
+                          const QString& data, bool& privateHomePath, bool& systemPath,
+                          const QString& userHome);
+    static bool
+    validateGameSourceRoot(const QFileInfo& canonical, const QFileInfo& binary,
+                           const QString& gameSourceRoot, const QString& opticalMediaId,
+                           const QString& opticalObservationId, bool& optical,
+                           QSet<QString>& opticalMediaIds, const QString& profileId,
+                           const QString& base, const QString& managedGameRoot,
+                           bool opticalExecutable, QString& error);
     static bool
     isActionTargetDenied(const QString& canonical, const QString& requested,
                          bool privateHomePath, bool systemPath, bool managedTarget,

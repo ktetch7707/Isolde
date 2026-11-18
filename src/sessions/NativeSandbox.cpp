@@ -153,15 +153,11 @@ NativeSandbox::validateBinaryAndOptical(NativeSandboxPlan& plan, const QString& 
                                         QString& binary, bool& nativeGame, bool& opticalExecutable)
 {
     binary = QFileInfo(executable).canonicalFilePath();
-    const bool managedExecutable = !managedGameRoot.isEmpty() && gameSourceRoot == managedGameRoot &&
-                                   ManagedGamePaths::isInstallRoot(profileId, managedGameRoot) &&
-                                   inside(binary, managedGameRoot) && QFileInfo(binary).isExecutable();
-    opticalExecutable = false;
-    if (!opticalMediaId.isEmpty() && OpticalDiscGrants::approved(profileId, opticalMediaId))
-        opticalExecutable = inside(binary, gameSourceRoot) &&
-                            (QFileInfo(binary).permissions() & (QFile::ExeOwner | QFile::ExeGroup | QFile::ExeOther)) &&
-                            opticalDirectPlayMount(gameSourceRoot, opticalMediaId, opticalObservationId);
-    nativeGame = managedExecutable || opticalExecutable;
+    if (!validateManagedExecutable(binary, managedGameRoot, gameSourceRoot, profileId, nativeGame))
+        return false;
+    if (!validateOpticalExecutable(binary, gameSourceRoot, opticalMediaId, opticalObservationId, opticalExecutable))
+        return false;
+    nativeGame = nativeGame || opticalExecutable;
     if (!opticalMediaId.isEmpty() && !opticalExecutable)
     {
         plan.error = "The approved optical disc changed or is unavailable. Reinsert it and retry.";
@@ -188,6 +184,30 @@ NativeSandbox::validateBinaryAndOptical(NativeSandboxPlan& plan, const QString& 
             QStringLiteral("This app launcher needs a dedicated profile adapter. Shared-account launch is disabled.");
         return false;
     }
+    return true;
+}
+
+bool
+NativeSandbox::validateManagedExecutable(const QString& binary, const QString& managedGameRoot,
+                                         const QString& gameSourceRoot, const QString& profileId,
+                                         bool& managedExecutable)
+{
+    managedExecutable = !managedGameRoot.isEmpty() && gameSourceRoot == managedGameRoot &&
+                        ManagedGamePaths::isInstallRoot(profileId, managedGameRoot) &&
+                        inside(binary, managedGameRoot) && QFileInfo(binary).isExecutable();
+    return true;
+}
+
+bool
+NativeSandbox::validateOpticalExecutable(const QString& binary, const QString& gameSourceRoot,
+                                         const QString& opticalMediaId, const QString& opticalObservationId,
+                                         bool& opticalExecutable)
+{
+    opticalExecutable = false;
+    if (!opticalMediaId.isEmpty() && OpticalDiscGrants::approved(profileId, opticalMediaId))
+        opticalExecutable = inside(binary, gameSourceRoot) &&
+                            (QFileInfo(binary).permissions() & (QFile::ExeOwner | QFile::ExeGroup | QFile::ExeOther)) &&
+                            opticalDirectPlayMount(gameSourceRoot, opticalMediaId, opticalObservationId);
     return true;
 }
 
@@ -369,32 +389,27 @@ NativeSandbox::resolveActionTarget(NativeSandboxPlan& plan, const QString& targe
 {
     plan.actionTarget = target;
     const QUrl url(target);
-    if (!(url.isLocalFile() || url.scheme().isEmpty()))
-    {
-        plan.error = QStringLiteral("This media address is not supported by isolated native apps.");
+    if (!validateActionTargetScheme(url, plan.error))
         return false;
-    }
     const auto requested = url.isLocalFile() ? url.toLocalFile() : target;
-    const auto canonical = QFileInfo(requested).canonicalFilePath();
-    const auto config = QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
-    const auto data = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    const QFileInfo canonical(requested);
+    bool privateHomePath = false, systemPath = false;
+    if (!validateCanonicalPath(canonical, base, QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation),
+                               QStandardPaths::writableLocation(QStandardPaths::AppDataLocation),
+                               privateHomePath, systemPath, userHome))
+        return false;
     const bool managedTarget = !managedGameRoot.isEmpty() &&
                                ManagedGamePaths::isInstallRoot(profileId, managedGameRoot) &&
                                inside(canonical, managedGameRoot);
     const bool opticalTarget = opticalExecutable && canonical == binary;
-    bool privateHomePath = false;
-    if (inside(canonical, userHome))
-    {
-        const auto components = QDir(userHome).relativeFilePath(canonical).split('/');
-        for (const auto& component : components)
-            privateHomePath |= component.startsWith('.');
-    }
-    bool systemPath = false;
-    for (const auto& system :
-         QStringList{"/etc", "/usr", "/opt", "/sys", "/dev", "/root", "/var", "/run", "/proc"})
-        systemPath |= inside(canonical, system);
+    bool optical = false;
+    QSet<QString> opticalMediaIds;
+    if (!validateGameSourceRoot(canonical, binary, gameSourceRoot, opticalMediaId, opticalObservationId,
+                                optical, opticalMediaIds, profileId))
+        return false;
     if (isActionTargetDenied(canonical, requested, privateHomePath, systemPath, managedTarget,
-                             opticalTarget, base, config, data))
+                             opticalTarget, base, QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation),
+                             QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)))
     {
         plan.error = QStringLiteral("Choose a media file or folder, not a profile, account, or system folder.");
         return false;
@@ -402,26 +417,64 @@ NativeSandbox::resolveActionTarget(NativeSandboxPlan& plan, const QString& targe
     auto& args = plan.arguments;
     if (!gameSourceRoot.isEmpty())
     {
-        const auto error = MediaGrants::validate(gameSourceRoot);
-        const bool managed = ManagedGamePaths::isInstallRoot(profileId, gameSourceRoot);
-                bool optical = opticalDirectPlayMount(gameSourceRoot, opticalMediaId, opticalObservationId) &&
-                               OpticalDiscGrants::approved(profileId, opticalMediaId);
-        if ((!opticalMediaId.isEmpty() && !optical) || (!error.isEmpty() && !managed && !optical) ||
-            !QFileInfo(canonical).isFile() || !canonical.startsWith(gameSourceRoot + '/') ||
-            (!managed && (inside(base, gameSourceRoot) || inside(gameSourceRoot, base))))
-        {
-            plan.error = "The reviewed game folder is unavailable or redirected. Review it in Games and retry.";
-            return false;
-        }
         plan.actionTarget = "/media/games/" + QDir(gameSourceRoot).relativeFilePath(canonical);
         args << "--ro-bind" << gameSourceRoot << "/media/games";
-        if (managed || optical)
+        if (managedTarget || optical)
             args << "--chdir" << "/media/games";
     }
     else
     {
         plan.actionTarget = "/media/selected/" + QFileInfo(canonical).fileName();
         args << "--ro-bind" << canonical << plan.actionTarget;
+    }
+    return true;
+}
+
+bool
+NativeSandbox::validateActionTargetScheme(const QUrl& url, QString& error)
+{
+    if (!(url.isLocalFile() || url.scheme().isEmpty()))
+    {
+        error = QStringLiteral("This media address is not supported by isolated native apps.");
+        return false;
+    }
+    return true;
+}
+
+bool
+NativeSandbox::validateCanonicalPath(const QFileInfo& canonical, const QString& base,
+                                     const QString& config, const QString& data,
+                                     bool& privateHomePath, bool& systemPath, const QString& userHome)
+{
+    privateHomePath = false;
+    if (inside(canonical, userHome))
+    {
+        const auto components = QDir(userHome).relativeFilePath(canonical).split('/');
+        for (const auto& component : components)
+            privateHomePath |= component.startsWith('.');
+    }
+    systemPath = false;
+    for (const auto& system :
+         QStringList{"/etc", "/usr", "/opt", "/sys", "/dev", "/root", "/var", "/run", "/proc"})
+        systemPath |= inside(canonical, system);
+    return true;
+}
+
+bool
+NativeSandbox::validateGameSourceRoot(const QFileInfo& canonical, const QFileInfo& binary,
+                                      const QString& gameSourceRoot, const QString& opticalMediaId,
+                                      const QString& opticalObservationId, bool& optical,
+                                      QSet<QString>& opticalMediaIds, const QString& profileId)
+{
+    optical = opticalDirectPlayMount(gameSourceRoot, opticalMediaId, opticalObservationId) &&
+              OpticalDiscGrants::approved(profileId, opticalMediaId);
+    const bool managed = ManagedGamePaths::isInstallRoot(profileId, gameSourceRoot);
+    if ((!opticalMediaId.isEmpty() && !optical) ||
+        !QFileInfo(canonical).isFile() || !canonical.startsWith(gameSourceRoot + '/') ||
+        (!managed && (inside(base, gameSourceRoot) || inside(gameSourceRoot, base))))
+    {
+        plan.error = "The reviewed game folder is unavailable or redirected. Review it in Games and retry.";
+        return false;
     }
     return true;
 }
@@ -445,6 +498,104 @@ NativeSandbox::bindSteam(NativeSandboxPlan& plan, const QString& appId, const QS
         return false;
     }
     plan.arguments << "--ro-bind" << helper << "/run/steam-games.py";
+    }
+
+bool
+NativeSandbox::resolveActionTarget(NativeSandboxPlan& plan, const QString& target,
+                                   const QString& userHome, const QString& managedGameRoot,
+                                   const QString& profileId, const QString& gameSourceRoot,
+                                   const QString& opticalMediaId, const QString& opticalObservationId,
+                                   bool opticalExecutable, const QString& binary, const QString& base)
+{
+    plan.actionTarget = target;
+    const QUrl url(target);
+    if (!validateActionTargetScheme(url, plan.error))
+        return false;
+    const auto requested = url.isLocalFile() ? url.toLocalFile() : target;
+    const QFileInfo canonical(requested);
+    bool privateHomePath = false, systemPath = false;
+    if (!validateCanonicalPath(canonical, base, QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation),
+                               QStandardPaths::writableLocation(QStandardPaths::AppDataLocation),
+                               privateHomePath, systemPath, userHome))
+        return false;
+    const bool managedTarget = !managedGameRoot.isEmpty() &&
+                               ManagedGamePaths::isInstallRoot(profileId, managedGameRoot) &&
+                               inside(canonical, managedGameRoot);
+    const bool opticalTarget = opticalExecutable && canonical == binary;
+    bool optical = false;
+    QSet<QString> opticalMediaIds;
+    if (!validateGameSourceRoot(canonical, binary, gameSourceRoot, opticalMediaId, opticalObservationId,
+                                optical, opticalMediaIds, profileId))
+        return false;
+    if (isActionTargetDenied(canonical, requested, privateHomePath, systemPath, managedTarget,
+                             opticalTarget, base, QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation),
+                             QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)))
+    {
+        plan.error = QStringLiteral("Choose a media file or folder, not a profile, account, or system folder.");
+        return false;
+    }
+    auto& args = plan.arguments;
+    if (!gameSourceRoot.isEmpty())
+    {
+        plan.actionTarget = "/media/games/" + QDir(gameSourceRoot).relativeFilePath(canonical);
+        args << "--ro-bind" << gameSourceRoot << "/media/games";
+        if (opticalTarget)
+            args << "--chdir" << "/media/games";
+    }
+    else
+       {
+        plan.actionTarget = "/media/selected/" + QFileInfo(canonical).fileName();
+        args << "--ro-bind" << canonical << plan.actionTarget;
+    }
+    return true;
+}
+
+bool
+NativeSandbox::validateActionTargetScheme(const QUrl& url, QString& error)
+{
+    if (!(url.isLocalFile() || url.scheme().isEmpty()))
+    {
+        error = QStringLiteral("This media address is not supported by isolated native apps.");
+        return false;
+    }
+    return true;
+}
+
+bool
+NativeSandbox::validateCanonicalPath(const QFileInfo& canonical, const QString& base,
+                                     const QString& config, const QString& data,
+                                     bool& privateHomePath, bool& systemPath, const QString& userHome)
+{
+    privateHomePath = false;
+    if (inside(canonical, userHome))
+    {
+        const auto components = QDir(userHome).relativeFilePath(canonical).split('/');
+        for (const auto& component : components)
+            privateHomePath |= component.startsWith('.');
+    }
+    systemPath = false;
+    for (const auto& system :
+         QStringList{"/etc", "/usr", "/opt", "/sys", "/dev", "/root", "/var", "/run", "/proc"})
+        systemPath |= inside(canonical, system);
+    return true;
+}
+
+bool
+NativeSandbox::validateGameSourceRoot(const QFileInfo& canonical, const QFileInfo& binary,
+                                      const QString& gameSourceRoot, const QString& opticalMediaId,
+                                      const QString& opticalObservationId, bool& optical,
+                                      QSet<QString>& opticalMediaIds, const QString& profileId)
+{
+    bool opticalTarget = opticalExecutable && canonical == binary;
+    optical = opticalDirectPlayMount(gameSourceRoot, opticalMediaId, opticalObservationId) &&
+              OpticalDiscGrants::approved(profileId, opticalMediaId);
+    if ((!opticalMediaId.isEmpty() && !optical) || (!error.isEmpty() && !managed && !optical) ||
+        !QFileInfo(canonical).isFile() || !canonical.startsWith(gameSourceRoot + '/') ||
+        (!managed && (inside(base, gameSourceRoot) || inside(gameSourceRoot, base))))
+    {
+        plan.error = "The reviewed game folder is unavailable or redirected. Review it in Games and retry.";
+        return false;
+    }
     return true;
 }
 
