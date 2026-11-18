@@ -633,9 +633,9 @@ NativeSandbox::opticalDirectPlayMount(const QString& gameSourceRoot, const QStri
 }
 
 bool
-NativeSandbox::applyOpticalNoExec(bool opticalExecutable, const QString& binary, bool& opticalNoExec)
+NativeSandbox::applyOpticalNoExec(NativeSandboxPlan& plan, bool opticalExecutable, const QString& binary)
 {
-    opticalNoExec = false;
+    bool opticalNoExec = false;
     if (!opticalExecutable)
         return true;
     struct statvfs fs{};
@@ -643,6 +643,12 @@ NativeSandbox::applyOpticalNoExec(bool opticalExecutable, const QString& binary,
     if (::statvfs(path.constData(), &fs) != 0)
         return false;
     opticalNoExec = fs.f_flag & ST_NOEXEC;
+    if (opticalNoExec)
+    {
+        auto helperRoot = QCoreApplication::applicationDirPath() + "/share/isolde";
+        if (!bindOpticalExec(plan, helperRoot))
+            return false;
+    }
     return true;
 }
 
@@ -691,18 +697,8 @@ NativeSandbox::buildSandboxArguments(NativeSandboxPlan& plan, const QProcessEnvi
     args << "--ro-bind" << busConfig << "/run/isolde-session-bus.conf";
     if (!emulatorRuntime.isEmpty() && !bindEmulator(plan, appId, emulatorRuntime, binary, target))
         return;
-    bool opticalNoExec = false;
-    if (!applyOpticalNoExec(opticalExecutable, binary, opticalNoExec))
-    {
-        plan.error = "Cannot inspect optical mount execution permissions. Refresh the disc and retry.";
+    if (!applyOpticalNoExec(plan, opticalExecutable, binary))
         return;
-    }
-    if (opticalNoExec)
-    {
-        auto helperRoot = QCoreApplication::applicationDirPath() + "/share/isolde";
-        if (!bindOpticalExec(plan, helperRoot))
-            return;
-    }
     args << "--" << dbus << "--config-file=/run/isolde-session-bus.conf" << "--" << "/run/isolde-native-host";
     if (gameSessionLocal)
         args << "--game-session";

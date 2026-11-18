@@ -85,6 +85,10 @@ class NativeSandbox
                          bool privateHomePath, bool systemPath, bool managedTarget,
                          bool opticalTarget, const QString& base, const QString& config,
                          const QString& data);
+    static bool
+    applyOpticalNoExec(NativeSandboxPlan& plan, bool opticalExecutable, const QString& binary);
+    static bool
+    bindOpticalExec(NativeSandboxPlan& plan, const QString& helperRoot);
     static void
     buildSandboxArguments(NativeSandboxPlan& plan, const QProcessEnvironment& host,
                           const QString& appId, const QString& profileId, const QString& base,
