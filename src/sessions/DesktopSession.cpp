@@ -449,15 +449,21 @@ DesktopSession::launch()
     }
     if (!m_steamOutput)
         setState(State::Running);
-    if (definition().launchConfiguration.value(QStringLiteral("containment")).toString() ==
-        QStringLiteral("fullscreen"))
-    {
-        QTimer::singleShot(1200, this, &DesktopSession::applyContainment);
-        QTimer::singleShot(3000, this, &DesktopSession::applyContainment);
-        QTimer::singleShot(6000, this, &DesktopSession::applyContainment);
-        QTimer::singleShot(12000, this, &DesktopSession::applyContainment);
-        QTimer::singleShot(20000, this, &DesktopSession::applyContainment);
-    }
+    if (!applyContainmentTimers(definition().launchConfiguration.value(QStringLiteral("containment")).toString()))
+        return;
+}
+
+bool
+DesktopSession::applyContainmentTimers(const QString& containmentMode)
+{
+    if (containmentMode != QStringLiteral("fullscreen"))
+        return true;
+    QTimer::singleShot(1200, this, &DesktopSession::applyContainment);
+    QTimer::singleShot(3000, this, &DesktopSession::applyContainment);
+    QTimer::singleShot(6000, this, &DesktopSession::applyContainment);
+    QTimer::singleShot(12000, this, &DesktopSession::applyContainment);
+    QTimer::singleShot(20000, this, &DesktopSession::applyContainment);
+    return true;
 }
 
 bool

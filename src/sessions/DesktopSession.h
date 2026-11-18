@@ -30,6 +30,8 @@ class DesktopSession final : public AppSession
     applyLaunchConfiguration(QJsonObject& configuration, const QString& steamGame, const QString& managedGame,
                              const QJsonObject& resolvedLaunch, const NativeSandboxPlan& sandbox,
                              QStringList& launchArguments);
+    bool
+    applyContainmentTimers(const QString& containmentMode);
 
   private:
     bool
