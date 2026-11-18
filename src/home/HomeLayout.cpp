@@ -1486,51 +1486,101 @@ HomeLayout::validateCategoriesAndComponents(const QByteArray& data, int version,
     }
     for (const auto& value : categoryArray)
     {
-        const auto category = value.toObject();
-        const auto id = category.value("id").toString();
-        if (id.isEmpty() || category.value("name").toString().trimmed().isEmpty() || categoryIds.contains(id) ||
-            (category.contains("presentation") &&
-             (!category["presentation"].isObject() ||
-              !ComponentSchema::validPresentation(category["presentation"].toObject().toVariantMap(), true))))
+        if (!validateCategoryItem(value.toObject(), categoryIds))
         {
             setError(tr("Home layout contains an invalid or duplicate category."));
             return false;
         }
-        categoryIds.insert(id);
     }
     QSet<QString> ids;
     for (const auto& value : entries.toArray())
     {
+        QJsonObject item;
         QString componentError;
-        const auto normalized =
-            ComponentSchema::component(value.toObject().toVariantMap(), version == 1, &componentError);
-        const auto item = QJsonObject::fromVariantMap(normalized);
-        const auto kind = item.value("kind").toString();
-        const auto id = item.value("id").toString();
-        const auto actionType = [&item]()
+        if (!validateComponentItem(value.toObject(), version, categoryIds, ids, item, componentError))
         {
-            if (item.contains("actions") && item["actions"].isArray() && !item["actions"].toArray().isEmpty())
-                return item["actions"].toArray().first().toObject().value("type").toString();
-            return QString();
-        }();
-        if (normalized.isEmpty() || item.value("componentType") == "media-shelf" || ids.contains(id) ||
-            (kind != "app" && kind != "widget" && kind != "action") ||
-            (kind == "app" && actionType == QStringLiteral("launch-app") && item.value("appId").toString().isEmpty()) ||
-            (kind == "action" && item.value("name").toString().trimmed().isEmpty()) ||
-            (kind == "widget" && item.value("widgetType").toString().isEmpty()) ||
-            (!item.value("categoryId").toString().isEmpty() &&
-             !categoryIds.contains(item.value("categoryId").toString())) ||
-            (!actionType.isEmpty() && normalizedActionForItem(item).isEmpty()) ||
-            (item.contains("opacity") && (!item.value("opacity").isDouble() || item.value("opacity").toDouble() < 0.0 ||
-                                          item.value("opacity").toDouble() > 1.0)))
-        {
-            setError(tr("Home layout contains an invalid or duplicate item."));
+            setError(componentError.isEmpty() ? tr("Home layout contains an invalid or duplicate item.")
+                                              : componentError);
             return false;
         }
-        ids.insert(id);
+        ids.insert(item.value("id").toString());
         components.append(item);
     }
     return true;
+}
+
+bool
+HomeLayout::validateCategoryItem(const QJsonObject& category, QSet<QString>& categoryIds) const
+{
+    const auto id = category.value("id").toString();
+    if (id.isEmpty() || category.value("name").toString().trimmed().isEmpty() || categoryIds.contains(id) ||
+        (category.contains("presentation") &&
+         (!category["presentation"].isObject() ||
+          !ComponentSchema::validPresentation(category["presentation"].toObject().toVariantMap(), true))))
+        return false;
+    categoryIds.insert(id);
+    return true;
+}
+
+bool
+HomeLayout::validateComponentItem(const QJsonObject& entry, int version, const QSet<QString>& categoryIds,
+                                  QSet<QString>& ids, QJsonObject& item, QString& componentError) const
+{
+    QString componentError;
+    const auto normalized =
+        ComponentSchema::component(entry.toVariantMap(), version == 1, &componentError);
+    item = QJsonObject::fromVariantMap(normalized);
+    const auto kind = item.value("kind").toString();
+    const auto id = item.value("id").toString();
+    const auto actionType = [&item]()
+    {
+        if (item.contains("actions") && item["actions"].isArray() && !item["actions"].toArray().isEmpty())
+            return item["actions"].toArray().first().toObject().value("type").toString();
+        return QString();
+    }();
+    if (normalized.isEmpty() || item.value("componentType") == "media-shelf" || ids.contains(id) ||
+        !isValidComponentKind(kind) || !isValidComponentAction(kind, actionType, item) ||
+        !isValidComponentCategoryRef(item, categoryIds) || !isValidComponentOpacity(item))
+    {
+        componentError = tr("Home layout contains an invalid or duplicate item.");
+        return false;
+    }
+    return true;
+}
+
+bool
+HomeLayout::isValidComponentKind(const QString& kind) const
+{
+    return kind == "app" || kind == "widget" || kind == "action";
+}
+
+bool
+HomeLayout::isValidComponentAction(const QString& kind, const QString& actionType, const QJsonObject& item) const
+{
+    if (kind == "app" && actionType == QStringLiteral("launch-app") && item.value("appId").toString().isEmpty())
+        return false;
+    if (kind == "action" && item.value("name").toString().trimmed().isEmpty())
+        return false;
+    if (kind == "widget" && item.value("widgetType").toString().isEmpty())
+        return false;
+    if (!actionType.isEmpty() && normalizedActionForItem(item).isEmpty())
+        return false;
+    return true;
+}
+
+bool
+HomeLayout::isValidComponentCategoryRef(const QJsonObject& item, const QSet<QString>& categoryIds) const
+{
+    return item.value("categoryId").toString().isEmpty() ||
+           categoryIds.contains(item.value("categoryId").toString());
+}
+
+bool
+HomeLayout::isValidComponentOpacity(const QJsonObject& item) const
+{
+    return !item.contains("opacity") || (item.value("opacity").isDouble() &&
+                                         item.value("opacity").toDouble() >= 0.0 &&
+                                         item.value("opacity").toDouble() <= 1.0);
 }
 
 bool

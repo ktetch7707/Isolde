@@ -368,6 +368,19 @@ class HomeLayout final : public QObject
                                     const QJsonArray& categoryArray, const QJsonArray& entries,
                                     QJsonArray& components);
     bool
+    validateCategoryItem(const QJsonObject& category, QSet<QString>& categoryIds) const;
+    bool
+    validateComponentItem(const QJsonObject& entry, int version, const QSet<QString>& categoryIds,
+                          QSet<QString>& ids, QJsonObject& item, QString& componentError) const;
+    bool
+    isValidComponentKind(const QString& kind) const;
+    bool
+    isValidComponentAction(const QString& kind, const QString& actionType, const QJsonObject& item) const;
+    bool
+    isValidComponentCategoryRef(const QJsonObject& item, const QSet<QString>& categoryIds) const;
+    bool
+    isValidComponentOpacity(const QJsonObject& item) const;
+    bool
     validateCategories(const QJsonArray& categoryArray, QSet<QString>& categoryIds);
     bool
     validateComponents(const QJsonArray& entries, int version, const QSet<QString>& categoryIds,
@@ -384,6 +397,12 @@ class HomeLayout final : public QObject
     componentPresentation(const QVariantMap& authored) const;
     bool
     applySkinDocument(QJsonObject document, const QJsonObject& assets, bool addMissingPages = false);
+    bool
+    applySkinAddMissingPages(QJsonObject document, QJsonArray& mergedPages) const;
+    QJsonObject
+    applySkinWrapSinglePage(QJsonObject document, const QJsonArray& mergedPages, const QJsonObject& previous) const;
+    bool
+    applySkinValidateArtwork(QJsonObject document, const QJsonObject& assets) const;
     bool
     storePage(const QString& id, const QJsonObject& document);
     void

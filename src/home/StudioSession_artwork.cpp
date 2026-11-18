@@ -204,20 +204,13 @@ StudioSession::stageArtwork(const QString& source)
         setError(tr("Reopen Studio before importing artwork."));
         return {};
     }
-    const QUrl url(source);
-    const auto path = url.isLocalFile() ? url.toLocalFile() : url.scheme().isEmpty() ? source : QString();
-    if (path.size() > 4096 || !QFileInfo(path).isFile())
-    {
-        setError(tr("Choose a regular local image file."));
+    QString path;
+    if (!validateArtworkSource(source, path))
         return {};
-    }
-    QFile input(path);
-    if (path.isEmpty() || !input.open(QIODevice::ReadOnly) || input.size() < 8 || input.size() > 20 * 1024 * 1024)
-    {
-        setError(tr("Choose a local PNG/JPEG of at most 20 MiB, or a bounded GIF of at most 2 MiB."));
+    QFileInfo info(path);
+    QByteArray data;
+    if (!validateArtworkFile(info, data))
         return {};
-    }
-    const auto data = input.readAll();
     QBuffer buffer;
     buffer.setData(data);
     buffer.open(QIODevice::ReadOnly);
@@ -225,34 +218,15 @@ StudioSession::stageArtwork(const QString& source)
     const auto format = reader.format();
     const auto size = reader.size();
     const bool gif = format == "gif";
-    QString gifError;
-    if (gif && ManagedGif::decode(data, true, &gifError).isEmpty())
-    {
-        setError(gifError);
+    if (!validateArtworkFormat(data, reader, gif))
         return {};
-    }
-    if ((!gif && !QList<QByteArray>{"png", "jpeg", "jpg"}.contains(format)) || !size.isValid() ||
-        size.width() > 16384 || size.height() > 16384 || qint64(size.width()) * size.height() > 32 * 1024 * 1024 ||
-        reader.read().isNull())
-    {
-        setError(tr("Artwork must be valid PNG/JPEG (16384 pixels / 32 megapixels) or a bounded GIF."));
-        return {};
-    }
     const auto relative = "artwork/studio-" +
                           QString::fromLatin1(QCryptographicHash::hash(data, QCryptographicHash::Sha256).toHex()) +
-                          (gif               ? ".gif"
-                           : format == "png" ? ".png"
-                                             : ".jpg");
+                          (gif ? ".gif" : format == "png" ? ".png" : ".jpg");
     if (m_stagedAssets.contains(relative))
         return relative;
-    qint64 total = data.size();
-    for (const auto& path : m_stagedAssets)
-        total += QFileInfo(path).size();
-    if (m_stagedAssets.size() >= 128 || total > 64 * 1024 * 1024)
-    {
-        setError(tr("This draft's artwork budget is 128 images / 64 MiB. Apply or discard before importing more."));
+    if (!checkArtworkBudget(data, relative))
         return {};
-    }
     if (!m_assetStage)
         m_assetStage = new QTemporaryDir;
     if (!m_assetStage->isValid())
@@ -274,4 +248,70 @@ StudioSession::stageArtwork(const QString& source)
     if (m_model)
         emit m_model->layoutChanged();
     return relative;
+}
+
+bool
+StudioSession::validateArtworkSource(const QString& source, QString& path) const
+{
+    const QUrl url(source);
+    path = url.isLocalFile() ? url.toLocalFile() : url.scheme().isEmpty() ? source : QString();
+    if (path.size() > 4096 || !QFileInfo(path).isFile())
+    {
+        setError(tr("Choose a regular local image file."));
+        return false;
+    }
+    return true;
+}
+
+bool
+StudioSession::validateArtworkFile(const QFileInfo& info, QByteArray& data) const
+{
+    QFile input(info.absoluteFilePath());
+    if (info.absoluteFilePath().isEmpty() || !input.open(QIODevice::ReadOnly) || input.size() < 8 ||
+        input.size() > 20 * 1024 * 1024)
+    {
+        setError(tr("Choose a local PNG/JPEG of at most 20 MiB, or a bounded GIF of at most 2 MiB."));
+        return false;
+    }
+    data = input.readAll();
+    return true;
+}
+
+bool
+StudioSession::validateArtworkFormat(const QByteArray& data, QImageReader& reader, bool& gif) const
+{
+    const auto format = reader.format();
+    const auto size = reader.size();
+    gif = format == "gif";
+    if (gif)
+    {
+        const auto decoded = ManagedGif::decode(data, true);
+        if (decoded.isEmpty())
+        {
+            setError(tr("Invalid GIF animation."));
+            return false;
+        }
+    }
+    if ((!gif && !QList<QByteArray>{"png", "jpeg", "jpg"}.contains(format)) || !size.isValid() ||
+        size.width() > 16384 || size.height() > 16384 ||
+        qint64(size.width()) * size.height() > 32 * 1024 * 1024 || reader.read().isNull())
+    {
+        setError(tr("Artwork must be valid PNG/JPEG (16384 pixels / 32 megapixels) or a bounded GIF."));
+        return false;
+    }
+    return true;
+}
+
+bool
+StudioSession::checkArtworkBudget(const QByteArray& data, const QString& relative) const
+{
+    qint64 total = data.size();
+    for (const auto& path : m_stagedAssets)
+        total += QFileInfo(path).size();
+    if (m_stagedAssets.size() >= 128 || total > 64 * 1024 * 1024)
+    {
+        setError(tr("This draft's artwork budget is 128 images / 64 MiB. Apply or discard before importing more."));
+        return false;
+    }
+    return true;
 }

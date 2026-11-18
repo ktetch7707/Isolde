@@ -143,116 +143,28 @@ StudioSession::validNewAction(const QVariantMap& value)
 QVariantMap
 StudioSession::componentPrototype(const QString& type, const QVariantMap& configuration)
 {
-    if (!currentProfile())
-    {
-        setError(tr("Reopen Skin Studio before adding components."));
-        return {};
-    }
     const auto options = m_live->studioOptions();
     QJsonArray nodes;
-    if (!selectComponentNodes(type, options, nodes))
+    if (!validatePrototypePrerequisites(type, options, nodes))
         return {};
-    if (nodes.isEmpty() || nodes.size() > 129)
-    {
-        setError(tr("The packaged component preset is invalid."));
-        return {};
-    }
     auto configured = nodes.first().toObject();
-    if (configuration.contains("variant"))
-    {
-        if (configuration["variant"].metaType().id() != QMetaType::QString)
-        {
-            setError(tr("Choose a registered starting style."));
-            return {};
-        }
-        QVariantMap selected;
-        for (const auto& entry : options.value("componentVariants").toMap().value(type).toList())
-            if (entry.toMap().value("id") == configuration["variant"])
-                selected = entry.toMap();
-        if (!applyVariantConfiguration(configuration, options, type, configured))
-            return {};
-    }
-    for (auto it = configuration.cbegin(); it != configuration.cend(); ++it)
-    {
-        if (!QStringList{"name", "action", "customLogo", "presentation", "appCollection", "apps", "buttons", "variant"}
-                 .contains(it.key()))
-        {
-            setError(tr("Unsupported component configuration."));
-            return {};
-        }
-        if (it.key() == "apps" || it.key() == "buttons" || it.key() == "variant")
-            continue;
-    }
+    if (configuration.contains("variant") && !applyVariantSelection(configuration, options, type, configured))
+        return {};
+    if (!validateComponentConfigKeys(configuration))
+        return {};
     if (!applyComponentConfiguration(configuration, configured))
         return {};
     nodes[0] = configured;
-    if (configuration.contains("buttons"))
-    {
-        const auto buttons = configuration.value("buttons").toList();
-        if (type != "carousel" || configuration.value("buttons").metaType().id() != QMetaType::QVariantList ||
-            buttons.size() > 128)
-        {
-            setError(tr("Choose up to 128 carousel buttons."));
-            return {};
-        }
-        auto style = configured["presentation"].toObject();
-        auto layout = style["layout"].toObject();
-        layout["columns"] = qMax(layout["columns"].toInt(), int(buttons.size()));
-        style["layout"] = layout;
-        configured["presentation"] = style;
-        nodes[0] = configured;
-        int column = 0;
-        for (const auto& value : buttons)
-        {
-            const auto changes = value.toMap();
-            if (value.metaType().id() != QMetaType::QVariantMap)
-            {
-                setError(tr("Choose a named button."));
-                return {};
-            }
-            auto child = QJsonObject::fromVariantMap(options.value("buttonChildPreset").toMap());
-            for (auto it = changes.cbegin(); it != changes.cend(); ++it)
-            {
-                if (!QStringList{"name", "action"}.contains(it.key()))
-                {
-                    setError(tr("Unsupported carousel button property."));
-                    return {};
-                }
-                child[it.key()] = QJsonValue::fromVariant(it.value());
-            }
-            child["id"] = "carousel-button-" + QString::number(column + 1);
-            child["parentId"] = configured["id"];
-            auto p = child["placement"].toObject();
-            p["x"] = column++;
-            child["placement"] = p;
-            nodes.append(child);
-        }
-    }
-    if (configuration.contains("apps"))
-    {
-        const auto apps = configuration.value("apps").toList();
-        QSet<QString> selected;
-        if (type != "app-bar" || configuration.value("apps").metaType().id() != QMetaType::QVariantList ||
-            apps.size() > 128)
-        {
-            setError(tr("Choose up to 128 installed apps."));
-            return {};
-        }
-        for (const auto& value : apps)
-        {
-            const auto id = value.toString();
-            const auto* app = m_live->registry()->find(id);
-            if (value.metaType().id() != QMetaType::QString || selected.contains(id) || !app ||
-                !QStringList{"desktop", "web", "android"}.contains(app->type))
-            {
-                setError(tr("Choose distinct installed applications."));
-                return {};
-            }
-            selected.insert(id);
-        }
-        configured["appCollection"] = QJsonObject{{"mode", "selected"}, {"ids", QJsonArray::fromVariantList(apps)}};
-        nodes[0] = configured;
-    }
+    if (configuration.contains("buttons") && !applyCarouselButtons(configuration, options, type, configured, nodes))
+        return {};
+    if (configuration.contains("apps") && !applyAppCollection(configuration, configured, nodes))
+        return {};
+    return finalizePrototype(type, nodes);
+}
+
+QVariantMap
+StudioSession::finalizePrototype(const QString& type, QJsonArray& nodes)
+{
     QHash<QString, QString> remap;
     if (!allocateNodeIdentities(nodes, type, remap))
         return {};
@@ -272,6 +184,133 @@ StudioSession::componentPrototype(const QString& type, const QVariantMap& config
             {"root", root.toVariantMap()},
             {"components", nodes.toVariantList()},
             {"viewItems", view.items()}};
+}
+
+bool
+StudioSession::validatePrototypePrerequisites(const QString& type, const QVariantMap& options, QJsonArray& nodes)
+{
+    if (!currentProfile())
+    {
+        setError(tr("Reopen Skin Studio before adding components."));
+        return false;
+    }
+    if (!selectComponentNodes(type, options, nodes))
+        return false;
+    if (nodes.isEmpty() || nodes.size() > 129)
+    {
+        setError(tr("The packaged component preset is invalid."));
+        return false;
+    }
+    return true;
+}
+
+bool
+StudioSession::applyVariantSelection(const QVariantMap& configuration, const QVariantMap& options,
+                                     const QString& type, QJsonObject& configured)
+{
+    if (configuration["variant"].metaType().id() != QMetaType::QString)
+    {
+        setError(tr("Choose a registered starting style."));
+        return false;
+    }
+    QVariantMap selected;
+    for (const auto& entry : options.value("componentVariants").toMap().value(type).toList())
+        if (entry.toMap().value("id") == configuration["variant"])
+            selected = entry.toMap();
+    if (!applyVariantConfiguration(configuration, options, type, configured))
+        return false;
+    return true;
+}
+
+bool
+StudioSession::validateComponentConfigKeys(const QVariantMap& configuration)
+{
+    for (auto it = configuration.cbegin(); it != configuration.cend(); ++it)
+    {
+        if (!QStringList{"name", "action", "customLogo", "presentation", "appCollection", "apps", "buttons", "variant"}
+                 .contains(it.key()))
+        {
+            setError(tr("Unsupported component configuration."));
+            return false;
+        }
+        if (it.key() == "apps" || it.key() == "buttons" || it.key() == "variant")
+            continue;
+    }
+    return true;
+}
+
+bool
+StudioSession::applyCarouselButtons(const QVariantMap& configuration, const QVariantMap& options,
+                                    const QString& type, QJsonObject& configured, QJsonArray& nodes)
+{
+    const auto buttons = configuration.value("buttons").toList();
+    if (type != "carousel" || configuration.value("buttons").metaType().id() != QMetaType::QVariantList ||
+        buttons.size() > 128)
+    {
+        setError(tr("Choose up to 128 carousel buttons."));
+        return false;
+    }
+    auto style = configured["presentation"].toObject();
+    auto layout = style["layout"].toObject();
+    layout["columns"] = qMax(layout["columns"].toInt(), int(buttons.size()));
+    style["layout"] = layout;
+    configured["presentation"] = style;
+    nodes[0] = configured;
+    int column = 0;
+    for (const auto& value : buttons)
+    {
+        const auto changes = value.toMap();
+        if (value.metaType().id() != QMetaType::QVariantMap)
+        {
+            setError(tr("Choose a named button."));
+            return false;
+        }
+        auto child = QJsonObject::fromVariantMap(options.value("buttonChildPreset").toMap());
+        for (auto it = changes.cbegin(); it != changes.cend(); ++it)
+        {
+            if (!QStringList{"name", "action"}.contains(it.key()))
+            {
+                setError(tr("Unsupported carousel button property."));
+                return false;
+            }
+            child[it.key()] = QJsonValue::fromVariant(it.value());
+        }
+        child["id"] = "carousel-button-" + QString::number(column + 1);
+        child["parentId"] = configured["id"];
+        auto p = child["placement"].toObject();
+        p["x"] = column++;
+        child["placement"] = p;
+        nodes.append(child);
+    }
+    return true;
+}
+
+bool
+StudioSession::applyAppCollection(const QVariantMap& configuration, QJsonObject& configured, QJsonArray& nodes)
+{
+    const auto apps = configuration.value("apps").toList();
+    QSet<QString> selected;
+    if (type != "app-bar" || configuration.value("apps").metaType().id() != QMetaType::QVariantList ||
+        apps.size() > 128)
+    {
+        setError(tr("Choose up to 128 installed apps."));
+        return false;
+    }
+    for (const auto& value : apps)
+    {
+        const auto id = value.toString();
+        const auto* app = m_live->registry()->find(id);
+        if (value.metaType().id() != QMetaType::QString || selected.contains(id) || !app ||
+            !QStringList{"desktop", "web", "android"}.contains(app->type))
+        {
+            setError(tr("Choose distinct installed applications."));
+            return false;
+        }
+        selected.insert(id);
+    }
+    configured["appCollection"] = QJsonObject{{"mode", "selected"}, {"ids", QJsonArray::fromVariantList(apps)}};
+    nodes[0] = configured;
+    return true;
 }
 
 bool

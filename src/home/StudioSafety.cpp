@@ -143,82 +143,107 @@ StudioSession::healthFindings() const
     if (!currentProfile() || !m_model)
         return findings;
     const auto document = QJsonDocument::fromJson(m_draft).object();
-    QSet<QString> pages;
+    QSet<QString> pageIds;
     for (const auto& value : document["pages"].toArray())
-        pages.insert(value.toObject()["id"].toString());
-    const auto inspect = [&](const QJsonObject& page, const QString& pageId)
-    {
-        int reachable = 0;
-        const auto components = page["components"].toArray();
-        QHash<QString, QJsonObject> nodes;
-        for (const auto& value : components)
-            nodes.insert(value.toObject()["id"].toString(), value.toObject());
-        const auto visible = [&](QJsonObject item)
-        {
-            for (int depth = 0; depth <= 4; ++depth)
-            {
-                if (item["hidden"].toBool())
-                    return false;
-                const auto parent = item["parentId"].toString();
-                if (parent.isEmpty())
-                    return true;
-                item = nodes.value(parent);
-            }
-            return false;
-        };
-        const auto add = [&](const QString& id, const QString& property, const QString& message)
-        {
-            if (findings.size() < 256)
-                findings.append(QVariantMap{{"pageId", pageId},
-                                            {"componentId", id},
-                                            {"property", property},
-                                            {"message", message},
-                                            {"blocking", false}});
-        };
-        for (const auto& value : page["components"].toArray())
-        {
-            const auto item = value.toObject();
-            const auto id = item["id"].toString();
-            const auto actionVal =
-                item.contains("actions") && item["actions"].isArray() && !item["actions"].toArray().isEmpty()
-                    ? item["actions"].toArray().first().toObject()
-                    : item["action"].toObject();
-            const auto presentation = item["presentation"].toObject();
-            const auto type = item["componentType"].toString();
-            if (visible(item) &&
-                (!actionVal.isEmpty() || item["kind"] == "app" || type == "library" || type == "carousel"))
-                ++reachable;
-            if (actionVal["type"] == "open-page" && !pages.contains(actionVal["pageId"].toString()))
-                add(id, "action", tr("The destination page is missing. Choose another destination."));
-            if (actionVal["type"] == "root-page" && !m_model->rootPageVisible())
-                add(id, "action", tr("The root page is hidden. Choose an available destination."));
-            const auto appId = item["appId"].toString();
-            if (!appId.isEmpty() && !m_live->registry()->find(appId))
-                add(id, "source", tr("This app is unavailable. Keep the placeholder or choose another app."));
-            const auto artwork = item["customLogo"].toString();
-            if (!artwork.isEmpty() && !QFileInfo::exists(QUrl(m_model->managedArtworkSource(artwork)).toLocalFile()))
-                add(id, "customLogo", tr("Managed artwork is missing. Choose another image or keep the placeholder."));
-            if (item["name"].toString().size() > 80)
-                add(id, "name", tr("This long label may be clipped. Review it at the current viewport."));
-            if ((type == "button" || type == "image") && actionVal.isEmpty())
-                add(id, "action", tr("This component has no action. Intentional decoration can be kept."));
-            if (type == "text" && presentation["bodyText"].toString().isEmpty())
-                add(id, "bodyText", tr("This text is empty. Add text or keep it intentionally empty."));
-            if (type == "library" && item["source"].toObject().isEmpty())
-                add(id, "source", tr("Choose a content source or keep this empty component."));
-        }
-        if (!reachable)
-            add({},
-                "navigation",
-                tr("No visible content action. The permanent Settings/Edit recovery remains available."));
-    };
-    inspect(document, {});
+        pageIds.insert(value.toObject()["id"].toString());
     for (const auto& value : document["pages"].toArray())
     {
         const auto entry = value.toObject();
-        inspect(entry["layout"].toObject(), entry["id"].toString());
+        inspectPageComponents(entry["layout"].toObject(), entry["id"].toString(), findings, pageIds);
     }
     return findings;
+}
+
+bool
+StudioSession::isComponentVisible(const QJsonObject& item, const QHash<QString, QJsonObject>& nodes) const
+{
+    auto current = item;
+    for (int depth = 0; depth <= 4; ++depth)
+    {
+        if (current["hidden"].toBool())
+            return false;
+        const auto parent = current["parentId"].toString();
+        if (parent.isEmpty())
+            return true;
+        current = nodes.value(parent);
+    }
+    return false;
+}
+
+void
+StudioSession::inspectPageComponents(const QJsonObject& page, const QString& pageId, QVariantList& findings,
+                                     const QSet<QString>& pageIds) const
+{
+    const auto components = page["components"].toArray();
+    QHash<QString, QJsonObject> nodes;
+    for (const auto& value : components)
+        nodes.insert(value.toObject()["id"].toString(), value.toObject());
+    int reachable = 0;
+    for (const auto& value : components)
+    {
+        const auto item = value.toObject();
+        const auto id = item["id"].toString();
+        const auto actionVal =
+            item.contains("actions") && item["actions"].isArray() && !item["actions"].toArray().isEmpty()
+                ? item["actions"].toArray().first().toObject()
+                : item["action"].toObject();
+        const auto presentation = item["presentation"].toObject();
+        const auto type = item["componentType"].toString();
+        if (isComponentVisible(item, nodes) &&
+            (!actionVal.isEmpty() || item["kind"] == "app" || type == "library" || type == "carousel"))
+            ++reachable;
+        inspectComponentItem(item, pageId, findings, actionVal, pageIds);
+    }
+    if (!reachable)
+        addHealthFinding(findings, pageId, {}, "navigation",
+                         tr("No visible content action. The permanent Settings/Edit recovery remains available."));
+}
+
+void
+StudioSession::inspectComponentItem(const QJsonObject& item, const QString& pageId, QVariantList& findings,
+                                    const QJsonObject& actionVal, const QSet<QString>& pageIds) const
+{
+    const auto id = item["id"].toString();
+    if (actionVal["type"] == "open-page" && !pageIds.contains(actionVal["pageId"].toString()))
+        addHealthFinding(findings, pageId, id, "action",
+                         tr("The destination page is missing. Choose another destination."));
+    if (actionVal["type"] == "root-page" && !m_model->rootPageVisible())
+        addHealthFinding(findings, pageId, id, "action",
+                         tr("The root page is hidden. Choose an available destination."));
+    const auto appId = item["appId"].toString();
+    if (!appId.isEmpty() && !m_live->registry()->find(appId))
+        addHealthFinding(findings, pageId, id, "source",
+                         tr("This app is unavailable. Keep the placeholder or choose another app."));
+    const auto artwork = item["customLogo"].toString();
+    if (!artwork.isEmpty() && !QFileInfo::exists(QUrl(m_model->managedArtworkSource(artwork)).toLocalFile()))
+        addHealthFinding(findings, pageId, id, "customLogo",
+                         tr("Managed artwork is missing. Choose another image or keep the placeholder."));
+    if (item["name"].toString().size() > 80)
+        addHealthFinding(findings, pageId, id, "name",
+                         tr("This long label may be clipped. Review it at the current viewport."));
+    const auto type = item["componentType"].toString();
+    const auto presentation = item["presentation"].toObject();
+    if ((type == "button" || type == "image") && actionVal.isEmpty())
+        addHealthFinding(findings, pageId, id, "action",
+                         tr("This component has no action. Intentional decoration can be kept."));
+    if (type == "text" && presentation["bodyText"].toString().isEmpty())
+        addHealthFinding(findings, pageId, id, "bodyText",
+                         tr("This text is empty. Add text or keep it intentionally empty."));
+    if (type == "library" && item["source"].toObject().isEmpty())
+        addHealthFinding(findings, pageId, id, "source",
+                         tr("Choose a content source or keep this empty component."));
+}
+
+void
+StudioSession::addHealthFinding(QVariantList& findings, const QString& pageId, const QString& componentId,
+                                const QString& property, const QString& message) const
+{
+    if (findings.size() < 256)
+        findings.append(QVariantMap{{"pageId", pageId},
+                                    {"componentId", componentId},
+                                    {"property", property},
+                                    {"message", message},
+                                    {"blocking", false}});
 }
 
 bool

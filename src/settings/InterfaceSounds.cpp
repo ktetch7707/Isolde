@@ -137,11 +137,29 @@ InterfaceSounds::validOptions(const QVariantMap& options)
 {
     if (options.size() != 5 || !number(options.value("schemaVersion"), 1, 1))
         return false;
-    const auto defaults = options.value("defaults").toMap(), tones = options.value("tones").toMap();
-    if (defaults.size() != 4 || defaults.value("enabled").metaType().id() != QMetaType::Bool ||
-        defaults.value("duringPlayback").metaType().id() != QMetaType::Bool ||
-        !number(defaults.value("volume"), 0, 100) || defaults.value("theme") != "resource.uisounds.kodi" ||
-        tones.size() != 4)
+    if (!validateDefaults(options.value("defaults").toMap()))
+        return false;
+    if (!validateTones(options.value("tones").toMap()))
+        return false;
+    if (!validateEvents(options.value("events").toList(), options.value("tones").toMap()))
+        return false;
+    return validateFields(options.value("fields").toList());
+}
+
+bool
+InterfaceSounds::validateDefaults(const QVariantMap& defaults)
+{
+    return defaults.size() == 4 &&
+           defaults.value("enabled").metaType().id() == QMetaType::Bool &&
+           defaults.value("duringPlayback").metaType().id() == QMetaType::Bool &&
+           number(defaults.value("volume"), 0, 100) &&
+           defaults.value("theme") == "resource.uisounds.kodi";
+}
+
+bool
+InterfaceSounds::validateTones(const QVariantMap& tones)
+{
+    if (tones.size() != 4)
         return false;
     for (const auto& name : QStringList{"move", "select", "back", "error"})
     {
@@ -150,41 +168,63 @@ InterfaceSounds::validOptions(const QVariantMap& options)
             !number(spec.value("durationMs"), 10, 150))
             return false;
     }
-    if (options.value("events").metaType().id() != QMetaType::QVariantList ||
-        options.value("events").toList().size() != Events.size())
+    return true;
+}
+
+bool
+InterfaceSounds::validateEvents(const QVariantList& events, const QVariantMap& tones)
+{
+    if (events.metaType().id() != QMetaType::QVariantList || events.size() != Events.size())
         return false;
     QSet<QString> ids;
-    for (const auto& value : options.value("events").toList())
+    for (const auto& value : events)
     {
-        const auto entry = value.toMap();
-        const auto id = entry.value("id").toString();
-        if (entry.size() != 4 || !Events.contains(id) || ids.contains(id) || !label(entry.value("label"), 80) ||
-            !tones.contains(entry.value("tone").toString()) ||
-            entry.value("kodi").metaType().id() != QMetaType::QVariantList)
+        if (!validateEventEntry(value.toMap(), tones, ids))
             return false;
-        ids.insert(id);
-        QSet<QString> aliases;
-        const auto list = entry.value("kodi").toList();
-        if (list.isEmpty() || list.size() > 2)
-            return false;
-        for (const auto& alias : list)
-        {
-            if (alias.metaType().id() != QMetaType::QString || !KodiActions.contains(alias.toString()) ||
-                aliases.contains(alias.toString()))
-                return false;
-            aliases.insert(alias.toString());
-        }
     }
-    const QSet<QString> fields{"enabled", "theme", "volume", "duringPlayback", "preview", "refresh"};
-    QSet<QString> seen;
-    if (options.value("fields").metaType().id() != QMetaType::QVariantList ||
-        options.value("fields").toList().size() != fields.size())
+    return true;
+}
+
+bool
+InterfaceSounds::validateEventEntry(const QVariantMap& entry, const QVariantMap& tones, QSet<QString>& ids)
+{
+    const auto id = entry.value("id").toString();
+    if (entry.size() != 4 || !Events.contains(id) || ids.contains(id) || !label(entry.value("label"), 80) ||
+        !tones.contains(entry.value("tone").toString()) ||
+        entry.value("kodi").metaType().id() != QMetaType::QVariantList)
         return false;
-    for (const auto& value : options.value("fields").toList())
+    ids.insert(id);
+    return validateEventAliases(entry.value("kodi").toList());
+}
+
+bool
+InterfaceSounds::validateEventAliases(const QVariantList& list)
+{
+    if (list.isEmpty() || list.size() > 2)
+        return false;
+    QSet<QString> aliases;
+    for (const auto& alias : list)
+    {
+        if (alias.metaType().id() != QMetaType::QString || !KodiActions.contains(alias.toString()) ||
+            aliases.contains(alias.toString()))
+            return false;
+        aliases.insert(alias.toString());
+    }
+    return true;
+}
+
+bool
+InterfaceSounds::validateFields(const QVariantList& fields)
+{
+    const QSet<QString> fieldSet{"enabled", "theme", "volume", "duringPlayback", "preview", "refresh"};
+    QSet<QString> seen;
+    if (fields.metaType().id() != QMetaType::QVariantList || fields.size() != fieldSet.size())
+        return false;
+    for (const auto& value : fields)
     {
         const auto field = value.toMap();
         const auto key = field.value("key").toString();
-        if (field.size() != 3 || !fields.contains(key) || seen.contains(key) || !label(field.value("label"), 80) ||
+        if (field.size() != 3 || !fieldSet.contains(key) || seen.contains(key) || !label(field.value("label"), 80) ||
             !label(field.value("help"), 240))
             return false;
         seen.insert(key);
@@ -197,51 +237,82 @@ InterfaceSounds::validWave(const QByteArray& bytes)
 {
     if (bytes.size() < 44 || bytes.size() > MaxWave || bytes.left(4) != "RIFF" || bytes.mid(8, 4) != "WAVE")
         return false;
-    const auto u16 = [&](qsizetype p)
-    {
-        return qFromLittleEndian<quint16>(bytes.constData() + p);
-    };
-    const auto u32 = [&](qsizetype p)
-    {
-        return qFromLittleEndian<quint32>(bytes.constData() + p);
-    };
-    if (quint64(u32(4)) + 8 != quint64(bytes.size()))
+    if (quint64(u32(bytes, 4)) + 8 != quint64(bytes.size()))
         return false;
-    bool format = false, data = false;
     quint32 rate = 0, dataSize = 0;
     quint16 frame = 0;
-    for (qsizetype p = 12; p + 8 <= bytes.size();)
+    bool dataFound = false;
+    qsizetype p = 12;
+    while (p + 8 <= bytes.size())
     {
-        const auto size = u32(p + 4);
+        const auto size = u32(bytes, p + 4);
         const auto start = p + 8;
         if (quint64(start) + size > quint64(bytes.size()))
             return false;
         if (bytes.mid(p, 4) == "fmt ")
         {
-            if (format || size < 16 || u16(start) != 1)
+            if (!validWaveFormat(bytes, start, rate, frame))
                 return false;
-            const auto channels = u16(start + 2), bits = u16(start + 14);
-            rate = u32(start + 4);
-            frame = u16(start + 12);
-            if ((channels != 1 && channels != 2) || !QList<int>{8, 16, 24, 32}.contains(bits) || rate < 8000 ||
-                rate > 96000 || frame != channels * bits / 8 || u32(start + 8) != rate * frame)
-                return false;
-            format = true;
         }
         else if (bytes.mid(p, 4) == "data")
         {
-            if (data || !size)
+            if (!validWaveData(bytes, start, size, frame, dataFound))
                 return false;
-            data = true;
+            dataFound = true;
             dataSize = size;
         }
         p = start + size + (size & 1);
         if (p > bytes.size())
             return false;
         if (p == bytes.size())
-            return format && data && dataSize % frame == 0 && quint64(dataSize) <= quint64(rate) * frame * 2;
+            return validWaveFinal(dataFound, dataSize, rate, frame);
     }
     return false;
+}
+
+bool
+InterfaceSounds::validWaveFormat(const QByteArray& bytes, qsizetype start, quint32& rate, quint16& frame)
+{
+    const auto size = u32(bytes, start - 4);
+    if (size < 16 || u16(bytes, start) != 1)
+        return false;
+    const auto channels = u16(bytes, start + 2), bits = u16(bytes, start + 14);
+    rate = u32(bytes, start + 4);
+    frame = u16(bytes, start + 12);
+    if ((channels != 1 && channels != 2) || !QList<int>{8, 16, 24, 32}.contains(bits) || rate < 8000 ||
+        rate > 96000 || frame != channels * bits / 8 || u32(bytes, start + 8) != rate * frame)
+        return false;
+    return true;
+}
+
+bool
+InterfaceSounds::validWaveData(const QByteArray& bytes, qsizetype start, quint32 size, quint16 frame, bool& dataFound)
+{
+    Q_UNUSED(bytes);
+    Q_UNUSED(start);
+    Q_UNUSED(frame);
+    if (size == 0)
+        return false;
+    dataFound = true;
+    return true;
+}
+
+bool
+InterfaceSounds::validWaveFinal(bool dataFound, quint32 dataSize, quint32 rate, quint16 frame)
+{
+    return dataFound && dataSize % frame == 0 && quint64(dataSize) <= quint64(rate) * frame * 2;
+}
+
+quint16
+InterfaceSounds::u16(const QByteArray& bytes, qsizetype p)
+{
+    return qFromLittleEndian<quint16>(bytes.constData() + p);
+}
+
+quint32
+InterfaceSounds::u32(const QByteArray& bytes, qsizetype p)
+{
+    return qFromLittleEndian<quint32>(bytes.constData() + p);
 }
 
 QVariantMap

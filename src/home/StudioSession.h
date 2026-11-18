@@ -104,6 +104,14 @@ class StudioSession final : public QObject
     QVariantList
     healthFindings() const;
     bool
+    isComponentVisible(const QJsonObject& item, const QHash<QString, QJsonObject>& nodes) const;
+    void
+    inspectPageComponents(const QJsonObject& page, const QString& pageId, QVariantList& findings,
+                          const QSet<QString>& pageIds) const;
+    void
+    inspectComponentItem(const QJsonObject& item, const QString& pageId, QVariantList& findings,
+                         const QJsonObject& actionVal, const QSet<QString>& pageIds) const;
+    bool
     editorLocked() const
     {
         return m_editorLocked;
@@ -161,6 +169,20 @@ class StudioSession final : public QObject
     clearReferenceImage();
     Q_INVOKABLE QVariantMap
     componentPrototype(const QString& type, const QVariantMap& configuration = {});
+    bool
+    applyVariantSelection(const QVariantMap& configuration, const QVariantMap& options, const QString& type,
+                          QJsonObject& configured);
+    bool
+    validateComponentConfigKeys(const QVariantMap& configuration);
+    bool
+    applyCarouselButtons(const QVariantMap& configuration, const QVariantMap& options, const QString& type,
+                         QJsonObject& configured, QJsonArray& nodes);
+    bool
+    applyAppCollection(const QVariantMap& configuration, QJsonObject& configured, QJsonArray& nodes);
+    bool
+    validatePrototypePrerequisites(const QString& type, const QVariantMap& options, QJsonArray& nodes);
+    QVariantMap
+    finalizePrototype(const QString& type, QJsonArray& nodes);
     Q_INVOKABLE QVariantMap
     replacementProposal(const QString& id, const QString& type, const QString& pageId = {});
     Q_INVOKABLE QVariantList
@@ -171,6 +193,14 @@ class StudioSession final : public QObject
     artworkPreview(const QString& source);
     Q_INVOKABLE QString
     stageArtwork(const QString& source);
+    bool
+    validateArtworkSource(const QString& source, QString& path) const;
+    bool
+    validateArtworkFile(const QFileInfo& info, QByteArray& data) const;
+    bool
+    validateArtworkFormat(const QByteArray& data, QImageReader& reader, bool& gif) const;
+    bool
+    checkArtworkBudget(const QByteArray& data, const QString& relative) const;
     Q_INVOKABLE QVariantMap
     cleanIconArtwork(const QString& source, int strength = 1, const QString& background = {});
     Q_INVOKABLE QVariantList

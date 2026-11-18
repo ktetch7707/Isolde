@@ -297,6 +297,23 @@ validateStringMatch(const QStringList& values, const QString& target, const QStr
 QVariantMap
 ComponentSchema::guideOptions(const QVariantMap& value, QString* error)
 {
+    if (!validateGuideOptionsBasics(value, error))
+        return {};
+    QVariantMap presentation;
+    if (!validateGuideOverlayPresentation(value, presentation, error))
+        return {};
+    if (!validateGuideToolbar(value, error))
+        return {};
+    if (!validateGuideSources(value, error))
+        return {};
+    if (error)
+        error->clear();
+    return value;
+}
+
+bool
+ComponentSchema::validateGuideOptionsBasics(const QVariantMap& value, QString* error)
+{
     if (!keys(value,
               {"rows",
                "minutes",
@@ -321,7 +338,13 @@ ComponentSchema::guideOptions(const QVariantMap& value, QString* error)
         value.value("toolbar").metaType().id() != QMetaType::QVariantList ||
         value.value("sources").metaType().id() != QMetaType::QVariantList)
         return reject(error, "Invalid guide appearance and controls.");
-    QVariantMap presentation;
+    return true;
+}
+
+bool
+ComponentSchema::validateGuideOverlayPresentation(const QVariantMap& value, QVariantMap& presentation,
+                                                  QString* error)
+{
     const QMap<QString, QString> overlayKeys{{"surface", "guideSurface"},
                                              {"overlayWidth", "guideOverlayWidth"},
                                              {"overlayHeight", "guideOverlayHeight"},
@@ -332,6 +355,12 @@ ComponentSchema::guideOptions(const QVariantMap& value, QString* error)
             presentation[it.value()] = value.value(it.key());
     if (!validPresentation(presentation, true))
         return reject(error, "Invalid guide overlay presentation.");
+    return true;
+}
+
+bool
+ComponentSchema::validateGuideToolbar(const QVariantMap& value, QString* error)
+{
     QSet<QString> seen;
     for (const auto& v : value.value("toolbar").toList())
     {
@@ -346,7 +375,13 @@ ComponentSchema::guideOptions(const QVariantMap& value, QString* error)
     if (!seen.contains("now") || !seen.contains("add") || !seen.contains("manage") || !seen.contains("sources") ||
         !seen.contains("close"))
         return reject(error, "Keep guide recovery and creation controls reachable.");
-    seen.clear();
+    return true;
+}
+
+bool
+ComponentSchema::validateGuideSources(const QVariantMap& value, QString* error)
+{
+    QSet<QString> seen;
     const auto sources = value.value("sources").toList();
     if (sources.size() > 32)
         return reject(error, "Too many guide service destinations.");
@@ -364,9 +399,7 @@ ComponentSchema::guideOptions(const QVariantMap& value, QString* error)
             return reject(error, "Invalid guide service destination.");
         seen.insert(id);
     }
-    if (error)
-        error->clear();
-    return value;
+    return true;
 }
 QVariantMap
 ComponentSchema::guideRule(const QVariantMap& value, QString* error)

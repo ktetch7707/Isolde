@@ -289,6 +289,10 @@ QVariantMap guideRule(const QVariantMap& value, QString* error = nullptr);
  * @return A valid guide options map if validation succeeds, empty map otherwise.
  */
 QVariantMap guideOptions(const QVariantMap& value, QString* error = nullptr);
+bool validateGuideOptionsBasics(const QVariantMap& value, QString* error);
+bool validateGuideOverlayPresentation(const QVariantMap& value, QVariantMap& presentation, QString* error);
+bool validateGuideToolbar(const QVariantMap& value, QString* error);
+bool validateGuideSources(const QVariantMap& value, QString* error);
 
 /** Validates a game registration document (title, platform, runtime, root, target, optional steam app id).
  * @brief Validates a game registration document: title, platform, runtime, root, target, optional steam app id.

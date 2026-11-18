@@ -138,7 +138,29 @@ class InterfaceSounds final : public QObject
     static bool
     validOptions(const QVariantMap& options);
     static bool
+    validateDefaults(const QVariantMap& defaults);
+    static bool
+    validateTones(const QVariantMap& tones);
+    static bool
+    validateEvents(const QVariantList& events, const QVariantMap& tones);
+    static bool
+    validateEventEntry(const QVariantMap& entry, const QVariantMap& tones, QSet<QString>& ids);
+    static bool
+    validateEventAliases(const QVariantList& list);
+    static bool
+    validateFields(const QVariantList& fields);
+    static bool
     validWave(const QByteArray& bytes);
+    static bool
+    validWaveFormat(const QByteArray& bytes, qsizetype& p, quint32& rate, quint16& frame);
+    static bool
+    validWaveData(const QByteArray& bytes, qsizetype& p, quint32 dataSize, quint16 frame, bool& dataFound);
+    static bool
+    validWaveFinal(bool dataFound, quint32 dataSize, quint32 rate, quint16 frame);
+    static quint16
+    u16(const QByteArray& bytes, qsizetype p);
+    static quint32
+    u32(const QByteArray& bytes, qsizetype p);
   signals:
     void
     changed();

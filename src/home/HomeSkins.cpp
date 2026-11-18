@@ -174,70 +174,101 @@ HomeLayout::applySkinDocument(QJsonObject document, const QJsonObject& assets, b
     const auto previous = documentData();
     const auto legacy = m_legacyDocument;
     QJsonArray mergedPages = m_pages;
-    if (addMissingPages)
-    {
-        if (m_owner)
-        {
-            setError(tr("Apply this page-set skin from Home to add its library pages."));
-            return false;
-        }
-        HomeLayout validator(m_registry);
-        if (!validator.loadDocument(QJsonDocument(document).toJson(), false))
-        {
-            setError(validator.errorString());
-            return false;
-        }
-        for (const auto& entry : document["pages"].toArray())
-        {
-            bool exists = false;
-            for (const auto& saved : mergedPages)
-                if (saved.toObject()["id"] == entry.toObject()["id"])
-                    exists = true;
-            if (!exists)
-                mergedPages.append(entry);
-        }
-        document.remove("pages");
-    }
-    const bool singlePage = !m_owner && !document.contains("pages");
-    const auto wrap = [&](QJsonObject page)
-    {
-        if (!singlePage)
-            return page;
-        if (m_homePageId.isEmpty())
-        {
-            page["pages"] = mergedPages;
-            page["homePageId"] = m_homePageId;
-            if (!m_rootPage.isEmpty())
-                page["rootPage"] = m_rootPage;
-            if (!m_studioAppearance.isEmpty())
-                page["studioAppearance"] = QJsonObject::fromVariantMap(m_studioAppearance);
-            return page;
-        }
-        page.remove("rootPage");
-        page.remove("homePageId");
-        page.remove("studioAppearance");
-        HomeLayout converted(m_registry);
-        converted.m_owner = this;
-        if (!converted.loadDocument(QJsonDocument(page).toJson(), false))
-            return QJsonObject{};
-        page = QJsonDocument::fromJson(converted.documentData()).object();
-        auto root = QJsonDocument::fromJson(previous).object();
-        auto pages = mergedPages;
-        for (int i = 0; i < pages.size(); ++i)
-            if (pages[i].toObject()["id"] == m_homePageId)
-            {
-                auto entry = pages[i].toObject();
-                entry["layout"] = page;
-                pages[i] = entry;
-            }
-        root["pages"] = pages;
-        return root;
-    };
+    if (addMissingPages && !applySkinAddMissingPages(document, mergedPages))
+        return false;
+    document = applySkinWrapSinglePage(document, mergedPages, previous);
     // Validate the entire document before importing artwork or replacing the current layout.
-    if (!loadDocument(QJsonDocument(wrap(document)).toJson(), false))
+    if (!loadDocument(QJsonDocument(document).toJson(), false))
         return false;
     loadDocument(previous, false);
     m_legacyDocument = legacy;
+    if (!applySkinValidateArtwork(document, assets))
+    {
+        setError(tr("This skin has missing or invalid artwork. Your Home has not changed."));
+        return false;
+    }
+    if (!loadDocument(QJsonDocument(document).toJson(), false) || !save())
+    {
+        const auto error = m_errorString;
+        loadDocument(previous, false);
+        m_legacyDocument = legacy;
+        setError(error);
+        return false;
+    }
+    emit layoutChanged();
+    return true;
+}
+
+QJsonArray
+HomeLayout::applySkinAddMissingPages(QJsonObject document, QJsonArray& mergedPages) const
+{
+    if (m_owner)
+    {
+        setError(tr("Apply this page-set skin from Home to add its library pages."));
+        return {};
+    }
+    HomeLayout validator(m_registry);
+    if (!validator.loadDocument(QJsonDocument(document).toJson(), false))
+    {
+        setError(validator.errorString());
+        return {};
+    }
+    for (const auto& entry : document["pages"].toArray())
+    {
+        bool exists = false;
+        for (const auto& saved : mergedPages)
+            if (saved.toObject()["id"] == entry.toObject()["id"])
+                exists = true;
+        if (!exists)
+            mergedPages.append(entry);
+    }
+    document.remove("pages");
+    return mergedPages;
+}
+
+QJsonObject
+HomeLayout::applySkinWrapSinglePage(QJsonObject document, const QJsonArray& mergedPages,
+                                    const QJsonObject& previous)
+{
+    const bool singlePage = !m_owner && !document.contains("pages");
+    if (!singlePage)
+        return document;
+    if (m_homePageId.isEmpty())
+    {
+        QJsonObject page = document;
+        page["pages"] = mergedPages;
+        page["homePageId"] = m_homePageId;
+        if (!m_rootPage.isEmpty())
+            page["rootPage"] = m_rootPage;
+        if (!m_studioAppearance.isEmpty())
+            page["studioAppearance"] = QJsonObject::fromVariantMap(m_studioAppearance);
+        return page;
+    }
+    QJsonObject page = document;
+    page.remove("rootPage");
+    page.remove("homePageId");
+    page.remove("studioAppearance");
+    HomeLayout converted(m_registry);
+    converted.m_owner = this;
+    if (!converted.loadDocument(QJsonDocument(page).toJson(), false))
+        return QJsonObject{};
+    page = QJsonDocument::fromJson(converted.documentData()).object();
+    auto root = previous;
+    auto pages = mergedPages;
+    for (int i = 0; i < pages.size(); ++i)
+        if (pages[i].toObject()["id"] == m_homePageId)
+        {
+            auto entry = pages[i].toObject();
+            entry["layout"] = page;
+            pages[i] = entry;
+        }
+    root["pages"] = pages;
+    return root;
+}
+
+bool
+HomeLayout::applySkinValidateArtwork(QJsonObject document, const QJsonObject& assets) const
+{
     bool valid = true;
     document =
         artwork(document,
@@ -276,22 +307,7 @@ HomeLayout::applySkinDocument(QJsonObject document, const QJsonObject& assets, b
                     return relative;
                 })
             .toObject();
-    if (!valid)
-    {
-        setError(tr("This skin has missing or invalid artwork. Your Home has not changed."));
-        return false;
-    }
-    document = wrap(document);
-    if (!loadDocument(QJsonDocument(document).toJson(), false) || !save())
-    {
-        const auto error = m_errorString;
-        loadDocument(previous, false);
-        m_legacyDocument = legacy;
-        setError(error);
-        return false;
-    }
-    emit layoutChanged();
-    return true;
+    return valid;
 }
 QJsonObject
 HomeLayout::skinSnapshot(const QString& id) const
