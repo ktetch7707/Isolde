@@ -186,53 +186,71 @@ PageModel::resolveItems(const QJsonArray& components) const
             item.insert("actions", actionList);
         }
         if (item.value("kind") == QStringLiteral("app"))
-        {
-            const auto appId = item.value("appId").toString();
-            const auto* app = registry ? registry->find(appId) : nullptr;
-            item.insert("name",
-                        !item.value("name").toString().isEmpty() ? item.value("name")
-                        : app                                    ? app->name
-                                                                 : appId);
-            item.insert("section", app ? app->section : QStringLiteral("Missing app"));
-            const auto tileSymbol = item.value("symbol").toString();
-            const auto tileAccent = item.value("accent").toString();
-            item.insert("symbol", tileSymbol.isEmpty() ? (app ? app->symbol : QStringLiteral("?")) : tileSymbol);
-            item.insert("accent",
-                        tileAccent.isEmpty() ? (app ? app->accent.name() : QStringLiteral("#64748B")) : tileAccent);
-            item.insert("presentationMode", app ? app->presentationMode : QStringLiteral("native-tv"));
-            item.insert("networkRequirement", app ? app->networkRequirement : QStringLiteral("none"));
-        }
+            item = resolveItemAppFields(item, registry);
         else if (item.value("kind") == QStringLiteral("action"))
-        {
-            const auto section = item.value("section").toString();
-            const auto symbol = item.value("symbol").toString();
-            const auto accent = item.value("accent").toString();
-            const auto networkRequirement = item.value("networkRequirement").toString();
-            item.insert("section", section.isEmpty() ? QCoreApplication::translate("PageModel", "Custom") : section);
-            item.insert("symbol", symbol.isEmpty() ? QStringLiteral("•") : symbol);
-            item.insert("accent", accent.isEmpty() ? QStringLiteral("#64748B") : accent);
-            item.insert("networkRequirement",
-                        networkRequirement.isEmpty() ? QStringLiteral("none") : networkRequirement);
-        }
+            item = resolveItemActionFields(item);
         const auto logoFile = item.value("customLogo").toString();
         item.insert("logoSource", m_owner ? m_owner->resolveArtwork(logoFile) : QString());
-        auto unavailable =
-            ComponentSchema::unavailable(actionList.isEmpty() ? QVariantMap() : actionList.first().toMap(),
-                                         registry,
-                                         m_owner ? m_owner->m_collections : QVariantList{});
-        if (unavailable.isEmpty() && !actionList.isEmpty() &&
-            actionList.first().toMap().value("type").toString() == QStringLiteral("switch-input") &&
-            (!m_owner || !m_owner->m_captureInputsReady))
-        {
-            unavailable = QCoreApplication::translate("PageModel", "Configure Settings → System → HDMI Inputs");
-        }
-        if (object.value("requiredCapability") == "capture-inputs" && (!m_owner || !m_owner->m_captureInputsReady))
-            unavailable =
-                QCoreApplication::translate("PageModel", "HDMI capture unavailable · configure inputs in Settings");
+        const auto unavailable = resolveItemUnavailableReason(item, actionList, registry);
         item.insert("unavailableReason", unavailable);
         result.append(ComponentSchema::component(item, true));
     }
     return result;
+}
+
+QVariantMap
+PageModel::resolveItemAppFields(const QVariantMap& item, const ComponentRegistry* registry) const
+{
+    const auto appId = item.value("appId").toString();
+    const auto* app = registry ? registry->find(appId) : nullptr;
+    auto updated = item;
+    updated.insert("name",
+                   !updated.value("name").toString().isEmpty() ? updated.value("name") : app ? app->name : appId);
+    updated.insert("section", app ? app->section : QStringLiteral("Missing app"));
+    const auto tileSymbol = updated.value("symbol").toString();
+    const auto tileAccent = updated.value("accent").toString();
+    updated.insert("symbol", tileSymbol.isEmpty() ? (app ? app->symbol : QStringLiteral("?")) : tileSymbol);
+    updated.insert("accent",
+                   tileAccent.isEmpty() ? (app ? app->accent.name() : QStringLiteral("#64748B")) : tileAccent);
+    updated.insert("presentationMode", app ? app->presentationMode : QStringLiteral("native-tv"));
+    updated.insert("networkRequirement", app ? app->networkRequirement : QStringLiteral("none"));
+    return updated;
+}
+
+QVariantMap
+PageModel::resolveItemActionFields(const QVariantMap& item) const
+{
+    const auto section = item.value("section").toString();
+    const auto symbol = item.value("symbol").toString();
+    const auto accent = item.value("accent").toString();
+    const auto networkRequirement = item.value("networkRequirement").toString();
+    auto updated = item;
+    updated.insert("section", section.isEmpty() ? QCoreApplication::translate("PageModel", "Custom") : section);
+    updated.insert("symbol", symbol.isEmpty() ? QStringLiteral("•") : symbol);
+    updated.insert("accent", accent.isEmpty() ? QStringLiteral("#64748B") : accent);
+    updated.insert("networkRequirement",
+                   networkRequirement.isEmpty() ? QStringLiteral("none") : networkRequirement);
+    return updated;
+}
+
+QString
+PageModel::resolveItemUnavailableReason(const QVariantMap& item, const QVariantList& actionList,
+                                        const ComponentRegistry* registry) const
+{
+    auto unavailable =
+        ComponentSchema::unavailable(actionList.isEmpty() ? QVariantMap() : actionList.first().toMap(),
+                                     registry,
+                                     m_owner ? m_owner->m_collections : QVariantList{});
+    if (unavailable.isEmpty() && !actionList.isEmpty() &&
+        actionList.first().toMap().value("type").toString() == QStringLiteral("switch-input") &&
+        (!m_owner || !m_owner->m_captureInputsReady))
+    {
+        unavailable = QCoreApplication::translate("PageModel", "Configure Settings → System → HDMI Inputs");
+    }
+    if (item.value("requiredCapability") == "capture-inputs" && (!m_owner || !m_owner->m_captureInputsReady))
+        unavailable =
+            QCoreApplication::translate("PageModel", "HDMI capture unavailable · configure inputs in Settings");
+    return unavailable;
 }
 
 QVariantMap

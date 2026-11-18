@@ -152,6 +152,15 @@ class PageModel final : public QObject
     [[nodiscard]] QVariantList
     resolveItems(const QJsonArray& components) const;
     [[nodiscard]] QVariantMap
+    resolveItemAppFields(const QVariantMap& item, const ComponentRegistry* registry) const;
+    [[nodiscard]] QVariantMap
+    resolveItemActionFields(const QVariantMap& item) const;
+    [[nodiscard]] QVariantMap
+    resolveItemDisplayFields(const QVariantMap& item, const ComponentRegistry* registry) const;
+    [[nodiscard]] QString
+    resolveItemUnavailableReason(const QVariantMap& item, const QVariantList& actionList,
+                                 const ComponentRegistry* registry) const;
+    [[nodiscard]] QVariantMap
     themeDefaults() const;
     bool
     setItemField(const QString& id, std::function<void(QJsonObject&)> mutate);
