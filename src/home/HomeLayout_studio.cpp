@@ -957,27 +957,69 @@ HomeLayout::validateStudioDefaults(QJsonObject& object, QVariantMap& guide) cons
                                      : QVariantMap();
     if (object.contains("guide") && guide.isEmpty())
         return false;
+    if (!validateStudioBasicSettings(object))
+        return false;
+    if (!validateStudioThemeSettings(object))
+        return false;
+    if (!validateStudioLayoutSettings(object))
+        return false;
+    const auto presets = object["componentPresets"].toObject();
+    if (!validateStudioContentSettings(object, presets))
+        return false;
+    const auto actionCategories = object["actionCategories"].toArray();
+    if (!object["actionCategories"].isArray() || actionCategories.isEmpty() || actionCategories.size() > 12)
+        return false;
+    if (!validateStudioActionCategoryTypes(actionCategories))
+        return false;
+    if (!validateStudioGridModeIds(object["gridModes"].toArray()))
+        return false;
+    const QStringList overlayKeys{"surface", "overlayWidth", "overlayHeight", "overlayRows", "overlayPosition"};
+    if (!validateStudioOverlayKeys(overlayKeys, {}))
+        return false;
+    return true;
+}
+
+bool
+HomeLayout::validateStudioBasicSettings(QJsonObject& object) const
+{
     if (!validateStudioHeaderDefaults(object.value("headerDefaults").toObject()))
         return false;
     if (!validateStudioAppPicker(object.value("appPicker").toObject()))
         return false;
     if (!validateStudioDesktop(object.value("desktop").toObject()))
         return false;
-    if (!validateStudioThemeGroups(simple["themeGroups"].toArray()))
+    return true;
+}
+
+bool
+HomeLayout::validateStudioThemeSettings(QJsonObject& object) const
+{
+    if (!validateStudioThemeGroups(object.value("themeGroups").toArray()))
         return false;
-    if (!validateStudioSchemes(simple["schemes"].toArray()))
+    if (!validateStudioSchemes(object.value("schemes").toArray()))
         return false;
-    if (!validateStudioStylePresets(simple["stylePresets"].toArray()))
+    if (!validateStudioStylePresets(object.value("stylePresets").toArray()))
         return false;
     if (!validateStudioTrialDurations(object["trialDurations"].toArray()))
         return false;
+    return true;
+}
+
+bool
+HomeLayout::validateStudioLayoutSettings(QJsonObject& object) const
+{
     if (!validateStudioMenuWidth(object["menuWidth"]))
         return false;
     if (!validateStudioSectionHeight(object["sectionHeight"]))
         return false;
     if (!validateStudioWidgetSpans(object.value("widgetSpans").toObject()))
         return false;
-    const auto presets = object["componentPresets"].toObject();
+    return true;
+}
+
+bool
+HomeLayout::validateStudioContentSettings(QJsonObject& object, const QJsonObject& presets) const
+{
     if (!validateStudioCatalog(object["catalog"].toArray(), presets))
         return false;
     if (!validateStudioActions(object["actions"].toArray()))
@@ -991,16 +1033,6 @@ HomeLayout::validateStudioDefaults(QJsonObject& object, QVariantMap& guide) cons
     if (!validateStudioCatalogIds(object, presets))
         return false;
     if (!validateStudioActionsList(object["actions"].toArray()))
-        return false;
-    const auto actionCategories = object["actionCategories"].toArray();
-    if (!object["actionCategories"].isArray() || actionCategories.isEmpty() || actionCategories.size() > 12)
-        return false;
-    if (!validateStudioActionCategoryTypes(actionCategories))
-        return false;
-    if (!validateStudioGridModeIds(object["gridModes"].toArray()))
-        return false;
-    const QStringList overlayKeys{"surface", "overlayWidth", "overlayHeight", "overlayRows", "overlayPosition"};
-    if (!validateStudioOverlayKeys(overlayKeys, {}))
         return false;
     return true;
 }
