@@ -266,6 +266,11 @@ class StudioSession final : public QObject
                  const QJsonArray& originalEntries, const QString& parent, const QString& category,
                  bool sections, int cols, int rows, QSet<int>& fixed, QList<int>& pending,
                  std::function<bool(QList<int>)>& solve, int& localAttempts, bool& affectedLimit);
+    bool
+    tryPlacementCell(QJsonArray& workingEntries, int index, const QVariantMap& target,
+                     const QJsonArray& originalEntries, QSet<int>& fixed, QList<int>& pending,
+                     int cols, int rows, int& localAttempts, std::function<bool(QList<int>)>& solve,
+                     bool& affectedLimit);
     int
     selectedIndex(const QJsonArray& entries, const QString& id);
     QVariantList

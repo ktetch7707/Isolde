@@ -1086,47 +1086,9 @@ StudioSession::handlePlacementShiftStrategy(const QJsonArray& entries, QJsonArra
                                                             target["x"].toInt(), target["y"].toInt());
         for (int pass = 0; pass < 2; ++pass)
         {
-            for (const auto& cell : cells)
-            {
-                if (++localAttempts > 4096)
-                {
-                    workingEntries = baseline;
-                    fixed = fixedBefore;
-                    return false;
-                }
-                target["x"] = cell.first;
-                target["y"] = cell.second;
-                if (!ComponentSchema::validPlacement(target, cols, rows))
-                    continue;
-                QList<int> displaced = findCollidersForTarget(workingEntries, index, target, parent, category,
-                                                              sections, fixed);
-                bool blocked = false;
-                for (int j : displaced)
-                {
-                    if (fixed.contains(j) || workingEntries[j].toObject().value("locked").toBool())
-                    {
-                        blocked = true;
-                        break;
-                    }
-                }
-                if (shouldSkipShiftCell(blocked, pass, displaced))
-                    continue;
-                auto placed = item;
-                placed["placement"] = QJsonObject::fromVariantMap(target);
-                workingEntries[index] = placed;
-                fixed.insert(index);
-                auto next = pending;
-                next.append(displaced);
-                if (solve(next))
-                    return true;
-                workingEntries = vacant;
-                fixed = fixedBefore;
-                if (localAttempts > 4096)
-                {
-                    workingEntries = baseline;
-                    return false;
-                }
-            }
+            if (!tryPlacementCell(workingEntries, index, target, originalEntries, fixed, pending,
+                                  cols, rows, localAttempts, solve, affectedLimit))
+                return false;
         }
         workingEntries = baseline;
         fixed = fixedBefore;
@@ -1146,6 +1108,56 @@ StudioSession::handlePlacementShiftStrategy(const QJsonArray& entries, QJsonArra
     attempts = localAttempts;
     entriesOut = workingEntries;
     return true;
+}
+
+bool
+StudioSession::tryPlacementCell(QJsonArray& workingEntries, int index, const QVariantMap& target,
+                                const QJsonArray& originalEntries, QSet<int>& fixed, QList<int>& pending,
+                                int cols, int rows, int& localAttempts,
+                                std::function<bool(QList<int>)>& solve, bool& affectedLimit)
+{
+    for (const auto& cell : cells)
+    {
+        if (++localAttempts > 4096)
+        {
+            workingEntries = baseline;
+            fixed = fixedBefore;
+            return false;
+        }
+        target["x"] = cell.first;
+        target["y"] = cell.second;
+        if (!ComponentSchema::validPlacement(target, cols, rows))
+            continue;
+        QList<int> displaced = findCollidersForTarget(workingEntries, index, target, parent, category,
+                                                      sections, fixed);
+        bool blocked = false;
+        for (int j : displaced)
+        {
+            if (fixed.contains(j) || workingEntries[j].toObject().value("locked").toBool())
+            {
+                blocked = true;
+                break;
+            }
+        }
+        if (shouldSkipShiftCell(blocked, pass, displaced))
+            continue;
+        auto placed = item;
+        placed["placement"] = QJsonObject::fromVariantMap(target);
+        workingEntries[index] = placed;
+        fixed.insert(index);
+        auto next = pending;
+        next.append(displaced);
+        if (solve(next))
+            return true;
+        workingEntries = vacant;
+        fixed = fixedBefore;
+        if (localAttempts > 4096)
+        {
+            workingEntries = baseline;
+            return false;
+        }
+    }
+    return false;
 }
 
 int
