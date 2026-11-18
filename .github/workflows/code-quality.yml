@@ -51,8 +51,35 @@ jobs:
             src -- -I src || true
 
       - name: Run Lizard complexity check
+        id: lizard
         run: |
-          python3 -m lizard src -l cpp -C 20 -L 60 -a 5
+          python3 -m lizard src -l cpp -C 20 -L 60 -a 5 --html lizard-report.html || true
+          echo "lizard_exit_code=$?" >> $GITHUB_OUTPUT
+        continue-on-error: true
+
+      - name: 🔴 Lizard Complexity Violations
+        if: steps.lizard.outputs.lizard_exit_code != 0
+        run: |
+          echo "::group::🔴 Lizard Complexity Violations (CCN > 20)"
+          python3 -m lizard src -l cpp -C 20 -L 60 -a 5 || true
+          echo "::endgroup::"
+          echo ""
+          echo "📊 Full HTML report available as workflow artifact: 'lizard-report'"
+          echo "   Open it in a browser for a detailed, sortable table of all violations."
+
+      - name: Upload Lizard HTML report
+        if: steps.lizard.outputs.lizard_exit_code != 0
+        uses: actions/upload-artifact@v4
+        with:
+          name: lizard-report
+          path: lizard-report.html
+          retention-days: 7
+
+      - name: Fail if Lizard violations found
+        if: steps.lizard.outputs.lizard_exit_code != 0
+        run: |
+          echo "::error::Lizard complexity violations found (CCN > 20). See the collapsed '🔴 Lizard Complexity Violations' section above or download the 'lizard-report' artifact for details."
+          exit 1
 
       - name: Run class-size checker
         run: |

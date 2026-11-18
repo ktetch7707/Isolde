@@ -82,36 +82,27 @@ HomeLayout::surfaceAppearance(const QString& surface, const QString& originId) c
     if (!QStringList{"search", "apps", "settings", "kodi"}.contains(surface))
         return {};
     const auto home = homeAppearance();
-    auto origin = home;
+    QVariantMap origin = home;
     QVariantMap originTheme;
     QString originName;
-    if (originId.isEmpty())
-    {
-        originName = rootPageName();
-        const auto raw = appearance();
-        for (const auto& key : m_themeKeys)
-            if (raw.contains(key))
-                originTheme[key] = raw[key];
-    }
-    QString source = rootPageName();
-    for (const auto& entry : m_pages)
-    {
-        const auto page = entry.toObject();
-        if (page["id"] == m_homePageId)
-            source = page["name"].toString();
-        if (!originId.isEmpty() && page["id"] == originId)
-        {
-            originName = page["name"].toString();
-            originTheme = page["layout"].toObject()["theme"].toObject().toVariantMap();
-        }
-    }
-    for (auto it = originTheme.cbegin(); it != originTheme.cend(); ++it)
-        origin[it.key()] = it.value();
-    // Settings never observes an originating page or an editor's private draft.
-    const auto policies = home.value("surfaceThemes").toMap();
+    resolveOriginInfo(surface, originId, home, origin, originTheme, originName);
+    return buildSurfaceAppearance(home, origin, originTheme, originName, surface,
+                                  surfacePolicy(originTheme, surface));
+}
+
+QVariantMap
+HomeLayout::surfacePolicy(const QVariantMap& originTheme, const QString& surface) const
+{
+    const auto policies = home().value("surfaceThemes").toMap();
     const auto localPolicies = originTheme.value("surfaceThemes").toMap();
-    const auto policy =
-        (surface != "settings" && localPolicies.contains(surface) ? localPolicies : policies).value(surface).toMap();
+    return (surface != "settings" && localPolicies.contains(surface) ? localPolicies : policies).value(surface).toMap();
+}
+
+QVariantMap
+HomeLayout::buildSurfaceAppearance(const QVariantMap& home, const QVariantMap& origin,
+                                   const QVariantMap& originTheme, const QString& originName,
+                                   const QString& surface, const QVariantMap& policy) const
+{
     const auto mode = policy.value("mode", surface == "settings" ? "home" : "origin").toString();
     auto effective = mode == "home" || surface == "settings" ? home : origin;
     if (mode == "custom")
@@ -121,9 +112,83 @@ HomeLayout::surfaceAppearance(const QString& surface, const QString& originId) c
             effective[it.key()] = it.value();
     }
     auto result = ComponentSchema::surfacePalette(effective);
-    result["themeSource"] = surface == "settings" || mode == "home" || originName.isEmpty() ? source : originName;
+    result["themeSource"] = surface == "settings" || mode == "home" || originName.isEmpty()
+        ? sourceForPage(surface) : originName;
     result["themeMode"] = mode;
     return result;
+}
+
+QVariantMap
+HomeLayout::resolveOriginInfo(const QString& surface, const QString& originId, const QVariantMap& home,
+                              QVariantMap& origin, QVariantMap& originTheme, QString& originName) const
+{
+    Q_UNUSED(surface);
+    if (originId.isEmpty())
+    {
+        originName = rootPageName();
+        const auto raw = appearance();
+        for (const auto& key : m_themeKeys)
+            if (raw.contains(key))
+                originTheme[key] = raw[key];
+    }
+    else
+    {
+        originName = rootPageName();
+        for (const auto& entry : m_pages)
+        {
+            const auto page = entry.toObject();
+            if (!originId.isEmpty() && page["id"] == originId)
+            {
+                originName = page["name"].toString();
+                originTheme = page["layout"].toObject()["theme"].toObject().toVariantMap();
+            }
+        }
+    }
+    return originTheme;
+}
+
+QVariantMap
+HomeLayout::surfacePolicy(const QVariantMap& originTheme, const QString& surface) const
+{
+    const auto policies = home().value("surfaceThemes").toMap();
+    const auto localPolicies = originTheme.value("surfaceThemes").toMap();
+    return (surface != "settings" && localPolicies.contains(surface) ? localPolicies : policies).value(surface).toMap();
+}
+
+QVariantMap
+HomeLayout::buildSurfaceAppearance(const QVariantMap& home, const QVariantMap& origin,
+                                   const QVariantMap& originTheme, const QString& originName,
+                                   const QString& surface, const QVariantMap& policy) const
+{
+    Q_UNUSED(home);
+    Q_UNUSED(originTheme);
+    const auto mode = policy.value("mode", surface == "settings" ? "home" : "origin").toString();
+    auto effective = mode == "home" || surface == "settings" ? home : origin;
+    if (mode == "custom")
+    {
+        const auto tokens = policy.value("tokens").toMap();
+        for (auto it = tokens.cbegin(); it != tokens.cend(); ++it)
+            effective[it.key()] = it.value();
+    }
+    auto result = ComponentSchema::surfacePalette(effective);
+    result["themeSource"] = surface == "settings" || mode == "home" || originName.isEmpty()
+        ? sourceForPage(surface) : originName;
+    result["themeMode"] = mode;
+    return result;
+}
+
+QString
+HomeLayout::sourceForPage(const QString& surface) const
+{
+    if (surface == "settings")
+        return "settings";
+    for (const auto& entry : m_pages)
+    {
+        const auto page = entry.toObject();
+        if (page["id"] == m_homePageId)
+            return page["name"].toString();
+    }
+    return rootPageName();
 }
 
 QString

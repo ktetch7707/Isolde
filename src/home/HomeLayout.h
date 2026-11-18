@@ -456,6 +456,17 @@ class HomeLayout final : public QObject
     QString
     unavailableReasonValue(const QVariantMap& item);
     bool
+    resolveOriginInfo(const QString& surface, const QString& originId, const QVariantMap& home,
+                      QVariantMap& origin, QVariantMap& originTheme, QString& originName) const;
+    QVariantMap
+    surfacePolicy(const QVariantMap& originTheme, const QString& surface) const;
+    QVariantMap
+    buildSurfaceAppearance(const QVariantMap& home, const QVariantMap& origin,
+                           const QVariantMap& originTheme, const QString& originName,
+                           const QString& surface, const QVariantMap& policy) const;
+    QString
+    sourceForPage(const QString& surface) const;
+    bool
     validateNumericKeyDefaults(const QString& key, const QVariantMap& defaults);
     bool
     validateNumericValueType(const QVariant& value);
