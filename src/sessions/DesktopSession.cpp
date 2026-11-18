@@ -139,15 +139,15 @@ parseExecTokens(const QString& execLine, QString* error)
 
     if (escaping)
         token.append(QLatin1Char('\\'));
-    if (inQuotes)
-    {
-        if (error)
-            *error = QStringLiteral("Desktop Exec line contains an unterminated quote.");
-        return {};
-    }
     if (!token.isEmpty())
         tokens.append(token);
 
+    return cleanExecTokens(tokens, error);
+}
+
+QStringList
+cleanExecTokens(const QVariantList& tokens, QString* error)
+{
     QStringList cleaned;
     for (auto item : tokens)
     {
