@@ -596,7 +596,6 @@ DesktopSession::readDiagnostics()
     m_protocolBuffer += output;
     if (m_protocolBuffer.size() > 4096)
         m_protocolBuffer.clear();
-    int newline = -1;
     while ((newline = m_protocolBuffer.indexOf('\n')) >= 0)
     {
         const auto line = m_protocolBuffer.left(newline).trimmed();
@@ -604,35 +603,68 @@ DesktopSession::readDiagnostics()
         constexpr auto prefix = "ISOLDE_GAMEPAD_STATUS ";
         if (!line.startsWith(prefix) || line.size() > 512)
             continue;
-        const auto document = QJsonDocument::fromJson(line.mid(int(sizeof("ISOLDE_GAMEPAD_STATUS ") - 1)));
-        if (!document.isObject())
-            continue;
-        const auto object = document.object();
-        if (object.size() != 4 || !object.contains("connected") || !object.contains("available") ||
-            !object.contains("new") || !object.contains("missing"))
-            continue;
         QVariantMap status;
-        for (const auto& key : QStringList{"connected", "available", "new", "missing"})
-        {
-            const auto value = object.value(key);
-            if (!value.isDouble() || value.toInt(-1) < 0 || value.toInt() > 32)
-            {
-                status.clear();
-                break;
-            }
-            status.insert(key, value.toInt());
-        }
-        if (status.isEmpty() || status.value("available").toInt() > status.value("connected").toInt() ||
-            status.value("new").toInt() > status.value("connected").toInt())
+        if (!parseGamepadStatusLine(line, status))
             continue;
-        if (status != m_gamepadStatus)
-        {
-            m_gamepadStatus = status;
-            emit gamepadSessionStatusChanged(status);
-        }
+        if (!processGamepadStatusLine(status))
+            continue;
     }
     if (!m_steamOutput)
         return;
+    const bool observed = m_steamOutput->consume(output);
+    const auto providerState = m_steamOutput->takeState();
+    if (!providerState.isEmpty())
+        emit steamProviderStateChanged(providerState);
+    if (observed && !m_stopping && state() == State::Created)
+    {
+        m_steamObserved = true;
+        setState(State::Running);
+    }
+}
+
+bool
+DesktopSession::parseGamepadStatusLine(const QString& line, QVariantMap& status) const
+{
+    constexpr auto prefix = "ISOLDE_GAMEPAD_STATUS ";
+    if (!line.startsWith(prefix) || line.size() > 512)
+        return false;
+    const auto document = QJsonDocument::fromJson(line.mid(int(sizeof("ISOLDE_GAMEPAD_STATUS ") - 1)));
+    if (!document.isObject())
+        return false;
+    const auto object = document.object();
+    if (object.size() != 4 || !object.contains("connected") || !object.contains("available") ||
+        !object.contains("new") || !object.contains("missing"))
+        return false;
+    for (const auto& key : QStringList{"connected", "available", "new", "missing"})
+    {
+        const auto value = object.value(key);
+        if (!value.isDouble() || value.toInt(-1) < 0 || value.toInt() > 32)
+        {
+            status.clear();
+            return false;
+        }
+        status.insert(key, value.toInt());
+    }
+    return true;
+}
+
+bool
+DesktopSession::processGamepadStatusLine(const QVariantMap& status) const
+{
+    if (status.isEmpty() || status.value("available").toInt() > status.value("connected").toInt() ||
+        status.value("new").toInt() > status.value("connected").toInt())
+        return false;
+    if (status != m_gamepadStatus)
+    {
+        m_gamepadStatus = status;
+        emit gamepadSessionStatusChanged(status);
+    }
+    return true;
+}
+
+void
+DesktopSession::processSteamOutput(const QByteArray& output)
+{
     const bool observed = m_steamOutput->consume(output);
     const auto providerState = m_steamOutput->takeState();
     if (!providerState.isEmpty())

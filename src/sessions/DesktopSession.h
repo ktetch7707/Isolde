@@ -36,6 +36,12 @@ class DesktopSession final : public AppSession
     onLauncherFinished(int exitCode, QProcess::ExitStatus exitStatus);
     void
     readDiagnostics();
+    bool
+    parseGamepadStatusLine(const QString& line, QVariantMap& status) const;
+    bool
+    processGamepadStatusLine(const QVariantMap& status) const;
+    void
+    processSteamOutput(const QByteArray& output);
     bool m_stopping = false;
     QByteArray m_diagnostics;
     QByteArray m_protocolBuffer;
