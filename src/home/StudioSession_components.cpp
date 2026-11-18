@@ -738,20 +738,8 @@ StudioSession::additionProposal(const QString& type,
             return {{"valid", false}, {"reason", QStringLiteral("The page no longer exists.")}};
         document = pages[pageIndex].toObject()["layout"].toObject();
     }
-    if (enableScrolling)
-    {
-        if (!parentId.isEmpty() || !categoryId.isEmpty())
-            return {{"valid", false}, {"reason", tr("Choose the page before enabling vertical scrolling.")}};
-        auto composition = document["composition"].toObject();
-        composition["verticalScrolling"] = true;
-        document["composition"] = composition;
-    }
-    if (type == "page-menu" && !pageId.isEmpty())
-    {
-        auto composition = document["composition"].toObject();
-        composition["pageNavigation"] = "none";
-        document["composition"] = composition;
-    }
+    if (!applyAdditionProposalOptions(document, type, pageId, enableScrolling, parentId, categoryId))
+        return {{"valid", false}, {"reason", errorString()}};
     auto entries = document["components"].toArray();
     for (const auto& value : prototype.value("components").toList())
     {

@@ -511,45 +511,35 @@ GameEmulators::validateEmulatorRuntimePackages(const QString& engine, const QVar
         if (!item.contains("core") || !packageSet.contains("retroarch") || corePackages != 1)
             return false;
     }
-    else if (engine == "rpcs3")
-    {
-        if (item.contains("core") || packageSet != QSet<QString>{"isolde-rpcs3"})
-            return false;
-    }
-    else if (engine == "shadps4")
-    {
-        if (item.contains("core") || packageSet != QSet<QString>{"isolde-shadps4"})
-            return false;
-    }
-    else if (engine == "vita3k")
-    {
-        if (item.contains("core") || packageSet != QSet<QString>{"isolde-vita3k"})
-            return false;
-    }
-    else if (engine == "xemu")
-    {
-        if (item.contains("core") || packageSet != QSet<QString>{"isolde-xemu"})
-            return false;
-    }
-    else if (engine == "xenia")
-    {
-        if (item.contains("core") || packageSet != QSet<QString>{"isolde-xenia"})
-            return false;
-    }
-    else if (engine == "cemu")
-    {
-        if (item.contains("core") || packageSet != QSet<QString>{"isolde-cemu"})
-            return false;
-    }
     else
     {
-        const QSet<QString> expectedPackage = engine == "ppsspp"    ? QSet<QString>{"isolde-ppsspp"}
-                                              : engine == "dolphin" ? QSet<QString>{"dolphin-emu"}
-                                                                      : QSet<QString>{"pcsx2"};
-        if (item.contains("core") || packageSet != expectedPackage)
+        const QSet<QString> expected = expectedPackageSet(engine);
+        if (!expected.isEmpty() && (item.contains("core") || packageSet != expected))
             return false;
     }
     return true;
+}
+
+QSet<QString>
+GameEmulators::expectedPackageSet(const QString& engine)
+{
+    if (engine == "rpcs3")
+        return QSet<QString>{"isolde-rpcs3"};
+    if (engine == "shadps4")
+        return QSet<QString>{"isolde-shadps4"};
+    if (engine == "vita3k")
+        return QSet<QString>{"isolde-vita3k"};
+    if (engine == "xemu")
+        return QSet<QString>{"isolde-xemu"};
+    if (engine == "xenia")
+        return QSet<QString>{"isolde-xenia"};
+    if (engine == "cemu")
+        return QSet<QString>{"isolde-cemu"};
+    if (engine == "ppsspp")
+        return QSet<QString>{"isolde-ppsspp"};
+    if (engine == "dolphin")
+        return QSet<QString>{"dolphin-emu"};
+    return QSet<QString>{"pcsx2"};
 }
 
 

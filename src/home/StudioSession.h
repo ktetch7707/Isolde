@@ -279,6 +279,41 @@ class StudioSession final : public QObject
                      const QString& parentId = {},
                      const QVariantMap& configuration = {},
                      bool enableScrolling = false);
+    bool
+    validateAdditionProposalPreconditions(HomeLayout& temporary, QJsonObject& root, QJsonArray& pages,
+                                          QJsonObject& document, int& pageIndex);
+    bool
+    applyAdditionProposalOptions(QJsonObject& document, const QString& type, const QString& pageId,
+                                 bool enableScrolling, const QString& parentId,
+                                 const QString& categoryId);
+    bool
+    validateAdditionProposalPreconditions(HomeLayout& temporary, QJsonObject& root, QJsonArray& pages,
+                                          QJsonObject& document, int& pageIndex);
+    bool
+    applyAdditionProposalOptions(QJsonObject& document, const QString& type, const QString& pageId,
+                                 bool enableScrolling);
+    QJsonObject
+    insertPrototypeComponents(const QJsonObject& document, const QJsonArray& entries,
+                              const QVariantMap& prototype, const QString& type, const QString& identity,
+                              const QString& parentId, const QString& categoryId);
+    QJsonObject
+    storeAdditionProposalDocument(const QJsonObject& document, const QJsonArray& pages,
+                                  int pageIndex, const QJsonObject& root, const QVariantMap& placements,
+                                  const QVariantMap& entries, const QString& identity);
+    bool
+    validateAdditionProposalPreconditions(const QString& type, HomeLayout& temporary, QJsonObject& root,
+                                          QJsonArray& pages, QJsonObject& document, int& pageIndex);
+    bool
+    applyAdditionProposalOptions(QJsonObject& document, const QString& type, const QString& pageId,
+                                 bool enableScrolling);
+    QJsonObject
+    insertPrototypeComponents(const QJsonObject& document, const QJsonArray& entries,
+                              const QVariantMap& prototype, const QString& type, const QString& identity,
+                              const QString& parentId, const QString& categoryId);
+    QJsonObject
+    storeAdditionProposalDocument(const QJsonObject& document, const QJsonArray& pages,
+                                  int pageIndex, const QJsonObject& root, const QVariantMap& placements,
+                                  const QVariantMap& entries, const QString& identity);
 
     /** Capture the live committed document. Clears undo/redo history. */
     Q_INVOKABLE bool

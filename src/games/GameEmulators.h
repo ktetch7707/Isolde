@@ -28,6 +28,8 @@ bool
 validateEmulatorRuntimeSetup(const QVariantMap& item);
 bool
 validateEmulatorRuntimePackages(const QString& engine, const QVariantMap& item, const QStringList& packages);
+QSet<QString>
+expectedPackageSet(const QString& engine);
 bool
 validateEmulatorCoverage(const QVariantMap& coverage, const QSet<QString>& integratedSet);
 QString
