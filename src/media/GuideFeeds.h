@@ -13,8 +13,11 @@
 
 // Explicit, bounded feed import. No fetching, scripts, Kodi configuration writes
 // or implicit refresh. A failed generation never replaces the previous cache.
-namespace GuideFeeds {
-inline bool streamUrl(const QString& text) {
+namespace GuideFeeds
+{
+inline bool
+streamUrl(const QString& text)
+{
     const QUrl url(text, QUrl::StrictMode);
     if (text.isEmpty() || text.size() > 4096 || !url.isValid() || url.host().isEmpty() ||
         !QStringList{"http", "https", "rtsp", "rtp", "udp"}.contains(url.scheme()) || !url.userInfo().isEmpty() ||
@@ -26,7 +29,8 @@ inline bool streamUrl(const QString& text) {
     const auto parameters = QUrlQuery(url).queryItems(QUrl::FullyDecoded);
     if (parameters.size() > 256)
         return false;
-    for (const auto& item : parameters) {
+    for (const auto& item : parameters)
+    {
         auto key = item.first.toCaseFolded();
         key.remove('-');
         key.remove('_');
@@ -46,12 +50,16 @@ inline bool streamUrl(const QString& text) {
     }
     return true;
 }
-inline QString identity(const QString& instance, const QString& station) {
+inline QString
+identity(const QString& instance, const QString& station)
+{
     return "feed-" + QString::fromLatin1(QCryptographicHash::hash(instance.toUtf8() + ":" + station.toUtf8(),
                                                                   QCryptographicHash::Sha256)
                                              .toHex());
 }
-inline qint64 xmlTime(const QString& value) {
+inline qint64
+xmlTime(const QString& value)
+{
     // XMLTV timestamps must identify an instant; never guess the host timezone.
     static const QRegularExpression format("^([0-9]{14}) ([+-])([0-9]{2})([0-9]{2})$");
     const auto m = format.match(value);
@@ -65,12 +73,24 @@ inline qint64 xmlTime(const QString& value) {
     return QDateTime(date.date(), date.time(), QTimeZone::utc()).toSecsSinceEpoch() -
            (m.captured(2) == "-" ? -1 : 1) * (hours * 3600 + minutes * 60);
 }
-inline QVariantMap parse(const QByteArray& m3u,
-                         const QByteArray& xml,
-                         const QString& instance,
-                         qint64 refreshed,
-                         const std::function<bool()>& cancelled = {}) {
-    const auto fail = [](const QString& message) {
+inline bool
+parseM3UPlaylist(const QString& playlist, const QString& instance, qint64 refreshed,
+                 const std::function<bool()>& cancelled, QVariantMap& pending, bool& header,
+                 QVariantList& entries, QSet<QString>& ids);
+inline bool
+parseXmlTv(const QByteArray& xml, const std::function<bool()>& cancelled,
+           QVariantMap& listings, QSet<QString>& declared);
+inline bool
+sortAndValidatePrograms(QVariantList& entries, const QVariantMap& listings);
+inline QVariantMap
+parse(const QByteArray& m3u,
+      const QByteArray& xml,
+      const QString& instance,
+      qint64 refreshed,
+      const std::function<bool()>& cancelled = {})
+{
+    const auto fail = [](const QString& message)
+    {
         return QVariantMap{{"ok", false}, {"error", message + " Cached listings were preserved."}};
     };
     if (m3u.size() > 4 * 1024 * 1024 || xml.size() > 16 * 1024 * 1024 || m3u.isEmpty())
@@ -84,68 +104,99 @@ inline QVariantMap parse(const QByteArray& m3u,
     QVariantList entries;
     QSet<QString> ids;
     static const QRegularExpression attribute("([A-Za-z0-9_-]+)=\"([^\"]*)\"");
-    for (auto line : lines) {
+    if (!parseM3UPlaylist(playlist, instance, refreshed, cancelled, pending, header, entries, ids))
+        return fail("Failed to parse M3U playlist.");
+    if (!pending.isEmpty() || entries.isEmpty())
+        return fail("Incomplete or empty playlist.");
+    QVariantMap listings;
+    QSet<QString> declared;
+    if (!parseXmlTv(xml, cancelled, listings, declared))
+        return fail("Failed to parse XMLTV.");
+    for (const auto& id : declared)
+        if (!listings.contains(id))
+            listings[id] = QVariantList{};
+    if (!sortAndValidatePrograms(entries, listings))
+        return fail("Failed to sort and validate programs.");
+    return {{"ok", true}, {"entries", entries}, {"listings", listings}, {"epgIds", QStringList(declared.values())}};
+}
+
+inline bool
+parseM3UPlaylist(const QString& playlist, const QString& instance, qint64 refreshed,
+                 const std::function<bool()>& cancelled, QVariantMap& pending, bool& header,
+                 QVariantList& entries, QSet<QString>& ids)
+{
+    const auto lines = playlist.split('\n');
+    static const QRegularExpression attribute("([A-Za-z0-9_-]+)=\"([^\"]*)\"");
+    for (auto line : lines)
+    {
         if (cancelled && cancelled())
-            return fail("Source preview cancelled.");
+            return false;
         line = line.trimmed();
         if (line.isEmpty())
             continue;
-        if (!header) {
+        if (!header)
+        {
             if (line != QStringLiteral("#EXTM3U") && !line.startsWith("#EXTM3U "))
-                return fail("Playlist needs an EXTM3U header.");
+                return false;
             header = true;
             continue;
         }
-        if (line.startsWith("#EXTINF:")) {
+        if (line.startsWith("#EXTINF:"))
+        {
             if (!pending.isEmpty())
-                return fail("A playlist station has no stream URL.");
+                return false;
             bool quoted = false;
             int comma = -1;
-            for (int i = 8; i < line.size(); ++i) {
+            for (int i = 8; i < line.size(); ++i)
+            {
                 if (line[i] == '"')
                     quoted = !quoted;
-                if (line[i] == ',' && !quoted) {
+                if (line[i] == ',' && !quoted)
+                {
                     comma = i;
                     break;
                 }
             }
             if (comma < 0)
-                return fail("Malformed EXTINF station.");
+                return false;
             const auto name = line.mid(comma + 1).trimmed();
             if (name.isEmpty() || name.size() > 160)
-                return fail("Station names must contain 1–160 characters.");
+                return false;
             pending = {{"name", name}};
             auto match = attribute.globalMatch(line.left(comma));
-            while (match.hasNext()) {
+            while (match.hasNext())
+            {
                 const auto a = match.next();
                 if (pending.contains(a.captured(1)))
-                    return fail("Duplicate playlist attribute.");
+                    return false;
                 pending[a.captured(1)] = a.captured(2);
             }
             continue;
         }
-        if (line.startsWith('#')) {
+        if (line.startsWith('#'))
+        {
             if (line.startsWith("#EXTVLCOPT") || line.startsWith("#KODIPROP"))
-                return fail("Stream options and executable addon properties are unsupported.");
+                return false;
             continue;
         }
         if (pending.isEmpty() || !streamUrl(line))
-            return fail("Each station needs a compatible URL without credentials or player options.");
+            return false;
         auto station = pending.value("tvg-id").toString();
         if (station.isEmpty())
             station = QString::fromLatin1(QCryptographicHash::hash(line.toUtf8(), QCryptographicHash::Sha256).toHex());
         if (station.size() > 160 || ids.contains(station))
-            return fail("Station IDs must be unique and at most 160 characters.");
+            return false;
         ids.insert(station);
         int number = entries.size() + 1;
         if (pending.contains("tvg-shift"))
-            return fail("Playlist time shifts must be resolved into explicit XMLTV UTC offsets before import.");
-        if (pending.contains("tvg-chno")) {
+            return false;
+        if (pending.contains("tvg-chno"))
+        {
             const auto text = pending.value("tvg-chno").toString();
             bool ok = false;
             const auto proposed = text.toInt(&ok);
             if (!QRegularExpression("^[0-9]{1,5}$").match(text).hasMatch() || !ok || proposed < 1 || proposed > 99999)
-                return fail("Playlist channel numbers must be whole values from 1 to 99999.");
+                return false;
             number = proposed;
         }
         QVariantMap source{{"instance", instance},
@@ -166,86 +217,100 @@ inline QVariantMap parse(const QByteArray& m3u,
         entries.append(QVariantMap{{"definition", definition}, {"programs", QVariantList{}}});
         pending.clear();
         if (entries.size() > 1024)
-            return fail("A source supports at most 1,024 stations.");
+            return false;
     }
-    if (!pending.isEmpty() || entries.isEmpty())
-        return fail("Incomplete or empty playlist.");
-    QVariantMap listings;
-    QSet<QString> declared;
+    return true;
+}
+
+inline bool
+parseXmlTv(const QByteArray& xml, const std::function<bool()>& cancelled,
+           QVariantMap& listings, QSet<QString>& declared)
+{
+    QXmlStreamReader reader(xml);
+    bool root = false;
     int count = 0;
-    if (!xml.isEmpty()) {
-        QXmlStreamReader reader(xml);
-        bool root = false;
-        while (!reader.atEnd()) {
-            if (cancelled && cancelled())
-                return fail("Source preview cancelled.");
-            const auto token = reader.readNext();
-            if (token == QXmlStreamReader::DTD || token == QXmlStreamReader::EntityReference)
-                return fail("XMLTV DTDs and entities are refused.");
-            if (!reader.isStartElement())
-                continue;
-            if (!root) {
-                if (reader.name() != u"tv")
-                    return fail("XMLTV needs a tv root.");
-                root = true;
-                continue;
-            }
-            if (reader.name() == u"channel") {
-                const auto id = reader.attributes().value("id").toString();
-                if (id.isEmpty() || id.size() > 160 || declared.contains(id) || declared.size() >= 4096)
-                    return fail("Invalid or duplicate XMLTV channel ID.");
-                declared.insert(id);
-            } else if (reader.name() == u"programme") {
-                const auto attributes = reader.attributes();
-                const auto channel = attributes.value("channel").toString();
-                const auto start = xmlTime(attributes.value("start").toString()),
-                           end = xmlTime(attributes.value("stop").toString());
-                QString title;
-                if (++count > 100000 || channel.isEmpty() || start < 0 || end <= start || end - start > 7 * 86400)
-                    return fail("Invalid or oversized XMLTV program intervals.");
-                while (reader.readNextStartElement()) {
-                    if (reader.name() == u"title") {
-                        const auto t = reader.readElementText();
-                        if (title.isEmpty())
-                            title = t;
-                    } else
-                        reader.skipCurrentElement();
-                }
-                if (title.trimmed().isEmpty() || title.size() > 512)
-                    return fail("XMLTV programs need readable titles up to 512 characters.");
-                if (start < refreshed - 7 * 86400 || end > refreshed + 31 * 86400)
-                    continue;
-                auto programs = listings.value(channel).toList();
-                if (programs.size() >= 1000)
-                    return fail("Limit XMLTV to 1,000 programs per station.");
-                programs.append(QVariantMap{
-                    {"broadcastId", QString::number(start)}, {"title", title}, {"startUtc", start}, {"endUtc", end}});
-                listings[channel] = programs;
-            }
+    while (!reader.atEnd())
+    {
+        if (cancelled && cancelled())
+            return false;
+        const auto token = reader.readNext();
+        if (token == QXmlStreamReader::DTD || token == QXmlStreamReader::EntityReference)
+            return false;
+        if (!reader.isStartElement())
+            continue;
+        if (!root)
+        {
+            if (reader.name() != u"tv")
+                return false;
+            root = true;
+            continue;
         }
-        if (reader.hasError() || !root)
-            return fail("Malformed or truncated XMLTV.");
+        if (reader.name() == u"channel")
+        {
+            const auto id = reader.attributes().value("id").toString();
+            if (id.isEmpty() || id.size() > 160 || declared.contains(id) || declared.size() >= 4096)
+                return false;
+            declared.insert(id);
+        }
+        else if (reader.name() == u"programme")
+        {
+            const auto attributes = reader.attributes();
+            const auto channel = attributes.value("channel").toString();
+            const auto start = xmlTime(attributes.value("start").toString()),
+                       end = xmlTime(attributes.value("stop").toString());
+            QString title;
+            if (++count > 100000 || channel.isEmpty() || start < 0 || end <= start || end - start > 7 * 86400)
+                return false;
+            while (reader.readNextStartElement())
+            {
+                if (reader.name() == u"title")
+                {
+                    const auto t = reader.readElementText();
+                    if (title.isEmpty())
+                        title = t;
+                }
+                else
+                    reader.skipCurrentElement();
+            }
+            if (title.trimmed().isEmpty() || title.size() > 512)
+                return false;
+            auto programs = listings.value(channel).toList();
+            if (programs.size() >= 1000)
+                return false;
+            programs.append(QVariantMap{
+                {"broadcastId", QString::number(start)}, {"title", title}, {"startUtc", start}, {"endUtc", end}});
+            listings[channel] = programs;
+        }
     }
-    for (const auto& id : declared)
-        if (!listings.contains(id))
-            listings[id] = QVariantList{};
-    for (auto& v : entries) {
+    return !reader.hasError() && root;
+}
+
+inline bool
+sortAndValidatePrograms(QVariantList& entries, const QVariantMap& listings)
+{
+    for (auto& v : entries)
+    {
         auto entry = v.toMap();
         const auto epg = entry.value("definition").toMap().value("source").toMap().value("epgId").toString();
         auto programs = listings.value(epg).toList();
-        std::sort(programs.begin(), programs.end(), [](const QVariant& a, const QVariant& b) {
-            return a.toMap().value("startUtc").toLongLong() < b.toMap().value("startUtc").toLongLong();
-        });
+        std::sort(programs.begin(),
+                  programs.end(),
+                  [](const QVariant& a, const QVariant& b)
+                  {
+                      return a.toMap().value("startUtc").toLongLong() < b.toMap().value("startUtc").toLongLong();
+                  });
         qint64 end = -1;
-        for (const auto& p : programs) {
+        for (const auto& p : programs)
+        {
             const auto program = p.toMap();
             if (program.value("startUtc").toLongLong() < end)
-                return fail("XMLTV programs overlap.");
+                return false;
             end = program.value("endUtc").toLongLong();
         }
         entry["programs"] = programs;
         v = entry;
     }
-    return {{"ok", true}, {"entries", entries}, {"listings", listings}, {"epgIds", QStringList(declared.values())}};
+    return true;
 }
+
 } // namespace GuideFeeds

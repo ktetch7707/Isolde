@@ -5,8 +5,11 @@
 #include "ComponentSchema.h"
 #include "DesignSystem.h"
 
-namespace DesignSystem {
-QVariantMap styleProperties(const QVariantMap& value) {
+namespace DesignSystem
+{
+QVariantMap
+styleProperties(const QVariantMap& value)
+{
     const QSet<QString> keys{"surfaceColor", "fillEndColor",       "fillMode",       "fillDirection", "iconColor",
                              "labelColor",   "selectedLabelColor", "surfaceOpacity", "radius",        "labelSize",
                              "iconSize",     "labelPosition",      "textAlign",      "labelBold",     "labelWrap",
@@ -19,57 +22,77 @@ QVariantMap styleProperties(const QVariantMap& value) {
             result[it.key()] = it.value();
     return result;
 }
-bool validResponsive(const QVariantMap& rule) {
+bool
+validResponsive(const QVariantMap& rule)
+{
     const QSet<QString> keys{"schemaVersion", "policy", "minimumWidth", "minimumHeight", "aspect"};
     if (rule.value("schemaVersion").metaType().id() == QMetaType::QString ||
         rule.value("schemaVersion").metaType().id() == QMetaType::Bool || rule.value("schemaVersion").toDouble() != 1 ||
         rule.size() != 5 || !QStringList{"wrap", "scroll", "shrink", "stack"}.contains(rule.value("policy").toString()))
         return false;
-    for (auto it = rule.cbegin(); it != rule.cend(); ++it) {
+    for (auto it = rule.cbegin(); it != rule.cend(); ++it)
+    {
         if (!keys.contains(it.key()))
             return false;
-        if (it.key() == "minimumWidth" || it.key() == "minimumHeight" || it.key() == "aspect") {
-            bool ok = false;
-            const double n = it.value().toDouble(&ok);
-            if (!ok || it.value().metaType().id() == QMetaType::QString ||
-                it.value().metaType().id() == QMetaType::Bool || !std::isfinite(n) ||
-                n < (it.key() == "aspect" ? .25 : 16) || n > (it.key() == "aspect" ? 4 : 800))
+        if (it.key() == "minimumWidth" || it.key() == "minimumHeight" || it.key() == "aspect")
+        {
+            if (!validResponsiveValue(it.value(), it.key()))
                 return false;
         }
     }
     return true;
 }
-bool valid(const QVariantMap& library) {
+
+bool
+validResponsiveValue(const QVariant& item, const QString& key)
+{
+    bool ok = false;
+    const double n = item.toDouble(&ok);
+    if (!ok || item.metaType().id() == QMetaType::QString ||
+        item.metaType().id() == QMetaType::Bool || !std::isfinite(n) ||
+        n < (key == "aspect" ? .25 : 16) || n > (key == "aspect" ? 4 : 800))
+        return false;
+    return true;
+}
+bool
+valid(const QVariantMap& library)
+{
     if (library.size() != 3 || library.value("schemaVersion").metaType().id() == QMetaType::QString ||
         library.value("schemaVersion").metaType().id() == QMetaType::Bool ||
         library.value("schemaVersion").toDouble() != 1 ||
         library.value("styles").metaType().id() != QMetaType::QVariantList ||
         library.value("components").metaType().id() != QMetaType::QVariantList)
         return false;
-    for (const auto& kind : {"styles", "components"}) {
+    for (const auto& kind : {"styles", "components"})
+    {
         const auto entries = library.value(kind).toList();
         if (entries.size() > 64)
             return false;
         QSet<QString> ids;
-        for (const auto& value : entries) {
+        for (const auto& value : entries)
+        {
             const auto entry = value.toMap();
             const auto id = entry.value("id").toString();
             if (entry.size() != 3 || !ComponentSchema::safeId(id) || ids.contains(id) ||
                 entry.value("name").toString().trimmed().isEmpty() || entry.value("name").toString().size() > 80)
                 return false;
             ids.insert(id);
-            if (QString(kind) == "styles") {
+            if (QString(kind) == "styles")
+            {
                 const auto style = entry.value("presentation").toMap();
                 if (entry.value("presentation").metaType().id() != QMetaType::QVariantMap ||
                     styleProperties(style) != style || style.contains("styleId") ||
                     !ComponentSchema::validPresentation(style))
                     return false;
-            } else {
+            }
+            else
+            {
                 const auto nodes = entry.value("nodes").toList();
                 if (nodes.isEmpty() || nodes.size() > 128)
                     return false;
                 QSet<QString> nodeIds;
-                for (const auto& nodeValue : nodes) {
+                for (const auto& nodeValue : nodes)
+                {
                     const auto node = nodeValue.toMap();
                     const auto nodeId = node.value("id").toString();
                     // Nested linked definitions are refused, so symbol cycles cannot enter storage.
@@ -86,7 +109,9 @@ bool valid(const QVariantMap& library) {
     }
     return true;
 }
-bool validDocument(const QJsonObject& document, QString* error) {
+bool
+validDocument(const QJsonObject& document, QString* error)
+{
     const auto library = document["composition"].toObject()["designLibrary"].toObject().toVariantMap();
     QSet<QString> styles, symbols;
     for (const auto& entry : library.value("styles").toList())
@@ -96,8 +121,10 @@ bool validDocument(const QJsonObject& document, QString* error) {
     QList<QJsonObject> layouts{document};
     for (const auto& entry : document["pages"].toArray())
         layouts.append(entry.toObject()["layout"].toObject());
-    for (const auto& layout : layouts) {
-        for (const auto& entry : layout["categories"].toArray()) {
+    for (const auto& layout : layouts)
+    {
+        for (const auto& entry : layout["categories"].toArray())
+        {
             const auto category = entry.toObject(), style = category["presentation"].toObject();
             const auto rule = style["responsive"].toObject();
             if (rule.isEmpty())
@@ -107,7 +134,8 @@ bool validDocument(const QJsonObject& document, QString* error) {
             int count = 0;
             for (const auto& value : layout["components"].toArray())
                 if (value.toObject()["categoryId"] == category["id"] &&
-                    value.toObject()["parentId"].toString().isEmpty()) {
+                    value.toObject()["parentId"].toString().isEmpty())
+                {
                     ++count;
                     if (value.toObject().contains("placement"))
                         invalid = true;
@@ -130,29 +158,35 @@ bool validDocument(const QJsonObject& document, QString* error) {
             if (cardWidth < rule["minimumWidth"].toDouble() || cardHeight > available ||
                 (policy != "scroll" && rows * cardHeight + qMax(0, rows - 1) * gap > available))
                 invalid = true;
-            if (invalid) {
+            if (invalid)
+            {
                 if (error)
-                    *error = QObject::tr("Responsive section rules overflow their minimum viewport or use an authored "
-                                         "grid. Increase section height, reduce minimum size, or choose Scroll.");
+                    *error = QObject::tr(
+                        "Responsive section rules overflow their minimum viewport or use an authored "
+                        "grid. Increase section height, reduce minimum size, or choose Scroll.");
                 return false;
             }
         }
     }
     for (const auto& layout : layouts)
-        for (const auto& value : layout["components"].toArray()) {
+        for (const auto& value : layout["components"].toArray())
+        {
             auto node = value.toObject().toVariantMap();
             const auto authored = node.value("presentation").toMap();
             if ((authored.contains("styleId") && !styles.contains(authored.value("styleId").toString())) ||
-                (node.contains("linkedDesign") && !symbols.contains(node.value("linkedDesign").toString()))) {
+                (node.contains("linkedDesign") && !symbols.contains(node.value("linkedDesign").toString())))
+            {
                 if (error)
-                    *error = QObject::tr("A shared style or component definition is missing. Import its whole "
-                                         "interface or detach it first.");
+                    *error = QObject::tr(
+                        "A shared style or component definition is missing. Import its whole "
+                        "interface or detach it first.");
                 return false;
             }
             if (!authored.contains("styleId") && !node.contains("linkedDesign"))
                 continue;
             node["presentation"] = presentation(authored, library);
-            if (ComponentSchema::component(node, false).isEmpty()) {
+            if (ComponentSchema::component(node, false).isEmpty())
+            {
                 if (error)
                     *error = QObject::tr("A shared style is incompatible with a linked component. Nothing changed.");
                 return false;
@@ -160,9 +194,12 @@ bool validDocument(const QJsonObject& document, QString* error) {
         }
     return true;
 }
-QVariantMap presentation(const QVariantMap& authored, const QVariantMap& library) {
+QVariantMap
+presentation(const QVariantMap& authored, const QVariantMap& library)
+{
     QVariantMap result;
-    for (const auto& value : library.value("styles").toList()) {
+    for (const auto& value : library.value("styles").toList())
+    {
         const auto style = value.toMap();
         if (style.value("id") == authored.value("styleId"))
             result = style.value("presentation").toMap();
@@ -172,7 +209,9 @@ QVariantMap presentation(const QVariantMap& authored, const QVariantMap& library
             result[it.key()] = it.value();
     return result;
 }
-QVariantMap responsive(const QVariantMap& authored, double width, double height, double unit) {
+QVariantMap
+responsive(const QVariantMap& authored, double width, double height, double unit)
+{
     auto result = authored;
     const auto rule = result.value("responsive").toMap();
     if (rule.isEmpty() || width <= 0 || height <= 0 || !std::isfinite(unit) || unit <= 0)
@@ -185,7 +224,8 @@ QVariantMap responsive(const QVariantMap& authored, double width, double height,
         result["columns"] = 1;
     else if (policy == "wrap")
         result["columns"] = qMax(1, qMin(columns, int(width / minimum)));
-    else if (policy == "shrink") {
+    else if (policy == "shrink")
+    {
         // contentWidth is authored scene data; viewport dimensions are pixels.
         // Return scene units so the renderer applies its scale exactly once.
         const double available = width / unit;

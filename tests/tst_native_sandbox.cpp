@@ -16,36 +16,60 @@
 #include "sessions/NativeSandbox.h"
 #include "sessions/SteamSessionOutput.h"
 
-class NativeSandboxTests : public QObject {
+class NativeSandboxTests : public QObject
+{
     Q_OBJECT
   private slots:
-    void steamAdapterCannotAttachToHostGameProcesses();
-    void steamProcessMarkerIsExactAndBounded();
-    void profileAndAppStorageRemainSeparate();
-    void explicitMediaIsReadOnlyAndPrivatePathsAreRefused();
-    void reviewedGameBundleIsReadOnlyAndCannotEscapeItsRoot();
-    void managedExecutableUsesSandboxPathAndRejectsChangedContent();
-    void pendingManagedUninstallRecoveryPreservesConflicts();
-    void processTreeDiesWithLauncher();
-    void gracefulExitFlushesAppState();
-    void steamHostAllowsDelayedGracefulExit();
-    void steamHostReportsFailedGracefulExit();
-    void normalExitRemovesDetachedChildren();
-    void invalidIdentityAndSymlinkAreRefused();
-    void rememberedKodiGrantsAreScopedReadOnlyAndRevocable();
-    void externalSteamGrantsAreProfileScopedAndFailClosed();
-    void gamepadCapabilityRecognitionIsBoundedAndExact();
-    void gamepadDiscoveryFiltersKeyboardAndRefreshesSnapshot();
-    void gamepadCharacterDeviceNumbersAreExactAndBounded();
-    void gamepadTopologyReportsAttachDetachAndReconnect();
-    void gameSessionsAcrossSourcesRequestGamepadAccess();
+    void
+    steamAdapterCannotAttachToHostGameProcesses();
+    void
+    steamProcessMarkerIsExactAndBounded();
+    void
+    profileAndAppStorageRemainSeparate();
+    void
+    explicitMediaIsReadOnlyAndPrivatePathsAreRefused();
+    void
+    reviewedGameBundleIsReadOnlyAndCannotEscapeItsRoot();
+    void
+    managedExecutableUsesSandboxPathAndRejectsChangedContent();
+    void
+    pendingManagedUninstallRecoveryPreservesConflicts();
+    void
+    processTreeDiesWithLauncher();
+    void
+    gracefulExitFlushesAppState();
+    void
+    steamHostAllowsDelayedGracefulExit();
+    void
+    steamHostReportsFailedGracefulExit();
+    void
+    normalExitRemovesDetachedChildren();
+    void
+    invalidIdentityAndSymlinkAreRefused();
+    void
+    rememberedKodiGrantsAreScopedReadOnlyAndRevocable();
+    void
+    externalSteamGrantsAreProfileScopedAndFailClosed();
+    void
+    gamepadCapabilityRecognitionIsBoundedAndExact();
+    void
+    gamepadDiscoveryFiltersKeyboardAndRefreshesSnapshot();
+    void
+    gamepadCharacterDeviceNumbersAreExactAndBounded();
+    void
+    gamepadTopologyReportsAttachDetachAndReconnect();
+    void
+    gameSessionsAcrossSourcesRequestGamepadAccess();
 };
 
 static const QString alice = "11111111-1111-4111-8111-111111111111";
 static const QString bob = "22222222-2222-4222-8222-222222222222";
 
-void NativeSandboxTests::gamepadCapabilityRecognitionIsBoundedAndExact() {
-    const auto bitmapFor = [](int code) {
+void
+NativeSandboxTests::gamepadCapabilityRecognitionIsBoundedAndExact()
+{
+    const auto bitmapFor = [](int code)
+    {
         QStringList words(code / 64 + 1, QStringLiteral("0"));
         words[words.size() - 1 - code / 64] = QString::number(quint64(1) << (code % 64), 16);
         return words.join(' ');
@@ -60,7 +84,9 @@ void NativeSandboxTests::gamepadCapabilityRecognitionIsBoundedAndExact() {
     QVERIFY(!NativeSandbox::hasGamepadKeyCapabilities("0 0 invalid 0 0"));
     QVERIFY(!NativeSandbox::hasGamepadKeyCapabilities(QString(4097, '0')));
 }
-void NativeSandboxTests::gameSessionsAcrossSourcesRequestGamepadAccess() {
+void
+NativeSandboxTests::gameSessionsAcrossSourcesRequestGamepadAccess()
+{
     QVERIFY(!NativeSandbox::isGameSession({}, {}, {}, {}, {}));
     QVERIFY(NativeSandbox::isGameSession("ppsspp", {}, {}, {}, {}));
     QVERIFY(NativeSandbox::isGameSession({}, "42", {}, {}, {}));
@@ -68,12 +94,15 @@ void NativeSandboxTests::gameSessionsAcrossSourcesRequestGamepadAccess() {
     QVERIFY(NativeSandbox::isGameSession({}, {}, {}, "/private/install", {}));
     QVERIFY(NativeSandbox::isGameSession({}, {}, {}, {}, QString(64, 'a')));
 }
-void NativeSandboxTests::gamepadDiscoveryFiltersKeyboardAndRefreshesSnapshot() {
+void
+NativeSandboxTests::gamepadDiscoveryFiltersKeyboardAndRefreshesSnapshot()
+{
     QTemporaryDir root;
     QVERIFY(root.isValid());
     const auto sys = root.filePath("sys"), devices = root.filePath("dev");
     QVERIFY(QDir().mkpath(devices));
-    const auto addNode = [&](const QString& name, const QString& bitmap, const QString& deviceNumber = {}) {
+    const auto addNode = [&](const QString& name, const QString& bitmap, const QString& deviceNumber = {})
+    {
         const auto capability = sys + "/" + name + "/device/capabilities/key";
         QVERIFY(QDir().mkpath(QFileInfo(capability).absolutePath()));
         QFile file(capability);
@@ -105,7 +134,9 @@ void NativeSandboxTests::gamepadDiscoveryFiltersKeyboardAndRefreshesSnapshot() {
     QVERIFY(QFile::remove(devices + "/event0"));
     QCOMPARE(NativeSandbox::gamepadDeviceNodes(sys, devices), QStringList({devices + "/event2", devices + "/js0"}));
 }
-void NativeSandboxTests::gamepadCharacterDeviceNumbersAreExactAndBounded() {
+void
+NativeSandboxTests::gamepadCharacterDeviceNumbersAreExactAndBounded()
+{
     uint major = 0, minor = 0;
     const QString gamepadKeys = "1000000000000 0 0 0 0";
     QVERIFY(GamepadTopology::verifiedGamepadNode("event0", gamepadKeys, "13:64"));
@@ -123,7 +154,9 @@ void NativeSandboxTests::gamepadCharacterDeviceNumbersAreExactAndBounded() {
     QVERIFY(!GamepadTopology::deviceNumber("event1000", "13:64", &major, &minor));
     QVERIFY(!GamepadTopology::deviceNumber("event0", "13:64:1", &major, &minor));
 }
-void NativeSandboxTests::gamepadTopologyReportsAttachDetachAndReconnect() {
+void
+NativeSandboxTests::gamepadTopologyReportsAttachDetachAndReconnect()
+{
     const QSet<QString> launchBound{"event0"};
     auto status = GamepadTopology::summarize(QSet<QString>{"event0"}, launchBound);
     QCOMPARE(status.value("connected").toInt(), 1);
@@ -149,7 +182,9 @@ void NativeSandboxTests::gamepadTopologyReportsAttachDetachAndReconnect() {
     QCOMPARE(status.value("missing").toInt(), 0);
 }
 
-void NativeSandboxTests::steamProcessMarkerIsExactAndBounded() {
+void
+NativeSandboxTests::steamProcessMarkerIsExactAndBounded()
+{
     SteamSessionOutput parser("42");
     QVERIFY(!parser.consume("STEAM_GAME_PROCESS_OBS"));
     QVERIFY(!parser.consume("ERVED 43\nSTEAM_GAME_PROCESS_OBSERVED 42"));
@@ -196,26 +231,33 @@ void NativeSandboxTests::steamProcessMarkerIsExactAndBounded() {
     QVERIFY(parser.takeState().isEmpty());
 }
 
-static QByteArray run(const NativeSandboxPlan& plan, const QString& script, const QStringList& extra = {}) {
-    if (!plan.error.isEmpty()) {
+static QByteArray
+run(const NativeSandboxPlan& plan, const QString& script, const QStringList& extra = {})
+{
+    if (!plan.error.isEmpty())
+    {
         qWarning() << plan.error;
         return "ERROR";
     }
     QProcess process;
     process.setProcessEnvironment(plan.environment);
     process.start(plan.program, plan.arguments + QStringList{"-c", script, "fixture"} + extra);
-    if (!process.waitForFinished(15000)) {
+    if (!process.waitForFinished(15000))
+    {
         process.kill();
         process.waitForFinished();
         return "TIMEOUT";
     }
-    if (process.exitCode() != 0 || process.exitStatus() != QProcess::NormalExit) {
+    if (process.exitCode() != 0 || process.exitStatus() != QProcess::NormalExit)
+    {
         qWarning() << process.exitCode() << process.readAllStandardError();
         return "ERROR";
     }
     return process.readAllStandardOutput();
 }
-void NativeSandboxTests::steamAdapterCannotAttachToHostGameProcesses() {
+void
+NativeSandboxTests::steamAdapterCannotAttachToHostGameProcesses()
+{
     QTemporaryDir storage;
     auto env = QProcessEnvironment::systemEnvironment();
     QProcess outside;
@@ -252,7 +294,9 @@ void NativeSandboxTests::steamAdapterCannotAttachToHostGameProcesses() {
     QVERIFY(!NativeSandbox::prepare(alice, "steam", "/usr/bin/python3", env, {}, storage.path(), {}, {}, "42 -bad")
                  .error.isEmpty());
 }
-void NativeSandboxTests::externalSteamGrantsAreProfileScopedAndFailClosed() {
+void
+NativeSandboxTests::externalSteamGrantsAreProfileScopedAndFailClosed()
+{
     QTemporaryDir config, storage;
     const auto original = QSettings::defaultFormat();
     QSettings::setDefaultFormat(QSettings::IniFormat);
@@ -278,7 +322,9 @@ void NativeSandboxTests::externalSteamGrantsAreProfileScopedAndFailClosed() {
     QVERIFY(!invalid.error.isEmpty());
     QSettings::setDefaultFormat(original);
 }
-void NativeSandboxTests::rememberedKodiGrantsAreScopedReadOnlyAndRevocable() {
+void
+NativeSandboxTests::rememberedKodiGrantsAreScopedReadOnlyAndRevocable()
+{
     QTemporaryDir config, storage, media;
     const auto original = QSettings::defaultFormat();
     QSettings::setDefaultFormat(QSettings::IniFormat);
@@ -314,7 +360,9 @@ void NativeSandboxTests::rememberedKodiGrantsAreScopedReadOnlyAndRevocable() {
     QSettings::setDefaultFormat(original);
 }
 
-void NativeSandboxTests::profileAndAppStorageRemainSeparate() {
+void
+NativeSandboxTests::profileAndAppStorageRemainSeparate()
+{
     QTemporaryDir storage;
     auto environment = QProcessEnvironment::systemEnvironment();
     environment.insert("SSH_AUTH_SOCK", "/host-secret-agent");
@@ -327,13 +375,14 @@ void NativeSandboxTests::profileAndAppStorageRemainSeparate() {
     QVERIFY(sentinel.open(QIODevice::WriteOnly));
     sentinel.write("not-visible");
     sentinel.close();
-    const auto create = QStringLiteral("test ! -e \"$1\" && test -z \"$SSH_AUTH_SOCK\" && "
-                                       "test ! -e \"$XDG_RUNTIME_DIR/bus\" && test ! -e \"$HOME/.ssh\" && "
-                                       "test -n \"$DBUS_SESSION_BUS_ADDRESS\" && "
-                                       "gdbus call --session --dest org.freedesktop.DBus --object-path "
-                                       "/org/freedesktop/DBus --method org.freedesktop.DBus.ListNames >/dev/null && "
-                                       "test ! -e \"$HOME/account\" && printf '%s' \"$2\" > \"$HOME/account\" && "
-                                       "printf '%s' \"$DBUS_SESSION_BUS_ADDRESS\"");
+    const auto create = QStringLiteral(
+        "test ! -e \"$1\" && test -z \"$SSH_AUTH_SOCK\" && "
+        "test ! -e \"$XDG_RUNTIME_DIR/bus\" && test ! -e \"$HOME/.ssh\" && "
+        "test -n \"$DBUS_SESSION_BUS_ADDRESS\" && "
+        "gdbus call --session --dest org.freedesktop.DBus --object-path "
+        "/org/freedesktop/DBus --method org.freedesktop.DBus.ListNames >/dev/null && "
+        "test ! -e \"$HOME/account\" && printf '%s' \"$2\" > \"$HOME/account\" && "
+        "printf '%s' \"$DBUS_SESSION_BUS_ADDRESS\"");
     const auto busA = run(a, create, {sentinel.fileName(), "Alice"});
     QVERIFY(busA.startsWith("unix:path="));
     const auto busB = run(b, create, {sentinel.fileName(), "Bob"});
@@ -346,7 +395,9 @@ void NativeSandboxTests::profileAndAppStorageRemainSeparate() {
     QVERIFY(a.homeDirectory != b.homeDirectory);
 }
 
-void NativeSandboxTests::explicitMediaIsReadOnlyAndPrivatePathsAreRefused() {
+void
+NativeSandboxTests::explicitMediaIsReadOnlyAndPrivatePathsAreRefused()
+{
     QTemporaryDir storage, media;
     QFile file(media.filePath("movie.txt"));
     QVERIFY(file.open(QIODevice::WriteOnly));
@@ -363,11 +414,14 @@ void NativeSandboxTests::explicitMediaIsReadOnlyAndPrivatePathsAreRefused() {
                  .error.isEmpty());
     QVERIFY(!NativeSandbox::prepare(alice, "fixture", "/bin/sh", environment, "/proc", storage.path()).error.isEmpty());
 }
-void NativeSandboxTests::reviewedGameBundleIsReadOnlyAndCannotEscapeItsRoot() {
+void
+NativeSandboxTests::reviewedGameBundleIsReadOnlyAndCannotEscapeItsRoot()
+{
     QTemporaryDir storage, bundle, unrelated;
     QVERIFY(QDir().mkpath(bundle.filePath("game/models")));
     const auto target = bundle.filePath("game/EBOOT.PBP"), resource = bundle.filePath("game/models/mesh.txt");
-    for (const auto& path : QStringList{target, resource}) {
+    for (const auto& path : QStringList{target, resource})
+    {
         QFile file(path);
         QVERIFY(file.open(QIODevice::WriteOnly));
         file.write("preserve-bundle");
@@ -398,7 +452,9 @@ void NativeSandboxTests::reviewedGameBundleIsReadOnlyAndCannotEscapeItsRoot() {
     QCOMPARE(original.readAll(), QByteArray("preserve-bundle"));
 }
 
-void NativeSandboxTests::managedExecutableUsesSandboxPathAndRejectsChangedContent() {
+void
+NativeSandboxTests::managedExecutableUsesSandboxPathAndRejectsChangedContent()
+{
     QStandardPaths::setTestModeEnabled(true);
     QTemporaryDir storage;
     const auto parent = ManagedGamePaths::gamesRoot(alice) + "/" + QUuid::createUuid().toString(QUuid::WithoutBraces);
@@ -431,7 +487,9 @@ void NativeSandboxTests::managedExecutableUsesSandboxPathAndRejectsChangedConten
     QStandardPaths::setTestModeEnabled(false);
 }
 
-void NativeSandboxTests::pendingManagedUninstallRecoveryPreservesConflicts() {
+void
+NativeSandboxTests::pendingManagedUninstallRecoveryPreservesConflicts()
+{
     QStandardPaths::setTestModeEnabled(true);
     const auto parent = ManagedGamePaths::gamesRoot(alice) + "/" + QUuid::createUuid().toString(QUuid::WithoutBraces);
     const auto root = parent + "/install", pending = root + ".uninstall-pending";
@@ -451,7 +509,9 @@ void NativeSandboxTests::pendingManagedUninstallRecoveryPreservesConflicts() {
     QStandardPaths::setTestModeEnabled(false);
 }
 
-void NativeSandboxTests::processTreeDiesWithLauncher() {
+void
+NativeSandboxTests::processTreeDiesWithLauncher()
+{
     QTemporaryDir storage;
     const auto plan = NativeSandbox::prepare(
         alice, "fixture", "/bin/sh", QProcessEnvironment::systemEnvironment(), {}, storage.path());
@@ -473,7 +533,9 @@ void NativeSandboxTests::processTreeDiesWithLauncher() {
     QCOMPARE(QFileInfo(heartbeat).size(), stoppedSize);
 }
 
-void NativeSandboxTests::invalidIdentityAndSymlinkAreRefused() {
+void
+NativeSandboxTests::invalidIdentityAndSymlinkAreRefused()
+{
     QTemporaryDir storage, outside;
     const auto environment = QProcessEnvironment::systemEnvironment();
     QVERIFY(
@@ -486,7 +548,9 @@ void NativeSandboxTests::invalidIdentityAndSymlinkAreRefused() {
         !NativeSandbox::prepare(alice, "fixture", "/usr/bin/flatpak", environment, {}, outside.path()).error.isEmpty());
 }
 
-void NativeSandboxTests::gracefulExitFlushesAppState() {
+void
+NativeSandboxTests::gracefulExitFlushesAppState()
+{
     QTemporaryDir storage;
     const auto plan = NativeSandbox::prepare(
         alice, "fixture", "/bin/sh", QProcessEnvironment::systemEnvironment(), {}, storage.path());
@@ -507,7 +571,9 @@ void NativeSandboxTests::gracefulExitFlushesAppState() {
     QCOMPARE(saved.readAll(), QByteArray("saved"));
 }
 
-void NativeSandboxTests::steamHostAllowsDelayedGracefulExit() {
+void
+NativeSandboxTests::steamHostAllowsDelayedGracefulExit()
+{
     QTemporaryDir storage;
     const auto ready = storage.filePath("ready");
     const auto saved = storage.filePath("saved");
@@ -534,7 +600,9 @@ void NativeSandboxTests::steamHostAllowsDelayedGracefulExit() {
     QCOMPARE(file.readAll(), QByteArray("saved"));
 }
 
-void NativeSandboxTests::steamHostReportsFailedGracefulExit() {
+void
+NativeSandboxTests::steamHostReportsFailedGracefulExit()
+{
     QTemporaryDir storage;
     const auto ready = storage.filePath("ready");
     QProcess process;
@@ -555,7 +623,9 @@ void NativeSandboxTests::steamHostReportsFailedGracefulExit() {
     QCOMPARE(process.exitCode(), 1);
 }
 
-void NativeSandboxTests::normalExitRemovesDetachedChildren() {
+void
+NativeSandboxTests::normalExitRemovesDetachedChildren()
+{
     QTemporaryDir storage;
     const auto plan = NativeSandbox::prepare(
         alice, "fixture", "/bin/sh", QProcessEnvironment::systemEnvironment(), {}, storage.path());

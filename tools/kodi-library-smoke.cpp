@@ -15,7 +15,9 @@
 #include "media/KodiService.h"
 #include "sessions/DesktopSession.h"
 
-int main(int argc, char** argv) {
+int
+main(int argc, char** argv)
+{
     QCoreApplication app(argc, argv);
     app.setApplicationName("Isolde");
     if (app.arguments().size() != 2)
@@ -29,18 +31,21 @@ int main(int argc, char** argv) {
     if (QFileInfo::exists(QFileInfo(userdata).absolutePath()) || QFileInfo::exists(collection))
         return 2;
     QMap<QString, QByteArray> hashes;
-    const auto hash = [](const QString& path) {
+    const auto hash = [](const QString& path)
+    {
         QFile file(path);
         if (!file.open(QIODevice::ReadOnly))
             return QByteArray();
         return QCryptographicHash::hash(file.readAll(), QCryptographicHash::Sha256);
     };
-    const auto write = [](const QString& path, const QByteArray& bytes) {
+    const auto write = [](const QString& path, const QByteArray& bytes)
+    {
         QDir().mkpath(QFileInfo(path).absolutePath());
         QFile file(path);
         return file.open(QIODevice::WriteOnly | QIODevice::NewOnly) && file.write(bytes) == bytes.size();
     };
-    const auto movie = [&](const QString& name) {
+    const auto movie = [&](const QString& name)
+    {
         const auto base = collection + "/Nested/" + name + '/' + name;
         QDir().mkpath(QFileInfo(base).absolutePath());
         QProcess generator;
@@ -58,7 +63,8 @@ int main(int argc, char** argv) {
                          "filesink",
                          "location=" + base + ".ogv"});
         if (!generator.waitForFinished(15000) || generator.exitCode() != 0 ||
-            generator.exitStatus() != QProcess::NormalExit) {
+            generator.exitStatus() != QProcess::NormalExit)
+        {
             qCritical() << generator.readAllStandardError();
             generator.kill();
             generator.waitForFinished();
@@ -91,7 +97,8 @@ int main(int argc, char** argv) {
     service.setEnabled(false);
     service.setFrontend("kodi");
     service.addLibraryFolder(QUrl::fromLocalFile(collection));
-    if (service.libraryFolders() != QStringList{collection}) {
+    if (service.libraryFolders() != QStringList{collection})
+    {
         qCritical() << service.folderStatus();
         return 2;
     }
@@ -105,66 +112,98 @@ int main(int argc, char** argv) {
     bool success = false;
     QObject::connect(&service, &KodiService::probeRequested, &media, &KodiMedia::refresh);
     QObject::connect(&service, &KodiService::unavailable, &media, &KodiMedia::invalidate);
-    QObject::connect(&media, &KodiMedia::changed, &app, [&] {
-        if (media.connected())
-            service.markReady();
-        if (stage != 2 || media.busy() || media.scanStatus().isEmpty())
-            return;
-        QStringList titles;
-        for (const auto& entry : media.movies())
-            titles.append(entry.toMap().value("title").toString());
-        success = media.connected() && titles.contains("Isolde Existing Fixture") &&
-                  titles.contains("Isolde Newly Added Fixture");
-        for (auto it = hashes.begin(); it != hashes.end(); ++it)
-            success &= hash(it.key()) == it.value();
-        qInfo() << "SCAN RESULT" << titles << media.scanStatus() << "MEDIA UNCHANGED AND BOTH MOVIES FOUND:" << success;
-        stage = 3;
-        QTimer::singleShot(0, &app, [&] {
-            service.setFrontend("kodi");
-        });
-    });
-    QObject::connect(&service, &KodiService::ready, &app, [&] {
-        if (stage != 1)
-            return;
-        // A missing new title before Scan proves this was not an automatic startup scan.
-        for (const auto& entry : media.movies())
-            if (entry.toMap().value("title") == "Isolde Newly Added Fixture") {
-                qCritical() << "New movie was already scanned; fixture cannot prove manual scan";
-                app.exit(1);
-                return;
-            }
-        stage = 2;
-        QTimer::singleShot(0, &app, [&] {
-            media.scanMovies();
-        });
-    });
-    QObject::connect(&service, &KodiService::changed, &app, [&] {
-        qInfo() << service.status();
-        if (stage == 3 && service.frontend() == "kodi" && !service.switching())
-            app.exit(success ? 0 : 1);
-    });
-    QObject::connect(&native, &AppSession::stateChanged, &app, [&](AppSession::State state) {
-        if (state != AppSession::State::Exited || stage != 0)
-            return;
-        if (!native.errorString().isEmpty()) {
-            qCritical() << native.errorString();
-            app.exit(1);
-            return;
-        }
-        QTimer::singleShot(0, &app, [&] {
-            if (!movie("Isolde Newly Added Fixture")) {
-                app.exit(1);
-                return;
-            }
-            stage = 1;
-            service.setEnabled(true);
-            service.setFrontend("isolde");
-        });
-    });
-    QTimer::singleShot(300000, &app, [&] {
-        qCritical() << "Acceptance timed out";
-        app.exit(1);
-    });
+    QObject::connect(&media,
+                     &KodiMedia::changed,
+                     &app,
+                     [&]
+                     {
+                         if (media.connected())
+                             service.markReady();
+                         if (stage != 2 || media.busy() || media.scanStatus().isEmpty())
+                             return;
+                         QStringList titles;
+                         for (const auto& entry : media.movies())
+                             titles.append(entry.toMap().value("title").toString());
+                         success = media.connected() && titles.contains("Isolde Existing Fixture") &&
+                                   titles.contains("Isolde Newly Added Fixture");
+                         for (auto it = hashes.begin(); it != hashes.end(); ++it)
+                             success &= hash(it.key()) == it.value();
+                         qInfo() << "SCAN RESULT" << titles << media.scanStatus()
+                                 << "MEDIA UNCHANGED AND BOTH MOVIES FOUND:" << success;
+                         stage = 3;
+                         QTimer::singleShot(0,
+                                            &app,
+                                            [&]
+                                            {
+                                                service.setFrontend("kodi");
+                                            });
+                     });
+    QObject::connect(&service,
+                     &KodiService::ready,
+                     &app,
+                     [&]
+                     {
+                         if (stage != 1)
+                             return;
+                         // A missing new title before Scan proves this was not an automatic startup scan.
+                         for (const auto& entry : media.movies())
+                             if (entry.toMap().value("title") == "Isolde Newly Added Fixture")
+                             {
+                                 qCritical() << "New movie was already scanned; fixture cannot prove manual scan";
+                                 app.exit(1);
+                                 return;
+                             }
+                         stage = 2;
+                         QTimer::singleShot(0,
+                                            &app,
+                                            [&]
+                                            {
+                                                media.scanMovies();
+                                            });
+                     });
+    QObject::connect(&service,
+                     &KodiService::changed,
+                     &app,
+                     [&]
+                     {
+                         qInfo() << service.status();
+                         if (stage == 3 && service.frontend() == "kodi" && !service.switching())
+                             app.exit(success ? 0 : 1);
+                     });
+    QObject::connect(&native,
+                     &AppSession::stateChanged,
+                     &app,
+                     [&](AppSession::State state)
+                     {
+                         if (state != AppSession::State::Exited || stage != 0)
+                             return;
+                         if (!native.errorString().isEmpty())
+                         {
+                             qCritical() << native.errorString();
+                             app.exit(1);
+                             return;
+                         }
+                         QTimer::singleShot(0,
+                                            &app,
+                                            [&]
+                                            {
+                                                if (!movie("Isolde Newly Added Fixture"))
+                                                {
+                                                    app.exit(1);
+                                                    return;
+                                                }
+                                                stage = 1;
+                                                service.setEnabled(true);
+                                                service.setFrontend("isolde");
+                                            });
+                     });
+    QTimer::singleShot(300000,
+                       &app,
+                       [&]
+                       {
+                           qCritical() << "Acceptance timed out";
+                           app.exit(1);
+                       });
     native.launch();
     qInfo() << "Configure test source: F8, select Isolde Library Test, context menu Set content, Movies, Local "
                "information only, Scan recursively. Confirm scan, then F12 to exit.";

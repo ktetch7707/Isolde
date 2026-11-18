@@ -1,6 +1,7 @@
 #pragma once
 
-namespace GamesResourceLimits {
+namespace GamesResourceLimits
+{
 inline constexpr int CatalogEntries = 50000;
 inline constexpr int PageEntries = 50;
 inline constexpr int Platforms = 128;

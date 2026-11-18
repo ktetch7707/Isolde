@@ -12,16 +12,23 @@
 #include "input/InputManager.h"
 #include "settings/RemoteSettings.h"
 
-namespace {
-QByteArray read(const QString& path) {
+namespace
+{
+QByteArray
+read(const QString& path)
+{
     QFile f(path);
     return f.open(QIODevice::ReadOnly) ? f.readAll() : QByteArray{};
 }
-bool write(const QString& path, const QByteArray& bytes) {
+bool
+write(const QString& path, const QByteArray& bytes)
+{
     QFile f(path);
     return f.open(QIODevice::WriteOnly) && f.write(bytes) == bytes.size();
 }
-void press(int key, Qt::KeyboardModifiers modifiers = Qt::NoModifier, bool repeat = false) {
+void
+press(int key, Qt::KeyboardModifiers modifiers = Qt::NoModifier, bool repeat = false)
+{
     QObject receiver;
     QKeyEvent event(QEvent::KeyPress, key, modifiers, {}, repeat);
     QCoreApplication::sendEvent(&receiver, &event);
@@ -30,21 +37,33 @@ void press(int key, Qt::KeyboardModifiers modifiers = Qt::NoModifier, bool repea
 }
 } // namespace
 
-class RemoteBindingTests : public QObject {
+class RemoteBindingTests : public QObject
+{
     Q_OBJECT
   private slots:
-    void captureSaveReloadAndProfileIsolation();
-    void cancelConflictRepeatAndInvalidInput();
-    void malformedStorageAndAtomicFailure();
-    void remoteUiCaptureReviewCancelRestore();
-    void physicalKeyboardTextAndControls();
-    void ambientWakeConsumesPressRepeatAndRelease();
-    void bindingCaptureReportsInputActivity();
-    void bindingCapturePreemptsShortcuts();
-    void textPreferenceCompatibilityAndRollback();
+    void
+    captureSaveReloadAndProfileIsolation();
+    void
+    cancelConflictRepeatAndInvalidInput();
+    void
+    malformedStorageAndAtomicFailure();
+    void
+    remoteUiCaptureReviewCancelRestore();
+    void
+    physicalKeyboardTextAndControls();
+    void
+    ambientWakeConsumesPressRepeatAndRelease();
+    void
+    bindingCaptureReportsInputActivity();
+    void
+    bindingCapturePreemptsShortcuts();
+    void
+    textPreferenceCompatibilityAndRollback();
 };
 
-void RemoteBindingTests::bindingCapturePreemptsShortcuts() {
+void
+RemoteBindingTests::bindingCapturePreemptsShortcuts()
+{
     QTemporaryDir dir;
     InputManager manager(dir.filePath("bindings.json"));
     QQuickWindow window;
@@ -71,7 +90,9 @@ void RemoteBindingTests::bindingCapturePreemptsShortcuts() {
     QCOMPARE(activated.size(), 1);
 }
 
-void RemoteBindingTests::bindingCaptureReportsInputActivity() {
+void
+RemoteBindingTests::bindingCaptureReportsInputActivity()
+{
     InputManager manager;
     QSignalSpy activity(&manager, &InputManager::inputActivity);
     QVERIFY(manager.beginBinding(InputManager::NavigateUp));
@@ -82,12 +103,17 @@ void RemoteBindingTests::bindingCaptureReportsInputActivity() {
     QCOMPARE(activity.size(), 2);
 }
 
-void RemoteBindingTests::ambientWakeConsumesPressRepeatAndRelease() {
-    class Recorder final : public QObject {
+void
+RemoteBindingTests::ambientWakeConsumesPressRepeatAndRelease()
+{
+    class Recorder final : public QObject
+    {
       public:
         int presses = 0;
         int releases = 0;
-        bool event(QEvent* event) override {
+        bool
+        event(QEvent* event) override
+        {
             if (event->type() == QEvent::KeyPress)
                 ++presses;
             if (event->type() == QEvent::KeyRelease)
@@ -97,15 +123,20 @@ void RemoteBindingTests::ambientWakeConsumesPressRepeatAndRelease() {
     } receiver;
     InputManager manager;
     QSignalSpy wake(&manager, &InputManager::ambientWakeRequested);
-    connect(&manager, &InputManager::ambientWakeRequested, &manager, [&manager] {
-        manager.setAmbientInputActive(false);
-    });
+    connect(&manager,
+            &InputManager::ambientWakeRequested,
+            &manager,
+            [&manager]
+            {
+                manager.setAmbientInputActive(false);
+            });
     manager.setAmbientInputActive(true);
     QKeyEvent overrideEvent(QEvent::ShortcutOverride, Qt::Key_A, Qt::NoModifier, "a");
     overrideEvent.ignore();
     QCoreApplication::sendEvent(&receiver, &overrideEvent);
     QVERIFY(overrideEvent.isAccepted());
-    auto send = [&receiver](QEvent::Type type, bool repeat) {
+    auto send = [&receiver](QEvent::Type type, bool repeat)
+    {
         QKeyEvent event(type, Qt::Key_A, Qt::NoModifier, "a", repeat);
         QCoreApplication::sendEvent(&receiver, &event);
     };
@@ -121,7 +152,9 @@ void RemoteBindingTests::ambientWakeConsumesPressRepeatAndRelease() {
     QCOMPARE(receiver.releases, 1);
 }
 
-void RemoteBindingTests::captureSaveReloadAndProfileIsolation() {
+void
+RemoteBindingTests::captureSaveReloadAndProfileIsolation()
+{
     QTemporaryDir dir;
     QVERIFY(dir.isValid());
     const auto path = dir.filePath("one.json");
@@ -171,7 +204,9 @@ void RemoteBindingTests::captureSaveReloadAndProfileIsolation() {
     QVERIFY(manager.nativeReturnShortcut().isEmpty());
 }
 
-void RemoteBindingTests::cancelConflictRepeatAndInvalidInput() {
+void
+RemoteBindingTests::cancelConflictRepeatAndInvalidInput()
+{
     QTemporaryDir dir;
     const auto path = dir.filePath("bindings.json");
     InputManager manager(path);
@@ -222,7 +257,9 @@ void RemoteBindingTests::cancelConflictRepeatAndInvalidInput() {
     QCOMPARE(read(path), before);
 }
 
-void RemoteBindingTests::malformedStorageAndAtomicFailure() {
+void
+RemoteBindingTests::malformedStorageAndAtomicFailure()
+{
     QTemporaryDir dir;
     const auto path = dir.filePath("bindings.json");
     const QList<QByteArray> invalid{R"({"schemaVersion":2,"bindings":{}})",
@@ -230,7 +267,8 @@ void RemoteBindingTests::malformedStorageAndAtomicFailure() {
                                     R"({"schemaVersion":1,"bindings":{"1":1.5}})",
                                     R"({"schemaVersion":1,"bindings":{"99":65}})",
                                     QByteArray(8193, 'x')};
-    for (const auto& bytes : invalid) {
+    for (const auto& bytes : invalid)
+    {
         QVERIFY(write(path, bytes));
         InputManager manager(path);
         QVERIFY(!manager.errorString().isEmpty());
@@ -257,7 +295,9 @@ void RemoteBindingTests::malformedStorageAndAtomicFailure() {
     QCOMPARE(manager.commandForKey(Qt::Key_F11), InputManager::Home);
 }
 
-void RemoteBindingTests::remoteUiCaptureReviewCancelRestore() {
+void
+RemoteBindingTests::remoteUiCaptureReviewCancelRestore()
+{
     QTemporaryDir dir;
     const auto path = dir.filePath("bindings.json");
     QSettings::setDefaultFormat(QSettings::IniFormat);
@@ -283,7 +323,8 @@ void RemoteBindingTests::remoteUiCaptureReviewCancelRestore() {
     QVERIFY(QTest::qWaitForWindowExposed(&window));
     auto* page = object->findChild<QObject*>("remotePage");
     QVERIFY(page);
-    auto capture = [&](const QString& name) {
+    auto capture = [&](const QString& name)
+    {
         const auto folder = qEnvironmentVariable("ISOLDE_TEST_ARTIFACTS");
         return folder.isEmpty() ||
                window.grabWindow().save(QDir(folder).filePath("studio-test-remote-" + name + ".png"));
@@ -342,7 +383,9 @@ void RemoteBindingTests::remoteUiCaptureReviewCancelRestore() {
     QVERIFY(capture("recovery"));
 }
 
-void RemoteBindingTests::physicalKeyboardTextAndControls() {
+void
+RemoteBindingTests::physicalKeyboardTextAndControls()
+{
     QTemporaryDir dir;
     InputManager manager(dir.filePath("bindings.json"));
     QVERIFY(manager.beginBinding(InputManager::NavigateUp));
@@ -380,7 +423,8 @@ void RemoteBindingTests::physicalKeyboardTextAndControls() {
     shortcut.setEnabled(false);
     chord.setEnabled(false);
     keyboard->setProperty("value", QString());
-    auto type = [&](int key, const QString& text, Qt::KeyboardModifiers modifiers = Qt::NoModifier) {
+    auto type = [&](int key, const QString& text, Qt::KeyboardModifiers modifiers = Qt::NoModifier)
+    {
         QKeyEvent down(QEvent::KeyPress, key, modifiers, text);
         QCoreApplication::sendEvent(&window, &down);
         QKeyEvent up(QEvent::KeyRelease, key, modifiers, text);
@@ -446,7 +490,9 @@ void RemoteBindingTests::physicalKeyboardTextAndControls() {
     QCOMPARE(object->property("acceptedValue").toString(), expected);
 }
 
-void RemoteBindingTests::textPreferenceCompatibilityAndRollback() {
+void
+RemoteBindingTests::textPreferenceCompatibilityAndRollback()
+{
     QTemporaryDir dir;
     const auto path = dir.filePath("bindings.json");
     const QByteArray legacy = R"({"schemaVersion":1,"bindings":{}})";

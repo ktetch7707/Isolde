@@ -5,7 +5,8 @@
 #include <QMediaDevices>
 #include "VideoCaptureAdapter.h"
 
-class QtVideoCaptureAdapter final : public VideoCaptureAdapter {
+class QtVideoCaptureAdapter final : public VideoCaptureAdapter
+{
     Q_OBJECT
   public:
     explicit QtVideoCaptureAdapter(QObject* parent = nullptr);

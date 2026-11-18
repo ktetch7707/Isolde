@@ -62,3 +62,8 @@ Before VM actions, read `docs/vm-oracle.md`. Use `tools/vm-test.ps1` for Test/Vi
     - Never include build artifacts, IDE files, or binary artwork in commits.
     - Keep commit messages short but descriptive; reference docs/task if relevant.
     - Accessibility/security: passwords masked, no credentialed URLs, no shell expansion of Exec lines, content-addressed managed artwork only, explicit consent for disk/install/update actions.
+66:
+67: 13. Code documentation (user revision 2026-11-17):
+68:     - EVERY function MUST have a comment explaining what it does and why it exists.
+69:     - Comments must explain intent and rationale, not just restate the code.
+70:     - Document the "why" behind each function, not just the "what."

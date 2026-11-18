@@ -6,8 +6,11 @@
 #include <QVideoFrame>
 #include <QVideoSink>
 
-namespace {
-QString formatKey(const QCameraFormat& format) {
+namespace
+{
+QString
+formatKey(const QCameraFormat& format)
+{
     const auto size = format.resolution();
     return QString("%1x%2@%3-%4#%5")
         .arg(size.width())
@@ -18,18 +21,27 @@ QString formatKey(const QCameraFormat& format) {
 }
 } // namespace
 
-QtVideoCaptureAdapter::QtVideoCaptureAdapter(QObject* parent) : VideoCaptureAdapter(parent) {
+QtVideoCaptureAdapter::QtVideoCaptureAdapter(QObject* parent) : VideoCaptureAdapter(parent)
+{
     connect(&m_devices, &QMediaDevices::videoInputsChanged, this, &VideoCaptureAdapter::devicesChanged);
-    connect(&m_camera, &QCamera::errorOccurred, this, [this](QCamera::Error, const QString& message) {
-        emit errorOccurred(message);
-    });
+    connect(&m_camera,
+            &QCamera::errorOccurred,
+            this,
+            [this](QCamera::Error, const QString& message)
+            {
+                emit errorOccurred(message);
+            });
 }
 
-QVariantList QtVideoCaptureAdapter::devices() const {
+QVariantList
+QtVideoCaptureAdapter::devices() const
+{
     QVariantList result;
-    for (const auto& device : QMediaDevices::videoInputs()) {
+    for (const auto& device : QMediaDevices::videoInputs())
+    {
         QStringList formats;
-        for (const auto& format : device.videoFormats()) {
+        for (const auto& format : device.videoFormats())
+        {
             const auto size = format.resolution();
             formats.append(QString("%1 × %2, %3–%4 fps")
                                .arg(size.width())
@@ -45,12 +57,16 @@ QVariantList QtVideoCaptureAdapter::devices() const {
     return result;
 }
 
-QVariantList QtVideoCaptureAdapter::formats(const QString& deviceId) const {
+QVariantList
+QtVideoCaptureAdapter::formats(const QString& deviceId) const
+{
     QVariantList result;
-    for (const auto& device : QMediaDevices::videoInputs()) {
+    for (const auto& device : QMediaDevices::videoInputs())
+    {
         if (QString::fromLatin1(device.id()) != deviceId)
             continue;
-        for (const auto& format : device.videoFormats()) {
+        for (const auto& format : device.videoFormats())
+        {
             const auto size = format.resolution();
             const auto key = formatKey(format);
             const auto label = QString("%1 × %2 · %3–%4 fps · format %5")
@@ -70,29 +86,42 @@ QVariantList QtVideoCaptureAdapter::formats(const QString& deviceId) const {
     return result;
 }
 
-QString QtVideoCaptureAdapter::name() const {
+QString
+QtVideoCaptureAdapter::name() const
+{
     return QStringLiteral("Qt Multimedia");
 }
 
-void QtVideoCaptureAdapter::setOutput(QObject* output) {
+void
+QtVideoCaptureAdapter::setOutput(QObject* output)
+{
     if (m_frameConnection)
         disconnect(m_frameConnection);
     m_session.setVideoOutput(output);
     if (auto* sink = m_session.videoSink())
-        m_frameConnection = connect(sink, &QVideoSink::videoFrameChanged, this, [this](const QVideoFrame& frame) {
-            if (frame.isValid())
-                emit frameReceived();
-        });
+        m_frameConnection = connect(sink,
+                                    &QVideoSink::videoFrameChanged,
+                                    this,
+                                    [this](const QVideoFrame& frame)
+                                    {
+                                        if (frame.isValid())
+                                            emit frameReceived();
+                                    });
 }
 
-bool QtVideoCaptureAdapter::start(const QString& deviceId, const QString& formatKeyValue) {
-    for (const auto& device : QMediaDevices::videoInputs()) {
+bool
+QtVideoCaptureAdapter::start(const QString& deviceId, const QString& formatKeyValue)
+{
+    for (const auto& device : QMediaDevices::videoInputs())
+    {
         if (QString::fromLatin1(device.id()) != deviceId)
             continue;
         QCameraFormat selectedFormat;
         bool found = formatKeyValue.isEmpty();
-        for (const auto& format : device.videoFormats()) {
-            if (formatKey(format) == formatKeyValue) {
+        for (const auto& format : device.videoFormats())
+        {
+            if (formatKey(format) == formatKeyValue)
+            {
                 selectedFormat = format;
                 found = true;
                 break;
@@ -109,12 +138,16 @@ bool QtVideoCaptureAdapter::start(const QString& deviceId, const QString& format
     return false;
 }
 
-void QtVideoCaptureAdapter::stop() {
+void
+QtVideoCaptureAdapter::stop()
+{
     if (m_camera.isActive())
         m_camera.stop();
     m_session.setCamera(nullptr);
 }
 
-QObject* QtVideoCaptureAdapter::audioContext() override {
+QObject*
+QtVideoCaptureAdapter::audioContext() override
+{
     return &m_session;
 }

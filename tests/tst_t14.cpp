@@ -25,21 +25,28 @@
 #include <QUuid>
 #include <QtTest>
 
-class FixtureRoot {
+class FixtureRoot
+{
   public:
     FixtureRoot()
         : m_path(QDir::current().filePath(
-              QStringLiteral(".t14-fixture-%1").arg(QUuid::createUuid().toString(QUuid::WithoutBraces)))) {
+              QStringLiteral(".t14-fixture-%1").arg(QUuid::createUuid().toString(QUuid::WithoutBraces))))
+    {
         m_valid = QDir().mkpath(m_path);
     }
-    ~FixtureRoot() {
+    ~FixtureRoot()
+    {
         if (m_valid)
             QDir(m_path).removeRecursively();
     }
-    bool isValid() const {
+    bool
+    isValid() const
+    {
         return m_valid;
     }
-    QString filePath(const QString& name) const {
+    QString
+    filePath(const QString& name) const
+    {
         return QDir(m_path).filePath(name);
     }
 
@@ -48,108 +55,153 @@ class FixtureRoot {
     bool m_valid = false;
 };
 
-class FakeSubtitleClient final : public QObject {
+class FakeSubtitleClient final : public QObject
+{
     Q_OBJECT
     Q_PROPERTY(QVariantList subtitleTracks READ subtitleTracks NOTIFY changed)
     Q_PROPERTY(bool busy READ busy NOTIFY changed)
     Q_PROPERTY(QString subtitleStatus READ subtitleStatus NOTIFY changed)
   public:
-    QVariantList subtitleTracks() const {
+    QVariantList
+    subtitleTracks() const
+    {
         return {QVariantMap{{QStringLiteral("id"), 4}, {QStringLiteral("name"), QStringLiteral("English")}},
                 QVariantMap{{QStringLiteral("id"), 8}, {QStringLiteral("name"), QStringLiteral("Spanish")}}};
     }
-    bool busy() const {
+    bool
+    busy() const
+    {
         return false;
     }
-    QString subtitleStatus() const {
+    QString
+    subtitleStatus() const
+    {
         return QStringLiteral("2 subtitle tracks discovered from Kodi.");
     }
-    Q_INVOKABLE void refreshSubtitleTracks() {
+    Q_INVOKABLE void
+    refreshSubtitleTracks()
+    {
         ++refreshes;
         emit changed();
     }
-    Q_INVOKABLE void setSubtitleTrack(int trackId) {
+    Q_INVOKABLE void
+    setSubtitleTrack(int trackId)
+    {
         selected = trackId;
         emit changed();
     }
     int refreshes = 0;
     int selected = -2;
   signals:
-    void changed();
+    void
+    changed();
 };
 
-class T14Tests final : public QObject {
+class T14Tests final : public QObject
+{
     Q_OBJECT
   private slots:
-    void discoveryIsOptInRegionAwareAndDoesNotClaimEntitlement();
-    void subtitleRepositoryIsOptInAndDownloadsOnlyExplicitPlainSrt();
-    void offlineTranslationWritesUnicodeSrtWithoutOverwriting();
-    void subtitleQualityReportFlagsUnchangedCuesWithoutCertifyingQuality();
-    void offlineAudioGenerationUsesOnlyAnInstalledLocalModel();
-    void languagePacksCanBeInspectedAndInstalledFromLocalFiles();
-    void subtitleInputsAreValidatedAndExplicitlyQueued();
-    void subtitleQueueHasRemoteKeyboardAndBackBehavior();
-    void subtitleTrackPickerUsesRemoteControlsAndManagedClient();
+    void
+    discoveryIsOptInRegionAwareAndDoesNotClaimEntitlement();
+    void
+    subtitleRepositoryIsOptInAndDownloadsOnlyExplicitPlainSrt();
+    void
+    offlineTranslationWritesUnicodeSrtWithoutOverwriting();
+    void
+    subtitleQualityReportFlagsUnchangedCuesWithoutCertifyingQuality();
+    void
+    offlineAudioGenerationUsesOnlyAnInstalledLocalModel();
+    void
+    languagePacksCanBeInspectedAndInstalledFromLocalFiles();
+    void
+    subtitleInputsAreValidatedAndExplicitlyQueued();
+    void
+    subtitleQueueHasRemoteKeyboardAndBackBehavior();
+    void
+    subtitleTrackPickerUsesRemoteControlsAndManagedClient();
 };
 
-void T14Tests::subtitleRepositoryIsOptInAndDownloadsOnlyExplicitPlainSrt() {
+void
+T14Tests::subtitleRepositoryIsOptInAndDownloadsOnlyExplicitPlainSrt()
+{
     QTcpServer server;
     QVERIFY(server.listen(QHostAddress::LocalHost));
     QStringList requests;
-    connect(&server, &QTcpServer::newConnection, &server, [&] {
-        while (server.hasPendingConnections()) {
-            auto* socket = server.nextPendingConnection();
-            connect(socket, &QTcpSocket::readyRead, socket, [&, socket] {
-                auto input = socket->property("request").toByteArray() + socket->readAll();
-                socket->setProperty("request", input);
-                const auto headerEnd = input.indexOf("\r\n\r\n");
-                if (headerEnd < 0)
-                    return;
-                const auto headers = input.left(headerEnd + 4);
-                int contentLength = 0;
-                const auto contentLengthLine =
-                    QRegularExpression(QStringLiteral("(?im)^Content-Length:\\s*(\\d+)\\s*$"))
-                        .match(QString::fromLatin1(headers));
-                if (contentLengthLine.hasMatch())
-                    contentLength = contentLengthLine.captured(1).toInt();
-                if (input.size() < headerEnd + 4 + contentLength)
-                    return;
-                const auto request = QString::fromLatin1(input);
-                requests.append(request);
-                QJsonObject body;
-                QByteArray contentType = QByteArrayLiteral("application/json");
-                QByteArray responseBody;
-                if (request.startsWith(QStringLiteral("GET /api/v1/subtitles?"))) {
-                    body = {{QStringLiteral("data"),
-                             QJsonArray{QJsonObject{
-                                 {QStringLiteral("attributes"),
-                                  QJsonObject{{QStringLiteral("language"), QStringLiteral("en")},
-                                              {QStringLiteral("release"), QStringLiteral("Arrival.2016")},
-                                              {QStringLiteral("download_count"), 77},
-                                              {QStringLiteral("feature_details"),
-                                               QJsonObject{{QStringLiteral("title"), QStringLiteral("Arrival")}}},
-                                              {QStringLiteral("files"),
-                                               QJsonArray{QJsonObject{{QStringLiteral("file_id"), 755},
-                                                                      {QStringLiteral("file_name"),
-                                                                       QStringLiteral("Arrival.en.srt")}}}}}}}}}};
-                    responseBody = QJsonDocument(body).toJson(QJsonDocument::Compact);
-                } else if (request.startsWith(QStringLiteral("POST /api/v1/download"))) {
-                    body = {{QStringLiteral("link"),
-                             QStringLiteral("http://127.0.0.1:%1/download/file").arg(server.serverPort())}};
-                    responseBody = QJsonDocument(body).toJson(QJsonDocument::Compact);
-                } else if (request.startsWith(QStringLiteral("GET /download/file"))) {
-                    contentType = QByteArrayLiteral("text/plain; charset=utf-8");
-                    responseBody = QByteArrayLiteral("1\n00:00:01,000 --> 00:00:02,000\nHello from repository\n");
-                } else {
-                    responseBody = QByteArrayLiteral("{}");
-                }
-                socket->write(QByteArrayLiteral("HTTP/1.1 200 OK\r\nContent-Type: ") + contentType +
-                              QByteArrayLiteral("\r\nConnection: close\r\nContent-Length: ") +
-                              QByteArray::number(responseBody.size()) + QByteArrayLiteral("\r\n\r\n") + responseBody);
-                socket->disconnectFromHost();
-            });
-        }
-    });
+    connect(
+        &server,
+        &QTcpServer::newConnection,
+        &server,
+        [&]
+        {
+            while (server.hasPendingConnections())
+            {
+                auto* socket = server.nextPendingConnection();
+                connect(
+                    socket,
+                    &QTcpSocket::readyRead,
+                    socket,
+                    [&, socket]
+                    {
+                        auto input = socket->property("request").toByteArray() + socket->readAll();
+                        socket->setProperty("request", input);
+                        const auto headerEnd = input.indexOf("\r\n\r\n");
+                        if (headerEnd < 0)
+                            return;
+                        const auto headers = input.left(headerEnd + 4);
+                        int contentLength = 0;
+                        const auto contentLengthLine =
+                            QRegularExpression(QStringLiteral("(?im)^Content-Length:\\s*(\\d+)\\s*$"))
+                                .match(QString::fromLatin1(headers));
+                        if (contentLengthLine.hasMatch())
+                            contentLength = contentLengthLine.captured(1).toInt();
+                        if (input.size() < headerEnd + 4 + contentLength)
+                            return;
+                        const auto request = QString::fromLatin1(input);
+                        requests.append(request);
+                        QJsonObject body;
+                        QByteArray contentType = QByteArrayLiteral("application/json");
+                        QByteArray responseBody;
+                        if (request.startsWith(QStringLiteral("GET /api/v1/subtitles?")))
+                        {
+                            body = {
+                                {QStringLiteral("data"),
+                                 QJsonArray{QJsonObject{
+                                     {QStringLiteral("attributes"),
+                                      QJsonObject{{QStringLiteral("language"), QStringLiteral("en")},
+                                                  {QStringLiteral("release"), QStringLiteral("Arrival.2016")},
+                                                  {QStringLiteral("download_count"), 77},
+                                                  {QStringLiteral("feature_details"),
+                                                   QJsonObject{{QStringLiteral("title"), QStringLiteral("Arrival")}}},
+                                                  {QStringLiteral("files"),
+                                                   QJsonArray{QJsonObject{{QStringLiteral("file_id"), 755},
+                                                                          {QStringLiteral("file_name"),
+                                                                           QStringLiteral("Arrival.en.srt")}}}}}}}}}};
+                            responseBody = QJsonDocument(body).toJson(QJsonDocument::Compact);
+                        }
+                        else if (request.startsWith(QStringLiteral("POST /api/v1/download")))
+                        {
+                            body = {{QStringLiteral("link"),
+                                     QStringLiteral("http://127.0.0.1:%1/download/file").arg(server.serverPort())}};
+                            responseBody = QJsonDocument(body).toJson(QJsonDocument::Compact);
+                        }
+                        else if (request.startsWith(QStringLiteral("GET /download/file")))
+                        {
+                            contentType = QByteArrayLiteral("text/plain; charset=utf-8");
+                            responseBody =
+                                QByteArrayLiteral("1\n00:00:01,000 --> 00:00:02,000\nHello from repository\n");
+                        }
+                        else
+                        {
+                            responseBody = QByteArrayLiteral("{}");
+                        }
+                        socket->write(QByteArrayLiteral("HTTP/1.1 200 OK\r\nContent-Type: ") + contentType +
+                                      QByteArrayLiteral("\r\nConnection: close\r\nContent-Length: ") +
+                                      QByteArray::number(responseBody.size()) + QByteArrayLiteral("\r\n\r\n") +
+                                      responseBody);
+                        socket->disconnectFromHost();
+                    });
+            }
+        });
 
     FixtureRoot directory;
     QVERIFY(directory.isValid());
@@ -197,57 +249,76 @@ void T14Tests::subtitleRepositoryIsOptInAndDownloadsOnlyExplicitPlainSrt() {
     QCOMPARE(requests.size(), 3);
 }
 
-void T14Tests::discoveryIsOptInRegionAwareAndDoesNotClaimEntitlement() {
+void
+T14Tests::discoveryIsOptInRegionAwareAndDoesNotClaimEntitlement()
+{
     QTcpServer server;
     QVERIFY(server.listen(QHostAddress::LocalHost));
     int requests = 0;
     QStringList requestLines;
     bool holdNext = false;
-    connect(&server, &QTcpServer::newConnection, &server, [&] {
-        while (server.hasPendingConnections()) {
-            auto* socket = server.nextPendingConnection();
-            connect(socket, &QTcpSocket::readyRead, socket, [&, socket] {
-                const auto input = socket->property("request").toByteArray() + socket->readAll();
-                socket->setProperty("request", input);
-                if (!input.contains("\r\n\r\n"))
-                    return;
-                const auto request = QString::fromLatin1(input);
-                requestLines.append(request);
-                ++requests;
-                if (holdNext) {
-                    holdNext = false;
-                    return;
-                }
-                QJsonObject body;
-                if (request.contains("/search/multi")) {
-                    body = {{QStringLiteral("results"),
-                             QJsonArray{QJsonObject{{QStringLiteral("id"), 501},
-                                                    {QStringLiteral("media_type"), QStringLiteral("movie")},
-                                                    {QStringLiteral("title"), QStringLiteral("Dune")},
-                                                    {QStringLiteral("release_date"), QStringLiteral("2021-10-22")},
-                                                    {QStringLiteral("overview"), QStringLiteral("A fixture result.")}},
-                                        QJsonObject{{QStringLiteral("id"), 502},
-                                                    {QStringLiteral("media_type"), QStringLiteral("movie")},
-                                                    {QStringLiteral("title"), QStringLiteral("Dune")},
-                                                    {QStringLiteral("release_date"), QStringLiteral("1984-12-14")}}}}};
-                } else {
-                    body = {{QStringLiteral("results"),
-                             QJsonObject{{QStringLiteral("CA"),
-                                          QJsonObject{{QStringLiteral("flatrate"),
-                                                       QJsonArray{QJsonObject{{QStringLiteral("provider_id"), 8},
-                                                                              {QStringLiteral("provider_name"),
-                                                                               QStringLiteral("Netflix")}}}}}}}}};
-                }
-                const auto bytes = QJsonDocument(body).toJson(QJsonDocument::Compact);
-                const auto response =
-                    QByteArrayLiteral(
-                        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\nContent-Length: ") +
-                    QByteArray::number(bytes.size()) + QByteArrayLiteral("\r\n\r\n") + bytes;
-                socket->write(response);
-                socket->disconnectFromHost();
-            });
-        }
-    });
+    connect(
+        &server,
+        &QTcpServer::newConnection,
+        &server,
+        [&]
+        {
+            while (server.hasPendingConnections())
+            {
+                auto* socket = server.nextPendingConnection();
+                connect(
+                    socket,
+                    &QTcpSocket::readyRead,
+                    socket,
+                    [&, socket]
+                    {
+                        const auto input = socket->property("request").toByteArray() + socket->readAll();
+                        socket->setProperty("request", input);
+                        if (!input.contains("\r\n\r\n"))
+                            return;
+                        const auto request = QString::fromLatin1(input);
+                        requestLines.append(request);
+                        ++requests;
+                        if (holdNext)
+                        {
+                            holdNext = false;
+                            return;
+                        }
+                        QJsonObject body;
+                        if (request.contains("/search/multi"))
+                        {
+                            body = {{QStringLiteral("results"),
+                                     QJsonArray{
+                                         QJsonObject{{QStringLiteral("id"), 501},
+                                                     {QStringLiteral("media_type"), QStringLiteral("movie")},
+                                                     {QStringLiteral("title"), QStringLiteral("Dune")},
+                                                     {QStringLiteral("release_date"), QStringLiteral("2021-10-22")},
+                                                     {QStringLiteral("overview"), QStringLiteral("A fixture result.")}},
+                                         QJsonObject{{QStringLiteral("id"), 502},
+                                                     {QStringLiteral("media_type"), QStringLiteral("movie")},
+                                                     {QStringLiteral("title"), QStringLiteral("Dune")},
+                                                     {QStringLiteral("release_date"), QStringLiteral("1984-12-14")}}}}};
+                        }
+                        else
+                        {
+                            body = {
+                                {QStringLiteral("results"),
+                                 QJsonObject{{QStringLiteral("CA"),
+                                              QJsonObject{{QStringLiteral("flatrate"),
+                                                           QJsonArray{QJsonObject{{QStringLiteral("provider_id"), 8},
+                                                                                  {QStringLiteral("provider_name"),
+                                                                                   QStringLiteral("Netflix")}}}}}}}}};
+                        }
+                        const auto bytes = QJsonDocument(body).toJson(QJsonDocument::Compact);
+                        const auto response = QByteArrayLiteral(
+                                                  "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: "
+                                                  "close\r\nContent-Length: ") +
+                                              QByteArray::number(bytes.size()) + QByteArrayLiteral("\r\n\r\n") + bytes;
+                        socket->write(response);
+                        socket->disconnectFromHost();
+                    });
+            }
+        });
 
     FixtureRoot directory;
     QVERIFY(directory.isValid());
@@ -318,7 +389,9 @@ void T14Tests::discoveryIsOptInRegionAwareAndDoesNotClaimEntitlement() {
     QVERIFY(unconfigured.status().contains(QStringLiteral("not configured")));
 }
 
-void T14Tests::offlineTranslationWritesUnicodeSrtWithoutOverwriting() {
+void
+T14Tests::offlineTranslationWritesUnicodeSrtWithoutOverwriting()
+{
     FixtureRoot directory;
     QVERIFY(directory.isValid());
     const auto tools = directory.filePath(QStringLiteral("tools"));
@@ -331,9 +404,11 @@ void T14Tests::offlineTranslationWritesUnicodeSrtWithoutOverwriting() {
     QVERIFY(script.setPermissions(QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner));
     const auto previousPath = qgetenv("PATH");
     qputenv("PATH", (tools + QLatin1Char(':') + QString::fromLocal8Bit(previousPath)).toLocal8Bit());
-    QScopeGuard restorePath([&] {
-        qputenv("PATH", previousPath);
-    });
+    QScopeGuard restorePath(
+        [&]
+        {
+            qputenv("PATH", previousPath);
+        });
 
     const auto source = directory.filePath(QStringLiteral("film.zh.srt"));
     const QByteArray original =
@@ -402,7 +477,9 @@ void T14Tests::offlineTranslationWritesUnicodeSrtWithoutOverwriting() {
     QVERIFY(QFileInfo::exists(output));
 }
 
-void T14Tests::subtitleQualityReportFlagsUnchangedCuesWithoutCertifyingQuality() {
+void
+T14Tests::subtitleQualityReportFlagsUnchangedCuesWithoutCertifyingQuality()
+{
     FixtureRoot directory;
     QVERIFY(directory.isValid());
     const auto tools = directory.filePath(QStringLiteral("tools"));
@@ -410,16 +487,19 @@ void T14Tests::subtitleQualityReportFlagsUnchangedCuesWithoutCertifyingQuality()
     const auto translator = QDir(tools).filePath(QStringLiteral("argos-translate"));
     QFile script(translator);
     QVERIFY(script.open(QIODevice::WriteOnly));
-    script.write("#!/bin/sh\nwhile [ \"$#\" -gt 0 ]; do\n"
-                 "if [ \"$1\" = \"--text\" ]; then shift; printf '%s' \"$1\"; exit 0; fi\n"
-                 "shift\ndone\nexit 2\n");
+    script.write(
+        "#!/bin/sh\nwhile [ \"$#\" -gt 0 ]; do\n"
+        "if [ \"$1\" = \"--text\" ]; then shift; printf '%s' \"$1\"; exit 0; fi\n"
+        "shift\ndone\nexit 2\n");
     script.close();
     QVERIFY(script.setPermissions(QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner));
     const auto previousPath = qgetenv("PATH");
     qputenv("PATH", (tools + QLatin1Char(':') + QString::fromLocal8Bit(previousPath)).toLocal8Bit());
-    QScopeGuard restorePath([&] {
-        qputenv("PATH", previousPath);
-    });
+    QScopeGuard restorePath(
+        [&]
+        {
+            qputenv("PATH", previousPath);
+        });
 
     const auto source = directory.filePath(QStringLiteral("same.zh.srt"));
     QFile input(source);
@@ -438,7 +518,9 @@ void T14Tests::subtitleQualityReportFlagsUnchangedCuesWithoutCertifyingQuality()
         report.value(QStringLiteral("warnings")).toStringList().contains(QStringLiteral("possible-untranslated-cues")));
 }
 
-void T14Tests::subtitleInputsAreValidatedAndExplicitlyQueued() {
+void
+T14Tests::subtitleInputsAreValidatedAndExplicitlyQueued()
+{
     FixtureRoot directory;
     QVERIFY(directory.isValid());
     SubtitleService service(nullptr, directory.filePath(QStringLiteral("cache")));
@@ -481,7 +563,9 @@ void T14Tests::subtitleInputsAreValidatedAndExplicitlyQueued() {
     QVERIFY(service.errorString().isEmpty());
 }
 
-void T14Tests::offlineAudioGenerationUsesOnlyAnInstalledLocalModel() {
+void
+T14Tests::offlineAudioGenerationUsesOnlyAnInstalledLocalModel()
+{
     FixtureRoot directory;
     QVERIFY(directory.isValid());
     const auto tools = directory.filePath(QStringLiteral("tools"));
@@ -501,9 +585,11 @@ void T14Tests::offlineAudioGenerationUsesOnlyAnInstalledLocalModel() {
     QVERIFY(script.setPermissions(QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner));
     const auto previousPath = qgetenv("PATH");
     qputenv("PATH", (tools + QLatin1Char(':') + QString::fromLocal8Bit(previousPath)).toLocal8Bit());
-    QScopeGuard restorePath([&] {
-        qputenv("PATH", previousPath);
-    });
+    QScopeGuard restorePath(
+        [&]
+        {
+            qputenv("PATH", previousPath);
+        });
 
     const auto media = directory.filePath(QStringLiteral("episode.mkv"));
     QFile input(media);
@@ -535,17 +621,20 @@ void T14Tests::offlineAudioGenerationUsesOnlyAnInstalledLocalModel() {
     QCOMPARE(provenance.value(QStringLiteral("offlineOnly")).toBool(), true);
 }
 
-void T14Tests::languagePacksCanBeInspectedAndInstalledFromLocalFiles() {
+void
+T14Tests::languagePacksCanBeInspectedAndInstalledFromLocalFiles()
+{
     FixtureRoot directory;
     QVERIFY(directory.isValid());
     const auto python = directory.filePath(QStringLiteral("python3"));
     QFile interpreter(python);
     QVERIFY(interpreter.open(QIODevice::WriteOnly));
-    interpreter.write("#!/bin/sh\ncase \"$2\" in\n"
-                      "*get_installed_languages*) printf '{\"pairs\":[{\"source\":\"en\",\"target\":\"es\"}]}' ;;\n"
-                      "*install_from_path*) [ -f \"$3\" ] || exit 4; printf "
-                      "'{\"pairs\":[{\"source\":\"en\",\"target\":\"es\"}]}' ;;\n"
-                      "*) exit 5 ;;\nesac\n");
+    interpreter.write(
+        "#!/bin/sh\ncase \"$2\" in\n"
+        "*get_installed_languages*) printf '{\"pairs\":[{\"source\":\"en\",\"target\":\"es\"}]}' ;;\n"
+        "*install_from_path*) [ -f \"$3\" ] || exit 4; printf "
+        "'{\"pairs\":[{\"source\":\"en\",\"target\":\"es\"}]}' ;;\n"
+        "*) exit 5 ;;\nesac\n");
     interpreter.close();
     QVERIFY(interpreter.setPermissions(QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner));
     const auto packagePath = directory.filePath(QStringLiteral("en_es.argosmodel"));
@@ -562,7 +651,9 @@ void T14Tests::languagePacksCanBeInspectedAndInstalledFromLocalFiles() {
     QCOMPARE(service.languagePacks().size(), 1);
 }
 
-void T14Tests::subtitleQueueHasRemoteKeyboardAndBackBehavior() {
+void
+T14Tests::subtitleQueueHasRemoteKeyboardAndBackBehavior()
+{
     FixtureRoot directory;
     QVERIFY(directory.isValid());
     SubtitleService service(nullptr, directory.filePath(QStringLiteral("cache")));
@@ -581,7 +672,8 @@ void T14Tests::subtitleQueueHasRemoteKeyboardAndBackBehavior() {
     window.resize(1280, 720);
     qobject_cast<QQuickItem*>(root.get())->setParentItem(window.contentItem());
     window.show();
-    auto command = [&](int value) {
+    auto command = [&](int value)
+    {
         return QMetaObject::invokeMethod(root.get(), "handleCommand", Q_ARG(QVariant, value));
     };
     QVERIFY(command(InputManager::Confirm));
@@ -596,7 +688,9 @@ void T14Tests::subtitleQueueHasRemoteKeyboardAndBackBehavior() {
     QCOMPARE(closed.count(), 1);
 }
 
-void T14Tests::subtitleTrackPickerUsesRemoteControlsAndManagedClient() {
+void
+T14Tests::subtitleTrackPickerUsesRemoteControlsAndManagedClient()
+{
     FakeSubtitleClient client;
     InputManager input;
     QQmlEngine engine;
@@ -610,7 +704,8 @@ void T14Tests::subtitleTrackPickerUsesRemoteControlsAndManagedClient() {
     std::unique_ptr<QObject> root(component.createWithInitialProperties(properties));
     QVERIFY2(root, qPrintable(component.errorString()));
     QTRY_COMPARE(client.refreshes, 1);
-    auto command = [&](int value) {
+    auto command = [&](int value)
+    {
         return QMetaObject::invokeMethod(root.get(), "handleCommand", Q_ARG(QVariant, value));
     };
     QVERIFY(command(InputManager::NavigateDown));

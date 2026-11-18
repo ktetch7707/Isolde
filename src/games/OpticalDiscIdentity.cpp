@@ -24,9 +24,11 @@
 #endif
 #endif
 
-namespace {
+namespace
+{
 constexpr quint64 MaxOpticalBytes = 16ULL * 1024 * 1024 * 1024;
-struct HashState {
+struct HashState
+{
     quint64 sequence = 0;
     quint64 size = 0;
     QString state;
@@ -34,27 +36,36 @@ struct HashState {
     QVariantMap iso9660Descriptor;
     QVariantMap udfDescriptor;
 };
-struct HashCache {
+struct HashCache
+{
     QMutex mutex;
     QMap<QString, HashState> hashes;
     int running = 0;
 };
-HashCache* hashCache() {
+HashCache*
+hashCache()
+{
     static auto* cache = new HashCache;
     return cache;
 }
 
-quint16 le16(const QByteArray& bytes, int offset) {
+quint16
+le16(const QByteArray& bytes, int offset)
+{
     return quint8(bytes.at(offset)) | (quint16(quint8(bytes.at(offset + 1))) << 8);
 }
-quint32 le32(const QByteArray& bytes, int offset) {
+quint32
+le32(const QByteArray& bytes, int offset)
+{
     return quint32(quint8(bytes.at(offset))) | (quint32(quint8(bytes.at(offset + 1))) << 8) |
            (quint32(quint8(bytes.at(offset + 2))) << 16) | (quint32(quint8(bytes.at(offset + 3))) << 24);
 }
 
-bool validUdfTag(const QByteArray& descriptor,
-                 quint16 minimumCrcLength = 0,
-                 quint32 expectedLocation = std::numeric_limits<quint32>::max()) {
+bool
+validUdfTag(const QByteArray& descriptor,
+            quint16 minimumCrcLength = 0,
+            quint32 expectedLocation = std::numeric_limits<quint32>::max())
+{
     if (descriptor.size() != 2048)
         return false;
     const auto version = le16(descriptor, 2);
@@ -71,7 +82,8 @@ bool validUdfTag(const QByteArray& descriptor,
     if (length < minimumCrcLength || length > descriptor.size() - 16)
         return false;
     quint16 crc = 0;
-    for (int i = 0; i < length; ++i) {
+    for (int i = 0; i < length; ++i)
+    {
         crc ^= quint16(quint8(descriptor.at(16 + i))) << 8;
         for (int bit = 0; bit < 8; ++bit)
             crc = crc & 0x8000 ? quint16((crc << 1) ^ 0x1021) : quint16(crc << 1);
@@ -79,7 +91,9 @@ bool validUdfTag(const QByteArray& descriptor,
     return crc == le16(descriptor, 8);
 }
 
-QVariantMap udfDescriptorForDevice(QFile* file, quint64 size) {
+QVariantMap
+udfDescriptorForDevice(QFile* file, quint64 size)
+{
     constexpr quint64 sectorSize = 2048;
     constexpr quint64 anchorSector = 256;
     constexpr quint64 maxDescriptorBytes = 2ULL * 1024 * 1024;
@@ -98,7 +112,9 @@ QVariantMap udfDescriptorForDevice(QFile* file, quint64 size) {
     return OpticalDiscParse::parseUdfVolumeDescriptors(anchor, descriptors, quint32(location));
 }
 
-QByteArray udfDstringAscii(const QByteArray& field, bool* valid) {
+QByteArray
+udfDstringAscii(const QByteArray& field, bool* valid)
+{
     if (valid)
         *valid = false;
     if (field.size() < 3 || quint8(field.at(0)) != 8)
@@ -119,12 +135,16 @@ QByteArray udfDstringAscii(const QByteArray& field, bool* valid) {
 }
 
 #ifdef Q_OS_LINUX
-bool diskInfo(QFile& file, quint64* sequence, quint64* size) {
+bool
+diskInfo(QFile& file, quint64* sequence, quint64* size)
+{
     return file.open(QIODevice::ReadOnly) && ::ioctl(file.handle(), BLKGETDISKSEQ, sequence) == 0 &&
            ::ioctl(file.handle(), BLKGETSIZE64, size) == 0 && *sequence && *size && *size <= MaxOpticalBytes;
 }
 
-QString mountInstance(const QString& root) {
+QString
+mountInstance(const QString& root)
+{
 #if defined(SYS_statx) && defined(STATX_MNT_ID)
     const auto path = QFile::encodeName(root);
     struct statx info{};
@@ -144,7 +164,9 @@ QString mountInstance(const QString& root) {
 }
 #endif
 
-QVariantMap contentIdentity(const QString& device) {
+QVariantMap
+contentIdentity(const QString& device)
+{
 #ifndef Q_OS_LINUX
     Q_UNUSED(device);
     return {{"hashState", "unavailable"}};
@@ -169,38 +191,44 @@ QVariantMap contentIdentity(const QString& device) {
         hashes.erase(hashes.begin());
     hashes.insert(device, {sequence, size, "hashing", {}, {}, {}});
     ++cache->running;
-    QThreadPool::globalInstance()->start([device, sequence, size] {
-        QFile input(device);
-        quint64 before = 0, bytes = 0, after = 0, afterSize = 0;
-        QByteArray digest;
-        QVariantMap iso9660Descriptor, udfDescriptor;
-        if (diskInfo(input, &before, &bytes) && before == sequence && bytes == size) {
-            if (size >= 17 * 2048 && input.seek(16 * 2048))
-                iso9660Descriptor = OpticalDiscParse::parseIsoVolumeDescriptor(input.read(2048));
-            udfDescriptor = udfDescriptorForDevice(&input, size);
-            if (input.seek(0))
-                digest = OpticalDiscHash::hashContent(&input, size);
-            if (::ioctl(input.handle(), BLKGETDISKSEQ, &after) != 0 ||
-                ::ioctl(input.handle(), BLKGETSIZE64, &afterSize) != 0 || after != sequence || afterSize != size)
-                digest.clear();
-        }
-        auto* cache = hashCache();
-        QMutexLocker guard(&cache->mutex);
-        --cache->running;
-        auto entry = cache->hashes.find(device);
-        if (entry != cache->hashes.end() && entry->sequence == sequence && entry->size == size) {
-            entry->digest = digest;
-            entry->iso9660Descriptor = digest.isEmpty() ? QVariantMap{} : iso9660Descriptor;
-            entry->udfDescriptor = digest.isEmpty() ? QVariantMap{} : udfDescriptor;
-            entry->state = digest.size() == 32 ? "ready" : "unreadable";
-        }
-    });
+    QThreadPool::globalInstance()->start(
+        [device, sequence, size]
+        {
+            QFile input(device);
+            quint64 before = 0, bytes = 0, after = 0, afterSize = 0;
+            QByteArray digest;
+            QVariantMap iso9660Descriptor, udfDescriptor;
+            if (diskInfo(input, &before, &bytes) && before == sequence && bytes == size)
+            {
+                if (size >= 17 * 2048 && input.seek(16 * 2048))
+                    iso9660Descriptor = OpticalDiscParse::parseIsoVolumeDescriptor(input.read(2048));
+                udfDescriptor = udfDescriptorForDevice(&input, size);
+                if (input.seek(0))
+                    digest = OpticalDiscHash::hashContent(&input, size);
+                if (::ioctl(input.handle(), BLKGETDISKSEQ, &after) != 0 ||
+                    ::ioctl(input.handle(), BLKGETSIZE64, &afterSize) != 0 || after != sequence || afterSize != size)
+                    digest.clear();
+            }
+            auto* cache = hashCache();
+            QMutexLocker guard(&cache->mutex);
+            --cache->running;
+            auto entry = cache->hashes.find(device);
+            if (entry != cache->hashes.end() && entry->sequence == sequence && entry->size == size)
+            {
+                entry->digest = digest;
+                entry->iso9660Descriptor = digest.isEmpty() ? QVariantMap{} : iso9660Descriptor;
+                entry->udfDescriptor = digest.isEmpty() ? QVariantMap{} : udfDescriptor;
+                entry->state = digest.size() == 32 ? "ready" : "unreadable";
+            }
+        });
     return {{"hashState", "hashing"}, {"diskSequence", QString::number(sequence)}};
 #endif
 }
 } // namespace
 
-QVariantMap OpticalDiscParse::parseIsoVolumeDescriptor(const QByteArray& descriptor) {
+QVariantMap
+OpticalDiscParse::parseIsoVolumeDescriptor(const QByteArray& descriptor)
+{
     if (descriptor.size() != 2048 || quint8(descriptor[0]) != 1 || descriptor.mid(1, 5) != "CD001" ||
         quint8(descriptor[6]) != 1)
         return {};
@@ -223,9 +251,11 @@ QVariantMap OpticalDiscParse::parseIsoVolumeDescriptor(const QByteArray& descrip
         {"volumeIdentifier", QString::fromLatin1(volumeId)}};
 }
 
-QVariantMap OpticalDiscParse::parseUdfVolumeDescriptors(const QByteArray& anchorDescriptor,
-                                                        const QByteArray& volumeDescriptors,
-                                                        quint32 sequenceLocation) {
+QVariantMap
+OpticalDiscParse::parseUdfVolumeDescriptors(const QByteArray& anchorDescriptor,
+                                            const QByteArray& volumeDescriptors,
+                                            quint32 sequenceLocation)
+{
     constexpr int sectorSize = 2048;
     constexpr int maxDescriptorBytes = 2 * 1024 * 1024;
     if (!validUdfTag(anchorDescriptor, 8, 256) || le16(anchorDescriptor, 0) != 2 || volumeDescriptors.isEmpty() ||
@@ -238,7 +268,8 @@ QVariantMap OpticalDiscParse::parseUdfVolumeDescriptors(const QByteArray& anchor
 
     QByteArray primary;
     bool hasLogicalVolume = false, hasTerminator = false;
-    for (int offset = 0; offset < volumeDescriptors.size(); offset += sectorSize) {
+    for (int offset = 0; offset < volumeDescriptors.size(); offset += sectorSize)
+    {
         const auto descriptor = volumeDescriptors.mid(offset, sectorSize);
         const quint32 index = quint32(offset / sectorSize);
         if (index > std::numeric_limits<quint32>::max() - sequenceLocation)
@@ -247,17 +278,22 @@ QVariantMap OpticalDiscParse::parseUdfVolumeDescriptors(const QByteArray& anchor
         const quint16 minimumCrcLength = identifier == 8 ? 0 : 1;
         if (!validUdfTag(descriptor, minimumCrcLength, sequenceLocation + index))
             return {};
-        if (identifier == 1) {
+        if (identifier == 1)
+        {
             if (!validUdfTag(descriptor, 184, sequenceLocation + index))
                 return {};
             if (!primary.isEmpty())
                 return {};
             primary = descriptor;
-        } else if (identifier == 6) {
+        }
+        else if (identifier == 6)
+        {
             if (hasLogicalVolume)
                 return {};
             hasLogicalVolume = true;
-        } else if (identifier == 8) {
+        }
+        else if (identifier == 8)
+        {
             for (int body = 16; body < descriptor.size(); ++body)
                 if (descriptor.at(body) != '\0')
                     return {};
@@ -291,9 +327,11 @@ QVariantMap OpticalDiscParse::parseUdfVolumeDescriptors(const QByteArray& anchor
         {"volumeIdentifier", QString::fromLatin1(volumeId)}};
 }
 
-QVariantMap OpticalDiscParse::descriptorForFilesystem(const QString& filesystem,
-                                                      const QVariantMap& iso9660Descriptor,
-                                                      const QVariantMap& udfDescriptor) {
+QVariantMap
+OpticalDiscParse::descriptorForFilesystem(const QString& filesystem,
+                                          const QVariantMap& iso9660Descriptor,
+                                          const QVariantMap& udfDescriptor)
+{
     if (filesystem == "iso9660")
         return iso9660Descriptor;
     if (filesystem == "udf")
@@ -301,7 +339,9 @@ QVariantMap OpticalDiscParse::descriptorForFilesystem(const QString& filesystem,
     return {};
 }
 
-QVariantMap OpticalDiscIdentify::identityForDevice(const QString& device) {
+QVariantMap
+OpticalDiscIdentify::identityForDevice(const QString& device)
+{
     if (!QRegularExpression("^/dev/sr[0-9]{1,3}$").match(device).hasMatch())
         return {};
     QFile block(device);
@@ -310,19 +350,36 @@ QVariantMap OpticalDiscIdentify::identityForDevice(const QString& device) {
     return OpticalDiscParse::parseIsoVolumeDescriptor(block.read(2048));
 }
 
-QVariantMap OpticalDiscIdentify::identityForContent(QVariantMap descriptor, const QString& contentId) {
-    if (!QRegularExpression("^[0-9a-f]{64}$").match(contentId).hasMatch())
+QVariantMap
+OpticalDiscIdentify::identityForContent(QVariantMap descriptor, const QString& contentId)
+{
+    if (!contentIdValid(contentId))
         return {};
     descriptor["mediaId"] = contentId;
-    if (descriptor.value("mediaSetId").toString().isEmpty()) {
+    ensureMediaSetDefaults(descriptor, contentId);
+    return OpticalDiscIdentify::rootReference(descriptor).isEmpty() ? QVariantMap{} : descriptor;
+}
+
+bool
+contentIdValid(const QString& contentId)
+{
+    return QRegularExpression("^[0-9a-f]{64}$").match(contentId).hasMatch();
+}
+
+void
+ensureMediaSetDefaults(QVariantMap& descriptor, const QString& contentId)
+{
+    if (descriptor.value("mediaSetId").toString().isEmpty())
+    {
         descriptor["mediaSetId"] = contentId;
         descriptor["discNumber"] = 1;
         descriptor["discCount"] = 1;
     }
-    return OpticalDiscIdentify::rootReference(descriptor).isEmpty() ? QVariantMap{} : descriptor;
 }
 
-QString OpticalDiscIdentify::rootReference(const QVariantMap& disc) {
+QString
+OpticalDiscIdentify::rootReference(const QVariantMap& disc)
+{
     const auto id = disc.value("mediaId").toString();
     const auto set = disc.value("mediaSetId").toString();
     const int number = disc.value("discNumber").toInt(), count = disc.value("discCount").toInt();
@@ -332,7 +389,9 @@ QString OpticalDiscIdentify::rootReference(const QVariantMap& disc) {
     return "/__isolde_optical__/" + id + "/" + set + "/" + QString::number(number) + "/" + QString::number(count);
 }
 
-bool OpticalDiscIdentify::isRootReference(const QString& root) {
+bool
+OpticalDiscIdentify::isRootReference(const QString& root)
+{
     static const QRegularExpression pattern(
         "^/__isolde_optical__/([0-9a-f]{64})/([0-9a-f]{64})/([1-9][0-9]?)/([1-9][0-9]?)$");
     const auto match = pattern.match(root);
@@ -343,16 +402,21 @@ bool OpticalDiscIdentify::isRootReference(const QString& root) {
     return numberOk && countOk && number <= count && count <= 99 && QDir::cleanPath(root) == root;
 }
 
-QString OpticalDiscIdentify::mediaIdFromRoot(const QString& root) {
+QString
+OpticalDiscIdentify::mediaIdFromRoot(const QString& root)
+{
     if (!isRootReference(root))
         return {};
     return root.split('/').at(2);
 }
 
-QVariantMap OpticalDiscClassify::currentMedia(const QString& mediaId) {
+QVariantMap
+OpticalDiscClassify::currentMedia(const QString& mediaId)
+{
     if (!QRegularExpression("^[0-9a-f]{64}$").match(mediaId).hasMatch())
         return {{"state", "invalid"}};
-    for (const auto& item : OpticalDiscHash::mountedDiscs()) {
+    for (const auto& item : OpticalDiscHash::mountedDiscs())
+    {
         const auto disc = item.toMap();
         if (disc.value("state") == "mounted" && disc.value("mediaId") == mediaId)
             return {{"state", "ready"}, {"disc", disc}};
@@ -360,18 +424,23 @@ QVariantMap OpticalDiscClassify::currentMedia(const QString& mediaId) {
     return {{"state", "missing"}};
 }
 
-QVariantMap OpticalDiscClassify::resolveRootReference(const QString& root) {
+QVariantMap
+OpticalDiscClassify::resolveRootReference(const QString& root)
+{
     return classifyRootReference(root, OpticalDiscHash::mountedDiscs());
 }
 
-QVariantMap OpticalDiscClassify::classifyRootReference(const QString& root, const QVariantList& currentDiscs) {
+QVariantMap
+OpticalDiscClassify::classifyRootReference(const QString& root, const QVariantList& currentDiscs)
+{
     if (!OpticalDiscIdentify::isRootReference(root))
         return {{"state", "invalid"}};
     const auto parts = root.split('/');
     const auto mediaId = parts.at(2), setId = parts.at(3);
     const int expectedNumber = parts.at(4).toInt(), expectedCount = parts.at(5).toInt();
     QVariantMap wrongDisc;
-    for (const auto& item : currentDiscs) {
+    for (const auto& item : currentDiscs)
+    {
         const auto disc = item.toMap();
         if (disc.value("state") != "mounted")
             continue;
@@ -389,16 +458,20 @@ QVariantMap OpticalDiscClassify::classifyRootReference(const QString& root, cons
     return {{"state", "missing"}, {"expectedDisc", expectedNumber}, {"discCount", expectedCount}};
 }
 
-QVariantMap OpticalDiscClassify::classifySession(const QString& reference,
-                                                 const QString& pinnedRoot,
-                                                 bool approved,
-                                                 const QVariantList& currentDiscs,
-                                                 const QString& pinnedObservation) {
+QVariantMap
+OpticalDiscClassify::classifySession(const QString& reference,
+                                     const QString& pinnedRoot,
+                                     bool approved,
+                                     const QVariantList& currentDiscs,
+                                     const QString& pinnedObservation)
+{
     auto classified = classifyRootReference(reference, currentDiscs);
-    for (const auto& item : currentDiscs) {
+    for (const auto& item : currentDiscs)
+    {
         const auto disc = item.toMap();
         if (disc.value("mountRoot").toString() == pinnedRoot &&
-            classifyRootReference(reference, {disc}).value("state") == "ready") {
+            classifyRootReference(reference, {disc}).value("state") == "ready")
+        {
             classified = {{"state", "ready"}, {"disc", disc}};
             break;
         }
@@ -413,9 +486,11 @@ QVariantMap OpticalDiscClassify::classifySession(const QString& reference,
         state = "interrupted";
     else if (state == "ready")
         state = "pinned";
-    else if (state == "missing") {
+    else if (state == "missing")
+    {
         for (const auto& item : currentDiscs)
-            if (item.toMap().value("mountRoot").toString() == pinnedRoot) {
+            if (item.toMap().value("mountRoot").toString() == pinnedRoot)
+            {
                 state = "replaced";
                 break;
             }
@@ -432,10 +507,13 @@ QVariantMap OpticalDiscClassify::classifySession(const QString& reference,
                                     "reconnect the expected disc, then retry Play."}};
 }
 
-QVariantList OpticalDiscHash::mountedDiscs() {
+QVariantList
+OpticalDiscHash::mountedDiscs()
+{
     QVariantList result;
     QSet<QString> mountedDevices;
-    for (const auto& storage : QStorageInfo::mountedVolumes()) {
+    for (const auto& storage : QStorageInfo::mountedVolumes())
+    {
         if (!storage.isValid() || !storage.isReady() || !storage.isReadOnly())
             continue;
         const auto device = QString::fromLatin1(storage.device());
@@ -453,9 +531,9 @@ QVariantList OpticalDiscHash::mountedDiscs() {
         const auto contentId = content.value("contentId").toString();
         const auto descriptor = OpticalDiscParse::descriptorForFilesystem(
             filesystem, content.value("iso9660Descriptor").toMap(), content.value("udfDescriptor").toMap());
-        const auto identity =
-            content.value("hashState") == "ready" ? OpticalDiscIdentify::identityForContent(descriptor, contentId)
-                                                  : QVariantMap{};
+        const auto identity = content.value("hashState") == "ready"
+                                  ? OpticalDiscIdentify::identityForContent(descriptor, contentId)
+                                  : QVariantMap{};
 #ifdef Q_OS_LINUX
         const auto instance = mountInstance(root);
 #else
@@ -487,15 +565,18 @@ QVariantList OpticalDiscHash::mountedDiscs() {
             {"discCount", identity.value("discCount")},
             {"volumeIdentifier", identity.value("volumeIdentifier")},
             {"hashState", content.value("hashState")},
-            {"directPlaySupported", !instance.isEmpty() && !contentId.isEmpty() && !OpticalDiscIdentify::rootReference(identity).isEmpty()},
+            {"directPlaySupported",
+             !instance.isEmpty() && !contentId.isEmpty() && !OpticalDiscIdentify::rootReference(identity).isEmpty()},
             {"readOnly", true},
             {"state", "mounted"}});
         if (result.size() >= 4)
             break;
     }
-    if (result.size() < 4) {
+    if (result.size() < 4)
+    {
         const QDir blockDevices("/sys/class/block");
-        for (const auto& name : blockDevices.entryList({"sr[0-9]*"}, QDir::Dirs | QDir::NoDotAndDotDot)) {
+        for (const auto& name : blockDevices.entryList({"sr[0-9]*"}, QDir::Dirs | QDir::NoDotAndDotDot))
+        {
             const auto device = "/dev/" + name;
             if (mountedDevices.contains(device) || !QRegularExpression("^/dev/sr[0-9]{1,3}$").match(device).hasMatch())
                 continue;
@@ -539,12 +620,15 @@ QVariantList OpticalDiscHash::mountedDiscs() {
     return result;
 }
 
-QByteArray OpticalDiscHash::hashContent(QIODevice* input, quint64 size) {
+QByteArray
+OpticalDiscHash::hashContent(QIODevice* input, quint64 size)
+{
     if (!input || !input->isReadable() || !size || size > MaxOpticalBytes)
         return {};
     QCryptographicHash hash(QCryptographicHash::Sha256);
     quint64 remaining = size;
-    while (remaining) {
+    while (remaining)
+    {
         const auto chunk = input->read(qint64(qMin<quint64>(remaining, 1024 * 1024)));
         if (chunk.isEmpty())
             return {};
@@ -554,17 +638,20 @@ QByteArray OpticalDiscHash::hashContent(QIODevice* input, quint64 size) {
     return hash.result();
 }
 
-QString OpticalDiscHash::mountObservationId(const QString& device,
-                                            const QString& filesystem,
-                                            const QString& label,
-                                            const QString& root,
-                                            const QString& sequence,
-                                            const QString& hashState,
-                                            const QString& mediaId,
-                                            const QString& mountInstance) {
+QString
+OpticalDiscHash::mountObservationId(const QString& device,
+                                    const QString& filesystem,
+                                    const QString& label,
+                                    const QString& root,
+                                    const QString& sequence,
+                                    const QString& hashState,
+                                    const QString& mediaId,
+                                    const QString& mountInstance)
+{
     const auto fields = QStringList{device, filesystem, label, root, sequence, hashState, mediaId, mountInstance};
     QCryptographicHash hash(QCryptographicHash::Sha256);
-    for (const auto& field : fields) {
+    for (const auto& field : fields)
+    {
         const auto bytes = field.toUtf8();
         hash.addData(QByteArray::number(bytes.size()));
         hash.addData(":", 1);
@@ -573,17 +660,21 @@ QString OpticalDiscHash::mountObservationId(const QString& device,
     return QString::fromLatin1(hash.result().toHex());
 }
 
-QVariantMap OpticalDiscProbe::classifyRevalidation(const QString& observationId,
-                                                   const QString& device,
-                                                   const QVariantList& currentDiscs) {
-    for (const auto& item : currentDiscs) {
+QVariantMap
+OpticalDiscProbe::classifyRevalidation(const QString& observationId,
+                                       const QString& device,
+                                       const QVariantList& currentDiscs)
+{
+    for (const auto& item : currentDiscs)
+    {
         const auto disc = item.toMap();
         if (disc.value("observationId") == observationId && disc.value("device") == device)
             return {{"schemaVersion", 1},
                     {"state", disc.value("state") == "mounted" ? "ready" : "unmounted"},
                     {"disc", disc}};
     }
-    for (const auto& item : currentDiscs) {
+    for (const auto& item : currentDiscs)
+    {
         const auto disc = item.toMap();
         if (disc.value("device") == device)
             return {{"schemaVersion", 1}, {"state", "replaced"}, {"disc", disc}};
@@ -591,11 +682,15 @@ QVariantMap OpticalDiscProbe::classifyRevalidation(const QString& observationId,
     return {{"schemaVersion", 1}, {"state", "missing"}};
 }
 
-QVariantMap OpticalDiscProbe::revalidate(const QString& observationId, const QString& device) {
+QVariantMap
+OpticalDiscProbe::revalidate(const QString& observationId, const QString& device)
+{
     return classifyRevalidation(observationId, device, OpticalDiscHash::mountedDiscs());
 }
 
-void OpticalDiscProbe::retryIdentity(const QString& device) {
+void
+OpticalDiscProbe::retryIdentity(const QString& device)
+{
     auto* cache = hashCache();
     QMutexLocker lock(&cache->mutex);
     auto entry = cache->hashes.find(device);
@@ -603,24 +698,29 @@ void OpticalDiscProbe::retryIdentity(const QString& device) {
         cache->hashes.erase(entry);
 }
 
-QVariantMap OpticalDiscProbe::deviceDiagnostics(const QString& device) {
+QVariantMap
+OpticalDiscProbe::deviceDiagnostics(const QString& device)
+{
     if (!QRegularExpression("^/dev/sr[0-9]{1,3}$").match(device).hasMatch())
         return {{"schemaVersion", 1}, {"state", "invalid"}, {"device", device}};
     QFileInfo block(device);
     QVariantMap result = {{"schemaVersion", 1}, {"device", device}, {"state", "unknown"}};
-    if (!block.exists()) {
+    if (!block.exists())
+    {
         result["state"] = "absent";
         result["reason"] = "The optical device does not exist on this system.";
         return result;
     }
-    if (!block.isReadable()) {
+    if (!block.isReadable())
+    {
         result["state"] = "unreadable";
         result["reason"] = "The optical device cannot be read. Check permissions and hardware.";
         return result;
     }
     bool mounted = false;
     QString mountRoot, filesystem, volumeLabel;
-    for (const auto& storage : QStorageInfo::mountedVolumes()) {
+    for (const auto& storage : QStorageInfo::mountedVolumes())
+    {
         if (!storage.isValid() || !storage.isReady())
             continue;
         if (QString::fromLatin1(storage.device()) != device)
@@ -631,7 +731,8 @@ QVariantMap OpticalDiscProbe::deviceDiagnostics(const QString& device) {
         volumeLabel = storage.name();
         break;
     }
-    if (mounted) {
+    if (mounted)
+    {
         result["state"] = "mounted";
         result["mountRoot"] = mountRoot;
         result["filesystem"] = filesystem;
@@ -641,17 +742,23 @@ QVariantMap OpticalDiscProbe::deviceDiagnostics(const QString& device) {
         result["hashState"] = content.value("hashState");
         result["diskSequence"] = content.value("diskSequence");
         result["contentId"] = content.value("contentId");
-    } else {
+    }
+    else
+    {
         result["state"] = "unmounted";
         result["reason"] = "No media is mounted in this drive. Insert a disc and refresh.";
         QFile sizeFile("/sys/class/block/" + device.mid(QString("/dev/").size()) + "/size");
-        if (sizeFile.open(QIODevice::ReadOnly)) {
+        if (sizeFile.open(QIODevice::ReadOnly))
+        {
             bool sizeOk = false;
             const auto sectors = sizeFile.read(64).trimmed().toULongLong(&sizeOk);
-            if (sizeOk && sectors > 0) {
+            if (sizeOk && sectors > 0)
+            {
                 result["mediaPresent"] = true;
                 result["mediaSizeSectors"] = sectors;
-            } else {
+            }
+            else
+            {
                 result["mediaPresent"] = false;
             }
         }

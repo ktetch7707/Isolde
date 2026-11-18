@@ -14,18 +14,24 @@
 #include "settings/AppVpn.h"
 
 static const QString Connection = "12345678-1234-1234-1234-123456789abc";
-static QByteArray read(const QString& path) {
+static QByteArray
+read(const QString& path)
+{
     QFile file(path);
     if (!file.open(QIODevice::ReadOnly))
         return {};
     return file.readAll();
 }
-static void write(const QString& path, const QByteArray& bytes) {
+static void
+write(const QString& path, const QByteArray& bytes)
+{
     QFile file(path);
     QVERIFY(file.open(QIODevice::WriteOnly));
     QCOMPARE(file.write(bytes), bytes.size());
 }
-static QString helper(const QString& root) {
+static QString
+helper(const QString& root)
+{
     const auto path = root + "/helper.py";
     write(path, R"py(import json,sys,time,signal
 from pathlib import Path
@@ -42,7 +48,8 @@ else:
     write(root + "/helper.json", "{}");
     return path;
 }
-class FakeVpnSettings final : public QObject {
+class FakeVpnSettings final : public QObject
+{
     Q_OBJECT
     Q_PROPERTY(bool busy READ busy CONSTANT)
     Q_PROPERTY(QString message READ message CONSTANT)
@@ -51,30 +58,48 @@ class FakeVpnSettings final : public QObject {
     Q_PROPERTY(QVariantList downloads READ downloads CONSTANT)
     Q_PROPERTY(QVariantList countries READ countries CONSTANT)
   public:
-    bool busy() const {
+    bool
+    busy() const
+    {
         return false;
     }
-    QString message() const {
+    QString
+    message() const
+    {
         return {};
     }
-    QVariantList providers() const {
+    QVariantList
+    providers() const
+    {
         return {QVariantMap{{"id", "surfshark"}, {"name", "Surfshark"}, {"installed", true}}};
     }
-    QVariantList connections() const {
+    QVariantList
+    connections() const
+    {
         return {};
     }
-    QVariantList downloads() const {
+    QVariantList
+    downloads() const
+    {
         return {QVariantMap{{"name", "canada.conf"}}};
     }
-    QVariantList countries() const {
+    QVariantList
+    countries() const
+    {
         return {QVariantMap{{"code", "CA"}, {"name", "Canada"}}};
     }
-    Q_INVOKABLE void perform(const QString&, const QString& = {}, const QString& = {}, const QString& = {}) {}
+    Q_INVOKABLE void
+    perform(const QString&, const QString& = {}, const QString& = {}, const QString& = {})
+    {
+    }
 };
-class VpnTests final : public QObject {
+class VpnTests final : public QObject
+{
     Q_OBJECT
   private slots:
-    void rulesAtomicProfileScopedAndInvalidRead() {
+    void
+    rulesAtomicProfileScopedAndInvalidRead()
+    {
         QTemporaryDir dir;
         const auto script = helper(dir.path());
         AppVpn a(dir.path() + "/a.json", "default", script), b(dir.path() + "/b.json", "default", script);
@@ -97,7 +122,9 @@ class VpnTests final : public QObject {
         QVERIFY(!broken.setRoute("demo", ""));
         QCOMPARE(read(dir.path() + "/invalid.json"), invalid);
     }
-    void verifiedLaunchFailureAndCancellation() {
+    void
+    verifiedLaunchFailureAndCancellation()
+    {
         QTemporaryDir dir;
         const auto script = helper(dir.path());
         AppVpn vpn(dir.path() + "/rules.json", "default", script);
@@ -108,12 +135,18 @@ class VpnTests final : public QObject {
         QVERIFY(registry.loadFromData(
             R"([{"id":"demo","name":"Demo","type":"mock","section":"Apps","accent":"#556677"}])"));
         SessionManager sessions(&registry);
-        sessions.setLaunchPreparation([&](const AppDefinition& definition) {
-            return vpn.prepare(definition.id);
-        });
-        connect(&vpn, &AppVpn::ready, &sessions, [&](const QString& id) {
-            sessions.launch(id);
-        });
+        sessions.setLaunchPreparation(
+            [&](const AppDefinition& definition)
+            {
+                return vpn.prepare(definition.id);
+            });
+        connect(&vpn,
+                &AppVpn::ready,
+                &sessions,
+                [&](const QString& id)
+                {
+                    sessions.launch(id);
+                });
         QSignalSpy failed(&vpn, &AppVpn::failed);
         QVERIFY(sessions.launch("demo"));
         QVERIFY(!sessions.hasActiveSession());
@@ -132,7 +165,9 @@ class VpnTests final : public QObject {
         QVERIFY(!sessions.hasActiveSession());
         QCOMPARE(failed.size(), 2);
     }
-    void remoteAssignAndBackDoNotWrite() {
+    void
+    remoteAssignAndBackDoNotWrite()
+    {
         QTemporaryDir dir;
         const auto script = helper(dir.path());
         const auto path = dir.path() + "/rules.json";
@@ -152,7 +187,8 @@ class VpnTests final : public QObject {
         QQmlComponent component(&engine, QUrl::fromLocalFile(VPN_QML));
         QScopedPointer<QObject> root(component.create());
         QVERIFY2(root, qPrintable(component.errorString()));
-        auto activate = [&](int index) {
+        auto activate = [&](int index)
+        {
             QVERIFY(QMetaObject::invokeMethod(root.data(), "activate", Q_ARG(QVariant, index)));
         };
         activate(1);

@@ -2,4 +2,5 @@
 #pragma once
 #include <string>
 #include <vector>
-int IsoldeSources(const std::vector<std::string>& parameters);
+int
+IsoldeSources(const std::vector<std::string>& parameters);

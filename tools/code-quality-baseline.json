@@ -53,6 +53,18 @@
       "GameEmulators::pruneFirmware: extracted shouldRetireFirmware (CCN 17 -> ~5)",
       "AppArtwork::cutout: extracted isUniformBackdrop (CCN 11 -> ~7)"
     ],
+    "documentation": {
+      "doxygen_required_on_classes": true,
+      "doxygen_required_on_functions": true,
+      "required_sections": [
+        "@brief (purpose)",
+        "@details (how it works)",
+        "@param (parameters)",
+        "@return (return value)"
+      ],
+      "no_inline_doxygen_at_call_sites": true,
+      "enforcement_tool": "tools/documentation-check.py"
+    },
     "clang_tidy": "not run locally - CMake/Qt6 not available on this host; baseline will be established on first CI run"
   },
   "notes": [

@@ -6,21 +6,28 @@
 
 // Five shared theme colors. Explicit role values always override their group.
 // Resolution is read-only; legacy documents never acquire palette data on load.
-namespace ThemeColors {
-inline QMap<QString, QStringList> roles() {
+namespace ThemeColors
+{
+inline QMap<QString, QStringList>
+roles()
+{
     return {{"background", {"backgroundStart", "backgroundEnd"}},
             {"cards", {"surfaceColor", "selectedColor"}},
             {"text", {"textColor", "mutedColor", "headingColor", "labelColor", "bodyColor"}},
             {"highlight", {"focusColor", "borderColor"}},
             {"accent", {"accentColor", "iconColor"}}};
 }
-inline bool role(const QString& key) {
+inline bool
+role(const QString& key)
+{
     for (const auto& keys : roles())
         if (keys.contains(key))
             return true;
     return false;
 }
-inline bool valid(const QVariant& value) {
+inline bool
+valid(const QVariant& value)
+{
     if (value.metaType().id() != QMetaType::QVariantMap)
         return false;
     const auto palette = value.toMap();
@@ -33,7 +40,8 @@ inline bool valid(const QVariant& value) {
     const auto colors = palette.value("colors").toMap();
     if (colors.size() != 5)
         return false;
-    for (auto it = colors.cbegin(); it != colors.cend(); ++it) {
+    for (auto it = colors.cbegin(); it != colors.cend(); ++it)
+    {
         const QColor color(it.value().toString());
         if (!roles().contains(it.key()) || it.value().metaType().id() != QMetaType::QString || !color.isValid() ||
             color.alpha() != 255)
@@ -41,10 +49,13 @@ inline bool valid(const QVariant& value) {
     }
     return true;
 }
-inline QVariantMap resolve(const QVariantMap& base, const QVariantMap& authored) {
+inline QVariantMap
+resolve(const QVariantMap& base, const QVariantMap& authored)
+{
     auto result = base;
     const auto palette = authored.value("colorTheme");
-    if (valid(palette)) {
+    if (valid(palette))
+    {
         const auto colors = palette.toMap().value("colors").toMap();
         const auto groups = roles();
         for (auto it = groups.cbegin(); it != groups.cend(); ++it)

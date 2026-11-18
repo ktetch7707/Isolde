@@ -6,45 +6,63 @@
 #include "../src/settings/SearchSettings.h"
 #include "tst_component_common.h"
 
-class PowerBoundaryFixture final : public QObject, protected QDBusContext {
+class PowerBoundaryFixture final : public QObject, protected QDBusContext
+{
     Q_OBJECT
     Q_CLASSINFO("D-Bus Interface", "org.freedesktop.login1.Manager")
   public:
     int accepted = 0;
     bool interactive = false, deny = false;
   public slots:
-    QString CanSuspend() const {
+    QString
+    CanSuspend() const
+    {
         return "no";
     }
-    QString CanReboot() const {
+    QString
+    CanReboot() const
+    {
         return "challenge";
     }
-    QString CanPowerOff() const {
+    QString
+    CanPowerOff() const
+    {
         return "yes";
     }
-    void PowerOff(bool value) {
+    void
+    PowerOff(bool value)
+    {
         interactive = value;
         ++accepted;
     }
-    void Reboot(bool) {
+    void
+    Reboot(bool)
+    {
         if (deny)
             sendErrorReply("org.freedesktop.DBus.Error.AccessDenied", "Fixture denial");
         else
             ++accepted;
     }
-    void Suspend(bool) {
+    void
+    Suspend(bool)
+    {
         ++accepted;
     }
 };
 
-class SettingsPowerTests : public QObject {
+class SettingsPowerTests : public QObject
+{
     Q_OBJECT
   private slots:
-    void powerCapabilitiesGuardAndActions();
-    void settingsNavigationIsBoundedAndProfileLocal();
+    void
+    powerCapabilitiesGuardAndActions();
+    void
+    settingsNavigationIsBoundedAndProfileLocal();
 };
 
-int main(int argc, char* argv[]) {
+int
+main(int argc, char* argv[])
+{
     QCoreApplication app(argc, argv);
     SettingsPowerTests test;
     return QTest::qExec(&test, argc, argv);
@@ -52,7 +70,9 @@ int main(int argc, char* argv[]) {
 
 #include "tst_settings_power.moc"
 
-void SettingsPowerTests::powerCapabilitiesGuardAndActions() {
+void
+SettingsPowerTests::powerCapabilitiesGuardAndActions()
+{
     QTemporaryDir dir;
     PowerSettings power(dir.path());
     QVERIFY(power.capabilities().value("suspend").toBool());
@@ -87,7 +107,9 @@ void SettingsPowerTests::powerCapabilitiesGuardAndActions() {
     QCOMPARE(fixture.accepted, 4);
 }
 
-void SettingsPowerTests::settingsNavigationIsBoundedAndProfileLocal() {
+void
+SettingsPowerTests::settingsNavigationIsBoundedAndProfileLocal()
+{
     QTemporaryDir dir;
     ProfileManager profiles(dir.path());
     QVERIFY(profiles.createProfile("Other"));

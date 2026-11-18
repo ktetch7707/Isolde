@@ -4,13 +4,18 @@
 #include <QImageReader>
 #include "ManagedGif.h"
 
-bool ManagedGif::matches(const QByteArray& data) {
+bool
+ManagedGif::matches(const QByteArray& data)
+{
     return data.startsWith("GIF87a") || data.startsWith("GIF89a");
 }
-QVariantMap ManagedGif::decode(const QByteArray& data, bool includeFrames, QString* error) {
+QVariantMap
+ManagedGif::decode(const QByteArray& data, bool includeFrames, QString* error)
+{
     if (error)
         error->clear();
-    const auto fail = [&](const QString& reason) {
+    const auto fail = [&](const QString& reason)
+    {
         if (error)
             *error = reason;
         return QVariantMap{};
@@ -35,7 +40,8 @@ QVariantMap ManagedGif::decode(const QByteArray& data, bool includeFrames, QStri
     QVariantList frames, delays;
     qint64 encoded = 0, decoded = 0;
     int duration = 0;
-    for (int index = 0; index < count; ++index) {
+    for (int index = 0; index < count; ++index)
+    {
         const auto frame = reader.read();
         if (frame.isNull() || frame.size() != size)
             return fail(QStringLiteral("The GIF contains an unreadable or inconsistent frame."));
@@ -49,7 +55,8 @@ QVariantMap ManagedGif::decode(const QByteArray& data, bool includeFrames, QStri
         if (duration > 30000)
             return fail(QStringLiteral("One GIF loop must last at most 30 seconds."));
         delays.append(delay);
-        if (includeFrames) {
+        if (includeFrames)
+        {
             QByteArray png;
             QBuffer output(&png);
             output.open(QIODevice::WriteOnly);

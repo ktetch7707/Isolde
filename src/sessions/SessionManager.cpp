@@ -13,9 +13,9 @@
 #include <QStandardPaths>
 #include <QUuid>
 #include "games/ManagedGamePaths.h"
+#include "games/OpticalDiscGrants.h"
 #include "games/OpticalDiscIdentity.h"
 #include "games/OpticalDiscSession.h"
-#include "games/OpticalDiscGrants.h"
 #include "home/ComponentSchema.h"
 #include "media/MediaGrants.h"
 #include "sessions/AndroidSession.h"
@@ -25,25 +25,32 @@
 #include <QScopedValueRollback>
 #include <QUrl>
 
-namespace {
-QString steamRecoveryDirectory(const QString& profile) {
+namespace
+{
+QString
+steamRecoveryDirectory(const QString& profile)
+{
     if (profile != "default" && (QUuid(profile).isNull() || QUuid(profile).toString(QUuid::WithoutBraces) != profile))
         return {};
     const auto base = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/native-profiles";
     return QDir::cleanPath(base + "/" + profile + "/steam/home/.local/state/isolde");
 }
 
-bool safeSteamRecoveryDirectory(const QString& directory, bool create) {
+bool
+safeSteamRecoveryDirectory(const QString& directory, bool create)
+{
     if (directory.isEmpty())
         return false;
     QString current;
     const auto parts = directory.split('/', Qt::SkipEmptyParts);
     if (directory.startsWith('/'))
         current = "/";
-    for (const auto& part : parts) {
+    for (const auto& part : parts)
+    {
         current = QDir(current).filePath(part);
         QFileInfo info(current);
-        if (!info.exists()) {
+        if (!info.exists())
+        {
             if (!create || !QDir().mkdir(current))
                 return false;
             info.setFile(current);
@@ -54,7 +61,9 @@ bool safeSteamRecoveryDirectory(const QString& directory, bool create) {
     return true;
 }
 
-QVariantMap loadSteamRecoveryStatuses(const QString& profile) {
+QVariantMap
+loadSteamRecoveryStatuses(const QString& profile)
+{
     const auto directory = steamRecoveryDirectory(profile);
     if (directory.isEmpty() || !safeSteamRecoveryDirectory(directory, false))
         return {};
@@ -116,7 +125,8 @@ QVariantMap loadSteamRecoveryStatuses(const QString& profile) {
                                "cloud_save",
                                "session_end",
                                "error"};
-    for (auto it = games.begin(); it != games.end(); ++it) {
+    for (auto it = games.begin(); it != games.end(); ++it)
+    {
         const auto object = it.value().toObject();
         QSet<QString> objectFields;
         for (const auto& key : object.keys())
@@ -139,13 +149,16 @@ QVariantMap loadSteamRecoveryStatuses(const QString& profile) {
     return result;
 }
 
-bool writeSteamRecoveryStatuses(const QString& profile, const QVariantMap& statuses) {
+bool
+writeSteamRecoveryStatuses(const QString& profile, const QVariantMap& statuses)
+{
     const auto directory = steamRecoveryDirectory(profile);
     if (directory.isEmpty() || statuses.size() > 64 || !safeSteamRecoveryDirectory(directory, true))
         return false;
     QJsonObject games;
     static const QRegularExpression appIdPattern("^[1-9][0-9]{0,9}$");
-    for (auto it = statuses.cbegin(); it != statuses.cend(); ++it) {
+    for (auto it = statuses.cbegin(); it != statuses.cend(); ++it)
+    {
         if (!appIdPattern.match(it.key()).hasMatch() || it.value().metaType() != QMetaType::fromType<QVariantMap>())
             return false;
         auto record = it.value().toMap();
@@ -171,18 +184,23 @@ bool writeSteamRecoveryStatuses(const QString& profile, const QVariantMap& statu
 } // namespace
 
 SessionManager::SessionManager(AppRegistry* registry, QObject* parent)
-    : QObject(parent), m_registry(registry), m_profileId(qApp->property("isoldeProfile").toString()) {
+    : QObject(parent), m_registry(registry), m_profileId(qApp->property("isoldeProfile").toString())
+{
     m_steamRecoveryStatuses = loadSteamRecoveryStatuses(m_profileId);
     m_opticalTimer.setInterval(2500);
     connect(&m_opticalTimer, &QTimer::timeout, this, &SessionManager::refreshOpticalSession);
 }
 
-void SessionManager::refreshOpticalSession() {
+void
+SessionManager::refreshOpticalSession()
+{
     QVariantMap status;
-    if (m_session) {
+    if (m_session)
+    {
         const auto config = m_session->definition().launchConfiguration;
         const auto reference = config.value("opticalReference").toString();
-        if (OpticalDiscIdentify::isRootReference(reference)) {
+        if (OpticalDiscIdentify::isRootReference(reference))
+        {
             const auto profile = qApp->property("isoldeProfile").toString();
             status = OpticalDiscClassify::classifySession(
                 reference,
@@ -193,7 +211,8 @@ void SessionManager::refreshOpticalSession() {
             status = OpticalDiscSession::latchSession(m_opticalSessionStatus, status);
         }
     }
-    if (status != m_opticalSessionStatus) {
+    if (status != m_opticalSessionStatus)
+    {
         m_opticalSessionStatus = status;
         emit opticalSessionStatusChanged();
     }
@@ -201,13 +220,16 @@ void SessionManager::refreshOpticalSession() {
         m_opticalTimer.stop();
 }
 
-SessionManager::~SessionManager() {
+SessionManager::~SessionManager()
+{
     if (m_session)
         disconnect(m_session.get(), nullptr, this, nullptr);
     m_session.reset();
 }
 
-bool SessionManager::acknowledgeSteamRecovery(const QString& identity) {
+bool
+SessionManager::acknowledgeSteamRecovery(const QString& identity)
+{
     static const QRegularExpression appIdPattern("^[1-9][0-9]{0,9}$");
     bool valid = false;
     const auto number = identity.toULongLong(&valid);
@@ -223,18 +245,22 @@ bool SessionManager::acknowledgeSteamRecovery(const QString& identity) {
     return true;
 }
 
-void SessionManager::handleSteamProviderState(const QVariantMap& state) {
+void
+SessionManager::handleSteamProviderState(const QVariantMap& state)
+{
     m_steamProviderState = state;
     const auto identity = state.value("appId").toString();
     const auto sessionEnd = state.value("session_end").toString();
     const bool isRecovery = QStringList{"incomplete", "recovery_required"}.contains(sessionEnd) &&
                             QRegularExpression("^[1-9][0-9]{0,9}$").match(identity).hasMatch();
-    if (isRecovery) {
+    if (isRecovery)
+    {
         auto record = state;
         record.insert("recoveryPending", true);
         auto updated = m_steamRecoveryStatuses;
         updated.insert(identity, record);
-        if (writeSteamRecoveryStatuses(m_profileId, updated)) {
+        if (writeSteamRecoveryStatuses(m_profileId, updated))
+        {
             m_steamRecoveryStatuses = updated;
             emit steamRecoveryStatusesChanged();
         }
@@ -244,33 +270,50 @@ void SessionManager::handleSteamProviderState(const QVariantMap& state) {
     emit steamProviderStateChanged();
 }
 
-bool SessionManager::hasActiveSession() const {
+bool
+SessionManager::hasActiveSession() const
+{
     return m_session != nullptr;
 }
-QString SessionManager::currentAppId() const {
+QString
+SessionManager::currentAppId() const
+{
     return m_session ? m_session->definition().id : QString();
 }
-QString SessionManager::currentAppName() const {
+QString
+SessionManager::currentAppName() const
+{
     return m_session ? m_session->definition().name : QString();
 }
-QString SessionManager::currentAppAccent() const {
+QString
+SessionManager::currentAppAccent() const
+{
     return m_session ? m_session->definition().accent.name() : QString();
 }
-QString SessionManager::currentAppType() const {
+QString
+SessionManager::currentAppType() const
+{
     return m_session ? m_session->definition().type : QString();
 }
-QString SessionManager::currentPresentationMode() const {
+QString
+SessionManager::currentPresentationMode() const
+{
     return m_session ? m_session->definition().presentationMode : QString();
 }
-QString SessionManager::currentLaunchUrl() const {
+QString
+SessionManager::currentLaunchUrl() const
+{
     return m_session ? m_session->definition().launchConfiguration.value(QStringLiteral("url")).toString() : QString();
 }
-QStringList SessionManager::currentAllowedOrigins() const {
+QStringList
+SessionManager::currentAllowedOrigins() const
+{
     if (!m_session)
         return {};
     QStringList origins;
     const auto configuredOrigins = m_session->definition().launchConfiguration.value(QStringLiteral("allowedOrigins"));
-    for (const auto& origin : configuredOrigins.toList()) {
+    for (const auto& origin : configuredOrigins.toList())
+    {
         const auto text = origin.toString().trimmed();
         if (!text.isEmpty())
             origins.append(text);
@@ -285,17 +328,24 @@ QStringList SessionManager::currentAllowedOrigins() const {
         origin += QStringLiteral(":%1").arg(url.port());
     return QStringList{origin};
 }
-QString SessionManager::previousFocusId() const {
+QString
+SessionManager::previousFocusId() const
+{
     return m_previousFocusId;
 }
-bool SessionManager::resumePreparedLaunch(const AppDefinition& definition) {
+bool
+SessionManager::resumePreparedLaunch(const AppDefinition& definition)
+{
     QScopedValueRollback<bool> resuming(m_resumingPrepared, true);
     return launchDefinition(definition);
 }
 
-bool SessionManager::launch(const QString& appId) {
+bool
+SessionManager::launch(const QString& appId)
+{
     const auto* definition = m_registry->find(appId);
-    if (!definition) {
+    if (!definition)
+    {
         const auto reason = tr("Unknown app ID: %1").arg(appId);
         emit sessionRejected(reason);
         emit sessionFailed(appId, reason);
@@ -304,16 +354,21 @@ bool SessionManager::launch(const QString& appId) {
     return launchDefinition(*definition);
 }
 
-bool SessionManager::launchDefinition(AppDefinition definition) {
-    if (m_launchGuard) {
+bool
+SessionManager::launchDefinition(AppDefinition definition)
+{
+    if (m_launchGuard)
+    {
         const auto reason = m_launchGuard(definition.id);
-        if (!reason.isEmpty()) {
+        if (!reason.isEmpty())
+        {
             emit sessionRejected(reason);
             emit launchDeferred(reason);
             return false;
         }
     }
-    if (m_session) {
+    if (m_session)
+    {
         const auto reason = tr("A session is already active.");
         emit sessionRejected(reason);
         emit sessionFailed(definition.id, reason);
@@ -322,18 +377,21 @@ bool SessionManager::launchDefinition(AppDefinition definition) {
     if (definition.type != QStringLiteral("mock") && definition.type != QStringLiteral("store") &&
         definition.type != QStringLiteral("customize") && definition.type != QStringLiteral("settings") &&
         definition.type != QStringLiteral("desktop") && definition.type != QStringLiteral("web") &&
-        definition.type != "android") {
+        definition.type != "android")
+    {
         const auto reason = tr("Unsupported session type: %1").arg(definition.type);
         emit sessionRejected(reason);
         emit sessionFailed(definition.id, reason);
         return false;
     }
 
-    if (m_launchPreparation && !m_launchPreparation(definition)) {
+    if (m_launchPreparation && !m_launchPreparation(definition))
+    {
         return true;
     }
     m_previousFocusId = definition.id;
-    if (!m_gamepadSessionStatus.isEmpty()) {
+    if (!m_gamepadSessionStatus.isEmpty())
+    {
         m_gamepadSessionStatus.clear();
         emit gamepadSessionStatusChanged();
     }
@@ -346,25 +404,35 @@ bool SessionManager::launchDefinition(AppDefinition definition) {
     else
         m_session = std::make_unique<MockSession>(definition);
     auto* session = m_session.get();
-    connect(session, &AppSession::steamProviderStateChanged, this, [this, session](const QVariantMap& state) {
-        if (m_session.get() != session)
-            return;
-        handleSteamProviderState(state);
-    });
-    connect(session, &AppSession::gamepadSessionStatusChanged, this, [this, session](const QVariantMap& state) {
-        if (m_session.get() != session)
-            return;
-        if (m_gamepadSessionStatus == state)
-            return;
-        m_gamepadSessionStatus = state;
-        emit gamepadSessionStatusChanged();
-    });
+    connect(session,
+            &AppSession::steamProviderStateChanged,
+            this,
+            [this, session](const QVariantMap& state)
+            {
+                if (m_session.get() != session)
+                    return;
+                handleSteamProviderState(state);
+            });
+    connect(session,
+            &AppSession::gamepadSessionStatusChanged,
+            this,
+            [this, session](const QVariantMap& state)
+            {
+                if (m_session.get() != session)
+                    return;
+                if (m_gamepadSessionStatus == state)
+                    return;
+                m_gamepadSessionStatus = state;
+                emit gamepadSessionStatusChanged();
+            });
     const auto appId = definition.id;
     connect(session,
             &AppSession::stateChanged,
             this,
-            [this, session, appId, opened = false](AppSession::State state) mutable {
-                if (state == AppSession::State::Running && m_session.get() == session && !opened) {
+            [this, session, appId, opened = false](AppSession::State state) mutable
+            {
+                if (state == AppSession::State::Running && m_session.get() == session && !opened)
+                {
                     opened = true;
                     const auto steamGame = session->definition().launchConfiguration.value("steamGameId").toString();
                     const auto type = session->definition().type;
@@ -382,7 +450,8 @@ bool SessionManager::launchDefinition(AppDefinition definition) {
     }
     if (!m_session)
         return false;
-    if (m_session->state() == AppSession::State::Exited) {
+    if (m_session->state() == AppSession::State::Exited)
+    {
         finishSession(session);
         return false;
     }
@@ -394,7 +463,9 @@ bool SessionManager::launchDefinition(AppDefinition definition) {
     return true;
 }
 
-void SessionManager::finishSession(AppSession* session) {
+void
+SessionManager::finishSession(AppSession* session)
+{
     if (m_session.get() != session)
         return;
     const bool intentionalExit = m_intentionalExit;
@@ -406,17 +477,21 @@ void SessionManager::finishSession(AppSession* session) {
         (session->definition().type == "desktop" || session->definition().type == "android") && failure.isEmpty();
     m_intentionalExit = false;
     m_session.reset();
-    if (!m_gamepadSessionStatus.isEmpty()) {
+    if (!m_gamepadSessionStatus.isEmpty())
+    {
         m_gamepadSessionStatus.clear();
         emit gamepadSessionStatusChanged();
     }
     refreshOpticalSession();
     emit currentAppChanged();
     emit activeChanged();
-    if (intentionalExit && !failure.isEmpty() && !steamGame.isEmpty()) {
+    if (intentionalExit && !failure.isEmpty() && !steamGame.isEmpty())
+    {
         emit sessionRejected(failure);
         emit steamGameFailed(steamGame, failure);
-    } else if (!intentionalExit && !normalDesktopExit) {
+    }
+    else if (!intentionalExit && !normalDesktopExit)
+    {
         const auto reason = failure.isEmpty() ? tr("%1 closed or failed to start.").arg(appName) : failure;
         emit sessionRejected(reason);
         if (!steamGame.isEmpty())
@@ -427,10 +502,14 @@ void SessionManager::finishSession(AppSession* session) {
     emit returnedHome(m_previousFocusId);
 }
 
-bool SessionManager::launchAction(const QVariantMap& input) {
+bool
+SessionManager::launchAction(const QVariantMap& input)
+{
     return launchFileAction(input, {});
 }
-bool SessionManager::launchGameFile(const QVariantMap& input, const QString& sourceRoot) {
+bool
+SessionManager::launchGameFile(const QVariantMap& input, const QString& sourceRoot)
+{
     const auto target = input.value("target").toString();
     const auto* runtime = m_registry->find(input.value("openWith").toString());
     const auto error = MediaGrants::validate(sourceRoot);
@@ -441,7 +520,8 @@ bool SessionManager::launchGameFile(const QVariantMap& input, const QString& sou
     const auto opticalObservationId = input.value("opticalObservationId").toString();
     bool optical = false;
     const auto discs = OpticalDiscHash::mountedDiscs();
-    for (const auto& item : discs) {
+    for (const auto& item : discs)
+    {
         const auto disc = item.toMap();
         if (disc.value("mountRoot") == sourceRoot && disc.value("mediaId") == opticalMediaId &&
             disc.value("observationId") == opticalObservationId &&
@@ -462,7 +542,8 @@ bool SessionManager::launchGameFile(const QVariantMap& input, const QString& sou
         !QStringList{"game", "game-hub"}.contains(runtime->presentationMode) || !target.startsWith(sourceRoot + '/') ||
         !QFileInfo(target).isFile() || QFileInfo(target).canonicalFilePath() != target ||
         (managed && !QFileInfo(target).isExecutable()) ||
-        (optical && !(QFileInfo(target).permissions() & (QFile::ExeOwner | QFile::ExeGroup | QFile::ExeOther)))) {
+        (optical && !(QFileInfo(target).permissions() & (QFile::ExeOwner | QFile::ExeGroup | QFile::ExeOther))))
+    {
         emit sessionRejected(
             tr("The reviewed game folder is missing, redirected or incompatible. Review its source and retry."));
         return false;
@@ -470,14 +551,17 @@ bool SessionManager::launchGameFile(const QVariantMap& input, const QString& sou
     return launchFileAction(
         input, sourceRoot, optical ? opticalMediaId : QString(), optical ? opticalReference : QString());
 }
-bool SessionManager::launchSteamGame(const QString& identity) {
+bool
+SessionManager::launchSteamGame(const QString& identity)
+{
     const auto* steam = m_registry->find("steam");
     bool valid = false;
     const auto number = identity.toULongLong(&valid);
     if (!steam || steam->type != "desktop" || steam->presentationMode != "game-hub" ||
         steam->launchConfiguration.value("desktopId") != "isolde-steam" ||
         !QRegularExpression("^[1-9][0-9]{0,9}$").match(identity).hasMatch() || !valid || number > 4294967295ULL ||
-        QString::number(number) != identity) {
+        QString::number(number) != identity)
+    {
         emit sessionRejected(
             tr("This Steam game or its client is unavailable. Repair Steam and import the game again."));
         return false;
@@ -489,13 +573,16 @@ bool SessionManager::launchSteamGame(const QString& identity) {
     emit steamProviderStateChanged();
     return launchDefinition(definition);
 }
-bool SessionManager::launchFileAction(const QVariantMap& input,
-                                      const QString& sourceRoot,
-                                      const QString& opticalMediaId,
-                                      const QString& opticalReference) {
+bool
+SessionManager::launchFileAction(const QVariantMap& input,
+                                 const QString& sourceRoot,
+                                 const QString& opticalMediaId,
+                                 const QString& opticalReference)
+{
     QString error;
     const auto action = ComponentSchema::action(input, &error);
-    if (action.isEmpty()) {
+    if (action.isEmpty())
+    {
         emit sessionRejected(error);
         return false;
     }
@@ -506,21 +593,25 @@ bool SessionManager::launchFileAction(const QVariantMap& input,
     auto openWith = action.value(QStringLiteral("openWith")).toString().trimmed();
     if (openWith.isEmpty())
         openWith = QStringLiteral("system");
-    if (type.isEmpty() || target.isEmpty()) {
+    if (type.isEmpty() || target.isEmpty())
+    {
         emit sessionRejected(tr("This tile has an incomplete action."));
         return false;
     }
-    if (openWith.isEmpty() || openWith == QStringLiteral("system")) {
+    if (openWith.isEmpty() || openWith == QStringLiteral("system"))
+    {
         emit sessionRejected(
             tr("System default handling for %1 is not implemented yet. Choose an app in Open With.").arg(type));
         return false;
     }
     const auto* definition = m_registry->find(openWith);
-    if (!definition) {
+    if (!definition)
+    {
         emit sessionRejected(tr("Open With app is not installed: %1").arg(openWith));
         return false;
     }
-    if (!definition->handledActions.contains(type)) {
+    if (!definition->handledActions.contains(type))
+    {
         emit sessionRejected(tr("%1 cannot handle %2 actions.").arg(definition->name, type));
         return false;
     }
@@ -536,7 +627,8 @@ bool SessionManager::launchFileAction(const QVariantMap& input,
     if (!opticalReference.isEmpty())
         actionDefinition.launchConfiguration.insert("opticalObservationId", input.value("opticalObservationId"));
     if (!opticalMediaId.isEmpty() ||
-        ManagedGamePaths::isInstallRoot(qApp->property("isoldeProfile").toString(), sourceRoot)) {
+        ManagedGamePaths::isInstallRoot(qApp->property("isoldeProfile").toString(), sourceRoot))
+    {
         actionDefinition.name = QFileInfo(target).completeBaseName();
         if (opticalMediaId.isEmpty())
             actionDefinition.launchConfiguration.insert("managedGameRoot", sourceRoot);
@@ -547,7 +639,9 @@ bool SessionManager::launchFileAction(const QVariantMap& input,
     return launchDefinition(actionDefinition);
 }
 
-void SessionManager::exitCurrent() {
+void
+SessionManager::exitCurrent()
+{
     if (!m_session)
         return;
     auto* session = m_session.get();
@@ -558,13 +652,15 @@ void SessionManager::exitCurrent() {
     }
     if (!m_session)
         return;
-    if (m_session->state() == AppSession::State::Exited) {
+    if (m_session->state() == AppSession::State::Exited)
+    {
         finishSession(session);
         return;
     }
     m_intentionalExit = false;
     m_session.reset();
-    if (!m_gamepadSessionStatus.isEmpty()) {
+    if (!m_gamepadSessionStatus.isEmpty())
+    {
         m_gamepadSessionStatus.clear();
         emit gamepadSessionStatusChanged();
     }
@@ -574,11 +670,11 @@ void SessionManager::exitCurrent() {
     emit returnedHome(m_previousFocusId);
 }
 
-void SessionManager::goHome() {
+void
+SessionManager::goHome()
+{
     if (m_session)
         exitCurrent();
     else
         emit returnedHome(m_previousFocusId);
 }
-
-

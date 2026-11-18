@@ -20,46 +20,84 @@
 #include "media/KodiShelves.h"
 #include "media/MediaGrants.h"
 
-class KodiMediaTests : public QObject {
+class KodiMediaTests : public QObject
+{
     Q_OBJECT
   private slots:
-    void desktopImportIsRecursivePrivateReversibleAndGuarded();
-    void startupPreferenceIsPerProfile();
-    void frontendPreferenceRoundTrip();
-    void localPlaybackPreferenceIsPersistedAndProfileScoped();
-    void mediaFolderPermissions();
-    void readsLibraryThroughTwoRequests();
-    void savedKodiPlaylistCatalogAndShelf();
-    void recentlyViewedMergesKodiHistoryAndStaysBounded();
-    void historyCountAndRetirement();
-    void selectedAppHistoryMergeAndOffline();
-    void musicAlbumsTracksAndKodiPlayback();
-    void tvGuideReadsChannelsAndKeepsUnavailableStateHonest();
-    void pagesLibraryAndResets();
-    void playbackLifecycle();
-    void sourcePreviewAndPlaybackOptionsBoundaries();
-    void scheduledPlaybackUsesExplicitBroadcastOffset();
-    void scheduledUnavailableAcknowledgementUsesOnlyOwnedStartIdentity();
-    void localViewsAndCollections();
-    void manualMovieCollections();
-    void manualShowCollections();
-    void episodeSearchAndShowResult();
-    void homeCollectionShelves();
-    void validatesPersistedCollections();
-    void televisionHierarchyAndEpisodePlayback();
-    void artworkSelectionCancellation();
-    void rejectsUnknownVersion();
-    void unavailableDoesNotHang();
-    void timesOut();
-    void invalidationClearsConnectedLibrary();
-    void cancelledRequestCanRetry();
-    void scansConfiguredSources();
-    void cancelsScanMonitoring();
-    void observedScanCompletes();
-    void rejectedScanIsNotSuccess();
-    void playlistCollisionAndRulePreview();
+    void
+    desktopImportIsRecursivePrivateReversibleAndGuarded();
+    void
+    startupPreferenceIsPerProfile();
+    void
+    frontendPreferenceRoundTrip();
+    void
+    localPlaybackPreferenceIsPersistedAndProfileScoped();
+    void
+    mediaFolderPermissions();
+    void
+    readsLibraryThroughTwoRequests();
+    void
+    savedKodiPlaylistCatalogAndShelf();
+    void
+    recentlyViewedMergesKodiHistoryAndStaysBounded();
+    void
+    historyCountAndRetirement();
+    void
+    selectedAppHistoryMergeAndOffline();
+    void
+    musicAlbumsTracksAndKodiPlayback();
+    void
+    tvGuideReadsChannelsAndKeepsUnavailableStateHonest();
+    void
+    pagesLibraryAndResets();
+    void
+    playbackLifecycle();
+    void
+    sourcePreviewAndPlaybackOptionsBoundaries();
+    void
+    scheduledPlaybackUsesExplicitBroadcastOffset();
+    void
+    scheduledUnavailableAcknowledgementUsesOnlyOwnedStartIdentity();
+    void
+    localViewsAndCollections();
+    void
+    manualMovieCollections();
+    void
+    manualShowCollections();
+    void
+    episodeSearchAndShowResult();
+    void
+    homeCollectionShelves();
+    void
+    validatesPersistedCollections();
+    void
+    televisionHierarchyAndEpisodePlayback();
+    void
+    artworkSelectionCancellation();
+    void
+    rejectsUnknownVersion();
+    void
+    unavailableDoesNotHang();
+    void
+    timesOut();
+    void
+    invalidationClearsConnectedLibrary();
+    void
+    cancelledRequestCanRetry();
+    void
+    scansConfiguredSources();
+    void
+    cancelsScanMonitoring();
+    void
+    observedScanCompletes();
+    void
+    rejectedScanIsNotSuccess();
+    void
+    playlistCollisionAndRulePreview();
 };
-void KodiMediaTests::localPlaybackPreferenceIsPersistedAndProfileScoped() {
+void
+KodiMediaTests::localPlaybackPreferenceIsPersistedAndProfileScoped()
+{
     QTemporaryDir config;
     const auto original = QSettings::defaultFormat();
     QSettings::setDefaultFormat(QSettings::IniFormat);
@@ -80,10 +118,12 @@ void KodiMediaTests::localPlaybackPreferenceIsPersistedAndProfileScoped() {
         const auto directory = QFileInfo(file).absolutePath();
         const auto fileMode = QFile::permissions(file), directoryMode = QFile::permissions(directory);
         {
-            auto restore = qScopeGuard([&] {
-                QFile::setPermissions(directory, directoryMode);
-                QFile::setPermissions(file, fileMode);
-            });
+            auto restore = qScopeGuard(
+                [&]
+                {
+                    QFile::setPermissions(directory, directoryMode);
+                    QFile::setPermissions(file, fileMode);
+                });
             QVERIFY(QFile::setPermissions(file, QFile::ReadOwner));
             QVERIFY(QFile::setPermissions(directory, QFile::ReadOwner | QFile::ExeOwner));
             reset.setAlwaysPlayLocally(false);
@@ -100,7 +140,9 @@ void KodiMediaTests::localPlaybackPreferenceIsPersistedAndProfileScoped() {
     }
     QSettings::setDefaultFormat(original);
 }
-void KodiMediaTests::mediaFolderPermissions() {
+void
+KodiMediaTests::mediaFolderPermissions()
+{
     QTemporaryDir config, media;
     const auto original = QSettings::defaultFormat();
     QSettings::setDefaultFormat(QSettings::IniFormat);
@@ -122,9 +164,12 @@ void KodiMediaTests::mediaFolderPermissions() {
         QVERIFY(capabilityIds.contains("import"));
         const auto libraryViews = service.libraryViews();
         QCOMPARE(libraryViews.size(), 3);
-        QVERIFY(std::any_of(libraryViews.begin(), libraryViews.end(), [](const QVariant& row) {
-            return row.toMap()["kind"] == "albums";
-        }));
+        QVERIFY(std::any_of(libraryViews.begin(),
+                            libraryViews.end(),
+                            [](const QVariant& row)
+                            {
+                                return row.toMap()["kind"] == "albums";
+                            }));
         QCOMPARE(service.frontend(), QString("isolde"));
         QVERIFY(service.canEditFolders());
         service.addLibraryFolder(QUrl::fromLocalFile(media.path()));
@@ -155,7 +200,9 @@ void KodiMediaTests::mediaFolderPermissions() {
     QSettings::setDefaultFormat(original);
 }
 
-void KodiMediaTests::frontendPreferenceRoundTrip() {
+void
+KodiMediaTests::frontendPreferenceRoundTrip()
+{
     QTemporaryDir dir;
     const auto original = QSettings::defaultFormat();
     QSettings::setDefaultFormat(QSettings::IniFormat);
@@ -185,7 +232,9 @@ void KodiMediaTests::frontendPreferenceRoundTrip() {
     QSettings::setDefaultFormat(original);
 }
 
-void KodiMediaTests::startupPreferenceIsPerProfile() {
+void
+KodiMediaTests::startupPreferenceIsPerProfile()
+{
     QTemporaryDir dir;
     const auto originalFormat = QSettings::defaultFormat();
     QSettings::setDefaultFormat(QSettings::IniFormat);
@@ -202,223 +251,284 @@ void KodiMediaTests::startupPreferenceIsPerProfile() {
     QSettings::setDefaultFormat(originalFormat);
 }
 
-static void serve(QLocalServer& server, int version) {
-    QObject::connect(&server, &QLocalServer::newConnection, &server, [&server, version] {
-        while (server.hasPendingConnections()) {
-            auto* socket = server.nextPendingConnection();
-            QObject::connect(socket, &QLocalSocket::disconnected, socket, &QObject::deleteLater);
-            QObject::connect(socket, &QLocalSocket::readyRead, socket, [socket, version, &server] {
-                const auto bytes = socket->property("input").toByteArray() + socket->readAll();
-                socket->setProperty("input", bytes);
-                if (!bytes.endsWith('\n'))
-                    return;
-                const auto request = QJsonDocument::fromJson(bytes).object();
-                if (server.property("rejectControl").toBool() && request["method"] == "Isolde.PlaybackControl") {
-                    socket->write(
-                        QJsonDocument(
-                            QJsonObject{{"jsonrpc", "2.0"},
-                                        {"id", request["id"]},
-                                        {"error", QJsonObject{{"code", -32000}, {"message", "Rejected control"}}}})
-                            .toJson(QJsonDocument::Compact) +
-                        '\n');
-                    socket->disconnectFromServer();
-                    return;
-                }
-                if (server.property("rejectPlaylistMutation").toBool() && request["method"] == "Isolde.SortPlaylist") {
-                    socket->write(
-                        QJsonDocument(QJsonObject{{"jsonrpc", "2.0"},
-                                                  {"id", request["id"]},
-                                                  {"error", QJsonObject{{"code", -32000}, {"message", "Refused"}}}})
-                            .toJson(QJsonDocument::Compact) +
-                        '\n');
-                    socket->disconnectFromServer();
-                    return;
-                }
-                QJsonValue result;
-                if (request.value("method") == "JSONRPC.Version")
-                    result = QJsonObject{{"version", QJsonObject{{"major", version}}}};
-                else if (request.value("method").toString().startsWith("Isolde.Play") ||
-                         request.value("method") == "Isolde.PlaybackControl") {
-                    server.setProperty("lastPlayMethod", request.value("method").toString());
-                    server.setProperty("lastPlayParams", request.value("params").toObject().toVariantMap());
-                    server.setProperty("playRequests", server.property("playRequests").toInt() + 1);
-                    result = QJsonObject{{"state", server.property("playState").toString()},
-                                         {"home", server.property("playHome").toBool()}};
-                    const auto overrideKey =
-                        request.value("method") == "Isolde.PlaybackStatus" ? "pollResult" : "playResult";
-                    if (server.property(overrideKey).isValid())
-                        result = QJsonObject::fromVariantMap(server.property(overrideKey).toMap());
-                    if (server.property("autoStop").toBool() && request["method"] == "Isolde.PlaybackControl" &&
-                        QStringList{"stop", "home"}.contains(request["params"].toObject()["action"].toString()))
-                        result =
-                            QJsonObject{{"state", "ended"}, {"home", request["params"].toObject()["action"] == "home"}};
-                } else if (QStringList{"Isolde.GetPlaybackOptions", "Isolde.SetPlaybackOption"}.contains(
-                               request["method"].toString())) {
-                    server.setProperty("optionParams", request["params"].toObject().toVariantMap());
-                    result = QJsonObject{{"audio",
-                                          QJsonArray{QJsonObject{
-                                              {"id", 0}, {"name", "Stereo"}, {"language", "en"}, {"selected", true}}}},
-                                         {"subtitles", QJsonArray{}},
-                                         {"views", QJsonArray{"normal", "zoom"}},
-                                         {"view", "normal"},
-                                         {"subtitleEnabled", false}};
-                    if (server.property("badOptions").toBool())
-                        result = QJsonObject{{"audio", QJsonArray{}}};
-                } else if (QStringList{"Isolde.GetSources", "Isolde.PreviewSource", "Isolde.ApplySource"}.contains(
-                               request["method"].toString())) {
-                    const auto params = request["params"].toObject();
-                    server.setProperty("sourceParams", params.toVariantMap());
-                    result = QJsonObject{{"revision", QString(64, 'c')},
-                                         {"sources", QJsonArray{}},
-                                         {"scrapers", QJsonArray{}},
-                                         {"roots", QJsonArray{"/media/fixture"}},
-                                         {"applied", true}};
-                    if (request["method"] == "Isolde.PreviewSource")
-                        result = QJsonObject{
-                            {"revision", QString(64, 'c')}, {"source", params["source"]}, {"preview", true}};
-                } else if (request.value("method") == "Isolde.GetPlaylists") {
-                    result = QJsonObject{
-                        {"playlists",
-                         QJsonArray{QJsonObject{
-                             {"playlistid", 1}, {"title", "Family films"}, {"playlistName", "Family films.xsp"}}}},
-                        {"limits", QJsonObject{{"start", 0}, {"end", 1}, {"total", 1}}}};
-                } else if (request.value("method") == "Isolde.CreatePlaylist") {
-                    const auto params = request.value("params").toObject();
-                    server.setProperty("savedPlaylist", params.toVariantMap());
-                    result = QJsonObject{{"saved", !server.property("rejectPlaylist").toBool()},
-                                         {"name", params["name"]},
-                                         {"kind", params["kind"]},
-                                         {"playlistName", "Isolde-12345678.xsp"}};
-                } else if (request.value("method") == "Isolde.RenamePlaylist") {
-                    const auto params = request.value("params").toObject();
-                    server.setProperty("savedPlaylist", params.toVariantMap());
-                    result = QJsonObject{{"renamed", !server.property("rejectPlaylist").toBool()},
-                                         {"newName", params["newName"]},
-                                         {"playlistName", "Isolde-12345678.xsp"}};
-                } else if (request.value("method") == "Isolde.DeletePlaylist") {
-                    const auto params = request.value("params").toObject();
-                    server.setProperty("savedPlaylist", params.toVariantMap());
-                    result =
-                        QJsonObject{{"deleted", !server.property("rejectPlaylist").toBool()}, {"name", params["name"]}};
-                } else if (request.value("method") == "Isolde.GetPlaylistItems") {
-                    server.setProperty("playlistParams", request.value("params").toObject().toVariantMap());
-                    const auto params = request.value("params").toObject();
-                    const int start = params["start"].toInt();
-                    result = QJsonObject{
-                        {"movies",
-                         QJsonArray{QJsonObject{
-                             {"movieid", start + 41}, {"title", "Local film"}, {"playlistMediaType", "movie"}}}},
-                        {"limits", QJsonObject{{"start", start}, {"end", start + 1}, {"total", 51}}}};
-                    if (params["kind"] == "shows")
-                        result = QJsonObject{
-                            {"tvshows",
-                             QJsonArray{QJsonObject{
-                                 {"episodeid", 41}, {"title", "Playlist episode"}, {"playlistMediaType", "episode"}}}},
-                            {"limits", QJsonObject{{"start", 0}, {"end", 1}, {"total", 1}}}};
-                } else if (request["method"] == "Isolde.PreviewPlaylistRule") {
-                    server.setProperty("ruleParams", request["params"].toObject().toVariantMap());
-                    result = QJsonObject{
-                        {"items",
-                         QJsonArray{QJsonObject{{"title", "Fixture"}, {"mediaType", "movie"}, {"mediaId", 41}}}},
-                        {"total", 1},
-                        {"revision", QString(64, 'a')}};
-                } else if (request["method"] == "Isolde.EditPlaylist" || request["method"] == "Isolde.SortPlaylist" ||
-                           request["method"] == "Isolde.ReorderPlaylist") {
-                    server.setProperty("playlistMutation", request["params"].toObject().toVariantMap());
-                    result = QJsonObject{{"edited", true}, {"reordered", true}};
-                } else if (request["method"] == "Isolde.GetPlaylistOrder") {
-                    result = QJsonObject{{"members",
-                                          QJsonArray{QJsonObject{{"title", "Alpha"}, {"index", 0}},
-                                                     QJsonObject{{"title", "Beta"}, {"index", 1}}}},
-                                         {"revision", QString(64, 'b')}};
-                } else if (request.value("method") == "VideoLibrary.Scan" ||
-                           request.value("method") == "AudioLibrary.Scan") {
-                    result = server.property("rejectScan").toBool() ? "rejected" : "OK";
-                    server.setProperty("scanRequests", server.property("scanRequests").toInt() + 1);
-                    server.setProperty("scanMethod", request["method"].toString());
-                } else if (request.value("method") == "XBMC.GetInfoBooleans") {
-                    const bool scanning = server.property("scanning").toBool();
-                    server.setProperty("scanning", false);
-                    const auto boolean = request["params"].toObject()["booleans"].toArray().first().toString();
-                    result = QJsonObject{{boolean, scanning}};
-                } else if (request.value("method") == "VideoLibrary.GetMovieDetails") {
-                    const int movieId = request.value("params").toObject().value("movieid").toInt();
-                    server.setProperty("detailRequests", server.property("detailRequests").toInt() + 1);
-                    result = QJsonObject{{"moviedetails",
-                                          QJsonObject{{"movieid", movieId},
-                                                      {"title", QString("Fixture movie %1").arg(movieId)},
-                                                      {"year", 2024}}}};
-                } else if (request.value("method") == "VideoLibrary.GetTVShowDetails") {
-                    const int showId = request.value("params").toObject().value("tvshowid").toInt();
-                    server.setProperty("detailRequests", server.property("detailRequests").toInt() + 1);
-                    result = QJsonObject{{"tvshowdetails",
-                                          QJsonObject{{"tvshowid", showId},
-                                                      {"title", QString("Fixture show %1").arg(showId)},
-                                                      {"episode", 4},
-                                                      {"watchedepisodes", 1}}}};
-                } else {
-                    server.setProperty("libraryRequests", server.property("libraryRequests").toInt() + 1);
-                    const auto params = request.value("params").toObject();
-                    const auto method = request.value("method").toString();
-                    server.setProperty("lastMethod", method);
-                    server.setProperty("lastParams", params.toVariantMap());
-                    if (server.property("historyFixture").toBool()) {
-                        auto calls = server.property("historyRequests").toList();
-                        calls.append(QVariantMap{{"method", method}, {"params", params.toVariantMap()}});
-                        server.setProperty("historyRequests", calls);
-                    }
-                    const int start = params.value("limits").toObject().value("start").toInt();
-                    const int total = method == "VideoLibrary.GetSeasons"  ? 2
-                                      : server.property("total").isValid() ? server.property("total").toInt()
-                                                                           : 1;
-                    QJsonArray movies;
-                    const auto listKey = method == "VideoLibrary.GetTVShows"    ? "tvshows"
-                                         : method == "VideoLibrary.GetSeasons"  ? "seasons"
-                                         : method == "VideoLibrary.GetEpisodes" ? "episodes"
-                                                                                : "movies";
-                    const auto idKey = method == "VideoLibrary.GetTVShows"    ? "tvshowid"
-                                       : method == "VideoLibrary.GetSeasons"  ? "seasonid"
-                                       : method == "VideoLibrary.GetEpisodes" ? "episodeid"
-                                                                              : "movieid";
-                    for (int i = start; i < qMin(params.value("limits").toObject().value("end").toInt(), total); ++i) {
-                        QJsonObject entry{{idKey, i + 1}, {"title", "Fixture movie"}};
-                        if (server.property("historyFixture").toBool()) {
-                            entry["dateadded"] = "2026-10-24 00:00:00";
-                            entry["lastplayed"] =
-                                i == 2   ? (method == "VideoLibrary.GetEpisodes" ? "2026-02-30 00:00:00" : "")
-                                : i == 0 ? (method == "VideoLibrary.GetEpisodes" ? "2026-10-23 12:00:00"
-                                                                                 : "2026-10-20 12:00:00")
-                                : i == 1 ? "2026-10-22 12:00:00"
-                                         : "2026-10-21 12:00:00";
+static void
+serve(QLocalServer& server, int version)
+{
+    QObject::connect(
+        &server,
+        &QLocalServer::newConnection,
+        &server,
+        [&server, version]
+        {
+            while (server.hasPendingConnections())
+            {
+                auto* socket = server.nextPendingConnection();
+                QObject::connect(socket, &QLocalSocket::disconnected, socket, &QObject::deleteLater);
+                QObject::connect(
+                    socket,
+                    &QLocalSocket::readyRead,
+                    socket,
+                    [socket, version, &server]
+                    {
+                        const auto bytes = socket->property("input").toByteArray() + socket->readAll();
+                        socket->setProperty("input", bytes);
+                        if (!bytes.endsWith('\n'))
+                            return;
+                        const auto request = QJsonDocument::fromJson(bytes).object();
+                        if (server.property("rejectControl").toBool() && request["method"] == "Isolde.PlaybackControl")
+                        {
+                            socket->write(QJsonDocument(QJsonObject{{"jsonrpc", "2.0"},
+                                                                    {"id", request["id"]},
+                                                                    {"error",
+                                                                     QJsonObject{{"code", -32000},
+                                                                                 {"message", "Rejected control"}}}})
+                                              .toJson(QJsonDocument::Compact) +
+                                          '\n');
+                            socket->disconnectFromServer();
+                            return;
                         }
-                        if (method == "VideoLibrary.GetSeasons") {
-                            entry["season"] = i;
-                            entry.remove("title");
+                        if (server.property("rejectPlaylistMutation").toBool() &&
+                            request["method"] == "Isolde.SortPlaylist")
+                        {
+                            socket->write(
+                                QJsonDocument(
+                                    QJsonObject{{"jsonrpc", "2.0"},
+                                                {"id", request["id"]},
+                                                {"error", QJsonObject{{"code", -32000}, {"message", "Refused"}}}})
+                                    .toJson(QJsonDocument::Compact) +
+                                '\n');
+                            socket->disconnectFromServer();
+                            return;
                         }
-                        if (method == "VideoLibrary.GetEpisodes") {
-                            entry["season"] = params.value("season").toInt();
-                            entry["episode"] = i + 1;
+                        QJsonValue result;
+                        if (request.value("method") == "JSONRPC.Version")
+                            result = QJsonObject{{"version", QJsonObject{{"major", version}}}};
+                        else if (request.value("method").toString().startsWith("Isolde.Play") ||
+                                 request.value("method") == "Isolde.PlaybackControl")
+                        {
+                            server.setProperty("lastPlayMethod", request.value("method").toString());
+                            server.setProperty("lastPlayParams", request.value("params").toObject().toVariantMap());
+                            server.setProperty("playRequests", server.property("playRequests").toInt() + 1);
+                            result = QJsonObject{{"state", server.property("playState").toString()},
+                                                 {"home", server.property("playHome").toBool()}};
+                            const auto overrideKey =
+                                request.value("method") == "Isolde.PlaybackStatus" ? "pollResult" : "playResult";
+                            if (server.property(overrideKey).isValid())
+                                result = QJsonObject::fromVariantMap(server.property(overrideKey).toMap());
+                            if (server.property("autoStop").toBool() && request["method"] == "Isolde.PlaybackControl" &&
+                                QStringList{"stop", "home"}.contains(request["params"].toObject()["action"].toString()))
+                                result = QJsonObject{{"state", "ended"},
+                                                     {"home", request["params"].toObject()["action"] == "home"}};
                         }
-                        movies.append(entry);
-                    }
-                    server.setProperty("lastStart", start);
-                    server.setProperty("lastEnd", params.value("limits").toObject().value("end").toInt());
-                    result = QJsonObject{{listKey, movies},
-                                         {"limits",
-                                          QJsonObject{{"start", start},
-                                                      {"end", start + movies.size()},
-                                                      {"total", server.property("badPaging").toBool() ? -1 : total}}}};
-                }
-                socket->write(
-                    QJsonDocument(QJsonObject{{"jsonrpc", "2.0"}, {"id", request.value("id")}, {"result", result}})
-                        .toJson(QJsonDocument::Compact) +
-                    '\n');
-                socket->disconnectFromServer();
-            });
-        }
-    });
+                        else if (QStringList{"Isolde.GetPlaybackOptions", "Isolde.SetPlaybackOption"}.contains(
+                                     request["method"].toString()))
+                        {
+                            server.setProperty("optionParams", request["params"].toObject().toVariantMap());
+                            result = QJsonObject{
+                                {"audio",
+                                 QJsonArray{QJsonObject{
+                                     {"id", 0}, {"name", "Stereo"}, {"language", "en"}, {"selected", true}}}},
+                                {"subtitles", QJsonArray{}},
+                                {"views", QJsonArray{"normal", "zoom"}},
+                                {"view", "normal"},
+                                {"subtitleEnabled", false}};
+                            if (server.property("badOptions").toBool())
+                                result = QJsonObject{{"audio", QJsonArray{}}};
+                        }
+                        else if (QStringList{"Isolde.GetSources", "Isolde.PreviewSource", "Isolde.ApplySource"}
+                                     .contains(request["method"].toString()))
+                        {
+                            const auto params = request["params"].toObject();
+                            server.setProperty("sourceParams", params.toVariantMap());
+                            result = QJsonObject{{"revision", QString(64, 'c')},
+                                                 {"sources", QJsonArray{}},
+                                                 {"scrapers", QJsonArray{}},
+                                                 {"roots", QJsonArray{"/media/fixture"}},
+                                                 {"applied", true}};
+                            if (request["method"] == "Isolde.PreviewSource")
+                                result = QJsonObject{
+                                    {"revision", QString(64, 'c')}, {"source", params["source"]}, {"preview", true}};
+                        }
+                        else if (request.value("method") == "Isolde.GetPlaylists")
+                        {
+                            result = QJsonObject{{"playlists",
+                                                  QJsonArray{QJsonObject{{"playlistid", 1},
+                                                                         {"title", "Family films"},
+                                                                         {"playlistName", "Family films.xsp"}}}},
+                                                 {"limits", QJsonObject{{"start", 0}, {"end", 1}, {"total", 1}}}};
+                        }
+                        else if (request.value("method") == "Isolde.CreatePlaylist")
+                        {
+                            const auto params = request.value("params").toObject();
+                            server.setProperty("savedPlaylist", params.toVariantMap());
+                            result = QJsonObject{{"saved", !server.property("rejectPlaylist").toBool()},
+                                                 {"name", params["name"]},
+                                                 {"kind", params["kind"]},
+                                                 {"playlistName", "Isolde-12345678.xsp"}};
+                        }
+                        else if (request.value("method") == "Isolde.RenamePlaylist")
+                        {
+                            const auto params = request.value("params").toObject();
+                            server.setProperty("savedPlaylist", params.toVariantMap());
+                            result = QJsonObject{{"renamed", !server.property("rejectPlaylist").toBool()},
+                                                 {"newName", params["newName"]},
+                                                 {"playlistName", "Isolde-12345678.xsp"}};
+                        }
+                        else if (request.value("method") == "Isolde.DeletePlaylist")
+                        {
+                            const auto params = request.value("params").toObject();
+                            server.setProperty("savedPlaylist", params.toVariantMap());
+                            result = QJsonObject{{"deleted", !server.property("rejectPlaylist").toBool()},
+                                                 {"name", params["name"]}};
+                        }
+                        else if (request.value("method") == "Isolde.GetPlaylistItems")
+                        {
+                            server.setProperty("playlistParams", request.value("params").toObject().toVariantMap());
+                            const auto params = request.value("params").toObject();
+                            const int start = params["start"].toInt();
+                            result = QJsonObject{
+                                {"movies",
+                                 QJsonArray{QJsonObject{{"movieid", start + 41},
+                                                        {"title", "Local film"},
+                                                        {"playlistMediaType", "movie"}}}},
+                                {"limits", QJsonObject{{"start", start}, {"end", start + 1}, {"total", 51}}}};
+                            if (params["kind"] == "shows")
+                                result = QJsonObject{{"tvshows",
+                                                      QJsonArray{QJsonObject{{"episodeid", 41},
+                                                                             {"title", "Playlist episode"},
+                                                                             {"playlistMediaType", "episode"}}}},
+                                                     {"limits", QJsonObject{{"start", 0}, {"end", 1}, {"total", 1}}}};
+                        }
+                        else if (request["method"] == "Isolde.PreviewPlaylistRule")
+                        {
+                            server.setProperty("ruleParams", request["params"].toObject().toVariantMap());
+                            result = QJsonObject{{"items",
+                                                  QJsonArray{QJsonObject{
+                                                      {"title", "Fixture"}, {"mediaType", "movie"}, {"mediaId", 41}}}},
+                                                 {"total", 1},
+                                                 {"revision", QString(64, 'a')}};
+                        }
+                        else if (request["method"] == "Isolde.EditPlaylist" ||
+                                 request["method"] == "Isolde.SortPlaylist" ||
+                                 request["method"] == "Isolde.ReorderPlaylist")
+                        {
+                            server.setProperty("playlistMutation", request["params"].toObject().toVariantMap());
+                            result = QJsonObject{{"edited", true}, {"reordered", true}};
+                        }
+                        else if (request["method"] == "Isolde.GetPlaylistOrder")
+                        {
+                            result = QJsonObject{{"members",
+                                                  QJsonArray{QJsonObject{{"title", "Alpha"}, {"index", 0}},
+                                                             QJsonObject{{"title", "Beta"}, {"index", 1}}}},
+                                                 {"revision", QString(64, 'b')}};
+                        }
+                        else if (request.value("method") == "VideoLibrary.Scan" ||
+                                 request.value("method") == "AudioLibrary.Scan")
+                        {
+                            result = server.property("rejectScan").toBool() ? "rejected" : "OK";
+                            server.setProperty("scanRequests", server.property("scanRequests").toInt() + 1);
+                            server.setProperty("scanMethod", request["method"].toString());
+                        }
+                        else if (request.value("method") == "XBMC.GetInfoBooleans")
+                        {
+                            const bool scanning = server.property("scanning").toBool();
+                            server.setProperty("scanning", false);
+                            const auto boolean = request["params"].toObject()["booleans"].toArray().first().toString();
+                            result = QJsonObject{{boolean, scanning}};
+                        }
+                        else if (request.value("method") == "VideoLibrary.GetMovieDetails")
+                        {
+                            const int movieId = request.value("params").toObject().value("movieid").toInt();
+                            server.setProperty("detailRequests", server.property("detailRequests").toInt() + 1);
+                            result = QJsonObject{{"moviedetails",
+                                                  QJsonObject{{"movieid", movieId},
+                                                              {"title", QString("Fixture movie %1").arg(movieId)},
+                                                              {"year", 2024}}}};
+                        }
+                        else if (request.value("method") == "VideoLibrary.GetTVShowDetails")
+                        {
+                            const int showId = request.value("params").toObject().value("tvshowid").toInt();
+                            server.setProperty("detailRequests", server.property("detailRequests").toInt() + 1);
+                            result = QJsonObject{{"tvshowdetails",
+                                                  QJsonObject{{"tvshowid", showId},
+                                                              {"title", QString("Fixture show %1").arg(showId)},
+                                                              {"episode", 4},
+                                                              {"watchedepisodes", 1}}}};
+                        }
+                        else
+                        {
+                            server.setProperty("libraryRequests", server.property("libraryRequests").toInt() + 1);
+                            const auto params = request.value("params").toObject();
+                            const auto method = request.value("method").toString();
+                            server.setProperty("lastMethod", method);
+                            server.setProperty("lastParams", params.toVariantMap());
+                            if (server.property("historyFixture").toBool())
+                            {
+                                auto calls = server.property("historyRequests").toList();
+                                calls.append(QVariantMap{{"method", method}, {"params", params.toVariantMap()}});
+                                server.setProperty("historyRequests", calls);
+                            }
+                            const int start = params.value("limits").toObject().value("start").toInt();
+                            const int total = method == "VideoLibrary.GetSeasons"  ? 2
+                                              : server.property("total").isValid() ? server.property("total").toInt()
+                                                                                   : 1;
+                            QJsonArray movies;
+                            const auto listKey = method == "VideoLibrary.GetTVShows"    ? "tvshows"
+                                                 : method == "VideoLibrary.GetSeasons"  ? "seasons"
+                                                 : method == "VideoLibrary.GetEpisodes" ? "episodes"
+                                                                                        : "movies";
+                            const auto idKey = method == "VideoLibrary.GetTVShows"    ? "tvshowid"
+                                               : method == "VideoLibrary.GetSeasons"  ? "seasonid"
+                                               : method == "VideoLibrary.GetEpisodes" ? "episodeid"
+                                                                                      : "movieid";
+                            for (int i = start; i < qMin(params.value("limits").toObject().value("end").toInt(), total);
+                                 ++i)
+                            {
+                                QJsonObject entry{{idKey, i + 1}, {"title", "Fixture movie"}};
+                                if (server.property("historyFixture").toBool())
+                                {
+                                    entry["dateadded"] = "2026-10-24 00:00:00";
+                                    entry["lastplayed"] =
+                                        i == 2   ? (method == "VideoLibrary.GetEpisodes" ? "2026-02-30 00:00:00" : "")
+                                        : i == 0 ? (method == "VideoLibrary.GetEpisodes" ? "2026-10-23 12:00:00"
+                                                                                         : "2026-10-20 12:00:00")
+                                        : i == 1 ? "2026-10-22 12:00:00"
+                                                 : "2026-10-21 12:00:00";
+                                }
+                                if (method == "VideoLibrary.GetSeasons")
+                                {
+                                    entry["season"] = i;
+                                    entry.remove("title");
+                                }
+                                if (method == "VideoLibrary.GetEpisodes")
+                                {
+                                    entry["season"] = params.value("season").toInt();
+                                    entry["episode"] = i + 1;
+                                }
+                                movies.append(entry);
+                            }
+                            server.setProperty("lastStart", start);
+                            server.setProperty("lastEnd", params.value("limits").toObject().value("end").toInt());
+                            result = QJsonObject{
+                                {listKey, movies},
+                                {"limits",
+                                 QJsonObject{{"start", start},
+                                             {"end", start + movies.size()},
+                                             {"total", server.property("badPaging").toBool() ? -1 : total}}}};
+                        }
+                        socket->write(
+                            QJsonDocument(
+                                QJsonObject{{"jsonrpc", "2.0"}, {"id", request.value("id")}, {"result", result}})
+                                .toJson(QJsonDocument::Compact) +
+                            '\n');
+                        socket->disconnectFromServer();
+                    });
+            }
+        });
 }
-void KodiMediaTests::savedKodiPlaylistCatalogAndShelf() {
+void
+KodiMediaTests::savedKodiPlaylistCatalogAndShelf()
+{
     QTemporaryDir dir;
     QLocalServer server;
     QVERIFY(server.listen(dir.filePath("rpc.sock")));
@@ -508,7 +618,9 @@ void KodiMediaTests::savedKodiPlaylistCatalogAndShelf() {
     QCOMPARE(editor.items(), retained);
     QVERIFY(editor.playlistStatus().contains("failed"));
 }
-void KodiMediaTests::playlistCollisionAndRulePreview() {
+void
+KodiMediaTests::playlistCollisionAndRulePreview()
+{
     QTemporaryDir dir;
     QLocalServer server;
     QVERIFY(server.listen(dir.filePath("rpc.sock")));
@@ -560,7 +672,9 @@ void KodiMediaTests::playlistCollisionAndRulePreview() {
 
     catalog.invalidate("Test complete");
 }
-void KodiMediaTests::recentlyViewedMergesKodiHistoryAndStaysBounded() {
+void
+KodiMediaTests::recentlyViewedMergesKodiHistoryAndStaysBounded()
+{
     QTemporaryDir dir;
     QLocalServer server;
     QVERIFY(server.listen(dir.filePath("rpc.sock")));
@@ -583,7 +697,8 @@ void KodiMediaTests::recentlyViewedMergesKodiHistoryAndStaysBounded() {
     QCOMPARE(items[3].toMap()["mediaId"].toInt(), 1);
     const auto calls = server.property("historyRequests").toList();
     QCOMPARE(calls.size(), 2);
-    for (const auto& call : calls) {
+    for (const auto& call : calls)
+    {
         const auto params = call.toMap()["params"].toMap();
         QCOMPARE(params["limits"].toMap()["end"].toInt(), 50);
         QCOMPARE(params["sort"].toMap()["method"].toString(), QString("lastplayed"));
@@ -613,7 +728,9 @@ void KodiMediaTests::recentlyViewedMergesKodiHistoryAndStaysBounded() {
     QVERIFY(media.items().isEmpty());
     QCOMPARE(media.status(), QString("Profile closed"));
 }
-void KodiMediaTests::historyCountAndRetirement() {
+void
+KodiMediaTests::historyCountAndRetirement()
+{
     QTemporaryDir dir;
     QLocalServer server;
     QVERIFY(server.listen(dir.filePath("rpc.sock")));
@@ -628,7 +745,8 @@ void KodiMediaTests::historyCountAndRetirement() {
     QCOMPARE(one.items().size(), 1);
     QCOMPARE(many.items().size(), 7);
     QCOMPARE(one.items()[0].toMap()["mediaType"].toString(), QString("episode"));
-    for (const auto& call : server.property("historyRequests").toList()) {
+    for (const auto& call : server.property("historyRequests").toList())
+    {
         const auto params = call.toMap()["params"].toMap();
         QVERIFY((QList<int>{1, 7}.contains(params["limits"].toMap()["end"].toInt())));
     }
@@ -659,7 +777,9 @@ void KodiMediaTests::historyCountAndRetirement() {
     QVERIFY(!many.connected());
     QVERIFY(!many.busy());
 }
-void KodiMediaTests::selectedAppHistoryMergeAndOffline() {
+void
+KodiMediaTests::selectedAppHistoryMergeAndOffline()
+{
     QTemporaryDir dir;
     QLocalServer server;
     QVERIFY(server.listen(dir.filePath("rpc.sock")));
@@ -722,54 +842,72 @@ void KodiMediaTests::selectedAppHistoryMergeAndOffline() {
     history.retire("Profile closed");
     QVERIFY(history.items().isEmpty());
 }
-void KodiMediaTests::musicAlbumsTracksAndKodiPlayback() {
+void
+KodiMediaTests::musicAlbumsTracksAndKodiPlayback()
+{
     QTemporaryDir dir;
     QLocalServer server;
     QVERIFY(server.listen(dir.filePath("rpc.sock")));
     QList<QJsonObject> calls;
     bool emptyMusic = true;
-    connect(&server, &QLocalServer::newConnection, &server, [&] {
-        while (server.hasPendingConnections()) {
-            auto* socket = server.nextPendingConnection();
-            connect(socket, &QLocalSocket::disconnected, socket, &QObject::deleteLater);
-            connect(socket, &QLocalSocket::readyRead, socket, [&, socket] {
-                auto bytes = socket->property("input").toByteArray() + socket->readAll();
-                socket->setProperty("input", bytes);
-                if (!bytes.endsWith('\n'))
-                    return;
-                const auto request = QJsonDocument::fromJson(bytes).object();
-                calls.append(request);
-                const auto method = request["method"].toString();
-                QJsonObject result;
-                if (method == "JSONRPC.Version")
-                    result = {{"version", QJsonObject{{"major", 13}}}};
-                else if (method == "AudioLibrary.GetAlbums" || method == "AudioLibrary.GetSongs") {
-                    const bool albums = method.endsWith("Albums");
-                    const auto params = request["params"].toObject();
-                    QCOMPARE(params["limits"].toObject()["end"].toInt(), 50);
-                    if (!albums)
-                        QCOMPARE(params["filter"].toObject()["albumid"].toInt(), 41);
-                    const QJsonObject item{{albums ? "albumid" : "songid", albums ? 41 : 23},
-                                           {"title", albums ? "An actual Kodi album" : "First track"},
-                                           {"artist", QJsonArray{"Composer"}},
-                                           {"duration", 120}};
-                    result = {{albums ? "albums" : "songs", QJsonArray{item}},
-                              {"limits", QJsonObject{{"start", 0}, {"end", 1}, {"total", 1}}}};
-                    if (emptyMusic)
-                        result = {{"limits", QJsonObject{{"start", 0}, {"end", 0}, {"total", 0}}}};
-                } else if (method == "Isolde.PlaySong") {
-                    QCOMPARE(request["params"].toObject()["songid"].toInt(), 23);
-                    QVERIFY(!request["params"].toObject()["resume"].toBool());
-                    result = {{"state", "playing"}, {"home", false}};
-                } else
-                    result = {{"state", method == "Isolde.PlaybackControl" ? "ended" : "playing"}, {"home", false}};
-                socket->write(QJsonDocument(QJsonObject{{"jsonrpc", "2.0"}, {"id", request["id"]}, {"result", result}})
-                                  .toJson(QJsonDocument::Compact) +
-                              '\n');
-                socket->disconnectFromServer();
+    connect(&server,
+            &QLocalServer::newConnection,
+            &server,
+            [&]
+            {
+                while (server.hasPendingConnections())
+                {
+                    auto* socket = server.nextPendingConnection();
+                    connect(socket, &QLocalSocket::disconnected, socket, &QObject::deleteLater);
+                    connect(socket,
+                            &QLocalSocket::readyRead,
+                            socket,
+                            [&, socket]
+                            {
+                                auto bytes = socket->property("input").toByteArray() + socket->readAll();
+                                socket->setProperty("input", bytes);
+                                if (!bytes.endsWith('\n'))
+                                    return;
+                                const auto request = QJsonDocument::fromJson(bytes).object();
+                                calls.append(request);
+                                const auto method = request["method"].toString();
+                                QJsonObject result;
+                                if (method == "JSONRPC.Version")
+                                    result = {{"version", QJsonObject{{"major", 13}}}};
+                                else if (method == "AudioLibrary.GetAlbums" || method == "AudioLibrary.GetSongs")
+                                {
+                                    const bool albums = method.endsWith("Albums");
+                                    const auto params = request["params"].toObject();
+                                    QCOMPARE(params["limits"].toObject()["end"].toInt(), 50);
+                                    if (!albums)
+                                        QCOMPARE(params["filter"].toObject()["albumid"].toInt(), 41);
+                                    const QJsonObject item{{albums ? "albumid" : "songid", albums ? 41 : 23},
+                                                           {"title", albums ? "An actual Kodi album" : "First track"},
+                                                           {"artist", QJsonArray{"Composer"}},
+                                                           {"duration", 120}};
+                                    result = {{albums ? "albums" : "songs", QJsonArray{item}},
+                                              {"limits", QJsonObject{{"start", 0}, {"end", 1}, {"total", 1}}}};
+                                    if (emptyMusic)
+                                        result = {{"limits", QJsonObject{{"start", 0}, {"end", 0}, {"total", 0}}}};
+                                }
+                                else if (method == "Isolde.PlaySong")
+                                {
+                                    QCOMPARE(request["params"].toObject()["songid"].toInt(), 23);
+                                    QVERIFY(!request["params"].toObject()["resume"].toBool());
+                                    result = {{"state", "playing"}, {"home", false}};
+                                }
+                                else
+                                    result = {{"state", method == "Isolde.PlaybackControl" ? "ended" : "playing"},
+                                              {"home", false}};
+                                socket->write(
+                                    QJsonDocument(
+                                        QJsonObject{{"jsonrpc", "2.0"}, {"id", request["id"]}, {"result", result}})
+                                        .toJson(QJsonDocument::Compact) +
+                                    '\n');
+                                socket->disconnectFromServer();
+                            });
+                }
             });
-        }
-    });
     KodiMedia media("music-profile", nullptr, dir.path());
     media.openView("albums", "all");
     QTRY_VERIFY(media.connected());
@@ -802,69 +940,91 @@ void KodiMediaTests::musicAlbumsTracksAndKodiPlayback() {
     QVERIFY(media.items().isEmpty());
     QVERIFY(!media.connected());
 }
-void KodiMediaTests::tvGuideReadsChannelsAndKeepsUnavailableStateHonest() {
+void
+KodiMediaTests::tvGuideReadsChannelsAndKeepsUnavailableStateHonest()
+{
     QTemporaryDir dir;
     QLocalServer server;
     QVERIFY(server.listen(dir.filePath("rpc.sock")));
     bool empty = false, reject = false;
     int plays = 0;
-    connect(&server, &QLocalServer::newConnection, &server, [&] {
-        while (server.hasPendingConnections()) {
-            auto* socket = server.nextPendingConnection();
-            connect(socket, &QLocalSocket::disconnected, socket, &QObject::deleteLater);
-            connect(socket, &QLocalSocket::readyRead, socket, [&, socket] {
-                auto bytes = socket->property("input").toByteArray() + socket->readAll();
-                socket->setProperty("input", bytes);
-                if (!bytes.endsWith('\n'))
-                    return;
-                const auto request = QJsonDocument::fromJson(bytes).object();
-                const auto method = request["method"].toString();
-                QJsonObject result;
-                if (method == "JSONRPC.Version")
-                    result = {{"version", QJsonObject{{"major", 13}}}};
-                else if (method == "PVR.GetChannels") {
-                    const auto params = request["params"].toObject();
-                    QCOMPARE(params["channelgroupid"].toString(), QString("alltv"));
-                    QCOMPARE(params["limits"].toObject()["end"].toInt(), 50);
-                    QVERIFY(!params.contains("sort"));
-                    if (reject) {
+    connect(
+        &server,
+        &QLocalServer::newConnection,
+        &server,
+        [&]
+        {
+            while (server.hasPendingConnections())
+            {
+                auto* socket = server.nextPendingConnection();
+                connect(socket, &QLocalSocket::disconnected, socket, &QObject::deleteLater);
+                connect(
+                    socket,
+                    &QLocalSocket::readyRead,
+                    socket,
+                    [&, socket]
+                    {
+                        auto bytes = socket->property("input").toByteArray() + socket->readAll();
+                        socket->setProperty("input", bytes);
+                        if (!bytes.endsWith('\n'))
+                            return;
+                        const auto request = QJsonDocument::fromJson(bytes).object();
+                        const auto method = request["method"].toString();
+                        QJsonObject result;
+                        if (method == "JSONRPC.Version")
+                            result = {{"version", QJsonObject{{"major", 13}}}};
+                        else if (method == "PVR.GetChannels")
+                        {
+                            const auto params = request["params"].toObject();
+                            QCOMPARE(params["channelgroupid"].toString(), QString("alltv"));
+                            QCOMPARE(params["limits"].toObject()["end"].toInt(), 50);
+                            QVERIFY(!params.contains("sort"));
+                            if (reject)
+                            {
+                                socket->write(QJsonDocument(QJsonObject{{"jsonrpc", "2.0"},
+                                                                        {"id", request["id"]},
+                                                                        {"error",
+                                                                         QJsonObject{{"code", -32000},
+                                                                                     {"message", "PVR unavailable"}}}})
+                                                  .toJson(QJsonDocument::Compact) +
+                                              '\n');
+                                socket->disconnectFromServer();
+                                return;
+                            }
+                            QJsonArray channels;
+                            if (!empty)
+                                for (int i = 1; i <= 3; ++i)
+                                    channels.append(
+                                        QJsonObject{{"channelid", i},
+                                                    {"channelnumber", i},
+                                                    {"label", QString("Channel %1").arg(i)},
+                                                    {"hidden", i == 3},
+                                                    {"locked", i == 2},
+                                                    {"broadcastnow", QJsonObject{{"title", "Current programme"}}},
+                                                    {"broadcastnext", QJsonObject{{"title", "Next programme"}}}});
+                            result = {
+                                {"channels", channels},
+                                {"limits",
+                                 QJsonObject{{"start", 0}, {"end", channels.size()}, {"total", channels.size()}}}};
+                        }
+                        else if (method == "Isolde.PlayChannel")
+                        {
+                            ++plays;
+                            QCOMPARE(request["params"].toObject()["channelid"].toInt(), 1);
+                            QVERIFY(!request["params"].toObject()["resume"].toBool());
+                            result = {{"state", "playing"}, {"home", false}};
+                        }
+                        else
+                            result = {{"state", method == "Isolde.PlaybackControl" ? "ended" : "playing"},
+                                      {"home", false}};
                         socket->write(
-                            QJsonDocument(
-                                QJsonObject{{"jsonrpc", "2.0"},
-                                            {"id", request["id"]},
-                                            {"error", QJsonObject{{"code", -32000}, {"message", "PVR unavailable"}}}})
+                            QJsonDocument(QJsonObject{{"jsonrpc", "2.0"}, {"id", request["id"]}, {"result", result}})
                                 .toJson(QJsonDocument::Compact) +
                             '\n');
                         socket->disconnectFromServer();
-                        return;
-                    }
-                    QJsonArray channels;
-                    if (!empty)
-                        for (int i = 1; i <= 3; ++i)
-                            channels.append(QJsonObject{{"channelid", i},
-                                                        {"channelnumber", i},
-                                                        {"label", QString("Channel %1").arg(i)},
-                                                        {"hidden", i == 3},
-                                                        {"locked", i == 2},
-                                                        {"broadcastnow", QJsonObject{{"title", "Current programme"}}},
-                                                        {"broadcastnext", QJsonObject{{"title", "Next programme"}}}});
-                    result = {
-                        {"channels", channels},
-                        {"limits", QJsonObject{{"start", 0}, {"end", channels.size()}, {"total", channels.size()}}}};
-                } else if (method == "Isolde.PlayChannel") {
-                    ++plays;
-                    QCOMPARE(request["params"].toObject()["channelid"].toInt(), 1);
-                    QVERIFY(!request["params"].toObject()["resume"].toBool());
-                    result = {{"state", "playing"}, {"home", false}};
-                } else
-                    result = {{"state", method == "Isolde.PlaybackControl" ? "ended" : "playing"}, {"home", false}};
-                socket->write(QJsonDocument(QJsonObject{{"jsonrpc", "2.0"}, {"id", request["id"]}, {"result", result}})
-                                  .toJson(QJsonDocument::Compact) +
-                              '\n');
-                socket->disconnectFromServer();
-            });
-        }
-    });
+                    });
+            }
+        });
     KodiMedia media("guide-profile", nullptr, dir.path());
     media.openView("channels", "all");
     QTRY_VERIFY(media.connected());
@@ -889,7 +1049,9 @@ void KodiMediaTests::tvGuideReadsChannelsAndKeepsUnavailableStateHonest() {
     QVERIFY(!media.connected());
     QVERIFY(media.status().contains("PVR TV source"));
 }
-void KodiMediaTests::artworkSelectionCancellation() {
+void
+KodiMediaTests::artworkSelectionCancellation()
+{
     QTemporaryDir dir;
     QLocalServer server;
     QVERIFY(server.listen(dir.filePath("rpc.sock")));
@@ -900,32 +1062,44 @@ void KodiMediaTests::artworkSelectionCancellation() {
     QVERIFY(buffer.open(QIODevice::WriteOnly));
     QVERIFY(image.save(&buffer, "PNG"));
     int requests = 0, lastId = 0;
-    connect(&server, &QLocalServer::newConnection, &server, [&] {
-        while (server.hasPendingConnections()) {
-            auto* socket = server.nextPendingConnection();
-            connect(socket, &QLocalSocket::disconnected, socket, &QObject::deleteLater);
-            connect(socket, &QLocalSocket::readyRead, socket, [&, socket] {
-                const auto bytes = socket->property("input").toByteArray() + socket->readAll();
-                socket->setProperty("input", bytes);
-                if (!bytes.endsWith('\n'))
-                    return;
-                const auto request = QJsonDocument::fromJson(bytes).object();
-                ++requests;
-                lastId = request["params"].toObject()["id"].toInt();
-                server.setProperty("lastArtworkMethod", request["method"].toString());
-                server.setProperty("lastArtworkParams", request["params"].toObject().toVariantMap());
-                const auto result =
-                    server.property("bad").toBool() ? QJsonObject{{"mime", "image/png"}, {"data", "not an image"}}
-                    : request["method"] == "Isolde.SetPoster"
-                        ? QJsonObject{{"updated", true}}
-                        : QJsonObject{{"mime", "image/png"}, {"data", QString::fromLatin1(png.toBase64())}};
-                socket->write(QJsonDocument(QJsonObject{{"jsonrpc", "2.0"}, {"id", request["id"]}, {"result", result}})
-                                  .toJson(QJsonDocument::Compact) +
-                              '\n');
-                socket->disconnectFromServer();
+    connect(&server,
+            &QLocalServer::newConnection,
+            &server,
+            [&]
+            {
+                while (server.hasPendingConnections())
+                {
+                    auto* socket = server.nextPendingConnection();
+                    connect(socket, &QLocalSocket::disconnected, socket, &QObject::deleteLater);
+                    connect(socket,
+                            &QLocalSocket::readyRead,
+                            socket,
+                            [&, socket]
+                            {
+                                const auto bytes = socket->property("input").toByteArray() + socket->readAll();
+                                socket->setProperty("input", bytes);
+                                if (!bytes.endsWith('\n'))
+                                    return;
+                                const auto request = QJsonDocument::fromJson(bytes).object();
+                                ++requests;
+                                lastId = request["params"].toObject()["id"].toInt();
+                                server.setProperty("lastArtworkMethod", request["method"].toString());
+                                server.setProperty("lastArtworkParams", request["params"].toObject().toVariantMap());
+                                const auto result = server.property("bad").toBool()
+                                                        ? QJsonObject{{"mime", "image/png"}, {"data", "not an image"}}
+                                                    : request["method"] == "Isolde.SetPoster"
+                                                        ? QJsonObject{{"updated", true}}
+                                                        : QJsonObject{{"mime", "image/png"},
+                                                                      {"data", QString::fromLatin1(png.toBase64())}};
+                                socket->write(
+                                    QJsonDocument(
+                                        QJsonObject{{"jsonrpc", "2.0"}, {"id", request["id"]}, {"result", result}})
+                                        .toJson(QJsonDocument::Compact) +
+                                    '\n');
+                                socket->disconnectFromServer();
+                            });
+                }
             });
-        }
-    });
     KodiArtwork art("test", nullptr, dir.path());
     art.load("movie", 1);
     art.load("episode", 2);
@@ -946,9 +1120,11 @@ void KodiMediaTests::artworkSelectionCancellation() {
     QCOMPARE(requests, 2);
     const auto poster = dir.filePath("poster.png");
     QVERIFY(image.save(poster));
-    art.setManagedArtworkResolver([&](const QString& id) {
-        return id == "artwork/managed.png" ? QUrl::fromLocalFile(poster).toString() : QString{};
-    });
+    art.setManagedArtworkResolver(
+        [&](const QString& id)
+        {
+            return id == "artwork/managed.png" ? QUrl::fromLocalFile(poster).toString() : QString{};
+        });
     QVERIFY(!art.setPoster("movie", 1, "../outside"));
     QVERIFY(!art.setPoster("episode", 1, "artwork/managed.png"));
     server.setProperty("bad", false);
@@ -962,7 +1138,9 @@ void KodiMediaTests::artworkSelectionCancellation() {
     QVERIFY(!params["data"].toString().isEmpty());
     QVERIFY(art.source().startsWith("data:image/png;base64,"));
 }
-void KodiMediaTests::televisionHierarchyAndEpisodePlayback() {
+void
+KodiMediaTests::televisionHierarchyAndEpisodePlayback()
+{
     QTemporaryDir dir;
     QLocalServer server;
     QVERIFY(server.listen(dir.filePath("rpc.sock")));
@@ -1029,7 +1207,9 @@ void KodiMediaTests::televisionHierarchyAndEpisodePlayback() {
     QCOMPARE(media.viewKind(), QString("all"));
     QCOMPARE(server.property("lastParams").toMap()["sort"].toMap()["method"].toString(), QString("title"));
 }
-void KodiMediaTests::pagesLibraryAndResets() {
+void
+KodiMediaTests::pagesLibraryAndResets()
+{
     QTemporaryDir dir;
     QLocalServer server;
     QVERIFY(server.listen(dir.filePath("rpc.sock")));
@@ -1073,7 +1253,9 @@ void KodiMediaTests::pagesLibraryAndResets() {
     QVERIFY(media.movies().isEmpty());
     QVERIFY(!media.hasNextPage());
 }
-void KodiMediaTests::localViewsAndCollections() {
+void
+KodiMediaTests::localViewsAndCollections()
+{
     QTemporaryDir config, dir;
     const auto original = QSettings::defaultFormat();
     QSettings::setDefaultFormat(QSettings::IniFormat);
@@ -1161,7 +1343,9 @@ void KodiMediaTests::localViewsAndCollections() {
     }
     QSettings::setDefaultFormat(original);
 }
-void KodiMediaTests::manualMovieCollections() {
+void
+KodiMediaTests::manualMovieCollections()
+{
     QTemporaryDir config, directory;
     const auto original = QSettings::defaultFormat();
     QSettings::setDefaultFormat(QSettings::IniFormat);
@@ -1214,7 +1398,9 @@ void KodiMediaTests::manualMovieCollections() {
     }
     QSettings::setDefaultFormat(original);
 }
-void KodiMediaTests::manualShowCollections() {
+void
+KodiMediaTests::manualShowCollections()
+{
     QTemporaryDir config, directory;
     const auto original = QSettings::defaultFormat();
     QSettings::setDefaultFormat(QSettings::IniFormat);
@@ -1258,7 +1444,9 @@ void KodiMediaTests::manualShowCollections() {
     }
     QSettings::setDefaultFormat(original);
 }
-void KodiMediaTests::episodeSearchAndShowResult() {
+void
+KodiMediaTests::episodeSearchAndShowResult()
+{
     QTemporaryDir directory;
     QLocalServer server;
     QVERIFY(server.listen(directory.filePath("rpc.sock")));
@@ -1288,7 +1476,9 @@ void KodiMediaTests::episodeSearchAndShowResult() {
     QCOMPARE(server.property("lastPlayMethod").toString(), QString("Isolde.PlayMovie"));
     queuedPlayback.invalidate("Test complete");
 }
-void KodiMediaTests::homeCollectionShelves() {
+void
+KodiMediaTests::homeCollectionShelves()
+{
     QTemporaryDir config, dir;
     const auto original = QSettings::defaultFormat();
     QSettings::setDefaultFormat(QSettings::IniFormat);
@@ -1374,7 +1564,9 @@ void KodiMediaTests::homeCollectionShelves() {
     }
     QSettings::setDefaultFormat(original);
 }
-void KodiMediaTests::validatesPersistedCollections() {
+void
+KodiMediaTests::validatesPersistedCollections()
+{
     QTemporaryDir config;
     const auto original = QSettings::defaultFormat();
     QSettings::setDefaultFormat(QSettings::IniFormat);
@@ -1434,7 +1626,9 @@ void KodiMediaTests::validatesPersistedCollections() {
     }
     QSettings::setDefaultFormat(original);
 }
-void KodiMediaTests::playbackLifecycle() {
+void
+KodiMediaTests::playbackLifecycle()
+{
     QTemporaryDir dir;
     QLocalServer server;
     QVERIFY(server.listen(dir.filePath("rpc.sock")));
@@ -1472,7 +1666,8 @@ void KodiMediaTests::playbackLifecycle() {
     QVERIFY(media.playbackStatus().contains("retained"));
     server.setProperty("rejectControl", false);
     server.setProperty("playState", "playing");
-    for (int index = 0; index < 40; ++index) {
+    for (int index = 0; index < 40; ++index)
+    {
         QTRY_VERIFY(!media.busy());
         media.playbackControl(index % 2 ? "backward" : "forward");
         QTRY_VERIFY(!media.busy());
@@ -1493,7 +1688,9 @@ void KodiMediaTests::playbackLifecycle() {
     QVERIFY(!media.connected());
     QCOMPARE(started.size(), 1);
 }
-void KodiMediaTests::sourcePreviewAndPlaybackOptionsBoundaries() {
+void
+KodiMediaTests::sourcePreviewAndPlaybackOptionsBoundaries()
+{
     QTemporaryDir dir;
     QLocalServer server;
     QVERIFY(server.listen(dir.filePath("rpc.sock")));
@@ -1505,9 +1702,11 @@ void KodiMediaTests::sourcePreviewAndPlaybackOptionsBoundaries() {
     media.refresh();
     QTRY_VERIFY(media.connected());
     bool allowed = true;
-    media.setSourceEditGuard([&] {
-        return allowed;
-    });
+    media.setSourceEditGuard(
+        [&]
+        {
+            return allowed;
+        });
     media.refreshSources();
     QTRY_VERIFY(!media.busy());
     QCOMPARE(media.sourceRoots(), QStringList{"/media/fixture"});
@@ -1595,7 +1794,9 @@ void KodiMediaTests::sourcePreviewAndPlaybackOptionsBoundaries() {
     QVERIFY(media.librarySources().isEmpty());
     QVERIFY(media.playbackOptions().isEmpty());
 }
-void KodiMediaTests::scheduledPlaybackUsesExplicitBroadcastOffset() {
+void
+KodiMediaTests::scheduledPlaybackUsesExplicitBroadcastOffset()
+{
     QTemporaryDir dir;
     QLocalServer server;
     QVERIFY(server.listen(dir.filePath("rpc.sock")));
@@ -1621,14 +1822,17 @@ void KodiMediaTests::scheduledPlaybackUsesExplicitBroadcastOffset() {
     QTRY_VERIFY(!media.playbackActive());
     QCOMPARE(returned.size(), 1);
 }
-void KodiMediaTests::scheduledUnavailableAcknowledgementUsesOnlyOwnedStartIdentity() {
+void
+KodiMediaTests::scheduledUnavailableAcknowledgementUsesOnlyOwnedStartIdentity()
+{
     const QVariantMap unavailable{{"state", "failed"},
                                   {"home", false},
                                   {"availability", "unavailable"},
                                   {"mediaType", "movie"},
                                   {"mediaId", 999}};
     QVariantList results{unavailable};
-    for (const auto& home : QVariantList{QVariant(), 0, QString("false"), true}) {
+    for (const auto& home : QVariantList{QVariant(), 0, QString("false"), true})
+    {
         auto invalid = unavailable;
         if (home.isValid())
             invalid["home"] = home;
@@ -1642,7 +1846,8 @@ void KodiMediaTests::scheduledUnavailableAcknowledgementUsesOnlyOwnedStartIdenti
     auto malformed = unavailable;
     malformed["availability"] = true;
     results.append(malformed);
-    for (int index = 0; index < results.size(); ++index) {
+    for (int index = 0; index < results.size(); ++index)
+    {
         QTemporaryDir dir;
         QLocalServer server;
         QVERIFY(server.listen(dir.filePath("rpc.sock")));
@@ -1653,7 +1858,8 @@ void KodiMediaTests::scheduledUnavailableAcknowledgementUsesOnlyOwnedStartIdenti
         QVERIFY(media.playScheduled("episode", 7, 0));
         QTRY_VERIFY(!media.playbackActive());
         QCOMPARE(missing.size(), index == 0 ? 1 : 0);
-        if (index == 0) {
+        if (index == 0)
+        {
             QCOMPARE(missing[0][0].toString(), QString("episode"));
             QCOMPARE(missing[0][1].toInt(), 7);
         }
@@ -1697,7 +1903,9 @@ void KodiMediaTests::scheduledUnavailableAcknowledgementUsesOnlyOwnedStartIdenti
         QVERIFY(missing.isEmpty());
     }
 }
-void KodiMediaTests::readsLibraryThroughTwoRequests() {
+void
+KodiMediaTests::readsLibraryThroughTwoRequests()
+{
     QTemporaryDir dir;
     QLocalServer server;
     QVERIFY(server.listen(dir.filePath("rpc.sock")));
@@ -1711,7 +1919,9 @@ void KodiMediaTests::readsLibraryThroughTwoRequests() {
     QTRY_VERIFY_WITH_TIMEOUT(!media.busy(), 5000);
     QCOMPARE(media.movies().size(), 1);
 }
-void KodiMediaTests::observedScanCompletes() {
+void
+KodiMediaTests::observedScanCompletes()
+{
     QTemporaryDir dir;
     QLocalServer server;
     QVERIFY(server.listen(dir.filePath("rpc.sock")));
@@ -1726,7 +1936,9 @@ void KodiMediaTests::observedScanCompletes() {
     QVERIFY(media.scanStatus().contains("finished scanning"));
     QCOMPARE(server.property("scanRequests").toInt(), 1);
 }
-void KodiMediaTests::rejectedScanIsNotSuccess() {
+void
+KodiMediaTests::rejectedScanIsNotSuccess()
+{
     QTemporaryDir dir;
     QLocalServer server;
     QVERIFY(server.listen(dir.filePath("rpc.sock")));
@@ -1740,7 +1952,9 @@ void KodiMediaTests::rejectedScanIsNotSuccess() {
     QVERIFY(!media.connected());
     QVERIFY(media.scanStatus().contains("did not accept"));
 }
-void KodiMediaTests::scansConfiguredSources() {
+void
+KodiMediaTests::scansConfiguredSources()
+{
     QTemporaryDir dir;
     QLocalServer server;
     QVERIFY(server.listen(dir.filePath("rpc.sock")));
@@ -1759,7 +1973,9 @@ void KodiMediaTests::scansConfiguredSources() {
     QVERIFY(!media.scanStatus().contains("finished scanning"));
     QCOMPARE(media.movies().size(), 1);
 }
-void KodiMediaTests::cancelsScanMonitoring() {
+void
+KodiMediaTests::cancelsScanMonitoring()
+{
     QTemporaryDir dir;
     QLocalServer server;
     QVERIFY(server.listen(dir.filePath("rpc.sock")));
@@ -1777,7 +1993,9 @@ void KodiMediaTests::cancelsScanMonitoring() {
     QVERIFY(media.connected());
     QVERIFY(media.scanStatus().contains("unavailable"));
 }
-void KodiMediaTests::rejectsUnknownVersion() {
+void
+KodiMediaTests::rejectsUnknownVersion()
+{
     QTemporaryDir dir;
     QLocalServer server;
     QVERIFY(server.listen(dir.filePath("rpc.sock")));
@@ -1788,7 +2006,9 @@ void KodiMediaTests::rejectsUnknownVersion() {
     QVERIFY(media.movies().isEmpty());
     QVERIFY(media.status().contains("not been validated"));
 }
-void KodiMediaTests::invalidationClearsConnectedLibrary() {
+void
+KodiMediaTests::invalidationClearsConnectedLibrary()
+{
     QTemporaryDir dir;
     QLocalServer server;
     QVERIFY(server.listen(dir.filePath("rpc.sock")));
@@ -1807,7 +2027,9 @@ void KodiMediaTests::invalidationClearsConnectedLibrary() {
     media.refresh();
     QTRY_VERIFY(media.connected());
 }
-void KodiMediaTests::cancelledRequestCanRetry() {
+void
+KodiMediaTests::cancelledRequestCanRetry()
+{
     QTemporaryDir dir;
     QLocalServer server;
     QVERIFY(server.listen(dir.filePath("rpc.sock")));
@@ -1831,7 +2053,9 @@ void KodiMediaTests::cancelledRequestCanRetry() {
     QVERIFY(media.connected()); // Cancelled deadline cannot erase the new result.
     QCOMPARE(media.movies().size(), 1);
 }
-void KodiMediaTests::unavailableDoesNotHang() {
+void
+KodiMediaTests::unavailableDoesNotHang()
+{
     QTemporaryDir dir;
     KodiMedia media("default", nullptr, dir.path());
     media.refresh();
@@ -1839,7 +2063,9 @@ void KodiMediaTests::unavailableDoesNotHang() {
     QVERIFY(media.movies().isEmpty());
     QVERIFY(media.status().contains("unavailable"));
 }
-void KodiMediaTests::timesOut() {
+void
+KodiMediaTests::timesOut()
+{
     QTemporaryDir dir;
     QLocalServer server;
     QVERIFY(server.listen(dir.filePath("rpc.sock")));
@@ -1848,24 +2074,30 @@ void KodiMediaTests::timesOut() {
     QTRY_VERIFY_WITH_TIMEOUT(!media.busy(), 5000);
     QVERIFY(media.status().contains("did not respond"));
 }
-void KodiMediaTests::desktopImportIsRecursivePrivateReversibleAndGuarded() {
+void
+KodiMediaTests::desktopImportIsRecursivePrivateReversibleAndGuarded()
+{
     QTemporaryDir temporary;
     QVERIFY(temporary.isValid());
     const auto oldHome = qgetenv("HOME"), oldConfig = qgetenv("XDG_CONFIG_HOME"), oldData = qgetenv("XDG_DATA_HOME");
-    const auto restore = qScopeGuard([&] {
-        qputenv("HOME", oldHome);
-        qputenv("XDG_CONFIG_HOME", oldConfig);
-        qputenv("XDG_DATA_HOME", oldData);
-    });
+    const auto restore = qScopeGuard(
+        [&]
+        {
+            qputenv("HOME", oldHome);
+            qputenv("XDG_CONFIG_HOME", oldConfig);
+            qputenv("XDG_DATA_HOME", oldData);
+        });
     qputenv("HOME", temporary.filePath("desktop").toUtf8());
     qputenv("XDG_CONFIG_HOME", temporary.filePath("config").toUtf8());
     qputenv("XDG_DATA_HOME", temporary.filePath("data").toUtf8());
-    auto write = [](const QString& path, const QByteArray& bytes) {
+    auto write = [](const QString& path, const QByteArray& bytes)
+    {
         QDir().mkpath(QFileInfo(path).absolutePath());
         QFile file(path);
         return file.open(QIODevice::WriteOnly) && file.write(bytes) == bytes.size();
     };
-    auto read = [](const QString& path) {
+    auto read = [](const QString& path)
+    {
         QFile file(path);
         return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray();
     };
@@ -1879,11 +2111,13 @@ void KodiMediaTests::desktopImportIsRecursivePrivateReversibleAndGuarded() {
     KodiImporter importer("default");
     int prepared = 0, released = 0;
     importer.setBackendGuard(
-        [&] {
+        [&]
+        {
             ++prepared;
             return true;
         },
-        [&] {
+        [&]
+        {
             ++released;
             QVERIFY(write(QFileInfo(target).dir().filePath("backend-state"), QByteArray::number(released)));
         });
@@ -1917,11 +2151,13 @@ void KodiMediaTests::desktopImportIsRecursivePrivateReversibleAndGuarded() {
     QCOMPARE(prepared, released);
     const auto complete = prepared;
     importer.setBackendGuard(
-        [&] {
+        [&]
+        {
             ++prepared;
             return false;
         },
-        [&] {
+        [&]
+        {
             ++released;
         });
     importer.createBackup();
@@ -1932,13 +2168,16 @@ void KodiMediaTests::desktopImportIsRecursivePrivateReversibleAndGuarded() {
     bool ready = false;
     int deferredReleases = 0;
     importer.setBackendGuard(
-        [&] {
+        [&]
+        {
             return ready;
         },
-        [&] {
+        [&]
+        {
             ++deferredReleases;
         },
-        [&] {
+        [&]
+        {
             return preparing;
         });
     importer.scanExistingKodi();

@@ -13,14 +13,18 @@
 #include <sys/syscall.h>
 #endif
 
-QString ManagedGamePaths::gamesRoot(const QString& profile) {
+QString
+ManagedGamePaths::gamesRoot(const QString& profile)
+{
     if (profile != "default" && (QUuid(profile).isNull() || QUuid(profile).toString(QUuid::WithoutBraces) != profile))
         return {};
     return QDir::cleanPath(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/native-profiles/" +
                            profile + "/games");
 }
 
-bool ManagedGamePaths::isInstallRoot(const QString& profile, const QString& path, bool requirePresent) {
+bool
+ManagedGamePaths::isInstallRoot(const QString& profile, const QString& path, bool requirePresent)
+{
     const auto base = gamesRoot(profile);
     if (base.isEmpty() || path.size() > 4096 || !QDir::isAbsolutePath(path) || QDir::cleanPath(path) != path ||
         !path.startsWith(base + '/'))
@@ -33,7 +37,8 @@ bool ManagedGamePaths::isInstallRoot(const QString& profile, const QString& path
     if (uuid.isNull() || uuid.toString(QUuid::WithoutBraces) != identity)
         return false;
     QFileInfo current(base);
-    while (!current.exists()) {
+    while (!current.exists())
+    {
         if (current.isSymLink())
             return false;
         current = QFileInfo(current.absolutePath());
@@ -48,7 +53,9 @@ bool ManagedGamePaths::isInstallRoot(const QString& profile, const QString& path
            !marker.isSymLink() && marker.canonicalFilePath() == marker.absoluteFilePath();
 }
 
-QString ManagedGamePaths::recoverPendingUninstall(const QString& profile, const QString& path, bool requireMarker) {
+QString
+ManagedGamePaths::recoverPendingUninstall(const QString& profile, const QString& path, bool requireMarker)
+{
     const auto pending = path + ".uninstall-pending";
     const QFileInfo staged(pending);
     if (!staged.exists() && !staged.isSymLink())

@@ -16,7 +16,8 @@
 // Only the dedicated, owned remote browser inherits these private pipes.
 // Fixed commands install the input bridge; no cookies/storage/network queries,
 // remote listener, arbitrary command API, or browser-data export is provided.
-class ChromiumRemotePipe {
+class ChromiumRemotePipe
+{
   public:
     ChromiumRemotePipe(QCoreApplication& app,
                        QProcess& process,
@@ -24,7 +25,8 @@ class ChromiumRemotePipe {
                        std::function<void()> failed,
                        std::function<void()> returned)
         : owner(app), child(process), failure(std::move(failed)), returnToOwner(std::move(returned)),
-          source(webRemoteScript(appearance)) {
+          source(webRemoteScript(appearance))
+    {
         valid = !source.isEmpty() && ::pipe2(input, O_CLOEXEC) == 0 && ::pipe2(output, O_CLOEXEC) == 0;
         if (!valid)
             return;
@@ -33,26 +35,37 @@ class ChromiumRemotePipe {
         reader = new QSocketNotifier(output[0], QSocketNotifier::Read, &owner);
         writer = new QSocketNotifier(input[1], QSocketNotifier::Write, &owner);
         writer->setEnabled(false);
-        QObject::connect(reader, &QSocketNotifier::activated, &owner, [this] {
-            read();
-        });
-        QObject::connect(writer, &QSocketNotifier::activated, &owner, [this] {
-            flush();
-        });
+        QObject::connect(reader,
+                         &QSocketNotifier::activated,
+                         &owner,
+                         [this]
+                         {
+                             read();
+                         });
+        QObject::connect(writer,
+                         &QSocketNotifier::activated,
+                         &owner,
+                         [this]
+                         {
+                             flush();
+                         });
         const int readFd = input[0], writeFd = output[1];
-        child.setChildProcessModifier([readFd, writeFd] {
-            ::setsid();
-            ::dup2(readFd, 3);
-            ::dup2(writeFd, 4);
-            ::fcntl(3, F_SETFD, 0);
-            ::fcntl(4, F_SETFD, 0);
-            if (readFd > 4)
-                ::close(readFd);
-            if (writeFd > 4)
-                ::close(writeFd);
-        });
+        child.setChildProcessModifier(
+            [readFd, writeFd]
+            {
+                ::setsid();
+                ::dup2(readFd, 3);
+                ::dup2(writeFd, 4);
+                ::fcntl(3, F_SETFD, 0);
+                ::fcntl(4, F_SETFD, 0);
+                if (readFd > 4)
+                    ::close(readFd);
+                if (writeFd > 4)
+                    ::close(writeFd);
+            });
     }
-    ~ChromiumRemotePipe() {
+    ~ChromiumRemotePipe()
+    {
         delete reader;
         delete writer;
         for (int fd : input)
@@ -63,34 +76,49 @@ class ChromiumRemotePipe {
                 ::close(fd);
     }
     bool valid = false;
-    void started() {
+    void
+    started()
+    {
         ::close(input[0]);
         input[0] = -1;
         ::close(output[1]);
         output[1] = -1;
         send("Target.setDiscoverTargets", {{"discover", true}});
-        QTimer::singleShot(15000, &owner, [this] {
-            if (!ready && child.state() == QProcess::Running)
-                failure();
-        });
+        auto shouldFail = [this]()
+        {
+            return !ready && child.state() == QProcess::Running;
+        };
+        QTimer::singleShot(15000,
+                           &owner,
+                           [this, shouldFail]
+                           {
+                               if (shouldFail())
+                                   failure();
+                           });
     }
 
   private:
-    int send(const QString& method, const QJsonObject& params = {}, const QString& session = {}) {
+    int
+    send(const QString& method, const QJsonObject& params = {}, const QString& session = {})
+    {
         QJsonObject message{{"id", ++sequence}, {"method", method}, {"params", params}};
         if (!session.isEmpty())
             message["sessionId"] = session;
         outgoing += QJsonDocument(message).toJson(QJsonDocument::Compact);
         outgoing += '\0';
-        if (outgoing.size() > 256 * 1024) {
+        if (outgoing.size() > 256 * 1024)
+        {
             failure();
             return 0;
         }
         flush();
         return sequence;
     }
-    void flush() {
-        while (!outgoing.isEmpty()) {
+    void
+    flush()
+    {
+        while (!outgoing.isEmpty())
+        {
             const auto count = ::write(input[1], outgoing.constData(), size_t(outgoing.size()));
             if (count > 0)
                 outgoing.remove(0, count);
@@ -102,16 +130,21 @@ class ChromiumRemotePipe {
         if (writer)
             writer->setEnabled(!outgoing.isEmpty());
     }
-    void read() {
+    void
+    read()
+    {
         char buffer[16384];
         ssize_t count;
-        while ((count = ::read(output[0], buffer, sizeof buffer)) > 0) {
+        while ((count = ::read(output[0], buffer, sizeof buffer)) > 0)
+        {
             incoming.append(buffer, count);
-            if (incoming.size() > 2 * 1024 * 1024) {
+            if (incoming.size() > 2 * 1024 * 1024)
+            {
                 failure();
                 return;
             }
-            while (incoming.contains('\0')) {
+            while (incoming.contains('\0'))
+            {
                 const int end = incoming.indexOf('\0');
                 const auto message = QJsonDocument::fromJson(incoming.left(end)).object();
                 incoming.remove(0, end + 1);
@@ -121,26 +154,32 @@ class ChromiumRemotePipe {
         if (count == 0)
             reader->setEnabled(false);
     }
-    void receive(const QJsonObject& message) {
+    void
+    receive(const QJsonObject& message)
+    {
         const auto method = message.value("method").toString();
         const auto params = message.value("params").toObject();
         if (method == "Runtime.bindingCalled" && sessions.contains(message.value("sessionId").toString()) &&
             params.value("name").toString() == "__isoldeReturnToOwner" &&
-            params.value("payload").toString() == "return") {
+            params.value("payload").toString() == "return")
+        {
             qInfo("Isolde remote root Back requested owned return");
             returnToOwner();
             return;
         }
-        if (method == "Target.targetCreated") {
+        if (method == "Target.targetCreated")
+        {
             const auto target = params.value("targetInfo").toObject();
             const auto type = target.value("type").toString(), id = target.value("targetId").toString();
-            if ((type == "page" || type == "iframe") && !attached.contains(id) && attached.size() < 32) {
+            if ((type == "page" || type == "iframe") && !attached.contains(id) && attached.size() < 32)
+            {
                 attached.insert(id);
                 attaching.insert(send("Target.attachToTarget", {{"targetId", id}, {"flatten", true}}), id);
             }
         }
         const auto id = message.value("id").toInt();
-        if (attaching.remove(id)) {
+        if (attaching.remove(id))
+        {
             const auto session = message.value("result").toObject().value("sessionId").toString();
             if (session.isEmpty())
                 return;
@@ -153,7 +192,9 @@ class ChromiumRemotePipe {
             scripts.insert(send("Page.addScriptToEvaluateOnNewDocument",
                                 {{"source", source}, {"worldName", "IsoldeRemote"}, {"runImmediately", true}},
                                 session));
-        } else if (scripts.remove(id) && !message.contains("error")) {
+        }
+        else if (scripts.remove(id) && !message.contains("error"))
+        {
             ready = true;
         }
     }

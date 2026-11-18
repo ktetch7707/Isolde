@@ -4,7 +4,9 @@
 #include <QJsonObject>
 #include <QVariantMap>
 
-inline QString webRemoteScript(const QVariantMap& appearance) {
+inline QString
+webRemoteScript(const QVariantMap& appearance)
+{
     if (!appearance.contains("focusColor") || !appearance.contains("surfaceColor") || !appearance.contains("textColor"))
         return {};
     QFile script(":/isolde/web-remote.js");

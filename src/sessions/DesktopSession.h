@@ -7,23 +7,49 @@
 #include <QProcess>
 #include <memory>
 
-class DesktopSession final : public AppSession {
+class DesktopSession final : public AppSession
+{
     Q_OBJECT
   public:
     using AppSession::AppSession;
     ~DesktopSession() override;
-    QString diagnostics() const {
+    QString
+    diagnostics() const
+    {
         return QString::fromUtf8(m_diagnostics);
     }
-    void launch() override;
-    void suspend() override;
-    void resume() override;
-    void exit() override;
+    void
+    launch() override;
+    void
+    suspend() override;
+    void
+    resume() override;
+    void
+    exit() override;
+    bool
+    applyLaunchConfiguration(QJsonObject& configuration, const QString& steamGame, const QString& managedGame,
+                             const QJsonObject& resolvedLaunch, const NativeSandboxPlan& sandbox,
+                             QStringList& launchArguments);
+    bool
+    applyContainmentTimers(const QString& containmentMode);
+    bool
+    prepareLaunch(QJsonObject& resolvedLaunch, QStringList& launchArguments);
 
   private:
-    bool applyContainment();
-    void stopProcess();
-    void readDiagnostics();
+    bool
+    applyContainment();
+    void
+    stopProcess();
+    void
+    onLauncherFinished(int exitCode, QProcess::ExitStatus exitStatus);
+    void
+    readDiagnostics();
+    bool
+    parseGamepadStatusLine(const QString& line, QVariantMap& status) const;
+    bool
+    processGamepadStatusLine(const QVariantMap& status) const;
+    void
+    processSteamOutput(const QByteArray& output);
     bool m_stopping = false;
     QByteArray m_diagnostics;
     QByteArray m_protocolBuffer;

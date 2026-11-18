@@ -4,20 +4,28 @@
 #include <QSet>
 #include <QtMath>
 
-namespace {
-double luminance(const QColor& color) {
-    const auto linear = [](double v) {
+namespace
+{
+double
+luminance(const QColor& color)
+{
+    const auto linear = [](double v)
+    {
         return v <= 0.04045 ? v / 12.92 : qPow((v + 0.055) / 1.055, 2.4);
     };
     return 0.2126 * linear(color.redF()) + 0.7152 * linear(color.greenF()) + 0.0722 * linear(color.blueF());
 }
 
-double contrast(const QColor& a, const QColor& b) {
+double
+contrast(const QColor& a, const QColor& b)
+{
     const double x = luminance(a), y = luminance(b);
     return (qMax(x, y) + 0.05) / (qMin(x, y) + 0.05);
 }
 
-QString readable(const QVariant& candidate, const QColor& surface, double minimum) {
+QString
+readable(const QVariant& candidate, const QColor& surface, double minimum)
+{
     const QColor color(candidate.toString());
     if (color.isValid() && color.alpha() == 255 && contrast(color, surface) >= minimum)
         return color.name();
@@ -42,36 +50,52 @@ const QSet<QString> colorRoles{"backgroundStart",
                                "errorColor",
                                "unavailableColor"};
 
-bool validTokens(const QVariant& value) {
+bool
+validTokens(const QVariant& value)
+{
     if (value.metaType().id() != QMetaType::QVariantMap)
         return false;
     const auto tokens = value.toMap();
-    for (auto it = tokens.cbegin(); it != tokens.cend(); ++it) {
-        if (colorRoles.contains(it.key())) {
+    for (auto it = tokens.cbegin(); it != tokens.cend(); ++it)
+    {
+        if (colorRoles.contains(it.key()))
+        {
             if (it.value().metaType().id() != QMetaType::QString)
                 return false;
             const QColor color(it.value().toString());
             if (!color.isValid() || color.alpha() != 255)
                 return false;
-        } else if (it.key() == "motionEnabled" || it.key() == "highContrast") {
+        }
+        else if (it.key() == "motionEnabled" || it.key() == "highContrast")
+        {
             if (it.value().metaType().id() != QMetaType::Bool)
                 return false;
-        } else if (it.key() == "fontFamily") {
+        }
+        else if (it.key() == "fontFamily")
+        {
             if (it.value().metaType().id() != QMetaType::QString || it.value().toString().trimmed().isEmpty() ||
                 it.value().toString().size() > 80 || it.value().toString().contains(QChar::Null))
                 return false;
-        } else {
+        }
+        else
+        {
             double low = 0, high = 1;
-            if (it.key() == "typographyScale") {
+            if (it.key() == "typographyScale")
+            {
                 low = 0.8;
                 high = 1.3;
-            } else if (it.key() == "spacing") {
+            }
+            else if (it.key() == "spacing")
+            {
                 low = 8;
                 high = 40;
-            } else if (it.key() == "cornerRadius") {
+            }
+            else if (it.key() == "cornerRadius")
+            {
                 low = 0;
                 high = 48;
-            } else if (it.key() != "scrimOpacity" && it.key() != "panelOpacity" && it.key() != "tileRoundness")
+            }
+            else if (it.key() != "scrimOpacity" && it.key() != "panelOpacity" && it.key() != "tileRoundness")
                 return false;
             if (it.value().metaType().id() == QMetaType::Bool || it.value().metaType().id() == QMetaType::QString)
                 return false;
@@ -85,11 +109,14 @@ bool validTokens(const QVariant& value) {
 }
 } // namespace
 
-bool ComponentSchema::validSurfaceThemes(const QVariant& value) {
+bool
+ComponentSchema::validSurfaceThemes(const QVariant& value)
+{
     if (value.metaType().id() != QMetaType::QVariantMap)
         return false;
     const auto policies = value.toMap();
-    for (auto it = policies.cbegin(); it != policies.cend(); ++it) {
+    for (auto it = policies.cbegin(); it != policies.cend(); ++it)
+    {
         if (!QStringList{"search", "apps", "settings", "kodi"}.contains(it.key()) ||
             it.value().metaType().id() != QMetaType::QVariantMap)
             return false;
@@ -112,13 +139,16 @@ bool ComponentSchema::validSurfaceThemes(const QVariant& value) {
     return true;
 }
 
-bool ComponentSchema::readableSurfaceThemes(const QVariantMap& home, const QVariantMap& origin) {
+bool
+ComponentSchema::readableSurfaceThemes(const QVariantMap& home, const QVariantMap& origin)
+{
     auto policies = home.value("surfaceThemes").toMap();
     const auto local = origin.value("surfaceThemes").toMap();
     for (auto it = local.cbegin(); it != local.cend(); ++it)
         if (it.key() != "settings")
             policies[it.key()] = it.value();
-    for (auto it = policies.cbegin(); it != policies.cend(); ++it) {
+    for (auto it = policies.cbegin(); it != policies.cend(); ++it)
+    {
         const auto policy = it.value().toMap();
         if (policy.value("mode") != "custom")
             continue;
@@ -143,10 +173,13 @@ bool ComponentSchema::readableSurfaceThemes(const QVariantMap& home, const QVari
     return true;
 }
 
-QVariantMap ComponentSchema::surfacePalette(const QVariantMap& appearance) {
+QVariantMap
+ComponentSchema::surfacePalette(const QVariantMap& appearance)
+{
     auto result = appearance;
     result.remove("surfaceThemes");
-    const auto fallback = [&](const QString& key, const QVariant& value) {
+    const auto fallback = [&](const QString& key, const QVariant& value)
+    {
         if (!result.contains(key))
             result[key] = value;
     };
@@ -160,7 +193,8 @@ QVariantMap ComponentSchema::surfacePalette(const QVariantMap& appearance) {
     // Consumers receive an opaque, contrast-tested color, never child opacity.
     const double panelOpacity = result.value("panelOpacity", 1.0).toDouble();
     const QColor backdrop(result["backgroundEnd"].toString());
-    for (const auto& role : QStringList{"surfaceColor", "selectedColor", "elevatedColor", "inputColor"}) {
+    for (const auto& role : QStringList{"surfaceColor", "selectedColor", "elevatedColor", "inputColor"})
+    {
         const QColor panel(result[role].toString());
         result[role] = QColor::fromRgbF(panel.redF() * panelOpacity + backdrop.redF() * (1 - panelOpacity),
                                         panel.greenF() * panelOpacity + backdrop.greenF() * (1 - panelOpacity),

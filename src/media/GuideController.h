@@ -14,7 +14,8 @@ class GuideWorker;
 
 // One coordinator per profile. SQLite objects live exclusively on its worker;
 // QML receives bounded immutable snapshots. Viewing never starts a catalog read.
-class GuideController final : public QObject {
+class GuideController final : public QObject
+{
     Q_OBJECT
     Q_PROPERTY(bool ready READ ready NOTIFY changed)
     Q_PROPERTY(bool busy READ busy NOTIFY changed)
@@ -46,145 +47,273 @@ class GuideController final : public QObject {
                     QObject* parent = nullptr,
                     const QString& bridgeDirectory = {});
     ~GuideController() override;
-    bool ready() const {
+    bool
+    ready() const
+    {
         return m_ready;
     }
-    bool busy() const {
+    bool
+    busy() const
+    {
         return m_busy || bool(m_pendingJob) || !m_pendingDefinition.isEmpty();
     }
-    bool backgroundBusy() const {
+    bool
+    backgroundBusy() const
+    {
         return m_busy && m_background && !m_pendingJob && m_pendingDefinition.isEmpty();
     }
-    QString errorString() const {
+    QString
+    errorString() const
+    {
         return m_error;
     }
-    QString status() const {
+    QString
+    status() const
+    {
         return m_status;
     }
-    QString scheduleStatus() const {
+    QString
+    scheduleStatus() const
+    {
         return m_scheduleStatus;
     }
-    QVariantList channels() const {
+    QVariantList
+    channels() const
+    {
         return m_channels;
     }
-    QVariantList rows() const {
+    QVariantList
+    rows() const
+    {
         return m_rows;
     }
-    QVariantList compactRows() const {
+    QVariantList
+    compactRows() const
+    {
         return m_compactRows;
     }
-    QVariantList previewItems() const {
+    QVariantList
+    previewItems() const
+    {
         return m_candidates.mid(0, 8);
     }
-    int previewCount() const {
+    int
+    previewCount() const
+    {
         return int(m_candidates.size());
     }
-    int skippedCount() const {
+    int
+    skippedCount() const
+    {
         return m_skipped;
     }
-    bool previewReady() const {
+    bool
+    previewReady() const
+    {
         return m_previewReady;
     }
-    QVariantMap previewDefinition() const {
+    QVariantMap
+    previewDefinition() const
+    {
         return m_previewDefinition;
     }
-    QVariantList sourcePreview() const {
+    QVariantList
+    sourcePreview() const
+    {
         return m_sourcePreview;
     }
-    bool sourcePreviewReady() const {
+    bool
+    sourcePreviewReady() const
+    {
         return m_sourcePreviewReady;
     }
-    QVariantMap regenerationReview() const {
+    QVariantMap
+    regenerationReview() const
+    {
         return m_regenerationReview;
     }
-    QVariantMap repairReview() const {
+    QVariantMap
+    repairReview() const
+    {
         return m_repairReview;
     }
-    QVariantMap clockReview() const {
+    QVariantMap
+    clockReview() const
+    {
         return m_clockReview;
     }
-    QVariantList importReview() const;
-    QVariantList ruleTemplates() const {
+    QVariantList
+    importReview() const;
+    QVariantList
+    ruleTemplates() const
+    {
         return m_ruleTemplates;
     }
-    QString clockWarning() const {
+    QString
+    clockWarning() const
+    {
         return m_clockWarning;
     }
-    QVariantMap guideDiagnostics() const {
+    QVariantMap
+    guideDiagnostics() const
+    {
         return m_diagnostics;
     }
-    qint64 firstPaintMs() const {
+    qint64
+    firstPaintMs() const
+    {
         return m_firstPaintMs;
     }
-    Q_INVOKABLE void beginGuidePaint() {
+    Q_INVOKABLE void
+    beginGuidePaint()
+    {
         m_paintTimer.start();
         m_paintPending = true;
     }
-    void recordGuidePaint();
-    Q_INVOKABLE bool readDiagnostics();
-    Q_INVOKABLE bool setSourceEnabled(const QString& instance, const QVariant& enabled);
-    Q_INVOKABLE bool acceptDeviceClock();
-    Q_INVOKABLE bool refreshRuleTemplates();
-    Q_INVOKABLE bool saveRuleTemplate(const QString& name, const QVariantMap& definition);
-    Q_INVOKABLE bool useRuleTemplate(int index);
-    Q_INVOKABLE QVariantList importChoices(int item, int first = 0) const;
-    Q_INVOKABLE bool mapImportedItem(int item, int candidate);
-    static qint64 pvrUtc(const QVariant& value);
-    Q_INVOKABLE QVariantMap editableDefinition(const QString& id) const;
-    Q_INVOKABLE bool updateLocal(const QVariantMap& definition, int revision);
-    Q_INVOKABLE bool previewRegeneration(const QString& id);
-    Q_INVOKABLE bool regenerate();
+    void
+    recordGuidePaint();
+    Q_INVOKABLE bool
+    readDiagnostics();
+    Q_INVOKABLE bool
+    setSourceEnabled(const QString& instance, const QVariant& enabled);
+    Q_INVOKABLE bool
+    acceptDeviceClock();
+    Q_INVOKABLE bool
+    refreshRuleTemplates();
+    Q_INVOKABLE bool
+    saveRuleTemplate(const QString& name, const QVariantMap& definition);
+    Q_INVOKABLE bool
+    useRuleTemplate(int index);
+    Q_INVOKABLE QVariantList
+    importChoices(int item, int first = 0) const;
+    Q_INVOKABLE bool
+    mapImportedItem(int item, int candidate);
+    static qint64
+    pvrUtc(const QVariant& value);
+    Q_INVOKABLE QVariantMap
+    editableDefinition(const QString& id) const;
+    Q_INVOKABLE bool
+    updateLocal(const QVariantMap& definition, int revision);
+    Q_INVOKABLE bool
+    previewRegeneration(const QString& id);
+    Q_INVOKABLE bool
+    regenerate();
     Q_INVOKABLE bool
     previewRepair(const QString& id, const QString& slotId, int revision, int first = 0, bool fitInterval = false);
-    Q_INVOKABLE bool previewClockAdjustment(const QString& id, const QVariant& deltaSeconds, int revision);
-    Q_INVOKABLE bool adjustClock();
-    Q_INVOKABLE bool repair(const QVariant& choice);
-    Q_INVOKABLE bool previewDuplicate(const QString& id, int revision);
-    Q_INVOKABLE bool previewPvr();
-    Q_INVOKABLE bool previewFeed(const QString& instance,
-                                 const QString& playlistPath,
-                                 const QString& xmltvPath,
-                                 const QString& directUrl = QString(),
-                                 const QString& directName = QString());
-    Q_INVOKABLE bool setSourceEpg(int index, const QString& epgId);
-    Q_INVOKABLE bool importPvr();
-    Q_INVOKABLE bool setSourceNumber(int index, const QVariant& number);
-    Q_INVOKABLE void refresh();
-    Q_INVOKABLE void maintainSchedules();
-    Q_INVOKABLE void setWindow(qint64 fromUtc, qint64 toUtc, int firstRow = 0);
-    Q_INVOKABLE QVariantMap newDefinition() const;
-    Q_INVOKABLE bool previewLocal(const QVariantMap& definition, const QString& mediaKind);
-    Q_INVOKABLE bool createLocal(const QVariantMap& definition);
-    Q_INVOKABLE bool exportChannel(const QString& id, const QString& path, bool includeSchedule = false);
-    Q_INVOKABLE bool previewImport(const QString& path, bool restoreSchedule = false);
-    Q_INVOKABLE void cancel();
-    Q_INVOKABLE bool setPreferences(const QString& id, const QVariantMap& preferences, int revision);
-    Q_INVOKABLE bool setMetadata(const QString& id, const QVariantMap& metadata, int revision);
-    Q_INVOKABLE bool setStationLogo(const QString& id, const QString& path, int revision);
-    Q_INVOKABLE QString stationLogo(const QString& relative) const;
-    Q_INVOKABLE bool swapNumbers(const QString& id, const QString& otherId, const QVariantMap& revisions);
-    Q_INVOKABLE bool reorder(const QStringList& ids, const QVariantMap& revisions);
-    Q_INVOKABLE bool remove(const QString& id, int revision);
+    Q_INVOKABLE bool
+    previewClockAdjustment(const QString& id, const QVariant& deltaSeconds, int revision);
+    Q_INVOKABLE bool
+    adjustClock();
+    Q_INVOKABLE bool
+    repair(const QVariant& choice);
+    Q_INVOKABLE bool
+    previewDuplicate(const QString& id, int revision);
+    Q_INVOKABLE bool
+    previewPvr();
+    Q_INVOKABLE bool
+    previewFeed(const QString& instance,
+                const QString& playlistPath,
+                const QString& xmltvPath,
+                const QString& directUrl = QString(),
+                const QString& directName = QString());
+    bool
+    readFeedFile(const QString& path, qint64 maximum, QByteArray& bytes);
+    bool
+    processFeedEntries(QVariantList& entries, const QVariantMap& listings, QSet<int>& used, GuideStore& store);
+    void
+    finalizeFeedLoad(QVariantMap& result, QVariantList& entries, QVariantList& sourcePreview,
+                     QVariantMap& feedListings, bool& sourcePreviewReady, qint64& snapshotBytes);
+    bool
+    validateFeedInputs(const QString& instance, const QString& directUrl, const QString& directName);
+    Q_INVOKABLE bool
+    setSourceEpg(int index, const QString& epgId);
+    Q_INVOKABLE bool
+    importPvr();
+    Q_INVOKABLE bool
+    setSourceNumber(int index, const QVariant& number);
+    Q_INVOKABLE void
+    refresh();
+    Q_INVOKABLE void
+    maintainSchedules();
+    Q_INVOKABLE void
+    setWindow(qint64 fromUtc, qint64 toUtc, int firstRow = 0);
+    Q_INVOKABLE QVariantMap
+    newDefinition() const;
+    Q_INVOKABLE bool
+    previewLocal(const QVariantMap& definition, const QString& mediaKind);
+    Q_INVOKABLE bool
+    createLocal(const QVariantMap& definition);
+    Q_INVOKABLE bool
+    exportChannel(const QString& id, const QString& path, bool includeSchedule = false);
+    Q_INVOKABLE bool
+    previewImport(const QString& path, bool restoreSchedule = false);
+    Q_INVOKABLE void
+    cancel();
+    Q_INVOKABLE bool
+    setPreferences(const QString& id, const QVariantMap& preferences, int revision);
+    Q_INVOKABLE bool
+    setMetadata(const QString& id, const QVariantMap& metadata, int revision);
+    Q_INVOKABLE bool
+    setStationLogo(const QString& id, const QString& path, int revision);
+    Q_INVOKABLE QString
+    stationLogo(const QString& relative) const;
+    Q_INVOKABLE bool
+    swapNumbers(const QString& id, const QString& otherId, const QVariantMap& revisions);
+    Q_INVOKABLE bool
+    reorder(const QStringList& ids, const QVariantMap& revisions);
+    Q_INVOKABLE bool
+    remove(const QString& id, int revision);
     // Execution is routed through ActionDispatcher; QML cannot launch IDs or
     // offsets obtained from an arbitrary source.
-    bool tune(const QString& id, const QString& origin);
-    bool markUnavailable(const QString& kind, int mediaId);
-    void invalidate();
+    bool
+    tune(const QString& id, const QString& origin);
+    bool
+    markUnavailable(const QString& kind, int mediaId);
+    void
+    invalidate();
   signals:
-    void changed();
-    void channelCreated(const QString& id);
-    void duplicatePrepared(const QVariantMap& definition);
-    void targetReady(const QVariantMap& target, const QString& origin);
+    void
+    changed();
+    void
+    channelCreated(const QString& id);
+    void
+    duplicatePrepared(const QVariantMap& definition);
+    void
+    targetReady(const QVariantMap& target, const QString& origin);
 
   private:
     using Job = std::function<QVariantMap(GuideStore&)>;
-    bool submit(Job job, std::function<void(const QVariantMap&)> completion = {}, bool background = false);
-    bool fail(const QString& message);
-    void requestPage();
-    void consume();
-    void consumePvr(const QVariantMap& result);
-    void closeBridge();
-    void readFailure(const QString& message);
+    bool
+    submit(Job job, std::function<void(const QVariantMap&)> completion = {}, bool background = false);
+    bool
+    fail(const QString& message);
+    void
+    requestPage();
+    void
+    consume();
+    void
+    consumePvr(const QVariantMap& result);
+    bool
+    validateGuidePage(const QVariantMap& result, const QVariantMap& limits, const QJsonArray& items, int start, int end,
+                      int total, int skipped);
+    bool
+    processGuideItems(const QJsonArray& items, QVariantList& candidates, QVariantMap& previewDefinition,
+                      qint64& snapshotBytes, int& skipped);
+    void
+    finalizeGuideLoad(QVariantList& candidates, int& page, int& kindIndex, int& sourceIndex, bool& previewReady,
+                      qint64& snapshotBytes, int end, int total, int skipped);
+    bool
+    validatePvrPage(const QVariantMap& result, const QVariantMap& limits);
+    bool
+    processNewPvrChannel(const QVariantMap& item, QVariantMap& source, QString& id, int& number, QVariantMap& definition, QSet<int>& used);
+    void
+    processPvrPrograms(const QVariantList& items, QVariantMap& entry, QVariantList& programs, qint64& m_sourceRefreshed, qint64& m_snapshotBytes);
+    void
+    finalizePvrLoad(int& m_page, int& m_sourceIndex, bool& m_sourcePreviewReady, bool& m_sourcePreviewIsEmpty);
+    void
+    closeBridge();
+    void
+    readFailure(const QString& message);
     QThread m_thread;
     GuideWorker* m_worker = nullptr;
     std::shared_ptr<std::atomic_bool> m_cancel;

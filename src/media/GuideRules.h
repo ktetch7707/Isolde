@@ -1,13 +1,52 @@
 #pragma once
 #include <QVariantMap>
 
-namespace GuideRules {
+namespace GuideRules
+{
 // Evaluate already-validated data against a Kodi metadata snapshot. Missing
 // metadata is never guessed; only the explicit missing operator matches it.
-bool matches(const QVariantMap& rule, const QVariantMap& metadata);
+bool
+matches(const QVariantMap& rule, const QVariantMap& metadata);
 // Shared preview/store selection, including explicit Kodi watch-state policy.
-bool matchesChannel(const QVariantMap& definition, const QVariantMap& metadata);
+bool
+matchesChannel(const QVariantMap& definition, const QVariantMap& metadata);
 // UTC boundaries derived from civil time, including both DST folds. The
 // returned rule applies until nextUtc; callers never cross that boundary.
-QVariantMap calendarWindow(const QVariantMap& definition, qint64 utc);
+QVariantMap
+calendarWindow(const QVariantMap& definition, qint64 utc);
+// Channel definition validation helpers.
+bool
+validateChannelSchedule(const QVariantMap& v, QString* error);
+bool
+validateChannelScheduleBlocks(const QVariantList& blocks, QString* error);
+bool
+validateSchedulePolicy(const QVariantMap& policy, QString* error);
+bool
+validateScheduleRules(const QVariantMap& policy, QString* error);
+bool
+validateChannelGroups(const QVariantMap& v, QString* error);
+bool
+validateGuideFeedOwner(const QVariantMap& v, QString* error);
+bool
+validateKodiPvrOwner(const QVariantMap& v, QString* error);
+bool
+validateLocalChannel(const QVariantMap& v, QString* error);
+bool
+validateLocalChannelMediaKinds(const QVariantMap& v, QString* error);
+bool
+validateChannelBasics(const QVariantMap& v, QString* error);
+bool
+validateChannelContent(const QVariantMap& v, QString* error);
+bool
+validateChannelDescription(const QVariantMap& v, QString* error);
+bool
+validateChannelSize(const QVariantMap& v, QString* error);
+bool
+validateChannelOwner(const QVariantMap& v, QString* error);
+bool
+validateChannelTiming(const QVariantMap& v, QString* error);
+bool
+validateRuleList(const QVariant& value, bool numeric, const QString& op);
+bool
+validateScalar(const QVariant& value, bool numeric);
 } // namespace GuideRules

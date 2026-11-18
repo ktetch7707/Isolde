@@ -31,65 +31,107 @@
 #include "input/InputManager.h"
 #include "media/MediaGrants.h"
 
-class GameDispatchProbe : public QObject {
+class GameDispatchProbe : public QObject
+{
     Q_OBJECT
   public:
     QVariantMap lastAction;
     QString origin;
-    Q_INVOKABLE bool dispatch(const QVariantMap& action, const QString& from) {
+    Q_INVOKABLE bool
+    dispatch(const QVariantMap& action, const QString& from)
+    {
         lastAction = action;
         origin = from;
         return true;
     }
   signals:
-    void rejected(const QString& reason);
+    void
+    rejected(const QString& reason);
 };
-class SteamRecoveryProbe : public QObject {
+class SteamRecoveryProbe : public QObject
+{
     Q_OBJECT
   public:
     QString acknowledged;
-    Q_INVOKABLE bool acknowledgeSteamRecovery(const QString& identity) {
+    Q_INVOKABLE bool
+    acknowledgeSteamRecovery(const QString& identity)
+    {
         acknowledged = identity;
         return true;
     }
 };
-class GamesUiTests : public QObject {
+class GamesUiTests : public QObject
+{
     Q_OBJECT
   private slots:
-    void remoteSteamImportCanCancelReviewAndPlay();
-    void remoteExternalSteamAccessIsExplicitAndCancelable();
-    void mountedOpticalDiscoveryUsesTypedReadOnlyObservations();
-    void opticalRevalidationClassifiesReadyReplacementAndRemoval();
-    void opticalIdentityAndMultiDiscReferencesAreDurable();
-    void udfVolumeSetIdentityGroupsDiscNumbers();
-    void fullOpticalContentIdentityRejectsTruncationAndChanges();
-    void opticalSessionContractNeverClaimsHotSwap();
-    void opticalMountInstanceChangesObservation();
-    void opticalApprovalsAreProfileScopedAndRevocable();
-    void readOnlyOpticalMountIsBoundedAndVerifiedByCaller();
-    void ejectRefusesWhileSessionIsActive();
-    void catalogRecoversStagedUninstallOnReopen();
-    void orphanedUninstallRecoveryPreservesRemainingFiles();
-    void compatibilityCandidatesNeverClaimInstallerSupport();
-    void safeEjectRefusesBusyUnmountAndNeverForces();
-    void remoteOpticalInspectionNeverStartsMedia();
-    void remoteOpticalRemovalOffersRefreshAndRetry();
-    void remoteDetailsFavoriteRemoveAndCancel();
-    void remoteAddReviewWritesOnlyOnConfirm();
-    void remoteEditCanCancelAndApplyWithoutMouse();
-    void remoteEditionChooserDispatchesOwnedVersion();
-    void remoteEmulatorSetupCancelsAndSavesWithoutMouse();
-    void platformShelvesFilterCanonicalGamesRemotely();
-    void directFranchiseAndTagFiltersArePagedAndRemoteOperable();
-    void fiveThousandGameCatalogStaysPagedAndSearchable();
-    void catalogCapDisablesNextFromLastFullPage();
-    void organizationAndManualSmartCollectionsStayProfileLocal();
-    void remoteSmartCollectionRulesAreDpadSelectable();
-    void catalogExportRestoreIsBoundedAndTransactional();
-    void catalogArtworkSurvivesRecoverySnapshotsWithoutGarbageCollection();
-    void catalogProvenanceIsImmutableAndConflictSafe();
+    void
+    remoteSteamImportCanCancelReviewAndPlay();
+    void
+    remoteExternalSteamAccessIsExplicitAndCancelable();
+    void
+    mountedOpticalDiscoveryUsesTypedReadOnlyObservations();
+    void
+    opticalRevalidationClassifiesReadyReplacementAndRemoval();
+    void
+    opticalIdentityAndMultiDiscReferencesAreDurable();
+    void
+    udfVolumeSetIdentityGroupsDiscNumbers();
+    void
+    fullOpticalContentIdentityRejectsTruncationAndChanges();
+    void
+    opticalSessionContractNeverClaimsHotSwap();
+    void
+    opticalMountInstanceChangesObservation();
+    void
+    opticalApprovalsAreProfileScopedAndRevocable();
+    void
+    readOnlyOpticalMountIsBoundedAndVerifiedByCaller();
+    void
+    ejectRefusesWhileSessionIsActive();
+    void
+    catalogRecoversStagedUninstallOnReopen();
+    void
+    orphanedUninstallRecoveryPreservesRemainingFiles();
+    void
+    compatibilityCandidatesNeverClaimInstallerSupport();
+    void
+    safeEjectRefusesBusyUnmountAndNeverForces();
+    void
+    remoteOpticalInspectionNeverStartsMedia();
+    void
+    remoteOpticalRemovalOffersRefreshAndRetry();
+    void
+    remoteDetailsFavoriteRemoveAndCancel();
+    void
+    remoteAddReviewWritesOnlyOnConfirm();
+    void
+    remoteEditCanCancelAndApplyWithoutMouse();
+    void
+    remoteEditionChooserDispatchesOwnedVersion();
+    void
+    remoteEmulatorSetupCancelsAndSavesWithoutMouse();
+    void
+    platformShelvesFilterCanonicalGamesRemotely();
+    void
+    directFranchiseAndTagFiltersArePagedAndRemoteOperable();
+    void
+    fiveThousandGameCatalogStaysPagedAndSearchable();
+    void
+    catalogCapDisablesNextFromLastFullPage();
+    void
+    organizationAndManualSmartCollectionsStayProfileLocal();
+    void
+    remoteSmartCollectionRulesAreDpadSelectable();
+    void
+    catalogExportRestoreIsBoundedAndTransactional();
+    void
+    catalogArtworkSurvivesRecoverySnapshotsWithoutGarbageCollection();
+    void
+    catalogProvenanceIsImmutableAndConflictSafe();
 };
-static AppDefinition runtime() {
+static AppDefinition
+runtime()
+{
     AppDefinition app;
     app.id = "local-test";
     app.name = "Local game";
@@ -100,8 +142,11 @@ static AppDefinition runtime() {
     app.launchConfiguration = {{"desktopId", "isolde-test-game"}};
     return app;
 }
-void GamesUiTests::opticalMountInstanceChangesObservation() {
-    const auto observe = [](const QString& instance) {
+void
+GamesUiTests::opticalMountInstanceChangesObservation()
+{
+    const auto observe = [](const QString& instance)
+    {
         return OpticalDiscAdapter::mountObservationId(
             "/dev/sr0", "udf", "Disc", "/media/disc", "7", "ready", QString(64, 'a'), instance);
     };
@@ -113,14 +158,17 @@ void GamesUiTests::opticalMountInstanceChangesObservation() {
     QVERIFY(first != observe({}));
     QVERIFY(OpticalDiscAdapter::mountObservationId("a\nb", "c", "", "", "1", "ready", "", "mount:1") !=
             OpticalDiscAdapter::mountObservationId("a", "b\nc", "", "", "1", "ready", "", "mount:1"));
-    const auto unmounted = [](const QString& sequence, const QString& sectors) {
+    const auto unmounted = [](const QString& sequence, const QString& sectors)
+    {
         return OpticalDiscAdapter::mountObservationId(
             "/dev/sr0", "unknown", {}, {}, sequence, "unmounted", sectors, {});
     };
     QVERIFY(unmounted("10", "4096") != unmounted("11", "4096"));
     QVERIFY(unmounted("10", "4096") != unmounted("10", "8192"));
 }
-void GamesUiTests::opticalSessionContractNeverClaimsHotSwap() {
+void
+GamesUiTests::opticalSessionContractNeverClaimsHotSwap()
+{
     const QVariantMap disc{{"mediaId", QString(64, 'a')},
                            {"mediaSetId", QString(64, 'b')},
                            {"discNumber", 1},
@@ -162,30 +210,37 @@ void GamesUiTests::opticalSessionContractNeverClaimsHotSwap() {
     QCOMPARE(OpticalDiscAdapter::latchSession(interrupted, pinned).value("state").toString(), QString("interrupted"));
     QCOMPARE(OpticalDiscAdapter::latchSession({}, pinned).value("state").toString(), QString("pinned"));
 }
-void GamesUiTests::compatibilityCandidatesNeverClaimInstallerSupport() {
+void
+GamesUiTests::compatibilityCandidatesNeverClaimInstallerSupport()
+{
     const auto missing = CompatibilityRuntime::classify(false, false);
     const auto untrusted = CompatibilityRuntime::classify(true, false);
     const auto candidate = CompatibilityRuntime::classify(true, true);
     QCOMPARE(missing.value("state").toString(), QString("missing"));
     QCOMPARE(untrusted.value("state").toString(), QString("unsafe"));
     QCOMPARE(candidate.value("state").toString(), QString("unverified"));
-    for (const auto& status : {missing, untrusted, candidate}) {
+    for (const auto& status : {missing, untrusted, candidate})
+    {
         QVERIFY(!status.value("supported").toBool());
         QVERIFY(status.value("requirements").toString().contains("verified"));
     }
 }
-void GamesUiTests::orphanedUninstallRecoveryPreservesRemainingFiles() {
+void
+GamesUiTests::orphanedUninstallRecoveryPreservesRemainingFiles()
+{
     QStandardPaths::setTestModeEnabled(true);
     const auto previous = qApp->property("isoldeProfile");
     const auto profile = QUuid::createUuid().toString(QUuid::WithoutBraces);
     qApp->setProperty("isoldeProfile", profile);
     const auto identity = QUuid::createUuid().toString(QUuid::WithoutBraces);
     const auto parent = ManagedGamePaths::gamesRoot(profile) + "/" + identity;
-    auto cleanup = qScopeGuard([&] {
-        QDir(parent).removeRecursively();
-        qApp->setProperty("isoldeProfile", previous);
-        QStandardPaths::setTestModeEnabled(false);
-    });
+    auto cleanup = qScopeGuard(
+        [&]
+        {
+            QDir(parent).removeRecursively();
+            qApp->setProperty("isoldeProfile", previous);
+            QStandardPaths::setTestModeEnabled(false);
+        });
     const auto root = parent + "/install", pending = root + ".uninstall-pending";
     QVERIFY(QDir().mkpath(pending));
     QFile payload(pending + "/remaining-save");
@@ -210,7 +265,9 @@ void GamesUiTests::orphanedUninstallRecoveryPreservesRemainingFiles() {
     QCOMPARE(restored.readAll(), QByteArray("keep"));
     QVERIFY(library.pendingUninstallRecovery().isEmpty());
 }
-void GamesUiTests::fullOpticalContentIdentityRejectsTruncationAndChanges() {
+void
+GamesUiTests::fullOpticalContentIdentityRejectsTruncationAndChanges()
+{
     QByteArray bytes(3 * 1024 * 1024, 'x');
     QBuffer source(&bytes);
     QVERIFY(source.open(QIODevice::ReadOnly));
@@ -238,17 +295,21 @@ void GamesUiTests::fullOpticalContentIdentityRejectsTruncationAndChanges() {
     QCOMPARE(iso.value("mediaSetId").toString(), QString(64, 'a'));
     QCOMPARE(iso.value("discNumber").toInt(), 2);
 }
-void GamesUiTests::catalogRecoversStagedUninstallOnReopen() {
+void
+GamesUiTests::catalogRecoversStagedUninstallOnReopen()
+{
     QStandardPaths::setTestModeEnabled(true);
     const auto previous = qApp->property("isoldeProfile");
     const auto profile = QUuid::createUuid().toString(QUuid::WithoutBraces);
     qApp->setProperty("isoldeProfile", profile);
     const auto parent = ManagedGamePaths::gamesRoot(profile) + "/" + QUuid::createUuid().toString(QUuid::WithoutBraces);
-    auto cleanup = qScopeGuard([&] {
-        QDir(parent).removeRecursively();
-        qApp->setProperty("isoldeProfile", previous);
-        QStandardPaths::setTestModeEnabled(false);
-    });
+    auto cleanup = qScopeGuard(
+        [&]
+        {
+            QDir(parent).removeRecursively();
+            qApp->setProperty("isoldeProfile", previous);
+            QStandardPaths::setTestModeEnabled(false);
+        });
     const auto root = parent + "/install", pending = root + ".uninstall-pending";
     QVERIFY(QDir().mkpath(pending));
     QFile marker(pending + "/.isolde-install.json");
@@ -288,7 +349,9 @@ void GamesUiTests::catalogRecoversStagedUninstallOnReopen() {
     QVERIFY(restored.open(QIODevice::ReadOnly));
     QCOMPARE(restored.readAll(), QByteArray("keep"));
 }
-void GamesUiTests::opticalRevalidationClassifiesReadyReplacementAndRemoval() {
+void
+GamesUiTests::opticalRevalidationClassifiesReadyReplacementAndRemoval()
+{
     const QVariantMap old{{"schemaVersion", 1},
                           {"observationId", QString(64, 'a')},
                           {"device", "/dev/sr0"},
@@ -317,7 +380,9 @@ void GamesUiTests::opticalRevalidationClassifiesReadyReplacementAndRemoval() {
                  .toString(),
              QString("missing"));
 }
-void GamesUiTests::opticalIdentityAndMultiDiscReferencesAreDurable() {
+void
+GamesUiTests::opticalIdentityAndMultiDiscReferencesAreDurable()
+{
     auto descriptor = QByteArray(2048, '\0');
     descriptor[0] = 1;
     descriptor.replace(1, 5, "CD001");
@@ -390,19 +455,25 @@ void GamesUiTests::opticalIdentityAndMultiDiscReferencesAreDurable() {
     QVERIFY(!OpticalDiscAdapter::parseIsoVolumeDescriptor(QByteArray(2048, 'x')).size());
     QVERIFY(!OpticalDiscAdapter::isRootReference(secondRoot + "/../bad"));
 }
-void GamesUiTests::udfVolumeSetIdentityGroupsDiscNumbers() {
-    const auto put16 = [](QByteArray& bytes, int offset, quint16 value) {
+void
+GamesUiTests::udfVolumeSetIdentityGroupsDiscNumbers()
+{
+    const auto put16 = [](QByteArray& bytes, int offset, quint16 value)
+    {
         bytes[offset] = char(value & 0xff);
         bytes[offset + 1] = char((value >> 8) & 0xff);
     };
-    const auto put32 = [](QByteArray& bytes, int offset, quint32 value) {
+    const auto put32 = [](QByteArray& bytes, int offset, quint32 value)
+    {
         for (int i = 0; i < 4; ++i)
             bytes[offset + i] = char((value >> (8 * i)) & 0xff);
     };
-    const auto finishTag = [](QByteArray descriptor) {
+    const auto finishTag = [](QByteArray descriptor)
+    {
         quint16 crc = 0;
         const auto crcLength = quint8(descriptor.at(10)) | (quint16(quint8(descriptor.at(11))) << 8);
-        for (int i = 0; i < crcLength; ++i) {
+        for (int i = 0; i < crcLength; ++i)
+        {
             crc ^= quint16(quint8(descriptor.at(16 + i))) << 8;
             for (int bit = 0; bit < 8; ++bit)
                 crc = crc & 0x8000 ? quint16((crc << 1) ^ 0x1021) : quint16(crc << 1);
@@ -416,7 +487,8 @@ void GamesUiTests::udfVolumeSetIdentityGroupsDiscNumbers() {
         descriptor[4] = char(checksum);
         return descriptor;
     };
-    const auto makeTag = [&](quint16 id, quint32 location) {
+    const auto makeTag = [&](quint16 id, quint32 location)
+    {
         QByteArray descriptor(2048, '\0');
         put16(descriptor, 0, id);
         put16(descriptor, 2, 2);
@@ -425,7 +497,8 @@ void GamesUiTests::udfVolumeSetIdentityGroupsDiscNumbers() {
         put32(descriptor, 12, location);
         return descriptor;
     };
-    const auto fixture = [&](int number, const QByteArray& setName) {
+    const auto fixture = [&](int number, const QByteArray& setName)
+    {
         auto primary = makeTag(1, 300);
         QByteArray volumeId(32, '\0');
         volumeId[0] = 8;
@@ -512,7 +585,9 @@ void GamesUiTests::udfVolumeSetIdentityGroupsDiscNumbers() {
     QCOMPARE(selectedUdf.value("mediaSetId"), firstDescriptor.value("mediaSetId"));
     QVERIFY(OpticalDiscAdapter::descriptorForFilesystem("udf", iso, {}).isEmpty());
 }
-void GamesUiTests::opticalApprovalsAreProfileScopedAndRevocable() {
+void
+GamesUiTests::opticalApprovalsAreProfileScopedAndRevocable()
+{
     QStandardPaths::setTestModeEnabled(true);
     const auto alice = QUuid::createUuid().toString(QUuid::WithoutBraces),
                bob = QUuid::createUuid().toString(QUuid::WithoutBraces);
@@ -524,15 +599,19 @@ void GamesUiTests::opticalApprovalsAreProfileScopedAndRevocable() {
     QVERIFY(!OpticalDiscGrants::approved(alice, identity));
     QVERIFY(!OpticalDiscGrants::authorize(alice, "not-an-identity").isEmpty());
 }
-void GamesUiTests::ejectRefusesWhileSessionIsActive() {
+void
+GamesUiTests::ejectRefusesWhileSessionIsActive()
+{
     QTemporaryDir dir;
     AppRegistry apps;
     GameLibrary library(dir.filePath("games.sqlite"), &apps);
     QVERIFY(library.ready());
     bool active = true;
-    library.setSessionActiveGuard([&active] {
-        return active;
-    });
+    library.setSessionActiveGuard(
+        [&active]
+        {
+            return active;
+        });
     QVERIFY(!library.ejectOpticalDisc(QString(64, 'a'), "/dev/sr0"));
     QVERIFY(library.errorString().contains("session is active"));
     QVERIFY(!library.uninstallManagedGame("game-test", true));
@@ -543,13 +622,16 @@ void GamesUiTests::ejectRefusesWhileSessionIsActive() {
     QVERIFY(!library.mountOpticalDisc(QString(64, 'a'), "/dev/sr9999"));
     QVERIFY(library.errorString().contains("changed"));
 }
-void GamesUiTests::safeEjectRefusesBusyUnmountAndNeverForces() {
+void
+GamesUiTests::safeEjectRefusesBusyUnmountAndNeverForces()
+{
     QStringList calls;
     const OpticalDiscAdapter::DbusCall busy = [&calls](const QString& service,
                                                        const QString& path,
                                                        const QString& interface,
                                                        const QString& method,
-                                                       const QVariantList&) {
+                                                       const QVariantList&)
+    {
         calls.append(method);
         return QDBusMessage::createMethodCall(service, path, interface, method)
             .createErrorReply("org.freedesktop.DBus.Error.Busy", "busy");
@@ -563,7 +645,8 @@ void GamesUiTests::safeEjectRefusesBusyUnmountAndNeverForces() {
                                                           const QString& path,
                                                           const QString& interface,
                                                           const QString& method,
-                                                          const QVariantList&) {
+                                                          const QVariantList&)
+    {
         calls.append(method);
         const auto request = QDBusMessage::createMethodCall(service, path, interface, method);
         if (method == "Get")
@@ -577,7 +660,9 @@ void GamesUiTests::safeEjectRefusesBusyUnmountAndNeverForces() {
     QVERIFY(!OpticalDiscAdapter::ejectUsing("/dev/sr9999", false, success, &error));
     QCOMPARE(error, QString("Invalid optical device."));
 }
-void GamesUiTests::readOnlyOpticalMountIsBoundedAndVerifiedByCaller() {
+void
+GamesUiTests::readOnlyOpticalMountIsBoundedAndVerifiedByCaller()
+{
     int calls = 0;
     QString error, mountPoint, serviceSeen, pathSeen, interfaceSeen, methodSeen;
     QVariantList argumentsSeen;
@@ -585,7 +670,8 @@ void GamesUiTests::readOnlyOpticalMountIsBoundedAndVerifiedByCaller() {
                                                    const QString& path,
                                                    const QString& interface,
                                                    const QString& method,
-                                                   const QVariantList& arguments) {
+                                                   const QVariantList& arguments)
+    {
         ++calls;
         serviceSeen = service;
         pathSeen = path;
@@ -615,7 +701,8 @@ void GamesUiTests::readOnlyOpticalMountIsBoundedAndVerifiedByCaller() {
                                                    const QString& path,
                                                    const QString& interface,
                                                    const QString& method,
-                                                   const QVariantList&) {
+                                                   const QVariantList&)
+    {
         return QDBusMessage::createMethodCall(service, path, interface, method)
             .createErrorReply("org.freedesktop.DBus.Error.Failed", "unreadable");
     };
@@ -625,18 +712,23 @@ void GamesUiTests::readOnlyOpticalMountIsBoundedAndVerifiedByCaller() {
                                                          const QString& path,
                                                          const QString& interface,
                                                          const QString& method,
-                                                         const QVariantList&) {
+                                                         const QVariantList&)
+    {
         return QDBusMessage::createMethodCall(service, path, interface, method)
             .createReply(QVariantList{QString("relative")});
     };
     QVERIFY(!OpticalDiscAdapter::mountUsing("/dev/sr0", true, invalidPoint, &mountPoint, &error));
     QVERIFY(error.contains("invalid mountpoint"));
 }
-static void command(QObject* widget, int value) {
+static void
+command(QObject* widget, int value)
+{
     QVariant result;
     QVERIFY(QMetaObject::invokeMethod(widget, "handleCommand", Q_RETURN_ARG(QVariant, result), Q_ARG(QVariant, value)));
 }
-static void doneOnKeyboard(QObject* widget) {
+static void
+doneOnKeyboard(QObject* widget)
+{
     auto* keyboard = widget->findChild<QObject*>("gamesKeyboard");
     QVERIFY(keyboard);
     const auto value = keyboard->property("keys");
@@ -652,7 +744,9 @@ static void doneOnKeyboard(QObject* widget) {
     QVERIFY(remaining > 0);
     command(widget, InputManager::Confirm);
 }
-void GamesUiTests::remoteExternalSteamAccessIsExplicitAndCancelable() {
+void
+GamesUiTests::remoteExternalSteamAccessIsExplicitAndCancelable()
+{
     QStandardPaths::setTestModeEnabled(true);
     const auto profile = QUuid::createUuid().toString(QUuid::WithoutBraces);
     qApp->setProperty("isoldeProfile", profile);
@@ -687,14 +781,17 @@ void GamesUiTests::remoteExternalSteamAccessIsExplicitAndCancelable() {
     QVERIFY(library.steamLibraries().isEmpty());
     qApp->setProperty("isoldeProfile", QVariant());
 }
-void GamesUiTests::mountedOpticalDiscoveryUsesTypedReadOnlyObservations() {
+void
+GamesUiTests::mountedOpticalDiscoveryUsesTypedReadOnlyObservations()
+{
     QTemporaryDir dir;
     AppRegistry apps;
     QVERIFY(apps.addApp(runtime()));
     GameLibrary library(dir.filePath("games.sqlite"), &apps);
     const auto discs = library.mountedOpticalDiscs();
     QVERIFY(discs.size() <= 4);
-    for (const auto& value : discs) {
+    for (const auto& value : discs)
+    {
         const auto disc = value.toMap();
         QCOMPARE(disc.value("schemaVersion").toInt(), 1);
         QCOMPARE(disc.value("sourceType").toString(), QString("pc-optical-disc"));
@@ -702,14 +799,17 @@ void GamesUiTests::mountedOpticalDiscoveryUsesTypedReadOnlyObservations() {
         QVERIFY(disc.value("device").toString().startsWith("/dev/sr"));
         if (disc.value("state") == "mounted")
             QVERIFY(disc.value("mountRoot").toString().startsWith("/"));
-        else {
+        else
+        {
             QCOMPARE(disc.value("state").toString(), QString("unmounted"));
             QVERIFY(disc.value("mountRoot").toString().isEmpty());
         }
         QVERIFY(disc.value("readOnly").toBool());
     }
 }
-void GamesUiTests::remoteOpticalInspectionNeverStartsMedia() {
+void
+GamesUiTests::remoteOpticalInspectionNeverStartsMedia()
+{
     QTemporaryDir dir;
     AppRegistry apps;
     QVERIFY(apps.addApp(runtime()));
@@ -735,10 +835,13 @@ void GamesUiTests::remoteOpticalInspectionNeverStartsMedia() {
     QCOMPARE(widget->property("mode").toString(), QString("opticalChooser"));
     QVERIFY(dispatch.lastAction.isEmpty());
     const auto discs = library.mountedOpticalDiscs();
-    if (discs.isEmpty()) {
+    if (discs.isEmpty())
+    {
         command(widget.data(), InputManager::Confirm);
         QCOMPARE(widget->property("mode").toString(), QString("opticalChooser"));
-    } else {
+    }
+    else
+    {
         command(widget.data(), InputManager::Confirm);
         QCOMPARE(widget->property("mode").toString(), QString("opticalDetails"));
         for (int i = 0; i < 5; ++i)
@@ -748,7 +851,9 @@ void GamesUiTests::remoteOpticalInspectionNeverStartsMedia() {
     }
     QVERIFY(dispatch.lastAction.isEmpty());
 }
-void GamesUiTests::remoteOpticalRemovalOffersRefreshAndRetry() {
+void
+GamesUiTests::remoteOpticalRemovalOffersRefreshAndRetry()
+{
     QTemporaryDir dir;
     AppRegistry apps;
     QVERIFY(apps.addApp(runtime()));
@@ -786,7 +891,9 @@ void GamesUiTests::remoteOpticalRemovalOffersRefreshAndRetry() {
     QCOMPARE(labels.value(5).toString(), QString("Refresh / retry"));
     QVERIFY(dispatch.lastAction.isEmpty());
 }
-void GamesUiTests::remoteSteamImportCanCancelReviewAndPlay() {
+void
+GamesUiTests::remoteSteamImportCanCancelReviewAndPlay()
+{
     QStandardPaths::setTestModeEnabled(true);
     const auto profile = QUuid::createUuid().toString(QUuid::WithoutBraces);
     qApp->setProperty("isoldeProfile", profile);
@@ -941,7 +1048,9 @@ void GamesUiTests::remoteSteamImportCanCancelReviewAndPlay() {
     qApp->setProperty("isoldeProfile", QVariant());
     QVERIFY(QDir(parent).removeRecursively());
 }
-void GamesUiTests::remoteEmulatorSetupCancelsAndSavesWithoutMouse() {
+void
+GamesUiTests::remoteEmulatorSetupCancelsAndSavesWithoutMouse()
+{
     QStandardPaths::setTestModeEnabled(true);
     const auto profile = QUuid::createUuid().toString(QUuid::WithoutBraces);
     qApp->setProperty("isoldeProfile", profile);
@@ -998,12 +1107,14 @@ void GamesUiTests::remoteEmulatorSetupCancelsAndSavesWithoutMouse() {
     QVERIFY(!library.setupBusy());
     QVERIFY(!library.installEmulators(false, true, true));
     QVERIFY(!library.setupBusy());
-    for (const auto& id : QStringList{"retroarch-psx", "pcsx2"}) {
+    for (const auto& id : QStringList{"retroarch-psx", "pcsx2"})
+    {
         const auto settingsFile = GameEmulators::home(profile, id) + "/.config/isolde-emulator/settings.json";
         const bool existed = QFileInfo::exists(settingsFile);
         QFile prior(settingsFile);
         QByteArray before;
-        if (existed) {
+        if (existed)
+        {
             QVERIFY(prior.open(QIODevice::ReadOnly));
             before = prior.readAll();
             prior.close();
@@ -1011,7 +1122,8 @@ void GamesUiTests::remoteEmulatorSetupCancelsAndSavesWithoutMouse() {
         QVERIFY(!library.configureEmulator(id, {{"video", "automatic"}, {"controller", "xbox"}}, "/etc/passwd"));
         QVERIFY(library.errorString().contains("Approve"));
         QCOMPARE(QFileInfo::exists(settingsFile), existed);
-        if (existed) {
+        if (existed)
+        {
             QFile after(settingsFile);
             QVERIFY(after.open(QIODevice::ReadOnly));
             QCOMPARE(after.readAll(), before);
@@ -1032,11 +1144,13 @@ void GamesUiTests::remoteEmulatorSetupCancelsAndSavesWithoutMouse() {
     firmwareFile.close();
     const auto otherProfile = QUuid::createUuid().toString(QUuid::WithoutBraces);
     QVERIFY(MediaGrants::save(otherProfile, {firmwareRoot}).isEmpty());
-    const auto cleanupFirmware = qScopeGuard([&] {
-        MediaGrants::save(otherProfile, {});
-        MediaGrants::save(profile, {});
-        QDir(GameEmulators::home(profile, "pcsx2")).removeRecursively();
-    });
+    const auto cleanupFirmware = qScopeGuard(
+        [&]
+        {
+            MediaGrants::save(otherProfile, {});
+            MediaGrants::save(profile, {});
+            QDir(GameEmulators::home(profile, "pcsx2")).removeRecursively();
+        });
     const auto ps2Home = GameEmulators::home(profile, "pcsx2");
     QVERIFY(!QFileInfo::exists(ps2Home));
     QVERIFY(!library.configureEmulator("pcsx2", {{"video", "automatic"}, {"controller", "xbox"}}, firmwarePath));
@@ -1050,7 +1164,8 @@ void GamesUiTests::remoteEmulatorSetupCancelsAndSavesWithoutMouse() {
     QCOMPARE(firmwareFile.readAll(), firmwareBytes);
     firmwareFile.close();
     const auto emulators = library.emulators();
-    for (const auto& id : QStringList{"retroarch-ds", "retroarch-vb", "retroarch-psx"}) {
+    for (const auto& id : QStringList{"retroarch-ds", "retroarch-vb", "retroarch-psx"})
+    {
         int index = -1;
         for (int i = 0; i < emulators.size(); ++i)
             if (emulators[i].toMap().value("id") == id)
@@ -1069,7 +1184,8 @@ void GamesUiTests::remoteEmulatorSetupCancelsAndSavesWithoutMouse() {
                                                                 : id == "retroarch-vb" ? "right trigger left"
                                                                                        : "SDL mappings"));
     }
-    for (const auto& id : QStringList{"rpcs3", "shadps4", "vita3k", "xemu", "xenia", "cemu"}) {
+    for (const auto& id : QStringList{"rpcs3", "shadps4", "vita3k", "xemu", "xenia", "cemu"})
+    {
         int index = -1;
         for (int i = 0; i < emulators.size(); ++i)
             if (emulators[i].toMap().value("id") == id)
@@ -1093,7 +1209,8 @@ void GamesUiTests::remoteEmulatorSetupCancelsAndSavesWithoutMouse() {
         QVERIFY(widget->setProperty("choice", 1));
         command(widget.data(), InputManager::Confirm);
         QCOMPARE(widget->property("message").toString(), setup.value("controllerHelp").toString());
-        if (emulators[index].toMap().value("firmwareRequired").toBool()) {
+        if (emulators[index].toMap().value("firmwareRequired").toBool())
+        {
             QVERIFY(widget->setProperty("choice", 5));
             command(widget.data(), InputManager::Confirm);
             QCOMPARE(widget->property("mode").toString(), QString("emulatorRebuildReview"));
@@ -1131,14 +1248,18 @@ void GamesUiTests::remoteEmulatorSetupCancelsAndSavesWithoutMouse() {
     QVERIFY(saved.open(QIODevice::WriteOnly));
     saved.write("keep save");
     saved.close();
-    library.setSessionActiveGuard([] {
-        return true;
-    });
+    library.setSessionActiveGuard(
+        []
+        {
+            return true;
+        });
     QVERIFY(!library.rebuildEmulatorData("rpcs3"));
     QVERIFY(QFileInfo::exists(prepared));
-    library.setSessionActiveGuard([] {
-        return false;
-    });
+    library.setSessionActiveGuard(
+        []
+        {
+            return false;
+        });
     QVERIFY2(library.rebuildEmulatorData("rpcs3"), qPrintable(library.errorString()));
     QVERIFY(!QFileInfo::exists(prepared));
     QVERIFY(QFileInfo::exists(saved.fileName()));
@@ -1151,7 +1272,9 @@ void GamesUiTests::remoteEmulatorSetupCancelsAndSavesWithoutMouse() {
     QVERIFY(QDir(QFileInfo(GameEmulators::home(profile, "ppsspp")).absolutePath()).removeRecursively());
     qApp->setProperty("isoldeProfile", QVariant());
 }
-void GamesUiTests::platformShelvesFilterCanonicalGamesRemotely() {
+void
+GamesUiTests::platformShelvesFilterCanonicalGamesRemotely()
+{
     QTemporaryDir dir;
     AppRegistry apps;
     QVERIFY(apps.addApp(runtime()));
@@ -1160,7 +1283,8 @@ void GamesUiTests::platformShelvesFilterCanonicalGamesRemotely() {
     QVERIFY(apps.addApp(handheld));
     GameLibrary library(dir.filePath("profile/games.sqlite"), &apps);
     QVERIFY(library.ready());
-    const auto add = [&library](const QString& title, const QString& platform) {
+    const auto add = [&library](const QString& title, const QString& platform)
+    {
         return library.addGame({{"schemaVersion", 1},
                                 {"title", title},
                                 {"platform", platform},
@@ -1224,7 +1348,9 @@ void GamesUiTests::platformShelvesFilterCanonicalGamesRemotely() {
     QCOMPARE(continueItems.size(), 1);
     QCOMPARE(continueItems.first().toMap().value("id").toString(), psp);
 }
-void GamesUiTests::directFranchiseAndTagFiltersArePagedAndRemoteOperable() {
+void
+GamesUiTests::directFranchiseAndTagFiltersArePagedAndRemoteOperable()
+{
     QTemporaryDir dir;
     AppRegistry apps;
     QVERIFY(apps.addApp(runtime()));
@@ -1244,11 +1370,13 @@ void GamesUiTests::directFranchiseAndTagFiltersArePagedAndRemoteOperable() {
     db.setDatabaseName(path);
     QVERIFY(db.open());
     QSqlQuery q(db);
-    QVERIFY(q.exec("WITH RECURSIVE n(x) AS (VALUES(0) UNION ALL SELECT x+1 FROM n WHERE x<50) "
-                   "INSERT INTO games(id,title,platform,runtime,root,target,added) "
-                   "SELECT printf('seed-%02d',x),printf('Title %02d',x),'PC',printf('runtime-%02d',x),'','',x FROM n"));
-    QVERIFY(q.exec("INSERT INTO game_metadata(game_id,franchise,tags) SELECT id,'Saga One','[\"1\",\"Puzzle Plus\"]' "
-                   "FROM games WHERE id LIKE 'seed-%'"));
+    QVERIFY(
+        q.exec("WITH RECURSIVE n(x) AS (VALUES(0) UNION ALL SELECT x+1 FROM n WHERE x<50) "
+               "INSERT INTO games(id,title,platform,runtime,root,target,added) "
+               "SELECT printf('seed-%02d',x),printf('Title %02d',x),'PC',printf('runtime-%02d',x),'','',x FROM n"));
+    QVERIFY(
+        q.exec("INSERT INTO game_metadata(game_id,franchise,tags) SELECT id,'Saga One','[\"1\",\"Puzzle Plus\"]' "
+               "FROM games WHERE id LIKE 'seed-%'"));
     q = QSqlQuery();
     db.close();
     db = QSqlDatabase();
@@ -1290,7 +1418,8 @@ void GamesUiTests::directFranchiseAndTagFiltersArePagedAndRemoteOperable() {
                           : keysValue.toList();
     int done = -1;
     for (int i = 0; i < keys.size(); ++i)
-        if (keys.at(i).toString() == "Done") {
+        if (keys.at(i).toString() == "Done")
+        {
             done = i;
             break;
         }
@@ -1313,7 +1442,9 @@ void GamesUiTests::directFranchiseAndTagFiltersArePagedAndRemoteOperable() {
     QCOMPARE(widget->property("queryView").toString(), QString("all"));
     QCOMPARE(widget->property("offset").toInt(), 0);
 }
-void GamesUiTests::catalogCapDisablesNextFromLastFullPage() {
+void
+GamesUiTests::catalogCapDisablesNextFromLastFullPage()
+{
     QTemporaryDir dir;
     QVERIFY(dir.isValid());
     const auto path = dir.filePath("catalog-cap.sqlite");
@@ -1322,15 +1453,17 @@ void GamesUiTests::catalogCapDisablesNextFromLastFullPage() {
     seed.setDatabaseName(path);
     QVERIFY(seed.open());
     QSqlQuery query(seed);
-    QVERIFY(query.exec("CREATE TABLE games(id TEXT PRIMARY KEY,title TEXT NOT NULL,platform TEXT NOT NULL,runtime TEXT "
-                       "NOT NULL,root TEXT NOT NULL,target TEXT NOT NULL,favorite INTEGER NOT NULL DEFAULT 0 "
-                       "CHECK(favorite IN (0,1)),added INTEGER NOT NULL,UNIQUE(runtime,root,target))"));
+    QVERIFY(
+        query.exec("CREATE TABLE games(id TEXT PRIMARY KEY,title TEXT NOT NULL,platform TEXT NOT NULL,runtime TEXT "
+                   "NOT NULL,root TEXT NOT NULL,target TEXT NOT NULL,favorite INTEGER NOT NULL DEFAULT 0 "
+                   "CHECK(favorite IN (0,1)),added INTEGER NOT NULL,UNIQUE(runtime,root,target))"));
     QVERIFY(query.exec("CREATE INDEX games_title ON games(title COLLATE NOCASE)"));
     QVERIFY(query.exec("PRAGMA user_version=1"));
-    QVERIFY(query.exec("WITH RECURSIVE n(x) AS (VALUES(0) UNION ALL SELECT x+1 FROM n WHERE x<49999) "
-                       "INSERT INTO games(id,title,platform,runtime,root,target,added) "
-                       "SELECT printf('game-%05d',x),printf('Fixture %05d',x),CASE WHEN x<50 THEN 'Small' ELSE 'PC' "
-                       "END,printf('runtime-%05d',x),'','',x FROM n"));
+    QVERIFY(
+        query.exec("WITH RECURSIVE n(x) AS (VALUES(0) UNION ALL SELECT x+1 FROM n WHERE x<49999) "
+                   "INSERT INTO games(id,title,platform,runtime,root,target,added) "
+                   "SELECT printf('game-%05d',x),printf('Fixture %05d',x),CASE WHEN x<50 THEN 'Small' ELSE 'PC' "
+                   "END,printf('runtime-%05d',x),'','',x FROM n"));
     query = QSqlQuery();
     seed.close();
     seed = QSqlDatabase();
@@ -1386,7 +1519,9 @@ void GamesUiTests::catalogCapDisablesNextFromLastFullPage() {
     QCOMPARE(widget->property("canNextPage").toBool(), false);
     QVERIFY(library.errorString().isEmpty());
 }
-void GamesUiTests::organizationAndManualSmartCollectionsStayProfileLocal() {
+void
+GamesUiTests::organizationAndManualSmartCollectionsStayProfileLocal()
+{
     QTemporaryDir dir;
     AppRegistry apps;
     QVERIFY(apps.addApp(runtime()));
@@ -1442,7 +1577,8 @@ void GamesUiTests::organizationAndManualSmartCollectionsStayProfileLocal() {
     QVERIFY(!literal.isEmpty());
     QVERIFY(library.createCollection("Invalid recent rule", "smart", "recent", "now").isEmpty());
     QVERIFY(library.createCollection("Invalid blank tag", "smart", "tag", "").isEmpty());
-    const auto collectionById = [&library](const QString& wanted) {
+    const auto collectionById = [&library](const QString& wanted)
+    {
         for (const auto& entry : library.collections())
             if (entry.toMap().value("id").toString() == wanted)
                 return entry.toMap();
@@ -1505,7 +1641,9 @@ void GamesUiTests::organizationAndManualSmartCollectionsStayProfileLocal() {
     QVERIFY(reopened.removeCollection(manual));
     QCOMPARE(reopened.collections().size(), 7);
 }
-void GamesUiTests::remoteSmartCollectionRulesAreDpadSelectable() {
+void
+GamesUiTests::remoteSmartCollectionRulesAreDpadSelectable()
+{
     QTemporaryDir dir;
     AppRegistry apps;
     QVERIFY(apps.addApp(runtime()));
@@ -1514,7 +1652,8 @@ void GamesUiTests::remoteSmartCollectionRulesAreDpadSelectable() {
     QQmlEngine engine;
     engine.rootContext()->setContextProperty("inputManager", &input);
     QQmlComponent component(&engine, QUrl::fromLocalFile(GAMES_WIDGET_QML));
-    for (int ruleIndex = 4; ruleIndex <= 6; ++ruleIndex) {
+    for (int ruleIndex = 4; ruleIndex <= 6; ++ruleIndex)
+    {
         QScopedPointer<QObject> widget(component.createWithInitialProperties(
             {{"library", QVariant::fromValue(&library)}, {"width", 1000}, {"height", 600}, {"engaged", true}}));
         QVERIFY2(widget, qPrintable(component.errorString()));
@@ -1530,7 +1669,9 @@ void GamesUiTests::remoteSmartCollectionRulesAreDpadSelectable() {
     }
     QVERIFY(library.collections().isEmpty());
 }
-void GamesUiTests::fiveThousandGameCatalogStaysPagedAndSearchable() {
+void
+GamesUiTests::fiveThousandGameCatalogStaysPagedAndSearchable()
+{
     QTemporaryDir dir;
     QVERIFY(dir.isValid());
     const auto path = dir.filePath("scale.sqlite");
@@ -1539,15 +1680,18 @@ void GamesUiTests::fiveThousandGameCatalogStaysPagedAndSearchable() {
     seed.setDatabaseName(path);
     QVERIFY(seed.open());
     QSqlQuery query(seed);
-    QVERIFY(query.exec("CREATE TABLE games(id TEXT PRIMARY KEY,title TEXT NOT NULL,platform TEXT NOT NULL,runtime TEXT "
-                       "NOT NULL,root TEXT NOT NULL,target TEXT NOT NULL,favorite INTEGER NOT NULL DEFAULT 0 "
-                       "CHECK(favorite IN (0,1)),added INTEGER NOT NULL,UNIQUE(runtime,root,target))"));
+    QVERIFY(
+        query.exec("CREATE TABLE games(id TEXT PRIMARY KEY,title TEXT NOT NULL,platform TEXT NOT NULL,runtime TEXT "
+                   "NOT NULL,root TEXT NOT NULL,target TEXT NOT NULL,favorite INTEGER NOT NULL DEFAULT 0 "
+                   "CHECK(favorite IN (0,1)),added INTEGER NOT NULL,UNIQUE(runtime,root,target))"));
     QVERIFY(query.exec("CREATE INDEX games_title ON games(title COLLATE NOCASE)"));
     QVERIFY(query.exec("PRAGMA user_version=1"));
     QVERIFY(seed.transaction());
-    query.prepare("INSERT INTO games(id,title,platform,runtime,root,target,favorite,added) "
-                  "VALUES(:id,:title,:platform,:runtime,:root,:target,:favorite,:added)");
-    for (int i = 0; i < 5000; ++i) {
+    query.prepare(
+        "INSERT INTO games(id,title,platform,runtime,root,target,favorite,added) "
+        "VALUES(:id,:title,:platform,:runtime,:root,:target,:favorite,:added)");
+    for (int i = 0; i < 5000; ++i)
+    {
         const auto suffix = QString("%1").arg(i, 5, 10, QLatin1Char('0'));
         query.bindValue(":id", "game-" + suffix);
         query.bindValue(":title", "Fixture " + suffix);
@@ -1575,17 +1719,21 @@ void GamesUiTests::fiveThousandGameCatalogStaysPagedAndSearchable() {
     QCOMPARE(library.page("platform", {}, 0, "PSP").size(), 50);
     QVERIFY(library.page("all", {}, 5000).isEmpty());
 }
-void GamesUiTests::catalogExportRestoreIsBoundedAndTransactional() {
+void
+GamesUiTests::catalogExportRestoreIsBoundedAndTransactional()
+{
     QTemporaryDir dir;
     QVERIFY(dir.isValid());
     QStandardPaths::setTestModeEnabled(true);
     const auto previousProfile = qApp->property("isoldeProfile");
     const auto profile = QUuid::createUuid().toString(QUuid::WithoutBraces);
     qApp->setProperty("isoldeProfile", profile);
-    auto cleanup = qScopeGuard([&] {
-        qApp->setProperty("isoldeProfile", previousProfile);
-        MediaGrants::save(profile, {});
-    });
+    auto cleanup = qScopeGuard(
+        [&]
+        {
+            qApp->setProperty("isoldeProfile", previousProfile);
+            MediaGrants::save(profile, {});
+        });
     QVERIFY2(MediaGrants::save(profile, {dir.path()}).isEmpty(), "Test export folder grant could not be prepared.");
     AppRegistry apps;
     QVERIFY(apps.addApp(runtime()));
@@ -1658,8 +1806,9 @@ void GamesUiTests::catalogExportRestoreIsBoundedAndTransactional() {
     triggerDb.setDatabaseName(database);
     QVERIFY(triggerDb.open());
     QSqlQuery trigger(triggerDb);
-    QVERIFY(trigger.exec("CREATE TRIGGER reject_restore BEFORE INSERT ON games WHEN NEW.title='Portable fixture' BEGIN "
-                         "SELECT RAISE(ABORT,'injected restore failure'); END"));
+    QVERIFY(
+        trigger.exec("CREATE TRIGGER reject_restore BEFORE INSERT ON games WHEN NEW.title='Portable fixture' BEGIN "
+                     "SELECT RAISE(ABORT,'injected restore failure'); END"));
     trigger = QSqlQuery();
     triggerDb.close();
     triggerDb = QSqlDatabase();
@@ -1704,7 +1853,8 @@ void GamesUiTests::catalogExportRestoreIsBoundedAndTransactional() {
     versionTwo["schemaVersion"] = 2;
     versionTwo.remove("provenance");
     QJsonArray versionTwoGames;
-    for (const auto& entry : versionTwo.value("games").toArray()) {
+    for (const auto& entry : versionTwo.value("games").toArray())
+    {
         auto gameObject = entry.toObject();
         gameObject.remove("artwork");
         versionTwoGames.append(gameObject);
@@ -1723,7 +1873,8 @@ void GamesUiTests::catalogExportRestoreIsBoundedAndTransactional() {
     legacy["schemaVersion"] = 1;
     legacy.remove("provenance");
     QJsonArray legacyGames;
-    for (const auto& entry : legacy.value("games").toArray()) {
+    for (const auto& entry : legacy.value("games").toArray())
+    {
         auto gameObject = entry.toObject();
         gameObject.remove("aliases");
         gameObject.remove("summary");
@@ -1751,17 +1902,21 @@ void GamesUiTests::catalogExportRestoreIsBoundedAndTransactional() {
     QCOMPARE(reopened.pageCollection(recentCollection).size(), 1);
     QCOMPARE(reopened.details(game).value("sourceReference").toString(), QString());
 }
-void GamesUiTests::catalogArtworkSurvivesRecoverySnapshotsWithoutGarbageCollection() {
+void
+GamesUiTests::catalogArtworkSurvivesRecoverySnapshotsWithoutGarbageCollection()
+{
     QTemporaryDir dir;
     QVERIFY(dir.isValid());
     QStandardPaths::setTestModeEnabled(true);
     const auto previousProfile = qApp->property("isoldeProfile");
     const auto profile = QUuid::createUuid().toString(QUuid::WithoutBraces);
     qApp->setProperty("isoldeProfile", profile);
-    auto cleanup = qScopeGuard([&] {
-        qApp->setProperty("isoldeProfile", previousProfile);
-        MediaGrants::save(profile, {});
-    });
+    auto cleanup = qScopeGuard(
+        [&]
+        {
+            qApp->setProperty("isoldeProfile", previousProfile);
+            MediaGrants::save(profile, {});
+        });
     QVERIFY2(MediaGrants::save(profile, {dir.path()}).isEmpty(), "Test export folder grant could not be prepared.");
     AppRegistry apps;
     QVERIFY(apps.addApp(runtime()));
@@ -1831,17 +1986,21 @@ void GamesUiTests::catalogArtworkSurvivesRecoverySnapshotsWithoutGarbageCollecti
         QVERIFY2(QFileInfo::exists(orphanPath), "Startup silently deleted an orphan without cross-process ownership.");
     }
 }
-void GamesUiTests::catalogProvenanceIsImmutableAndConflictSafe() {
+void
+GamesUiTests::catalogProvenanceIsImmutableAndConflictSafe()
+{
     QTemporaryDir dir;
     QVERIFY(dir.isValid());
     QStandardPaths::setTestModeEnabled(true);
     const auto previousProfile = qApp->property("isoldeProfile");
     const auto profile = QUuid::createUuid().toString(QUuid::WithoutBraces);
     qApp->setProperty("isoldeProfile", profile);
-    auto cleanup = qScopeGuard([&] {
-        qApp->setProperty("isoldeProfile", previousProfile);
-        MediaGrants::save(profile, {});
-    });
+    auto cleanup = qScopeGuard(
+        [&]
+        {
+            qApp->setProperty("isoldeProfile", previousProfile);
+            MediaGrants::save(profile, {});
+        });
     QVERIFY2(MediaGrants::save(profile, {dir.path()}).isEmpty(), "Test export folder grant could not be prepared.");
     AppRegistry apps;
     QVERIFY(apps.addApp(runtime()));
@@ -1929,9 +2088,11 @@ void GamesUiTests::catalogProvenanceIsImmutableAndConflictSafe() {
     QCOMPARE(records.size(), 3);
     auto mismatchedType = archive;
     auto typedRecords = mismatchedType.value("provenance").toArray();
-    for (qsizetype index = 0; index < typedRecords.size(); ++index) {
+    for (qsizetype index = 0; index < typedRecords.size(); ++index)
+    {
         auto item = typedRecords.at(index).toObject();
-        if (item.value("entityId").toString() == game) {
+        if (item.value("entityId").toString() == game)
+        {
             item["entityType"] = "edition";
             typedRecords[index] = item;
         }
@@ -1946,9 +2107,11 @@ void GamesUiTests::catalogProvenanceIsImmutableAndConflictSafe() {
     QCOMPARE(library.details(game).value("acquisitionProvenance").toMap(), provenance);
     auto mismatchedEditionType = archive;
     typedRecords = mismatchedEditionType.value("provenance").toArray();
-    for (qsizetype index = 0; index < typedRecords.size(); ++index) {
+    for (qsizetype index = 0; index < typedRecords.size(); ++index)
+    {
         auto item = typedRecords.at(index).toObject();
-        if (item.value("entityId").toString() == edition) {
+        if (item.value("entityId").toString() == edition)
+        {
             item["entityType"] = "game";
             typedRecords[index] = item;
         }
@@ -1961,9 +2124,11 @@ void GamesUiTests::catalogProvenanceIsImmutableAndConflictSafe() {
     mismatchedEdition.close();
     QVERIFY(!library.restoreCatalog(mismatchedEditionPath, true));
     QCOMPARE(library.details(game).value("acquisitionProvenance").toMap(), provenance);
-    for (qsizetype index = 0; index < records.size(); ++index) {
+    for (qsizetype index = 0; index < records.size(); ++index)
+    {
         auto item = records.at(index).toObject();
-        if (item.value("entityId").toString() == game) {
+        if (item.value("entityId").toString() == game)
+        {
             item["sourceFingerprint"] = QString(64, 'f');
             records[index] = item;
         }
@@ -1992,7 +2157,9 @@ void GamesUiTests::catalogProvenanceIsImmutableAndConflictSafe() {
     QVERIFY2(library.restoreCatalog(backup, true), qPrintable(library.errorString()));
     QCOMPARE(library.details(game).value("acquisitionProvenance").toMap(), provenance);
 }
-void GamesUiTests::remoteEditionChooserDispatchesOwnedVersion() {
+void
+GamesUiTests::remoteEditionChooserDispatchesOwnedVersion()
+{
     QTemporaryDir dir;
     AppRegistry apps;
     QVERIFY(apps.addApp(runtime()));
@@ -2044,7 +2211,9 @@ void GamesUiTests::remoteEditionChooserDispatchesOwnedVersion() {
     QCOMPARE(reopened.editions(game).size(), 2);
     QCOMPARE(reopened.page("continue").size(), 1);
 }
-void GamesUiTests::remoteEditCanCancelAndApplyWithoutMouse() {
+void
+GamesUiTests::remoteEditCanCancelAndApplyWithoutMouse()
+{
     QTemporaryDir dir;
     AppRegistry apps;
     QVERIFY(apps.addApp(runtime()));
@@ -2085,7 +2254,9 @@ void GamesUiTests::remoteEditCanCancelAndApplyWithoutMouse() {
     QCOMPARE(library.details(id).value("title").toString(), QString("Original1"));
     QCOMPARE(library.page().size(), 1);
 }
-void GamesUiTests::remoteDetailsFavoriteRemoveAndCancel() {
+void
+GamesUiTests::remoteDetailsFavoriteRemoveAndCancel()
+{
     QTemporaryDir dir;
     AppRegistry apps;
     QVERIFY(apps.addApp(runtime()));
@@ -2143,7 +2314,9 @@ void GamesUiTests::remoteDetailsFavoriteRemoveAndCancel() {
     command(widget.data(), InputManager::Confirm);
     QVERIFY(library.details(id).isEmpty());
 }
-void GamesUiTests::remoteAddReviewWritesOnlyOnConfirm() {
+void
+GamesUiTests::remoteAddReviewWritesOnlyOnConfirm()
+{
     QTemporaryDir dir;
     AppRegistry apps;
     QVERIFY(apps.addApp(runtime()));

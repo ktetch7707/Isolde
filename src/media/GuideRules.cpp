@@ -8,14 +8,19 @@
 #include "GuideRules.h"
 #include "home/ComponentSchema.h"
 
-namespace {
-bool keys(const QVariantMap& v, const QSet<QString>& allowed) {
+namespace
+{
+bool
+keys(const QVariantMap& v, const QSet<QString>& allowed)
+{
     for (auto it = v.cbegin(); it != v.cend(); ++it)
         if (!allowed.contains(it.key()))
             return false;
     return true;
 }
-bool integer(const QVariant& v, qint64 low, qint64 high) {
+bool
+integer(const QVariant& v, qint64 low, qint64 high)
+{
     const auto type = v.metaType().id();
     if (type != QMetaType::Int && type != QMetaType::LongLong && type != QMetaType::UInt &&
         type != QMetaType::ULongLong && type != QMetaType::Double)
@@ -24,40 +29,178 @@ bool integer(const QVariant& v, qint64 low, qint64 high) {
     const double number = v.toDouble(&ok);
     return ok && std::isfinite(number) && std::floor(number) == number && number >= low && number <= high;
 }
-bool text(const QVariant& v, int limit, bool empty = false) {
+bool
+text(const QVariant& v, int limit, bool empty = false)
+{
     if (v.metaType().id() != QMetaType::QString)
         return false;
     const auto s = v.toString();
-    if ((!empty && s.trimmed().isEmpty()) || s.size() > limit)
+    if (!isValidText(s, empty, limit))
         return false;
     for (const auto c : s)
         if (c.unicode() < 32)
             return false;
     return true;
 }
-QVariantMap reject(QString* error, const QString& message) {
+
+bool
+isValidText(const QString& s, bool empty, int limit)
+{
+    return !((!empty && s.trimmed().isEmpty()) || s.size() > limit);
+}
+QVariantMap
+reject(QString* error, const QString& message)
+{
     if (error)
         *error = message;
     return {};
 }
-bool numericField(const QString& field) {
+bool
+numericField(const QString& field)
+{
     return QStringList{"year", "rating", "playcount", "duration", "season", "episode"}.contains(field);
 }
-bool validRule(const QVariantMap& v, int depth, int& count) {
+bool
+validRule(const QVariantMap& v, int depth, int& count)
+{
     if (depth > 8 || ++count > 128 || v.isEmpty())
         return false;
     const auto op = v.value("op").toString();
-    if (op == "all" || op == "any" || op == "not") {
-        if (!keys(v, {"op", "rules"}) || v.value("rules").metaType().id() != QMetaType::QVariantList)
+    if (op == "all" || op == "any" || op == "not")
+        return validateCompoundRule(v, depth, count);
+    return true;
+}
+
+bool
+validateCompoundRule(const QVariantMap& v, int depth, int& count)
+{
+    if (!keys(v, {"op", "rules"}) || v.value("rules").metaType().id() != QMetaType::QVariantList)
+        return false;
+    const auto children = v.value("rules").toList();
+    if (children.isEmpty() || children.size() > 32)
+        return false;
+    const auto op = v.value("op").toString();
+    if (op == "not" && children.size() != 1)
+        return false;
+    for (const auto& child : children)
+        if (child.metaType().id() != QMetaType::QVariantMap || !validRule(child.toMap(), depth + 1, count))
             return false;
-        const auto children = v.value("rules").toList();
-        if (children.isEmpty() || children.size() > 32 || (op == "not" && children.size() != 1))
+    return true;
+}
+
+bool
+validateScheduleBlock(const QVariantMap& b, QString* error);
+bool
+scheduleBlocksOverlap(const QVariantMap& bi, const QVariantMap& bj, const QSet<int>& daysSetI,
+                      const QSet<int>& daysSetJ, QString* error);
+
+bool
+GuideRules::validateChannelScheduleBlocks(const QVariantList& blocks, QString* error)
+{
+    if (blocks.metaType().id() != QMetaType::QVariantList || blocks.size() > 32)
+        return reject(error, "Choose at most 32 calendar blocks.");
+    QList<QVariantMap> parsed;
+    for (const auto& block : blocks)
+    {
+        if (!validateScheduleBlock(block.toMap(), error))
             return false;
-        for (const auto& child : children)
-            if (child.metaType().id() != QMetaType::QVariantMap || !validRule(child.toMap(), depth + 1, count))
-                return false;
-        return true;
+        parsed.append(block.toMap());
     }
+    for (int i = 0; i < parsed.size(); ++i)
+    {
+        const auto bi = parsed[i];
+        const auto daysI = bi.value("days").toList();
+        QSet<int> daysSetI;
+        for (const auto& day : daysI)
+            daysSetI.insert(day.toInt());
+        for (int j = 0; j < i; ++j)
+        {
+            const auto bj = parsed[j];
+            QSet<int> daysSetJ;
+            for (const auto& day : bj.value("days").toList())
+                daysSetJ.insert(day.toInt());
+            if (scheduleBlocksOverlap(bi, bj, daysSetI, daysSetJ, error))
+                return false;
+        }
+    }
+    return true;
+}
+
+bool
+validateScheduleBlock(const QVariantMap& b, QString* error)
+{
+    if (!validateScheduleBlockFields(b, error))
+        return false;
+    if (!validateScheduleBlockDays(b, error))
+        return false;
+    if (!validateScheduleBlockDates(b, error))
+        return false;
+    return true;
+}
+
+bool
+validateScheduleBlockFields(const QVariantMap& b, QString* error)
+{
+    if (b.metaType().id() != QMetaType::QVariantMap ||
+        !keys(b, {"name", "days", "startMinute", "endMinute", "fromDate", "toDate", "rule"}) ||
+        !text(b.value("name"), 80) || !integer(b.value("startMinute"), 0, 1439) ||
+        !integer(b.value("endMinute"), 1, 1440) ||
+        b.value("startMinute").toInt() >= b.value("endMinute").toInt() ||
+        b.value("days").metaType().id() != QMetaType::QVariantList || b.value("days").toList().isEmpty() ||
+        b.value("days").toList().size() > 7 || b.value("rule").metaType().id() != QMetaType::QVariantMap ||
+        guideRule(b.value("rule").toMap()).isEmpty())
+        return reject(error, "Calendar blocks need a name, weekdays, increasing times and matching rules.");
+    return true;
+}
+
+bool
+validateScheduleBlockDays(const QVariantMap& b, QString* error)
+{
+    QSet<int> days;
+    for (const auto& day : b.value("days").toList())
+    {
+        if (!integer(day, 1, 7) || days.contains(day.toInt()))
+            return reject(error, "Choose unique weekdays, Monday 1 through Sunday 7.");
+        days.insert(day.toInt());
+    }
+    return true;
+}
+
+bool
+validateScheduleBlockDates(const QVariantMap& b, QString* error)
+{
+    for (const auto& key : QStringList{"fromDate", "toDate"})
+        if (b.contains(key) &&
+            (!text(b.value(key), 10) ||
+             QDate::fromString(b.value(key).toString(), Qt::ISODate).toString(Qt::ISODate) !=
+                 b.value(key).toString()))
+            return reject(error, "Use calendar dates in YYYY-MM-DD form.");
+    if (b.contains("fromDate") && b.contains("toDate") &&
+        b.value("fromDate").toString() > b.value("toDate").toString())
+        return reject(error, "The last calendar date precedes the first.");
+    return true;
+}
+
+bool
+scheduleBlocksOverlap(const QVariantMap& bi, const QVariantMap& bj, const QSet<int>& daysSetI,
+                      const QSet<int>& daysSetJ, QString* error)
+{
+    bool shared = false;
+    for (const auto& day : bi.value("days").toList())
+        if (daysSetJ.contains(day.toInt()))
+            shared = true;
+    if (shared && bi.value("startMinute").toInt() < bj.value("endMinute").toInt() &&
+        bi.value("endMinute").toInt() > bj.value("startMinute").toInt() &&
+        bi.value("fromDate", "0001-01-01").toString() <=
+            bj.value("toDate", "9999-12-31").toString() &&
+        bj.value("fromDate", "0001-01-01").toString() <= bi.value("toDate", "9999-12-31").toString())
+        return reject(error, "Calendar blocks overlap. Choose different times, days or dates.");
+    return false;
+}
+
+bool
+validateRuleLeaf(const QVariantMap& v, const QString& op)
+{
     if (!keys(v, {"field", "op", "value"}) || !text(v.value("field"), 32) || !text(v.value("op"), 32))
         return false;
     const auto field = v.value("field").toString();
@@ -85,40 +228,129 @@ bool validRule(const QVariantMap& v, int depth, int& count) {
         return !v.contains("value");
     if (!v.contains("value"))
         return false;
-    const auto value = v.value("value");
-    const bool numeric = numericField(field);
-    const auto scalar = [numeric](const QVariant& item) {
-        if (!numeric)
-            return text(item, 256);
-        const auto type = item.metaType().id();
-        if (type == QMetaType::Bool || type == QMetaType::QString)
-            return false;
-        bool ok = false;
-        const auto n = item.toDouble(&ok);
-        return ok && std::isfinite(n) && n >= 0 && n <= 10000000;
-    };
-    if (op == "one-of" || op == "in-range") {
-        if (value.metaType().id() != QMetaType::QVariantList)
-            return false;
-        const auto values = value.toList();
-        if (values.isEmpty() || values.size() > 32 || (op == "in-range" && (!numeric || values.size() != 2)))
-            return false;
-        for (const auto& item : values)
-            if (!scalar(item))
-                return false;
-        return op != "in-range" || values[0].toDouble() <= values[1].toDouble();
-    }
-    if (!scalar(value))
+    if (!validateRuleLeafValue(v.value("value"), numericField(field), op))
         return false;
+}
+
+bool
+validateRuleLeafValue(const QVariant& value, bool numeric, const QString& op)
+{
+    if (op == "one-of" || op == "in-range")
+        return validateRuleList(value, numeric, op);
+    const auto scalar = validateScalar(value, numeric);
+    if (!scalar)
+        return false;
+    return validateRuleLeafComparison(value, numeric, op);
+}
+
+bool
+validateRuleLeafComparison(const QVariant& value, bool numeric, const QString& op)
+{
     if (op == "is" || op == "is-not")
         return true;
     if (numeric)
         return op == "before" || op == "after";
     return op == "contains" || op == "does-not-contain" || op == "starts-with";
 }
+
+bool
+validateRuleList(const QVariant& value, bool numeric, const QString& op)
+{
+    if (value.metaType().id() != QMetaType::QVariantList)
+        return false;
+    const auto values = value.toList();
+    if (values.isEmpty() || values.size() > 32 || (op == "in-range" && (!numeric || values.size() != 2)))
+        return false;
+    for (const auto& v : values)
+        if (!validateScalar(v, numeric))
+            return false;
+    return op != "in-range" || values[0].toDouble() <= values[1].toDouble();
+}
+
+bool
+validateScalar(const QVariant& item, bool numeric)
+{
+    if (!numeric)
+        return text(item, 256);
+    const auto type = item.metaType().id();
+    if (type == QMetaType::Bool || type == QMetaType::QString)
+        return false;
+    bool ok = false;
+    const auto n = item.toDouble(&ok);
+    return ok && std::isfinite(n) && n >= 0 && n <= 10000000;
+}
+
+bool
+validateNumericMatch(const QVariant& actual, const QVariant& expected, const QString& op)
+{
+    bool ok = false;
+    const auto n = actual.toDouble(&ok);
+    if (!ok || !std::isfinite(n))
+        return false;
+    if (op == "is")
+        return n == expected.toDouble();
+    if (op == "is-not")
+        return n != expected.toDouble();
+    if (op == "before")
+        return n < expected.toDouble();
+    if (op == "after")
+        return n > expected.toDouble();
+    if (op == "in-range")
+    {
+        const auto range = expected.toList();
+        return n >= range[0].toDouble() && n <= range[1].toDouble();
+    }
+    if (op == "one-of")
+    {
+        for (const auto& v : expected.toList())
+            if (n == v.toDouble())
+                return true;
+        return false;
+    }
+    return false;
+}
+
+bool
+validateStringMatch(const QStringList& values, const QString& target, const QString& op)
+{
+    bool found = false;
+    for (const auto& value : values)
+    {
+        if (op == "is" || op == "is-not")
+            found |= value.compare(target, Qt::CaseInsensitive) == 0;
+        else if (op == "contains" || op == "does-not-contain")
+            found |= value.contains(target, Qt::CaseInsensitive);
+        else if (op == "starts-with")
+            found |= value.startsWith(target, Qt::CaseInsensitive);
+        else if (op == "one-of")
+            for (const auto& v : target.split(','))
+                found |= value.compare(v.trimmed(), Qt::CaseInsensitive) == 0;
+    }
+    return op == "is-not" || op == "does-not-contain" ? !found : found;
+}
+
 } // namespace
 
-QVariantMap ComponentSchema::guideOptions(const QVariantMap& value, QString* error) {
+QVariantMap
+ComponentSchema::guideOptions(const QVariantMap& value, QString* error)
+{
+    if (!validateGuideOptionsBasics(value, error))
+        return {};
+    QVariantMap presentation;
+    if (!validateGuideOverlayPresentation(value, presentation, error))
+        return {};
+    if (!validateGuideToolbar(value, error))
+        return {};
+    if (!validateGuideSources(value, error))
+        return {};
+    if (error)
+        error->clear();
+    return value;
+}
+
+bool
+ComponentSchema::validateGuideOptionsBasics(const QVariantMap& value, QString* error)
+{
     if (!keys(value,
               {"rows",
                "minutes",
@@ -143,7 +375,13 @@ QVariantMap ComponentSchema::guideOptions(const QVariantMap& value, QString* err
         value.value("toolbar").metaType().id() != QMetaType::QVariantList ||
         value.value("sources").metaType().id() != QMetaType::QVariantList)
         return reject(error, "Invalid guide appearance and controls.");
-    QVariantMap presentation;
+    return true;
+}
+
+bool
+ComponentSchema::validateGuideOverlayPresentation(const QVariantMap& value, QVariantMap& presentation,
+                                                  QString* error)
+{
     const QMap<QString, QString> overlayKeys{{"surface", "guideSurface"},
                                              {"overlayWidth", "guideOverlayWidth"},
                                              {"overlayHeight", "guideOverlayHeight"},
@@ -154,8 +392,15 @@ QVariantMap ComponentSchema::guideOptions(const QVariantMap& value, QString* err
             presentation[it.value()] = value.value(it.key());
     if (!validPresentation(presentation, true))
         return reject(error, "Invalid guide overlay presentation.");
+    return true;
+}
+
+bool
+ComponentSchema::validateGuideToolbar(const QVariantMap& value, QString* error)
+{
     QSet<QString> seen;
-    for (const auto& v : value.value("toolbar").toList()) {
+    for (const auto& v : value.value("toolbar").toList())
+    {
         const auto item = v.toMap();
         const auto id = item.value("id").toString();
         if (!keys(item, {"id", "label"}) ||
@@ -167,11 +412,18 @@ QVariantMap ComponentSchema::guideOptions(const QVariantMap& value, QString* err
     if (!seen.contains("now") || !seen.contains("add") || !seen.contains("manage") || !seen.contains("sources") ||
         !seen.contains("close"))
         return reject(error, "Keep guide recovery and creation controls reachable.");
-    seen.clear();
+    return true;
+}
+
+bool
+ComponentSchema::validateGuideSources(const QVariantMap& value, QString* error)
+{
+    QSet<QString> seen;
     const auto sources = value.value("sources").toList();
     if (sources.size() > 32)
         return reject(error, "Too many guide service destinations.");
-    for (const auto& v : sources) {
+    for (const auto& v : sources)
+    {
         const auto item = v.toMap();
         const auto id = item.value("id").toString();
         const auto launch = action(item.value("action").toMap());
@@ -184,11 +436,11 @@ QVariantMap ComponentSchema::guideOptions(const QVariantMap& value, QString* err
             return reject(error, "Invalid guide service destination.");
         seen.insert(id);
     }
-    if (error)
-        error->clear();
-    return value;
+    return true;
 }
-QVariantMap ComponentSchema::guideRule(const QVariantMap& value, QString* error) {
+QVariantMap
+ComponentSchema::guideRule(const QVariantMap& value, QString* error)
+{
     int count = 0;
     if (QJsonDocument::fromVariant(value).toJson(QJsonDocument::Compact).size() > 65536 || !validRule(value, 0, count))
         return reject(error,
@@ -197,148 +449,288 @@ QVariantMap ComponentSchema::guideRule(const QVariantMap& value, QString* error)
         error->clear();
     return value;
 }
-QVariantMap ComponentSchema::guideChannel(const QVariantMap& v, QString* error) {
+QVariantMap
+ComponentSchema::guideChannel(const QVariantMap& v, QString* error)
+{
+    if (!validateChannelSize(v, error))
+        return v;
+    if (!validateChannelDescription(v, error))
+        return v;
+    if (!validateChannelContent(v, error))
+        return v;
+    if (error)
+        error->clear();
+    return v;
+}
+
+bool
+GuideRules::validateChannelContent(const QVariantMap& v, QString* error)
+{
+    if (v.contains("schedule") && !validateChannelSchedule(v, error))
+        return false;
+    if (!validateChannelBasics(v, error))
+        return false;
+    if (!validateChannelOwner(v, error))
+        return false;
+    if (!validateChannelTiming(v, error))
+        return false;
+    if (!validateLocalChannel(v, error))
+        return false;
+    return true;
+}
+
+bool
+GuideRules::validateChannelSize(const QVariantMap& v, QString* error)
+{
     if (QJsonDocument::fromVariant(v).toJson(QJsonDocument::Compact).size() > 131072)
         return reject(error, "Channel definitions must fit within 128 KiB.");
-    if (v.contains("schedule")) {
-        const auto policy = v.value("schedule").toMap();
-        if (v.value("schedule").metaType().id() != QMetaType::QVariantMap ||
-            !keys(policy, {"blocks", "cooldownSeconds", "fillerRule", "bumperRule"}) ||
-            (policy.contains("cooldownSeconds") && !integer(policy.value("cooldownSeconds"), 0, 7 * 86400)))
-            return reject(error, "Invalid bounded channel scheduling policy.");
-        for (const auto& key : QStringList{"fillerRule", "bumperRule"})
-            if (policy.contains(key) && (policy.value(key).metaType().id() != QMetaType::QVariantMap ||
-                                         guideRule(policy.value(key).toMap()).isEmpty()))
-                return reject(error, "Choose valid filler and bumper rules.");
-        if (policy.contains("blocks")) {
-            if (policy.value("blocks").metaType().id() != QMetaType::QVariantList ||
-                policy.value("blocks").toList().size() > 32)
-                return reject(error, "Choose at most 32 calendar blocks.");
-            const auto blocks = policy.value("blocks").toList();
-            for (int i = 0; i < blocks.size(); ++i) {
-                const auto b = blocks[i].toMap();
-                if (blocks[i].metaType().id() != QMetaType::QVariantMap ||
-                    !keys(b, {"name", "days", "startMinute", "endMinute", "fromDate", "toDate", "rule"}) ||
-                    !text(b.value("name"), 80) || !integer(b.value("startMinute"), 0, 1439) ||
-                    !integer(b.value("endMinute"), 1, 1440) ||
-                    b.value("startMinute").toInt() >= b.value("endMinute").toInt() ||
-                    b.value("days").metaType().id() != QMetaType::QVariantList || b.value("days").toList().isEmpty() ||
-                    b.value("days").toList().size() > 7 || b.value("rule").metaType().id() != QMetaType::QVariantMap ||
-                    guideRule(b.value("rule").toMap()).isEmpty())
-                    return reject(error, "Calendar blocks need a name, weekdays, increasing times and matching rules.");
-                QSet<int> days;
-                for (const auto& day : b.value("days").toList()) {
-                    if (!integer(day, 1, 7) || days.contains(day.toInt()))
-                        return reject(error, "Choose unique weekdays, Monday 1 through Sunday 7.");
-                    days.insert(day.toInt());
-                }
-                for (const auto& key : QStringList{"fromDate", "toDate"})
-                    if (b.contains(key) &&
-                        (!text(b.value(key), 10) ||
-                         QDate::fromString(b.value(key).toString(), Qt::ISODate).toString(Qt::ISODate) !=
-                             b.value(key).toString()))
-                        return reject(error, "Use calendar dates in YYYY-MM-DD form.");
-                if (b.contains("fromDate") && b.contains("toDate") &&
-                    b.value("fromDate").toString() > b.value("toDate").toString())
-                    return reject(error, "The last calendar date precedes the first.");
-                for (int j = 0; j < i; ++j) {
-                    const auto other = blocks[j].toMap();
-                    bool shared = false;
-                    for (const auto& day : other.value("days").toList())
-                        shared |= days.contains(day.toInt());
-                    if (shared && b.value("startMinute").toInt() < other.value("endMinute").toInt() &&
-                        b.value("endMinute").toInt() > other.value("startMinute").toInt() &&
-                        b.value("fromDate", "0001-01-01").toString() <=
-                            other.value("toDate", "9999-12-31").toString() &&
-                        other.value("fromDate", "0001-01-01").toString() <= b.value("toDate", "9999-12-31").toString())
-                        return reject(error, "Calendar blocks overlap. Choose different times, days or dates.");
-                }
-            }
-        }
-    }
+    return true;
+}
+
+bool
+GuideRules::validateChannelDescription(const QVariantMap& v, QString* error)
+{
     if (v.contains("description") && !text(v.value("description"), 512, true))
         return reject(error, "Use a plain-text channel description of at most 512 characters.");
-    if (v.contains("logo") &&
-        (v.value("logo").metaType().id() != QMetaType::QString ||
-         !QRegularExpression("^artwork/logo-[0-9a-f]{64}\\.(png|jpg)$").match(v.value("logo").toString()).hasMatch()))
-        return reject(error, "Choose managed content-addressed station artwork.");
-    if (v.contains("presentation") && (v.value("presentation").metaType().id() != QMetaType::QVariantMap ||
-                                       !validPresentation(v.value("presentation").toMap())))
-        return reject(error, "Invalid shared station presentation.");
-    if (v.contains("sourceEnabled") && v.value("sourceEnabled").metaType().id() != QMetaType::Bool)
-        return reject(error, "Source enablement must be an explicit boolean.");
-    if (v.contains("groups")) {
-        if (v.value("groups").metaType().id() != QMetaType::QVariantList || v.value("groups").toList().size() > 32)
-            return reject(error, "Choose at most 32 channel groups.");
-        QSet<QString> groups;
-        for (const auto& group : v.value("groups").toList()) {
-            if (!text(group, 80) || group.toString() != group.toString().trimmed() || group.toString().contains(',') ||
-                groups.contains(group.toString().toCaseFolded()))
-                return reject(error, "Use unique group names of at most 80 characters without commas.");
-            groups.insert(group.toString().toCaseFolded());
+    return true;
+}
+
+bool
+GuideRules::matchesChannel(const QVariantMap& definition, const QVariantMap& metadata)
+{
+    if (definition.contains("mediaKinds") &&
+        !definition.value("mediaKinds").toList().contains(metadata.value("mediaType")))
+        return false;
+    // Missing, malformed or unknown watch state is never treated as unwatched.
+    if (definition.value("sequence") == "next-unwatched" && !integer(metadata.value("playcount"), 0, 0))
+        return false;
+    if (matches(definition.value("rule").toMap(), metadata))
+        return true;
+    const auto schedule = definition.value("schedule").toMap();
+    for (const auto& key : QStringList{"fillerRule", "bumperRule"})
+        if (schedule.contains(key) && matches(schedule.value(key).toMap(), metadata))
+            return true;
+    for (const auto& block : schedule.value("blocks").toList())
+        if (matches(block.toMap().value("rule").toMap(), metadata))
+            return true;
+    return false;
+}
+
+QVariantMap
+GuideRules::calendarWindow(const QVariantMap& definition, qint64 utc)
+{
+    const auto zone = QTimeZone(definition.value("timezone").toString().toUtf8());
+    const auto local = QDateTime::fromSecsSinceEpoch(utc, zone);
+    QVariantMap rule = definition.value("rule").toMap();
+    const auto blocks = definition.value("schedule").toMap().value("blocks").toList();
+    // Cooldowns/filler alone do not create a calendar cut at midnight.
+    if (blocks.isEmpty())
+        return {{"rule", rule}, {"nextUtc", utc + 86400}};
+    const auto date = local.date().toString(Qt::ISODate);
+    const int minute = local.time().hour() * 60 + local.time().minute();
+    for (const auto& v : blocks)
+    {
+        const auto b = v.toMap();
+        if (b.value("days").toList().contains(local.date().dayOfWeek()) &&
+            date >= b.value("fromDate", "0001-01-01").toString() &&
+            date <= b.value("toDate", "9999-12-31").toString() && minute >= b.value("startMinute").toInt() &&
+            minute < b.value("endMinute").toInt())
+            rule = b.value("rule").toMap();
+    }
+    // Civil-minute arithmetic is valid until the next offset transition.
+    // Splitting there handles spring gaps and both fall folds without choosing
+    // an ambiguous local QDateTime or walking every minute of every slot.
+    qint64 next = utc + (1440 - minute) * 60 - local.time().second();
+    for (const auto& v : blocks)
+    {
+        const auto b = v.toMap();
+        for (const auto& key : QStringList{"startMinute", "endMinute"})
+        {
+            const auto m = b.value(key).toInt();
+            if (m > minute)
+                next = std::min(next, utc + (m - minute) * 60 - local.time().second());
         }
     }
-    if (v.value("owner") == "guide-feed") {
-        const auto source = v.value("source").toMap();
-        if (!keys(v,
-                  {"schemaVersion",
-                   "id",
-                   "name",
-                   "number",
-                   "description",
-                   "groups",
-                   "logo",
-                   "presentation",
-                   "owner",
-                   "source",
-                   "sourceAvailable",
-                   "sourceEnabled",
-                   "refreshedUtc"}) ||
-            !integer(v.value("schemaVersion"), 1, 1) || !safeId(v.value("id").toString()) ||
-            !text(v.value("name"), 160) || !integer(v.value("number"), 1, 99999) ||
-            !keys(source, {"instance", "stationId", "epgId", "url", "number"}) ||
-            !safeId(source.value("instance").toString()) || !text(source.value("stationId"), 160) ||
-            !text(source.value("epgId"), 160, true) || !GuideFeeds::streamUrl(source.value("url").toString()) ||
-            !integer(source.value("number"), 1, 99999) ||
-            v.value("id") !=
-                GuideFeeds::identity(source.value("instance").toString(), source.value("stationId").toString()) ||
-            v.value("sourceAvailable").metaType().id() != QMetaType::Bool ||
-            !integer(v.value("refreshedUtc"), 0, 253402214400LL))
-            return reject(error, "Invalid stream station identity or URL. Credentials and player options are refused.");
-        if (error)
-            error->clear();
-        return v;
+    const auto transition = zone.nextTransition(QDateTime::fromSecsSinceEpoch(utc, QTimeZone::utc()));
+    if (transition.atUtc.isValid() && transition.atUtc.toSecsSinceEpoch() > utc)
+        next = std::min(next, transition.atUtc.toSecsSinceEpoch());
+    return {{"rule", rule}, {"nextUtc", next}};
+}
+
+bool
+matchCompoundRule(const QVariantMap& rule, const QVariantMap& metadata);
+
+bool
+GuideRules::matches(const QVariantMap& rule, const QVariantMap& metadata)
+{
+    const auto op = rule.value("op").toString();
+    if (op == "all" || op == "any" || op == "not")
+        return matchCompoundRule(rule, metadata);
+    const auto field = rule.value("field").toString();
+    const auto actual = metadata.value(field);
+    const bool absent =
+        !actual.isValid() || actual.isNull() || (actual.toString().isEmpty() && actual.toList().isEmpty());
+    if (op == "missing")
+        return absent;
+    if (op == "present")
+        return !absent;
+    if (absent)
+        return false;
+    const auto expected = rule.value("value");
+    if (numericField(field))
+        return validateNumericMatch(actual, expected, op);
+    QStringList values;
+    if (actual.metaType().id() == QMetaType::QStringList)
+        values = actual.toStringList();
+    else if (actual.metaType().id() == QMetaType::QVariantList)
+        for (const auto& v : actual.toList())
+            values.append(v.toString());
+    else
+        values.append(actual.toString());
+    return validateStringMatch(values, expected.toString(), op);
+}
+
+bool
+matchCompoundRule(const QVariantMap& rule, const QVariantMap& metadata)
+{
+    const auto children = rule.value("rules").toList();
+    if (children.isEmpty())
+        return false;
+    const auto op = rule.value("op").toString();
+    if (op == "not")
+        return !matches(children.first().toMap(), metadata);
+    bool anyMatch = false;
+    for (const auto& child : children)
+    {
+        const bool match = matches(child.toMap(), metadata);
+        if (op == "all" && !match)
+            return false;
+        if (op == "any" && match)
+            anyMatch = true;
     }
-    if (v.value("owner") == "kodi-pvr") {
-        const auto source = v.value("source").toMap();
-        if (!keys(v,
-                  {"schemaVersion",
-                   "id",
-                   "name",
-                   "number",
-                   "description",
-                   "groups",
-                   "logo",
-                   "presentation",
-                   "owner",
-                   "source",
-                   "sourceAvailable",
-                   "sourceEnabled",
-                   "refreshedUtc"}) ||
-            !integer(v.value("schemaVersion"), 1, 1) || !safeId(v.value("id").toString()) ||
-            !text(v.value("name"), 160) || !integer(v.value("number"), 1, 99999) ||
-            !keys(source, {"instance", "channelId", "clientId", "uniqueId", "number"}) ||
-            !safeId(source.value("instance").toString()) || !integer(source.value("channelId"), 1, 2147483647) ||
-            !integer(source.value("clientId"), -2147483648LL, 2147483647) ||
-            !integer(source.value("uniqueId"), -2147483648LL, 2147483647) ||
-            !integer(source.value("number"), 0, 99999) ||
-            v.value("sourceAvailable").metaType().id() != QMetaType::Bool ||
-            !integer(v.value("refreshedUtc"), 0, 253402214400LL))
-            return reject(error, "Invalid Kodi PVR channel identity or capabilities.");
-        if (error)
-            error->clear();
-        return v;
+    return op == "all" || anyMatch;
+}
+
+bool
+GuideRules::validateScheduleRules(const QVariantMap& policy, QString* error)
+{
+    for (const auto& key : QStringList{"fillerRule", "bumperRule"})
+        if (policy.contains(key) && (policy.value(key).metaType().id() != QMetaType::QVariantMap ||
+                                     guideRule(policy.value(key).toMap()).isEmpty()))
+            return reject(error, "Choose valid filler and bumper rules.");
+    return true;
+}
+
+
+bool
+GuideRules::validateChannelSchedule(const QVariantMap& v, QString* error)
+{
+    const auto policy = v.value("schedule").toMap();
+    if (!validateSchedulePolicy(policy, error))
+        return false;
+    if (!validateScheduleRules(policy, error))
+        return false;
+    if (!policy.contains("blocks"))
+        return true;
+    if (!validateChannelScheduleBlocks(policy.value("blocks").toList(), error))
+        return false;
+    return true;
+}
+
+bool
+GuideRules::validateChannelGroups(const QVariantMap& v, QString* error)
+{
+    if (v.value("groups").metaType().id() != QMetaType::QVariantList || v.value("groups").toList().size() > 32)
+        return reject(error, "Choose at most 32 channel groups.");
+    QSet<QString> groups;
+    for (const auto& group : v.value("groups").toList())
+    {
+        if (!text(group, 80) || group.toString() != group.toString().trimmed() || group.toString().contains(',') ||
+            groups.contains(group.toString().toCaseFolded()))
+            return reject(error, "Use unique group names of at most 80 characters without commas.");
+        groups.insert(group.toString().toCaseFolded());
     }
+    return true;
+}
+
+bool
+GuideRules::validateGuideFeedOwner(const QVariantMap& v, QString* error)
+{
+    const auto source = v.value("source").toMap();
+    if (!keys(v,
+              {"schemaVersion",
+               "id",
+               "name",
+               "number",
+               "description",
+               "groups",
+               "logo",
+               "presentation",
+               "owner",
+               "source",
+               "sourceAvailable",
+               "sourceEnabled",
+               "refreshedUtc"}) ||
+        !integer(v.value("schemaVersion"), 1, 1) || !safeId(v.value("id").toString()) ||
+        !text(v.value("name"), 160) || !integer(v.value("number"), 1, 99999) ||
+        !keys(source, {"instance", "stationId", "epgId", "url", "number"}) ||
+        !safeId(source.value("instance").toString()) || !text(source.value("stationId"), 160) ||
+        !text(source.value("epgId"), 160, true) || !GuideFeeds::streamUrl(source.value("url").toString()) ||
+        !integer(source.value("number"), 1, 99999) ||
+        v.value("id") !=
+            GuideFeeds::identity(source.value("instance").toString(), source.value("stationId").toString()) ||
+        v.value("sourceAvailable").metaType().id() != QMetaType::Bool ||
+        !integer(v.value("refreshedUtc"), 0, 253402214400LL))
+        return reject(error, "Invalid stream station identity or URL. Credentials and player options are refused.");
+    if (error)
+        error->clear();
+    return true;
+}
+
+bool
+GuideRules::validateKodiPvrOwner(const QVariantMap& v, QString* error)
+{
+    const auto source = v.value("source").toMap();
+    if (!keys(v,
+              {"schemaVersion",
+               "id",
+               "name",
+               "number",
+               "description",
+               "groups",
+               "logo",
+               "presentation",
+               "owner",
+               "source",
+               "sourceAvailable",
+               "sourceEnabled",
+               "refreshedUtc"}) ||
+        !integer(v.value("schemaVersion"), 1, 1) || !safeId(v.value("id").toString()) ||
+        !text(v.value("name"), 160) || !integer(v.value("number"), 1, 99999) ||
+        !keys(source, {"instance", "channelId", "clientId", "uniqueId", "number"}) ||
+        !safeId(source.value("instance").toString()) || !integer(source.value("channelId"), 1, 2147483647) ||
+        !integer(source.value("clientId"), -2147483648LL, 2147483647) ||
+        !integer(source.value("uniqueId"), -2147483648LL, 2147483647) ||
+        !integer(source.value("number"), 0, 99999) ||
+        v.value("sourceAvailable").metaType().id() != QMetaType::Bool ||
+        !integer(v.value("refreshedUtc"), 0, 253402214400LL))
+        return reject(error, "Invalid Kodi PVR channel identity or capabilities.");
+    if (error)
+        error->clear();
+    return true;
+}
+
+bool
+validateLocalChannel(const QVariantMap& v, QString* error)
+{
+    if (!validateLocalChannelCore(v, error))
+        return false;
+    return validateLocalChannelOptions(v, error);
+}
+
+bool
+GuideRules::validateLocalChannelCore(const QVariantMap& v, QString* error)
+{
     if ((v.contains("horizonDays") && !integer(v.value("horizonDays"), 1, 31)) ||
         (v.contains("retentionDays") && !integer(v.value("retentionDays"), 0, 7)))
         return reject(error, "Choose a 1–31 day schedule horizon and 0–7 days of retained history.");
@@ -346,6 +738,12 @@ QVariantMap ComponentSchema::guideChannel(const QVariantMap& v, QString* error) 
         (!integer(v.value("clockOffsetSeconds"), -31 * 86400, 31 * 86400) ||
          (v.value("clock") != "real-time" && v.value("clockOffsetSeconds").toLongLong() != 0)))
         return reject(error, "Only real-time local channels support a broadcast offset, bounded to 31 days.");
+    return true;
+}
+
+bool
+GuideRules::validateLocalChannelOptions(const QVariantMap& v, QString* error)
+{
     if (!keys(v,
               {"schemaVersion",
                "id",
@@ -376,151 +774,63 @@ QVariantMap ComponentSchema::guideChannel(const QVariantMap& v, QString* error) 
         return reject(error,
                       "Invalid local channel definition. Check its version, name, number, clock, sequencing, timezone "
                       "and rules.");
-    if (v.contains("mediaKinds")) {
-        if (v.value("mediaKinds").metaType().id() != QMetaType::QVariantList ||
-            v.value("mediaKinds").toList().isEmpty() || v.value("mediaKinds").toList().size() > 4)
-            return reject(error, "Choose one to four local media types.");
-        QSet<QString> kinds;
-        for (const auto& kind : v.value("mediaKinds").toList()) {
-            if (kind.metaType().id() != QMetaType::QString ||
-                !QStringList{"movie", "episode", "musicvideo", "song"}.contains(kind.toString()) ||
-                kinds.contains(kind.toString()))
-                return reject(error, "Invalid or duplicate local media type.");
-            kinds.insert(kind.toString());
-        }
-    }
-    if (error)
-        error->clear();
-    return v;
+    return true;
 }
 
-bool GuideRules::matchesChannel(const QVariantMap& definition, const QVariantMap& metadata) {
-    if (definition.contains("mediaKinds") &&
-        !definition.value("mediaKinds").toList().contains(metadata.value("mediaType")))
-        return false;
-    // Missing, malformed or unknown watch state is never treated as unwatched.
-    if (definition.value("sequence") == "next-unwatched" && !integer(metadata.value("playcount"), 0, 0))
-        return false;
-    if (matches(definition.value("rule").toMap(), metadata))
+bool
+GuideRules::validateLocalChannelMediaKinds(const QVariantMap& v, QString* error)
+{
+    if (!v.contains("mediaKinds"))
         return true;
-    const auto schedule = definition.value("schedule").toMap();
-    for (const auto& key : QStringList{"fillerRule", "bumperRule"})
-        if (schedule.contains(key) && matches(schedule.value(key).toMap(), metadata))
-            return true;
-    for (const auto& block : schedule.value("blocks").toList())
-        if (matches(block.toMap().value("rule").toMap(), metadata))
-            return true;
-    return false;
+    const auto kinds = v.value("mediaKinds").toList();
+    if (kinds.isEmpty() || kinds.size() > 4)
+        return reject(error, "Choose one to four local media types.");
+    for (const auto& kind : kinds)
+    {
+        if (kind.metaType().id() != QMetaType::QString ||
+            !QStringList{"movie", "episode", "musicvideo", "song"}.contains(kind.toString()))
+            return reject(error, "Invalid or duplicate local media type.");
+    }
+    return true;
 }
 
-QVariantMap GuideRules::calendarWindow(const QVariantMap& definition, qint64 utc) {
-    const auto zone = QTimeZone(definition.value("timezone").toString().toUtf8());
-    const auto local = QDateTime::fromSecsSinceEpoch(utc, zone);
-    QVariantMap rule = definition.value("rule").toMap();
-    const auto blocks = definition.value("schedule").toMap().value("blocks").toList();
-    // Cooldowns/filler alone do not create a calendar cut at midnight.
-    if (blocks.isEmpty())
-        return {{"rule", rule}, {"nextUtc", utc + 86400}};
-    const auto date = local.date().toString(Qt::ISODate);
-    const int minute = local.time().hour() * 60 + local.time().minute();
-    for (const auto& v : blocks) {
-        const auto b = v.toMap();
-        if (b.value("days").toList().contains(local.date().dayOfWeek()) &&
-            date >= b.value("fromDate", "0001-01-01").toString() &&
-            date <= b.value("toDate", "9999-12-31").toString() && minute >= b.value("startMinute").toInt() &&
-            minute < b.value("endMinute").toInt())
-            rule = b.value("rule").toMap();
-    }
-    // Civil-minute arithmetic is valid until the next offset transition.
-    // Splitting there handles spring gaps and both fall folds without choosing
-    // an ambiguous local QDateTime or walking every minute of every slot.
-    qint64 next = utc + (1440 - minute) * 60 - local.time().second();
-    for (const auto& v : blocks) {
-        const auto b = v.toMap();
-        for (const auto& key : QStringList{"startMinute", "endMinute"}) {
-            const auto m = b.value(key).toInt();
-            if (m > minute)
-                next = std::min(next, utc + (m - minute) * 60 - local.time().second());
-        }
-    }
-    const auto transition = zone.nextTransition(QDateTime::fromSecsSinceEpoch(utc, QTimeZone::utc()));
-    if (transition.atUtc.isValid() && transition.atUtc.toSecsSinceEpoch() > utc)
-        next = std::min(next, transition.atUtc.toSecsSinceEpoch());
-    return {{"rule", rule}, {"nextUtc", next}};
+
+bool
+GuideRules::validateChannelBasics(const QVariantMap& v, QString* error)
+{
+    if (v.contains("logo") &&
+        (v.value("logo").metaType().id() != QMetaType::QString ||
+         !QRegularExpression("^artwork/logo-[0-9a-f]{64}\\.(png|jpg)$").match(v.value("logo").toString()).hasMatch()))
+        return reject(error, "Choose managed content-addressed station artwork.");
+    if (v.contains("presentation") && (v.value("presentation").metaType().id() != QMetaType::QVariantMap ||
+                                       !validPresentation(v.value("presentation").toMap())))
+        return reject(error, "Invalid shared station presentation.");
+    if (v.contains("sourceEnabled") && v.value("sourceEnabled").metaType().id() != QMetaType::Bool)
+        return reject(error, "Source enablement must be an explicit boolean.");
+    if (v.contains("groups") && !validateChannelGroups(v, error))
+        return false;
+    return true;
 }
 
-bool GuideRules::matches(const QVariantMap& rule, const QVariantMap& metadata) {
-    const auto op = rule.value("op").toString();
-    if (op == "all" || op == "any" || op == "not") {
-        const auto children = rule.value("rules").toList();
-        if (children.isEmpty())
-            return false;
-        if (op == "not")
-            return !matches(children.first().toMap(), metadata);
-        for (const auto& child : children) {
-            const bool match = matches(child.toMap(), metadata);
-            if (op == "all" && !match)
-                return false;
-            if (op == "any" && match)
-                return true;
-        }
-        return op == "all";
-    }
-    const auto field = rule.value("field").toString();
-    const auto actual = metadata.value(field);
-    const bool absent =
-        !actual.isValid() || actual.isNull() || (actual.toString().isEmpty() && actual.toList().isEmpty());
-    if (op == "missing")
-        return absent;
-    if (op == "present")
-        return !absent;
-    if (absent)
+bool
+GuideRules::validateChannelOwner(const QVariantMap& v, QString* error)
+{
+    if (v.value("owner") == "guide-feed" && !validateGuideFeedOwner(v, error))
         return false;
-    const auto expected = rule.value("value");
-    if (numericField(field)) {
-        bool ok = false;
-        const auto n = actual.toDouble(&ok);
-        if (!ok || !std::isfinite(n))
-            return false;
-        if (op == "is")
-            return n == expected.toDouble();
-        if (op == "is-not")
-            return n != expected.toDouble();
-        if (op == "before")
-            return n < expected.toDouble();
-        if (op == "after")
-            return n > expected.toDouble();
-        if (op == "in-range") {
-            const auto range = expected.toList();
-            return n >= range[0].toDouble() && n <= range[1].toDouble();
-        }
-        if (op == "one-of") {
-            for (const auto& v : expected.toList())
-                if (n == v.toDouble())
-                    return true;
-        }
+    if (v.value("owner") == "kodi-pvr" && !validateKodiPvrOwner(v, error))
         return false;
-    }
-    QStringList values;
-    if (actual.metaType().id() == QMetaType::QStringList)
-        values = actual.toStringList();
-    else if (actual.metaType().id() == QMetaType::QVariantList)
-        for (const auto& v : actual.toList())
-            values.append(v.toString());
-    else
-        values.append(actual.toString());
-    bool found = false;
-    for (const auto& value : values) {
-        const auto target = expected.toString();
-        if (op == "is" || op == "is-not")
-            found |= value.compare(target, Qt::CaseInsensitive) == 0;
-        else if (op == "contains" || op == "does-not-contain")
-            found |= value.contains(target, Qt::CaseInsensitive);
-        else if (op == "starts-with")
-            found |= value.startsWith(target, Qt::CaseInsensitive);
-        else if (op == "one-of")
-            for (const auto& v : expected.toList())
-                found |= value.compare(v.toString(), Qt::CaseInsensitive) == 0;
-    }
-    return op == "is-not" || op == "does-not-contain" ? !found : found;
+    return true;
+}
+
+bool
+GuideRules::validateChannelTiming(const QVariantMap& v, QString* error)
+{
+    if ((v.contains("horizonDays") && !integer(v.value("horizonDays"), 1, 31)) ||
+        (v.contains("retentionDays") && !integer(v.value("retentionDays"), 0, 7)))
+        return reject(error, "Choose a 1–31 day schedule horizon and 0–7 days of retained history.");
+    if (v.contains("clockOffsetSeconds") &&
+        (!integer(v.value("clockOffsetSeconds"), -31 * 86400, 31 * 86400) ||
+         (v.value("clock") != "real-time" && v.value("clockOffsetSeconds").toLongLong() != 0)))
+        return reject(error, "Only real-time local channels support a broadcast offset, bounded to 31 days.");
+    return true;
 }

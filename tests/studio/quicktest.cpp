@@ -21,15 +21,20 @@
 
 // No service, network client or normal-profile path is supplied to the editor.
 // Each scenario owns a new saved document under this process's temporary root.
-class StudioTestSetup : public QObject {
+class StudioTestSetup : public QObject
+{
     Q_OBJECT
     Q_PROPERTY(QString artifacts READ artifacts CONSTANT)
     Q_PROPERTY(QObject* sources READ sources NOTIFY sourcesChanged)
   public:
-    QObject* sources() const {
+    QObject*
+    sources() const
+    {
         return sourceManager.get();
     }
-    Q_INVOKABLE bool resetSources(int count) {
+    Q_INVOKABLE bool
+    resetSources(int count)
+    {
         if (count < 0 || count > 12 || !reset())
             return false;
         if (!registry.loadFromData(
@@ -50,11 +55,14 @@ class StudioTestSetup : public QObject {
         emit sourcesChanged();
         return true;
     }
-    Q_INVOKABLE void sourcesConnected(bool connected) {
+    Q_INVOKABLE void
+    sourcesConnected(bool connected)
+    {
         if (sourceManager)
             sourceManager->setProbeRootsForTests(connected ? QStringList{sourceRoot} : QStringList{});
     }
-    StudioTestSetup() : home(&registry) {
+    StudioTestSetup() : home(&registry)
+    {
         if (!temp.isValid())
             return;
         // Exercise the real global display binding without reading or writing
@@ -65,20 +73,28 @@ class StudioTestSetup : public QObject {
         QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, temp.path());
         display = std::make_unique<DisplaySettings>();
     }
-    QString artifacts() const {
+    QString
+    artifacts() const
+    {
         return qEnvironmentVariable("ISOLDE_TEST_ARTIFACTS");
     }
-    Q_INVOKABLE double monotonicMilliseconds() const {
+    Q_INVOKABLE double
+    monotonicMilliseconds() const
+    {
         return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now().time_since_epoch()).count();
     }
-    Q_INVOKABLE int activeStudioClients() const {
+    Q_INVOKABLE int
+    activeStudioClients() const
+    {
         int count = 0;
         for (auto* session : home.findChildren<StudioSession*>())
             if (session->property("active").toBool())
                 ++count;
         return count;
     }
-    Q_INVOKABLE bool writePerformance(const QString& tag, const QVariantMap& receipt) const {
+    Q_INVOKABLE bool
+    writePerformance(const QString& tag, const QVariantMap& receipt) const
+    {
         if (!QStringList{"720", "1080"}.contains(tag) || artifacts().isEmpty())
             return false;
         QSaveFile output(QDir(artifacts()).filePath("studio-performance-" + tag + ".json"));
@@ -86,7 +102,9 @@ class StudioTestSetup : public QObject {
         return output.open(QIODevice::WriteOnly) && output.write(bytes) == bytes.size() && output.commit();
     }
 
-    Q_INVOKABLE QString referenceFixture() const {
+    Q_INVOKABLE QString
+    referenceFixture() const
+    {
         const auto directory = temp.filePath(QString("reference-input-%1").arg(sequence));
         if (!QDir().mkpath(directory))
             return {};
@@ -95,9 +113,12 @@ class StudioTestSetup : public QObject {
         image.fill(QColor("#6688aa"));
         return image.save(path) ? path : QString();
     }
-    Q_INVOKABLE QVariantList iconAppsFixture() const {
+    Q_INVOKABLE QVariantList
+    iconAppsFixture() const
+    {
         AppRegistry icons;
-        for (const auto& id : QStringList{"spotify", "netflix", "steam"}) {
+        for (const auto& id : QStringList{"spotify", "netflix", "steam"})
+        {
             AppDefinition app;
             app.id = id;
             app.name = id == "spotify" ? "Spotify" : id == "netflix" ? "Netflix" : "Steam";
@@ -107,7 +128,9 @@ class StudioTestSetup : public QObject {
         }
         return icons.apps();
     }
-    Q_INVOKABLE QString iconArtworkFixture() const {
+    Q_INVOKABLE QString
+    iconArtworkFixture() const
+    {
         const auto path = temp.filePath("icon-artwork-input");
         QDir().mkpath(path);
         QImage image(64, 64, QImage::Format_ARGB32);
@@ -119,14 +142,17 @@ class StudioTestSetup : public QObject {
         const auto file = path + "/logo.png";
         return image.save(file) ? file : QString();
     }
-    Q_INVOKABLE QString artworkFixture() const {
+    Q_INVOKABLE QString
+    artworkFixture() const
+    {
         const auto path = temp.filePath("artwork-input");
         QDir().mkpath(path);
         QFile file(path + "/animation.gif");
         if (!file.open(QIODevice::WriteOnly))
             return {};
         auto bytes = QByteArray::fromHex("47494638396101000100800000ff00000000ff");
-        for (int i = 0; i < 2; ++i) {
+        for (int i = 0; i < 2; ++i)
+        {
             bytes += QByteArray::fromHex("21f90400640000002c0000000001000100000202");
             bytes += QByteArray::fromHex(i ? "4c0100" : "440100");
         }
@@ -135,7 +161,8 @@ class StudioTestSetup : public QObject {
         return file.fileName();
     }
     Q_INVOKABLE bool
-    reset(bool full = false, bool scrolling = false, bool flow = false, bool arrangement = false, int scaleCount = 0) {
+    reset(bool full = false, bool scrolling = false, bool flow = false, bool arrangement = false, int scaleCount = 0)
+    {
         if (!temp.isValid() || scaleCount < 0 || scaleCount > 1024)
             return false;
         const int columns = scaleCount ? 16 : 4;
@@ -152,7 +179,8 @@ class StudioTestSetup : public QObject {
                         {"showClock", false},
                         {"grid", QJsonObject{{"columns", columns}, {"rows", scaleCount ? 10 : 3}, {"mode", "screen"}}}};
         QJsonArray nodes;
-        for (int i = 0; i < (scaleCount ? scaleCount : arrangement ? 3 : full ? 12 : 1); ++i) {
+        for (int i = 0; i < (scaleCount ? scaleCount : arrangement ? 3 : full ? 12 : 1); ++i)
+        {
             const auto node = ComponentSchema::component({{"id", QString("cell-%1").arg(i)},
                                                           {"kind", "widget"},
                                                           {"widgetType", "text"},
@@ -167,9 +195,11 @@ class StudioTestSetup : public QObject {
                 return false;
             nodes.append(QJsonObject::fromVariantMap(node));
         }
-        if (flow) {
+        if (flow)
+        {
             doc["composition"] = QJsonObject{{"schemaVersion", 1}, {"enabled", false}};
-            for (int i = 0; i < nodes.size(); ++i) {
+            for (int i = 0; i < nodes.size(); ++i)
+            {
                 auto node = nodes[i].toObject();
                 node.remove("placement");
                 nodes[i] = node;
@@ -183,20 +213,28 @@ class StudioTestSetup : public QObject {
         file.close();
         return home.load(QStringLiteral(STUDIO_DEFAULTS), saved);
     }
-    Q_INVOKABLE bool resetPastel() {
+    Q_INVOKABLE bool
+    resetPastel()
+    {
         if (!temp.isValid())
             return false;
         saved = temp.filePath(QString("scenario-%1.json").arg(++sequence));
         return home.load(QStringLiteral(STUDIO_DEFAULTS), saved) && home.applySkin("builtin-pastel");
     }
-    Q_INVOKABLE QVariantMap surfacePalette(const QVariantMap& appearance) const {
+    Q_INVOKABLE QVariantMap
+    surfacePalette(const QVariantMap& appearance) const
+    {
         return ComponentSchema::surfacePalette(appearance);
     }
-    Q_INVOKABLE QString disk() const {
+    Q_INVOKABLE QString
+    disk() const
+    {
         QFile file(saved);
         return file.open(QIODevice::ReadOnly) ? QString::fromUtf8(file.readAll()) : QString();
     }
-    Q_INVOKABLE bool writeGalleryPresentation(const QVariantMap& presentation) const {
+    Q_INVOKABLE bool
+    writeGalleryPresentation(const QVariantMap& presentation) const
+    {
         if (artifacts().isEmpty() ||
             !ComponentSchema::validComposition({{"schemaVersion", 1}, {"appGallery", presentation}}))
             return false;
@@ -207,9 +245,12 @@ class StudioTestSetup : public QObject {
         return output.open(QIODevice::WriteOnly) && output.write(bytes) == bytes.size() && output.commit();
     }
   signals:
-    void sourcesChanged();
+    void
+    sourcesChanged();
   public slots:
-    void qmlEngineAvailable(QQmlEngine* engine) {
+    void
+    qmlEngineAvailable(QQmlEngine* engine)
+    {
         engine->rootContext()->setContextProperty("studioFixture", this);
         engine->rootContext()->setContextProperty("homeLayout", &home);
         engine->rootContext()->setContextProperty("inputManager", &input);

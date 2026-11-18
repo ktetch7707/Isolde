@@ -15,8 +15,10 @@
 #include <Qt>
 
 InputManager::InputManager(QObject* parent) : InputManager(QString{}, parent) {}
-InputManager::InputManager(const QString& storagePath, QObject* parent) : QObject(parent), m_storagePath(storagePath) {
-    static const bool resourcesReady = [] {
+InputManager::InputManager(const QString& storagePath, QObject* parent) : QObject(parent), m_storagePath(storagePath)
+{
+    static const bool resourcesReady = []
+    {
         Q_INIT_RESOURCE(remote_buttons);
         return true;
     }();
@@ -24,18 +26,25 @@ InputManager::InputManager(const QString& storagePath, QObject* parent) : QObjec
     if (qApp)
         qApp->installEventFilter(this);
     m_captureDeadline.setSingleShot(true);
-    connect(&m_captureDeadline, &QTimer::timeout, this, [this] {
-        cancelBinding();
-        m_status = tr("No binding saved. Select an action to try again.");
-        emit bindingsChanged();
-    });
+    connect(&m_captureDeadline,
+            &QTimer::timeout,
+            this,
+            [this]
+            {
+                cancelBinding();
+                m_status = tr("No binding saved. Select an action to try again.");
+                emit bindingsChanged();
+            });
     loadBindings();
 }
-InputManager::~InputManager() {
+InputManager::~InputManager()
+{
     if (qApp)
         qApp->removeEventFilter(this);
 }
-static QString nativeShortcutForKey(int key) {
+static QString
+nativeShortcutForKey(int key)
+{
     if (key == Qt::Key_Home)
         return QStringLiteral("Home");
     if (key >= Qt::Key_F1 && key <= Qt::Key_F35)
@@ -44,10 +53,14 @@ static QString nativeShortcutForKey(int key) {
         return QString(QChar(key)).toLower();
     return {};
 }
-QString InputManager::nativeReturnShortcut() const {
+QString
+InputManager::nativeReturnShortcut() const
+{
     return m_bindings.contains(Home) ? nativeShortcutForKey(m_bindings.value(Home)) : QString{};
 }
-QVariantMap InputManager::webRemoteOptions(const QVariantMap& appearance) const {
+QVariantMap
+InputManager::webRemoteOptions(const QVariantMap& appearance) const
+{
     auto options = appearance;
     QVariantMap bindings;
     const QMap<int, QString> commands{{NavigateUp, "up"},
@@ -59,7 +72,8 @@ QVariantMap InputManager::webRemoteOptions(const QVariantMap& appearance) const 
                                       {Home, "home"},
                                       {Menu, "menu"},
                                       {Search, "search"}};
-    for (auto it = m_bindings.cbegin(); it != m_bindings.cend(); ++it) {
+    for (auto it = m_bindings.cbegin(); it != m_bindings.cend(); ++it)
+    {
         if (!commands.contains(it.key()))
             continue;
         QString key;
@@ -73,74 +87,102 @@ QVariantMap InputManager::webRemoteOptions(const QVariantMap& appearance) const 
     options["keyBindings"] = bindings;
     return options;
 }
-QString InputManager::webRemoteScript(const QVariantMap& appearance) const {
+QString
+InputManager::webRemoteScript(const QVariantMap& appearance) const
+{
     return ::webRemoteScript(webRemoteOptions(appearance));
 }
 
-InputManager::Command InputManager::commandForKey(int key) const {
+InputManager::Command
+InputManager::commandForKey(int key) const
+{
     for (auto it = m_bindings.cbegin(); it != m_bindings.cend(); ++it)
         if (it.value() == key)
             return static_cast<Command>(it.key());
     return defaultCommandForKey(key);
 }
 
-InputManager::Command InputManager::defaultCommandForKey(int key) {
-    switch (key) {
-    case Qt::Key_Up: return NavigateUp;
-    case Qt::Key_Down: return NavigateDown;
-    case Qt::Key_Left: return NavigateLeft;
-    case Qt::Key_Right: return NavigateRight;
+InputManager::Command
+InputManager::defaultCommandForKey(int key)
+{
+    switch (key)
+    {
+    case Qt::Key_Up:
+        return NavigateUp;
+    case Qt::Key_Down:
+        return NavigateDown;
+    case Qt::Key_Left:
+        return NavigateLeft;
+    case Qt::Key_Right:
+        return NavigateRight;
     case Qt::Key_Return:
     case Qt::Key_Enter:
-    case Qt::Key_Space: return Confirm;
+    case Qt::Key_Space:
+        return Confirm;
     case Qt::Key_Escape:
-    case Qt::Key_Back: return Back;
+    case Qt::Key_Back:
+        return Back;
     case Qt::Key_Home:
-    case Qt::Key_H: return Home;
+    case Qt::Key_H:
+        return Home;
     case Qt::Key_VolumeUp:
     case Qt::Key_Plus:
-    case Qt::Key_Equal: return VolumeUp;
+    case Qt::Key_Equal:
+        return VolumeUp;
     case Qt::Key_VolumeDown:
-    case Qt::Key_Minus: return VolumeDown;
+    case Qt::Key_Minus:
+        return VolumeDown;
     case Qt::Key_VolumeMute:
-    case Qt::Key_M: return Mute;
+    case Qt::Key_M:
+        return Mute;
     case Qt::Key_PowerOff:
-    case Qt::Key_Suspend: return Power;
+    case Qt::Key_Suspend:
+        return Power;
     case Qt::Key_MediaTogglePlayPause:
     case Qt::Key_MediaPlay:
-    case Qt::Key_MediaPause: return PlayPause;
-    case Qt::Key_Menu: return Menu;
-    case Qt::Key_Search: return Search;
-    default: return None;
+    case Qt::Key_MediaPause:
+        return PlayPause;
+    case Qt::Key_Menu:
+        return Menu;
+    case Qt::Key_Search:
+        return Search;
+    default:
+        return None;
     }
 }
 
-QString InputManager::labelForCommand(Command command) const {
-    switch (command) {
-    case NavigateUp: return QStringLiteral("Up");
-    case NavigateDown: return QStringLiteral("Down");
-    case NavigateLeft: return QStringLiteral("Left");
-    case NavigateRight: return QStringLiteral("Right");
-    case Confirm: return QStringLiteral("OK / Select");
-    case Back: return QStringLiteral("Back");
-    case Home: return QStringLiteral("Home");
-    case VolumeUp: return QStringLiteral("Volume +");
-    case VolumeDown: return QStringLiteral("Volume -");
-    case Mute: return QStringLiteral("Mute");
-    case Power: return QStringLiteral("Power");
-    case PlayPause: return QStringLiteral("Play / Pause");
-    case Menu: return QStringLiteral("Menu");
-    case Search: return QStringLiteral("Search");
-    case None: return QStringLiteral("Unknown input");
-    }
-    return QStringLiteral("Unknown input");
+QString
+InputManager::labelForCommand(Command command) const
+{
+    static const QMap<Command, QString> labels{
+        {NavigateUp, QStringLiteral("Up")},
+        {NavigateDown, QStringLiteral("Down")},
+        {NavigateLeft, QStringLiteral("Left")},
+        {NavigateRight, QStringLiteral("Right")},
+        {Confirm, QStringLiteral("OK / Select")},
+        {Back, QStringLiteral("Back")},
+        {Home, QStringLiteral("Home")},
+        {VolumeUp, QStringLiteral("Volume +")},
+        {VolumeDown, QStringLiteral("Volume -")},
+        {Mute, QStringLiteral("Mute")},
+        {Power, QStringLiteral("Power")},
+        {PlayPause, QStringLiteral("Play / Pause")},
+        {Menu, QStringLiteral("Menu")},
+        {Search, QStringLiteral("Search")},
+        {None, QStringLiteral("Unknown input")},
+    };
+    return labels.value(command, QStringLiteral("Unknown input"));
 }
 
-namespace {
-bool safeBindingPath(QString path) {
+namespace
+{
+bool
+safeBindingPath(QString path)
+{
     if (!QDir::isAbsolutePath(path))
         return false;
-    for (;;) {
+    for (;;)
+    {
         const QFileInfo info(path);
         if (info.isSymLink())
             return false;
@@ -150,8 +192,11 @@ bool safeBindingPath(QString path) {
         path = parent;
     }
 }
-bool usableKey(int key) {
-    switch (key) {
+bool
+usableKey(int key)
+{
+    switch (key)
+    {
     case Qt::Key_Shift:
     case Qt::Key_Control:
     case Qt::Key_Meta:
@@ -163,18 +208,24 @@ bool usableKey(int key) {
     case Qt::Key_Super_L:
     case Qt::Key_Super_R:
     case Qt::Key_Hyper_L:
-    case Qt::Key_Hyper_R: return false;
-    default: break;
+    case Qt::Key_Hyper_R:
+        return false;
+    default:
+        break;
     }
     return key >= Qt::Key_Space && key < Qt::Key_unknown && key != Qt::Key_Escape;
 }
-QString keyLabel(int key) {
+QString
+keyLabel(int key)
+{
     const auto label = QKeySequence(key).toString(QKeySequence::NativeText);
     return label.isEmpty() ? QStringLiteral("Button %1").arg(key) : label;
 }
 } // namespace
 
-QVariantList InputManager::bindingRows() const {
+QVariantList
+InputManager::bindingRows() const
+{
     QFile file(QStringLiteral(":/config/remote-buttons.json"));
     if (!file.open(QIODevice::ReadOnly))
         return {};
@@ -183,7 +234,8 @@ QVariantList InputManager::bindingRows() const {
         return {};
     QVariantList result;
     QSet<int> seen;
-    for (const auto& value : doc.value("actions").toArray()) {
+    for (const auto& value : doc.value("actions").toArray())
+    {
         const auto row = value.toObject();
         const int command = row.value("command").toInt();
         if (command <= None || command > Search || seen.contains(command) || row.value("name").toString().isEmpty() ||
@@ -199,7 +251,9 @@ QVariantList InputManager::bindingRows() const {
     return seen.size() == Search ? result : QVariantList{};
 }
 
-bool InputManager::beginBinding(int command) {
+bool
+InputManager::beginBinding(int command)
+{
     if (command <= None || command > Search)
         return false;
     m_target = static_cast<Command>(command);
@@ -215,72 +269,108 @@ bool InputManager::beginBinding(int command) {
     return true;
 }
 
-void InputManager::setAmbientInputActive(bool active) {
+void
+InputManager::setAmbientInputActive(bool active)
+{
     if (m_ambientInputActive == active)
         return;
     m_ambientInputActive = active;
     emit ambientInputActiveChanged();
 }
 
-bool InputManager::eventFilter(QObject* object, QEvent* event) {
+bool
+InputManager::eventFilter(QObject* object, QEvent* event)
+{
     Q_UNUSED(object);
-    if (event->type() == QEvent::ApplicationDeactivate) {
+    if (event->type() == QEvent::ApplicationDeactivate)
+    {
         m_ambientWakeKey = -1;
         if (bindingActive())
             cancelBinding();
     }
-    if (event->type() == QEvent::ShortcutOverride) {
+    if (event->type() == QEvent::ShortcutOverride)
+    {
         const auto key = static_cast<QKeyEvent*>(event);
-        const auto shortcutModifiers = Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier;
-        const bool customBinding = !(key->modifiers() & shortcutModifiers) && m_bindings.values().contains(key->key());
-        bool textInput = false;
-        if (!bindingActive() && m_acceptTextKeys) {
-            for (auto it = m_textInputTargets.rbegin(); it != m_textInputTargets.rend(); ++it) {
-                const QPointer<QObject> target = *it;
-                if (!target || !target->property("visible").toBool() || !target->property("enabled").toBool())
-                    continue;
-                const bool chord =
-                    (key->modifiers() & shortcutModifiers) && !(key->modifiers() & Qt::GroupSwitchModifier);
-                bool printable = !key->text().isEmpty();
-                for (const QChar ch : key->text())
-                    if (ch.unicode() < 0x20 || (ch.unicode() >= 0x7f && ch.unicode() <= 0x9f))
-                        printable = false;
-                textInput = chord || printable;
-                break;
-            }
-        }
-        if (m_ambientInputActive || key->key() == m_ambientWakeKey || listening() || customBinding || textInput) {
-            event->accept();
+        if (handleShortcutOverride(key, event))
             return true;
-        }
     }
-    if (event->type() == QEvent::KeyRelease) {
+    if (event->type() == QEvent::KeyRelease)
+    {
         const auto key = static_cast<QKeyEvent*>(event);
-        if (key->key() == m_ambientWakeKey) {
-            if (!key->isAutoRepeat())
-                m_ambientWakeKey = -1;
+        if (handleKeyRelease(key))
             return true;
-        }
-        if (m_textReleaseKeys.contains(key->key())) {
-            if (!key->isAutoRepeat())
-                m_textReleaseKeys.remove(key->key());
-            return true;
-        }
-        if (key->key() == m_releaseKey) {
-            if (!key->isAutoRepeat())
-                m_releaseKey = 0;
-            return true;
-        }
     }
     if (event->type() != QEvent::KeyPress)
         return false;
-    const auto key = static_cast<QKeyEvent*>(event);
-    if (m_ambientInputActive) {
+    return handleKeyPress(static_cast<QKeyEvent*>(event));
+}
+
+bool
+InputManager::handleShortcutOverride(QKeyEvent* key, QEvent* event)
+{
+    const auto shortcutModifiers = Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier;
+    const bool customBinding = !(key->modifiers() & shortcutModifiers) && m_bindings.values().contains(key->key());
+    bool textInput = false;
+    if (!bindingActive() && m_acceptTextKeys)
+    {
+        for (auto it = m_textInputTargets.rbegin(); it != m_textInputTargets.rend(); ++it)
+        {
+            const QPointer<QObject> target = *it;
+            if (!target || !target->property("visible").toBool() || !target->property("enabled").toBool())
+                continue;
+            const bool chord =
+                (key->modifiers() & shortcutModifiers) && !(key->modifiers() & Qt::GroupSwitchModifier);
+            bool printable = !key->text().isEmpty();
+            for (const QChar ch : key->text())
+                if (ch.unicode() < 0x20 || (ch.unicode() >= 0x7f && ch.unicode() <= 0x9f))
+                    printable = false;
+            textInput = chord || printable;
+            break;
+        }
+    }
+    if (m_ambientInputActive || key->key() == m_ambientWakeKey || listening() || customBinding || textInput)
+    {
+        event->accept();
+        return true;
+    }
+    return false;
+}
+
+bool
+InputManager::handleKeyRelease(QKeyEvent* key)
+{
+    if (key->key() == m_ambientWakeKey)
+    {
+        if (!key->isAutoRepeat())
+            m_ambientWakeKey = -1;
+        return true;
+    }
+    if (m_textReleaseKeys.contains(key->key()))
+    {
+        if (!key->isAutoRepeat())
+            m_textReleaseKeys.remove(key->key());
+        return true;
+    }
+    if (key->key() == m_releaseKey)
+    {
+        if (!key->isAutoRepeat())
+            m_releaseKey = 0;
+        return true;
+    }
+    return false;
+}
+
+bool
+InputManager::handleKeyPress(QKeyEvent* key)
+{
+    if (m_ambientInputActive)
+    {
         m_ambientWakeKey = key->key();
         emit ambientWakeRequested();
         return true;
     }
-    if (key->key() == m_ambientWakeKey) {
+    if (key->key() == m_ambientWakeKey)
+    {
         if (key->isAutoRepeat())
             return true;
         m_ambientWakeKey = -1;
@@ -288,8 +378,10 @@ bool InputManager::eventFilter(QObject* object, QEvent* event) {
     emit inputActivity();
     if (m_releaseKey == key->key() && key->isAutoRepeat())
         return true;
-    if (!bindingActive() && m_acceptTextKeys) {
-        for (auto it = m_textInputTargets.rbegin(); it != m_textInputTargets.rend(); ++it) {
+    if (!bindingActive() && m_acceptTextKeys)
+    {
+        for (auto it = m_textInputTargets.rbegin(); it != m_textInputTargets.rend(); ++it)
+        {
             const QPointer<QObject> target = *it;
             if (!target || !target->property("visible").toBool() || !target->property("enabled").toBool())
                 continue;
@@ -302,11 +394,12 @@ bool InputManager::eventFilter(QObject* object, QEvent* event) {
                                                            Q_ARG(QVariant, key->text()),
                                                            Q_ARG(QVariant, static_cast<int>(key->modifiers())),
                                                            Q_ARG(QVariant, key->isAutoRepeat()));
-            if (invoked && handled.toBool()) {
+            if (invoked && handled.toBool())
+            {
                 m_textReleaseKeys.insert(key->key());
                 return true;
             }
-            break; // only the frontmost visible keyboard receives text
+            break;
         }
     }
     if (m_textReleaseKeys.contains(key->key()) && key->isAutoRepeat())
@@ -316,25 +409,35 @@ bool InputManager::eventFilter(QObject* object, QEvent* event) {
     if (key->isAutoRepeat())
         return true;
     m_releaseKey = key->key();
-    if (key->key() == Qt::Key_Escape) {
+    if (key->key() == Qt::Key_Escape)
+    {
         cancelBinding();
         return true;
     }
-    if (commandForKey(key->key()) == Back && m_target != Back) {
+    if (commandForKey(key->key()) == Back && m_target != Back)
+    {
         cancelBinding();
         return true;
     }
-    if (!usableKey(key->key()) || (key->modifiers() & (Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier))) {
+    if (!usableKey(key->key()) || (key->modifiers() & (Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier)))
+    {
         m_error = tr("Use a single remote button, without Ctrl, Alt or Meta.");
-    } else if (m_target == Home && nativeShortcutForKey(key->key()).isEmpty()) {
+    }
+    else if (m_target == Home && nativeShortcutForKey(key->key()).isEmpty())
+    {
         m_error = tr(
             "Home also returns from native apps. Choose a letter, number, function key or the standard Home button.");
-    } else {
+    }
+    else
+    {
         const auto assigned = commandForKey(key->key());
-        if (assigned != None && assigned != m_target) {
+        if (assigned != None && assigned != m_target)
+        {
             m_error = tr("%1 already controls %2. Choose another button; the existing binding is unchanged.")
                           .arg(keyLabel(key->key()), labelForCommand(assigned));
-        } else {
+        }
+        else
+        {
             m_candidate = key->key();
             m_error.clear();
             m_status = tr("Use %1 for %2? Select Save binding or Cancel. Standard buttons remain available.")
@@ -346,7 +449,9 @@ bool InputManager::eventFilter(QObject* object, QEvent* event) {
     return true;
 }
 
-bool InputManager::saveBinding() {
+bool
+InputManager::saveBinding()
+{
     if (!bindingActive() || !m_candidate)
         return false;
     auto bindings = m_bindings;
@@ -360,7 +465,9 @@ bool InputManager::saveBinding() {
     return true;
 }
 
-void InputManager::cancelBinding() {
+void
+InputManager::cancelBinding()
+{
     m_captureDeadline.stop();
     m_target = None;
     m_candidate = 0;
@@ -369,8 +476,10 @@ void InputManager::cancelBinding() {
     emit bindingsChanged();
 }
 
-bool InputManager::clearBinding(int command) {
-    if (command <= None || command > Search)
+bool
+InputManager::clearBinding(int command)
+{
+    if (!isValidCommand(command))
         return false;
     auto bindings = m_bindings;
     bindings.remove(command);
@@ -381,7 +490,15 @@ bool InputManager::clearBinding(int command) {
     return true;
 }
 
-bool InputManager::resetBindings() {
+bool
+InputManager::isValidCommand(int command)
+{
+    return command > None && command <= Search;
+}
+
+bool
+InputManager::resetBindings()
+{
     if (!persist({}, m_acceptTextKeys))
         return false;
     m_bindings.clear();
@@ -389,7 +506,9 @@ bool InputManager::resetBindings() {
     return true;
 }
 
-bool InputManager::setAcceptTextKeys(bool enabled) {
+bool
+InputManager::setAcceptTextKeys(bool enabled)
+{
     if (enabled == m_acceptTextKeys)
         return true;
     if (!persist(m_bindings, enabled))
@@ -399,7 +518,9 @@ bool InputManager::setAcceptTextKeys(bool enabled) {
     return true;
 }
 
-void InputManager::setTextInputTarget(QObject* target, bool active) {
+void
+InputManager::setTextInputTarget(QObject* target, bool active)
+{
     for (qsizetype i = m_textInputTargets.size(); i-- > 0;)
         if (!m_textInputTargets[i] || m_textInputTargets[i] == target)
             m_textInputTargets.removeAt(i);
@@ -408,8 +529,11 @@ void InputManager::setTextInputTarget(QObject* target, bool active) {
         m_textInputTargets.append(target);
 }
 
-bool InputManager::persist(const QMap<int, int>& bindings, bool acceptTextKeys) {
-    auto fail = [this] {
+bool
+InputManager::persist(const QMap<int, int>& bindings, bool acceptTextKeys)
+{
+    auto fail = [this]
+    {
         m_error = tr("Could not save remote input settings. Previous settings are unchanged. Check storage and retry.");
         emit bindingsChanged();
         return false;
@@ -423,7 +547,8 @@ bool InputManager::persist(const QMap<int, int>& bindings, bool acceptTextKeys) 
     const auto bytes =
         QJsonDocument(QJsonObject{{"schemaVersion", 1}, {"bindings", values}, {"acceptTextKeys", acceptTextKeys}})
             .toJson();
-    if (QFileInfo::exists(m_storagePath)) {
+    if (QFileInfo::exists(m_storagePath))
+    {
         QFile previous(m_storagePath);
         if (!previous.open(QIODevice::ReadOnly) || previous.size() > 8192)
             return fail();
@@ -441,39 +566,48 @@ bool InputManager::persist(const QMap<int, int>& bindings, bool acceptTextKeys) 
     return true;
 }
 
-void InputManager::loadBindings() {
+void
+InputManager::loadBindings()
+{
     if (m_storagePath.isEmpty() || !QFileInfo::exists(m_storagePath))
         return;
-    auto invalid = [this] {
-        m_error = tr("Saved remote bindings are invalid or unreadable. Standard buttons are active; the saved file was "
-                     "preserved.");
+    auto invalid = [this]
+    {
+        m_error =
+            tr("Saved remote bindings are invalid or unreadable. Standard buttons are active; the saved file was "
+               "preserved.");
     };
     QFile file(m_storagePath);
-    if (!safeBindingPath(m_storagePath) || !file.open(QIODevice::ReadOnly) || file.size() > 8192) {
+    if (!safeBindingPath(m_storagePath) || !file.open(QIODevice::ReadOnly) || file.size() > 8192)
+    {
         invalid();
         return;
     }
     const auto doc = QJsonDocument::fromJson(file.readAll()).object();
     if ((doc.size() != 2 && doc.size() != 3) || doc.value("schemaVersion") != QJsonValue(1) ||
         !doc.value("bindings").isObject() ||
-        (doc.size() == 3 && (!doc.contains("acceptTextKeys") || !doc.value("acceptTextKeys").isBool()))) {
+        (doc.size() == 3 && (!doc.contains("acceptTextKeys") || !doc.value("acceptTextKeys").isBool())))
+    {
         invalid();
         return;
     }
     const auto values = doc.value("bindings").toObject();
-    if (values.size() > Search) {
+    if (values.size() > Search)
+    {
         invalid();
         return;
     }
     QMap<int, int> bindings;
     QSet<int> keys;
-    for (auto it = values.begin(); it != values.end(); ++it) {
+    for (auto it = values.begin(); it != values.end(); ++it)
+    {
         const int command = it.key().toInt(), key = it.value().toInt();
         const auto standard = defaultCommandForKey(key);
         if (command <= None || command > Search || it.key() != QString::number(command) || !it.value().isDouble() ||
             it.value().toDouble() != key || !usableKey(key) ||
             (command == Home && nativeShortcutForKey(key).isEmpty()) || keys.contains(key) ||
-            (standard != None && standard != command)) {
+            (standard != None && standard != command))
+        {
             invalid();
             return;
         }

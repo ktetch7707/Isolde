@@ -29,20 +29,27 @@
 #include <unistd.h>
 #endif
 
-class GuideWorker final : public QObject {
+class GuideWorker final : public QObject
+{
     Q_OBJECT
   public:
     explicit GuideWorker(QString path) : path(std::move(path)) {}
     QString path;
     std::unique_ptr<GuideStore> store;
   signals:
-    void completed(quint64 id, const QVariantMap& result);
+    void
+    completed(quint64 id, const QVariantMap& result);
 };
-namespace {
-qint64 now() {
+namespace
+{
+qint64
+now()
+{
     return QDateTime::currentSecsSinceEpoch();
 }
-bool integer(const QVariant& value, qint64 minimum, qint64 maximum) {
+bool
+integer(const QVariant& value, qint64 minimum, qint64 maximum)
+{
     const auto type = value.metaType().id();
     if (type != QMetaType::Int && type != QMetaType::UInt && type != QMetaType::LongLong &&
         type != QMetaType::ULongLong && type != QMetaType::Double)
@@ -51,10 +58,14 @@ bool integer(const QVariant& value, qint64 minimum, qint64 maximum) {
     const auto number = value.toDouble(&ok);
     return ok && std::isfinite(number) && std::floor(number) == number && number >= minimum && number <= maximum;
 }
-QVariantMap outcome(bool ok, GuideStore& store) {
+QVariantMap
+outcome(bool ok, GuideStore& store)
+{
     return {{"ok", ok}, {"error", ok ? QString() : store.errorString()}};
 }
-bool portablePath(const QString& path) {
+bool
+portablePath(const QString& path)
+{
     for (const auto c : path)
         if (c.unicode() < 32 || c.unicode() == 127)
             return false;
@@ -62,7 +73,8 @@ bool portablePath(const QString& path) {
         (!path.endsWith(".json", Qt::CaseInsensitive) && !path.endsWith(".xsp", Qt::CaseInsensitive)) ||
         QFileInfo(path).isSymLink())
         return false;
-    for (auto dir = QFileInfo(path).absoluteDir();;) {
+    for (auto dir = QFileInfo(path).absoluteDir();;)
+    {
         if (QFileInfo(dir.absolutePath()).isSymLink())
             return false;
         if (dir.isRoot())
@@ -72,7 +84,9 @@ bool portablePath(const QString& path) {
     }
     return true;
 }
-QVariantMap cachedCurrent(GuideStore& store, const QString& id, qint64 wall) {
+QVariantMap
+cachedCurrent(GuideStore& store, const QString& id, qint64 wall)
+{
     auto current = store.tuneTarget(id, wall);
     if (!current.isEmpty())
         return current;
@@ -90,11 +104,14 @@ QVariantMap cachedCurrent(GuideStore& store, const QString& id, qint64 wall) {
     current["status"] = "unavailable";
     return current;
 }
-QVariantMap snapshot(GuideStore& store, qint64 from, qint64 to, int first) {
+QVariantMap
+snapshot(GuideStore& store, qint64 from, qint64 to, int first)
+{
     QVariantList rows;
     const auto channels = store.channels();
     int visible = 0;
-    for (const auto& v : channels) {
+    for (const auto& v : channels)
+    {
         auto channel = v.toMap();
         if (channel.value("hidden").toBool())
             continue;
@@ -108,7 +125,8 @@ QVariantMap snapshot(GuideStore& store, qint64 from, qint64 to, int first) {
         auto programs = store.programs(id, from + delta, to + delta, 1000);
         channel["listingsTruncated"] =
             programs.size() == 1000 && programs.last().toMap().value("endUtc").toLongLong() < to + delta;
-        for (auto& entry : programs) {
+        for (auto& entry : programs)
+        {
             auto slot = entry.toMap();
             slot["displayStartUtc"] = slot.value("startUtc").toLongLong() - delta;
             slot["displayEndUtc"] = slot.value("endUtc").toLongLong() - delta;
@@ -123,7 +141,8 @@ QVariantMap snapshot(GuideStore& store, qint64 from, qint64 to, int first) {
         rows.append(channel);
     }
     QVariantList compact;
-    for (const auto& v : channels) {
+    for (const auto& v : channels)
+    {
         auto channel = v.toMap();
         if (channel.value("hidden").toBool())
             continue;
@@ -133,7 +152,8 @@ QVariantMap snapshot(GuideStore& store, qint64 from, qint64 to, int first) {
         const auto current = channel.value("current").toMap();
         const auto end = current.value("endUtc", clock).toLongLong();
         auto next = store.programs(id, end, end + 86400, 3);
-        for (auto& entry : next) {
+        for (auto& entry : next)
+        {
             auto slot = entry.toMap();
             slot["displayStartUtc"] = slot.value("startUtc").toLongLong() - clock + wall;
             slot["displayEndUtc"] = slot.value("endUtc").toLongLong() - clock + wall;
@@ -156,121 +176,163 @@ GuideController::GuideController(const QString& path,
     : QObject(parent),
       m_directory(bridgeDirectory.isEmpty() ? QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) +
                                                   "/native-profiles/" + profile + "/kodi/home/.kodi/userdata/isolde"
-                                            : bridgeDirectory) {
+                                            : bridgeDirectory)
+{
     m_profileDirectory = QFileInfo(path).absolutePath();
     m_from = now();
     m_to = m_from + 7200;
     m_worker = new GuideWorker(path);
     m_worker->moveToThread(&m_thread);
     connect(&m_thread, &QThread::finished, m_worker, &QObject::deleteLater);
-    connect(m_worker, &GuideWorker::completed, this, [this](quint64 id, const QVariantMap& result) {
-        if (!m_valid || id != m_jobId)
-            return;
-        const bool background = m_background;
-        m_busy = m_background = false;
-        m_ready = result.value("ready").toBool();
-        m_channels = result.value("channels").toList();
-        m_rows = result.value("rows").toList();
-        m_compactRows = result.value("compactRows").toList();
-        if (!background || !result.value("error").toString().isEmpty())
-            m_error = result.value("error").toString();
-        m_status = m_error.isEmpty() ? tr("Saved guide ready") : m_error;
-        auto completed = std::move(m_completion);
-        m_completion = {};
-        emit changed();
-        if (completed)
-            completed(result);
-        if (!m_busy && !m_pendingDefinition.isEmpty()) {
-            const auto definition = m_pendingDefinition;
-            const auto kind = m_pendingKind;
-            m_pendingDefinition.clear();
-            m_pendingKind.clear();
-            previewLocal(definition, kind);
-            return;
-        }
-        if (!m_busy && m_pendingJob) {
-            auto job = std::move(m_pendingJob);
-            auto completion = std::move(m_pendingCompletion);
-            m_pendingJob = {};
-            m_pendingCompletion = {};
-            submit(std::move(job), std::move(completion));
-            return;
-        }
-        if (m_refreshPending && !m_busy) {
-            m_refreshPending = false;
-            refresh();
-        }
-    });
+    connect(m_worker,
+            &GuideWorker::completed,
+            this,
+            [this](quint64 id, const QVariantMap& result)
+            {
+                if (!m_valid || id != m_jobId)
+                    return;
+                const bool background = m_background;
+                m_busy = m_background = false;
+                m_ready = result.value("ready").toBool();
+                m_channels = result.value("channels").toList();
+                m_rows = result.value("rows").toList();
+                m_compactRows = result.value("compactRows").toList();
+                if (!background || !result.value("error").toString().isEmpty())
+                    m_error = result.value("error").toString();
+                m_status = m_error.isEmpty() ? tr("Saved guide ready") : m_error;
+                auto completed = std::move(m_completion);
+                m_completion = {};
+                emit changed();
+                if (completed)
+                    completed(result);
+                if (!m_busy && !m_pendingDefinition.isEmpty())
+                {
+                    const auto definition = m_pendingDefinition;
+                    const auto kind = m_pendingKind;
+                    m_pendingDefinition.clear();
+                    m_pendingKind.clear();
+                    previewLocal(definition, kind);
+                    return;
+                }
+                if (!m_busy && m_pendingJob)
+                {
+                    auto job = std::move(m_pendingJob);
+                    auto completion = std::move(m_pendingCompletion);
+                    m_pendingJob = {};
+                    m_pendingCompletion = {};
+                    submit(std::move(job), std::move(completion));
+                    return;
+                }
+                if (m_refreshPending && !m_busy)
+                {
+                    m_refreshPending = false;
+                    refresh();
+                }
+            });
     m_thread.start();
     const auto profileDirectory = m_profileDirectory;
     submit(
-        [profileDirectory](GuideStore& store) {
+        [profileDirectory](GuideStore& store)
+        {
             auto result = outcome(store.resumeClocks(now()), store);
             result["clockWarning"] = GuideClock::warning(profileDirectory, GuideClock::observation());
             return result;
         },
-        [this](const QVariantMap& result) {
+        [this](const QVariantMap& result)
+        {
             m_clockWarning = result.value("clockWarning").toString();
             emit changed();
             QTimer::singleShot(0, this, &GuideController::maintainSchedules);
         },
         true);
     m_maintenance.setInterval(60000);
-    connect(&m_maintenance, &QTimer::timeout, this, [this] {
-        m_maintenanceAttempted.clear();
-        maintainSchedules();
-    });
+    connect(&m_maintenance,
+            &QTimer::timeout,
+            this,
+            [this]
+            {
+                m_maintenanceAttempted.clear();
+                maintainSchedules();
+            });
     m_maintenance.start();
     m_checkpoint.setInterval(30000);
-    connect(&m_checkpoint, &QTimer::timeout, this, [this] {
-        if (m_valid && m_ready && !m_busy && m_clockWarning.isEmpty()) {
-            const auto profile = m_profileDirectory;
-            submit(
-                [profile](GuideStore& store) {
-                    auto result = outcome(store.setActive(true, now()), store);
-                    const auto observation = GuideClock::observation();
-                    const auto warning = GuideClock::warning(profile, observation);
-                    result["clockWarning"] = warning;
-                    if (warning.isEmpty() && result.value("ok").toBool() && !GuideClock::save(profile, observation))
-                        result = {{"ok", false}, {"error", "Cannot save this profile's clock observation."}};
-                    return result;
-                },
-                [this](const QVariantMap& result) {
-                    if (!result.value("clockWarning").toString().isEmpty()) {
-                        m_clockWarning = result.value("clockWarning").toString();
-                        emit changed();
-                    }
-                },
-                true);
-        }
-    });
+    connect(&m_checkpoint,
+            &QTimer::timeout,
+            this,
+            [this]
+            {
+                if (m_valid && m_ready && !m_busy && m_clockWarning.isEmpty())
+                {
+                    const auto profile = m_profileDirectory;
+                    submit(
+                        [profile](GuideStore& store)
+                        {
+                            auto result = outcome(store.setActive(true, now()), store);
+                            const auto observation = GuideClock::observation();
+                            const auto warning = GuideClock::warning(profile, observation);
+                            result["clockWarning"] = warning;
+                            if (warning.isEmpty() && result.value("ok").toBool() &&
+                                !GuideClock::save(profile, observation))
+                                result = {{"ok", false}, {"error", "Cannot save this profile's clock observation."}};
+                            return result;
+                        },
+                        [this](const QVariantMap& result)
+                        {
+                            if (!result.value("clockWarning").toString().isEmpty())
+                            {
+                                m_clockWarning = result.value("clockWarning").toString();
+                                emit changed();
+                            }
+                        },
+                        true);
+                }
+            });
     m_checkpoint.start();
     m_socket.setReadBufferSize(4 * 1024 * 1024 + 1);
-    connect(&m_socket, &QLocalSocket::connected, this, [this] {
-        m_socket.write(m_request);
-    });
+    connect(&m_socket,
+            &QLocalSocket::connected,
+            this,
+            [this]
+            {
+                m_socket.write(m_request);
+            });
     connect(&m_socket, &QLocalSocket::readyRead, this, &GuideController::consume);
-    connect(&m_socket, &QLocalSocket::errorOccurred, this, [this](QLocalSocket::LocalSocketError error) {
-        if (error == QLocalSocket::PeerClosedError && m_input.endsWith('\n'))
-            return;
-        if (m_reading)
-            readFailure(tr("This profile's Kodi bridge is unavailable. Start Kodi, then preview again."));
-    });
+    connect(&m_socket,
+            &QLocalSocket::errorOccurred,
+            this,
+            [this](QLocalSocket::LocalSocketError error)
+            {
+                if (error == QLocalSocket::PeerClosedError && m_input.endsWith('\n'))
+                    return;
+                if (m_reading)
+                    readFailure(tr("This profile's Kodi bridge is unavailable. Start Kodi, then preview again."));
+            });
     m_requestDeadline.setSingleShot(true);
     m_requestDeadline.setInterval(5000);
     m_catalogDeadline.setSingleShot(true);
     m_catalogDeadline.setInterval(120000);
-    connect(&m_requestDeadline, &QTimer::timeout, this, [this] {
-        readFailure(tr("Kodi media preview timed out. Your channel draft was not saved."));
-    });
-    connect(&m_catalogDeadline, &QTimer::timeout, this, [this] {
-        readFailure(tr("The media preview exceeded two minutes. Narrow the media selection and retry."));
-    });
+    connect(&m_requestDeadline,
+            &QTimer::timeout,
+            this,
+            [this]
+            {
+                readFailure(tr("Kodi media preview timed out. Your channel draft was not saved."));
+            });
+    connect(&m_catalogDeadline,
+            &QTimer::timeout,
+            this,
+            [this]
+            {
+                readFailure(tr("The media preview exceeded two minutes. Narrow the media selection and retry."));
+            });
 }
-GuideController::~GuideController() {
+GuideController::~GuideController()
+{
     invalidate();
 }
-void GuideController::invalidate() {
+void
+GuideController::invalidate()
+{
     if (!m_valid)
         return;
     m_valid = false;
@@ -287,8 +349,10 @@ void GuideController::invalidate() {
     closeBridge();
     QMetaObject::invokeMethod(
         m_worker,
-        [worker = m_worker] {
-            if (worker->store) {
+        [worker = m_worker]
+        {
+            if (worker->store)
+            {
                 worker->store->setCancellationCheck({});
                 worker->store->setActive(false, now());
                 worker->store.reset();
@@ -318,16 +382,22 @@ void GuideController::invalidate() {
     m_feedListings.clear();
     emit changed();
 }
-bool GuideController::fail(const QString& message) {
+bool
+GuideController::fail(const QString& message)
+{
     m_error = message;
     emit changed();
     return false;
 }
-bool GuideController::submit(Job job, std::function<void(const QVariantMap&)> completion, bool background) {
+bool
+GuideController::submit(Job job, std::function<void(const QVariantMap&)> completion, bool background)
+{
     if (!m_valid)
         return fail(tr("This guide profile is no longer active."));
-    if (m_busy) {
-        if (m_background && !background && !m_pendingJob && m_pendingDefinition.isEmpty()) {
+    if (m_busy)
+    {
+        if (m_background && !background && !m_pendingJob && m_pendingDefinition.isEmpty())
+        {
             m_pendingJob = std::move(job);
             m_pendingCompletion = std::move(completion);
             m_status = tr("Waiting for the saved guide refresh…");
@@ -347,13 +417,16 @@ bool GuideController::submit(Job job, std::function<void(const QVariantMap&)> co
     const auto cancelled = m_cancel = std::make_shared<std::atomic_bool>(false);
     QMetaObject::invokeMethod(
         m_worker,
-        [worker = m_worker, id, from, to, first, cancelled, job = std::move(job)] {
+        [worker = m_worker, id, from, to, first, cancelled, job = std::move(job)]
+        {
             if (!worker->store)
                 worker->store = std::make_unique<GuideStore>(worker->path);
             auto& store = *worker->store;
-            store.setCancellationCheck([cancelled] {
-                return cancelled->load();
-            });
+            store.setCancellationCheck(
+                [cancelled]
+                {
+                    return cancelled->load();
+                });
             auto result = store.ready() ? job(store) : outcome(false, store);
             const auto view = snapshot(store, from, to, first);
             for (auto it = view.cbegin(); it != view.cend(); ++it)
@@ -365,25 +438,32 @@ bool GuideController::submit(Job job, std::function<void(const QVariantMap&)> co
     emit changed();
     return true;
 }
-void GuideController::refresh() {
+void
+GuideController::refresh()
+{
     if (!m_valid)
         return;
-    if (m_busy) {
+    if (m_busy)
+    {
         m_refreshPending = true;
         return;
     }
     submit(
-        [](GuideStore& store) {
+        [](GuideStore& store)
+        {
             return outcome(true, store);
         },
         {},
         true);
 }
-void GuideController::maintainSchedules() {
+void
+GuideController::maintainSchedules()
+{
     if (!m_valid || !m_ready || busy() || !m_clockWarning.isEmpty())
         return;
     const auto wall = now();
-    for (const auto& v : m_channels) {
+    for (const auto& v : m_channels)
+    {
         const auto channel = v.toMap();
         const auto id = channel.value("id").toString();
         if (channel.contains("owner"))
@@ -404,10 +484,12 @@ void GuideController::maintainSchedules() {
         m_maintenanceAttempted.insert(id);
         const auto revision = channel.value("revision").toInt();
         submit(
-            [id, revision, wall](GuideStore& store) {
+            [id, revision, wall](GuideStore& store)
+            {
                 return outcome(store.maintain(id, wall, revision), store);
             },
-            [this, id](const QVariantMap& result) {
+            [this, id](const QVariantMap& result)
+            {
                 m_scheduleStatus =
                     result.value("ok").toBool()
                         ? tr("Rolling schedule updated · %1").arg(QDateTime::currentDateTime().toString(Qt::ISODate))
@@ -420,8 +502,11 @@ void GuideController::maintainSchedules() {
         return;
     }
 }
-void GuideController::setWindow(qint64 from, qint64 to, int first) {
-    if (from < 86400 || to <= from || to - from > 86400 || first < 0 || first > 1024) {
+void
+GuideController::setWindow(qint64 from, qint64 to, int first)
+{
+    if (from < 86400 || to <= from || to - from > 86400 || first < 0 || first > 1024)
+    {
         fail(tr("Invalid guide time window."));
         return;
     }
@@ -430,7 +515,9 @@ void GuideController::setWindow(qint64 from, qint64 to, int first) {
     m_first = first;
     refresh();
 }
-QVariantMap GuideController::newDefinition() const {
+QVariantMap
+GuideController::newDefinition() const
+{
     QSet<int> used;
     for (const auto& v : m_channels)
         used.insert(v.toMap().value("number").toInt());
@@ -448,7 +535,9 @@ QVariantMap GuideController::newDefinition() const {
             {"mediaKinds", QVariantList{QString("episode")}},
             {"rule", QVariantMap{{"field", "source"}, {"op", "is"}, {"value", "kodi"}}}};
 }
-bool GuideController::previewLocal(const QVariantMap& definition, const QString& kind) {
+bool
+GuideController::previewLocal(const QVariantMap& definition, const QString& kind)
+{
     if (!m_valid)
         return fail(tr("This guide profile is no longer active."));
     QString error;
@@ -460,7 +549,8 @@ bool GuideController::previewLocal(const QVariantMap& definition, const QString&
     QStringList requested = kind == "mixed" ? QStringList{"movie", "episode"}
                             : kind == "all" ? QStringList{"movie", "episode", "musicvideo", "song"}
                                             : QStringList{kind};
-    if (kind == "custom") {
+    if (kind == "custom")
+    {
         requested.clear();
         for (const auto& v : validated.value("mediaKinds").toList())
             requested.append(v.toString());
@@ -470,8 +560,10 @@ bool GuideController::previewLocal(const QVariantMap& definition, const QString&
         selected.insert(v.toString());
     if (selected != QSet<QString>(requested.cbegin(), requested.cend()))
         return fail(tr("The media selection changed. Preview the updated channel settings."));
-    if (m_busy) {
-        if (m_background && !m_pendingJob && m_pendingDefinition.isEmpty()) {
+    if (m_busy)
+    {
+        if (m_background && !m_pendingJob && m_pendingDefinition.isEmpty())
+        {
             m_pendingDefinition = validated;
             m_pendingKind = kind;
             m_status = tr("Waiting for the saved guide refresh…");
@@ -497,7 +589,9 @@ bool GuideController::previewLocal(const QVariantMap& definition, const QString&
     emit changed();
     return true;
 }
-void GuideController::closeBridge() {
+void
+GuideController::closeBridge()
+{
     m_requestDeadline.stop();
     m_socket.abort();
 #ifdef Q_OS_LINUX
@@ -506,7 +600,9 @@ void GuideController::closeBridge() {
 #endif
     m_descriptor = -1;
 }
-void GuideController::readFailure(const QString& message) {
+void
+GuideController::readFailure(const QString& message)
+{
     ++m_catalogGeneration;
     m_reading = false;
     m_busy = false;
@@ -517,7 +613,9 @@ void GuideController::readFailure(const QString& message) {
     m_sourcePreview.clear();
     fail(message);
 }
-void GuideController::requestPage() {
+void
+GuideController::requestPage()
+{
     closeBridge();
     m_input.clear();
     m_request = QJsonDocument(QJsonObject{{"jsonrpc", "2.0"},
@@ -529,7 +627,8 @@ void GuideController::requestPage() {
                                                        {"end", m_page + 50}}}})
                     .toJson(QJsonDocument::Compact) +
                 '\n';
-    if (m_pvrReading) {
+    if (m_pvrReading)
+    {
         const auto params =
             m_sourceIndex < 0
                 ? QVariantMap{{"channelgroupid", "alltv"},
@@ -555,7 +654,8 @@ void GuideController::requestPage() {
     }
 #ifdef Q_OS_LINUX
     m_descriptor = ::open(m_directory.toLocal8Bit().constData(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
-    if (m_descriptor < 0) {
+    if (m_descriptor < 0)
+    {
         readFailure(tr("Kodi's local bridge is not set up for this profile. Start Kodi, then retry."));
         return;
     }
@@ -565,11 +665,14 @@ void GuideController::requestPage() {
     readFailure(tr("The local Kodi bridge requires Linux."));
 #endif
 }
-void GuideController::consume() {
+void
+GuideController::consume()
+{
     if (!m_valid || !m_reading)
         return;
     m_input += m_socket.readAll();
-    if (m_input.size() > 4 * 1024 * 1024) {
+    if (m_input.size() > 4 * 1024 * 1024)
+    {
         readFailure(tr("Kodi returned too much preview data."));
         return;
     }
@@ -577,13 +680,15 @@ void GuideController::consume() {
         return;
     const auto reply = QJsonDocument::fromJson(m_input).object();
     if (reply.value("jsonrpc") != "2.0" || reply.value("id").toInt(-1) != m_requestId || reply.contains("error") ||
-        !reply.value("result").isObject()) {
+        !reply.value("result").isObject())
+    {
         readFailure(tr(
             "Kodi could not provide guide metadata. Update/enable the Isolde bridge, check your library and retry."));
         return;
     }
     const auto result = reply.value("result").toObject();
-    if (m_pvrReading) {
+    if (m_pvrReading)
+    {
         consumePvr(result.toVariantMap());
         return;
     }
@@ -591,62 +696,23 @@ void GuideController::consume() {
     const auto items = result.value("items").toArray();
     const int start = limits.value("start").toInt(-1), end = limits.value("end").toInt(-1),
               total = limits.value("total").toInt(-1), skipped = result.value("skipped").toInt(-1);
-    if (!result.value("items").isArray() || start != m_page || end < start || end > start + 50 || total < end ||
-        total > 100000 || (end == start && total > end) || skipped < 0 || items.size() + skipped != end - start) {
-        readFailure(tr("Kodi returned an invalid guide metadata page."));
+    if (!validateGuidePage(result, limits, items, start, end, total, skipped))
         return;
-    }
-    for (const auto& v : items) {
-        const auto item = v.toObject().toVariantMap();
-        if (!GuideRules::matchesChannel(m_previewDefinition, item))
-            continue;
-        m_snapshotBytes += QJsonDocument::fromVariant(item).toJson(QJsonDocument::Compact).size() + 1;
-        if (m_candidates.size() >= 10000 || m_snapshotBytes > 4 * 1024 * 1024 - 2) {
-            readFailure(tr("More media matches than one channel can hold. Narrow the rules before saving."));
-            return;
-        }
-        m_candidates.append(item);
-    }
-    m_skipped += skipped;
-    closeBridge();
-    if (end < total)
-        m_page = end;
-    else {
-        ++m_kindIndex;
-        m_page = 0;
-    }
-    if (m_kindIndex < m_kinds.size()) {
-        m_status = tr("Previewing local media · %1 matches").arg(m_candidates.size());
-        emit changed();
-        const auto generation = m_catalogGeneration;
-        QTimer::singleShot(0, this, [this, generation] {
-            if (m_valid && m_reading && generation == m_catalogGeneration)
-                requestPage();
-        });
+    QVariantList candidates = m_candidates;
+    if (!processGuideItems(items, candidates, m_previewDefinition, m_snapshotBytes, m_skipped))
         return;
-    }
-    m_catalogDeadline.stop();
-    m_reading = m_busy = false;
-    m_previewReady = !m_candidates.isEmpty();
-    m_status =
-        tr("%1 matching items · %2 items skipped (remote or unknown duration)").arg(m_candidates.size()).arg(m_skipped);
-    if (m_previewDefinition.value("sequence") == "next-unwatched")
-        m_status += tr(" · Unwatched in Kodi at preview; repeats in episode order. Refresh rules to update watch "
-                       "state; committed programs stay unchanged.");
-    if (m_importPackage.value("draftId") == m_previewDefinition.value("id") &&
-        !m_importPackage.value("snapshot").toMap().isEmpty())
-        m_status += tr(" · Review imported media mappings before Save. Imported UTC intervals stay unchanged; edited "
-                       "matching rules apply beyond the snapshot.");
-    if (!m_previewReady)
-        m_error = tr("No playable local media matches. Adjust the rules or update Kodi's metadata.");
-    emit changed();
+    finalizeGuideLoad(candidates, m_page, m_kindIndex, m_sourceIndex, m_previewReady, m_snapshotBytes,
+                      end, total, skipped);
 }
-bool GuideController::previewClockAdjustment(const QString& id, const QVariant& delta, int revision) {
+bool
+GuideController::previewClockAdjustment(const QString& id, const QVariant& delta, int revision)
+{
     m_clockReview.clear();
     if (!ComponentSchema::safeId(id) || !integer(delta, -31 * 86400, 31 * 86400) || delta.toLongLong() == 0)
         return fail(tr("Choose a nonzero clock adjustment of at most 31 days."));
     return submit(
-        [id, delta, revision](GuideStore& store) {
+        [id, delta, revision](GuideStore& store)
+        {
             const auto review = store.clockAdjustmentPreview(id, delta.toLongLong(), revision, now());
             return QVariantMap{
                 {"ok", !review.isEmpty()},
@@ -656,23 +722,30 @@ bool GuideController::previewClockAdjustment(const QString& id, const QVariant& 
                      ? QString("Review an unchanged local channel and choose a position inside its cached schedule.")
                      : QString()}};
         },
-        [this](const QVariantMap& result) {
-            if (result.value("ok").toBool()) {
+        [this](const QVariantMap& result)
+        {
+            if (result.value("ok").toBool())
+            {
                 m_clockReview = result.value("review").toMap();
                 emit changed();
             }
         });
 }
-bool GuideController::adjustClock() {
+bool
+GuideController::adjustClock()
+{
     if (m_clockReview.isEmpty())
         return fail(tr("Preview the broadcast-clock adjustment before applying it."));
     const auto review = m_clockReview;
     return submit(
-        [review](GuideStore& store) {
+        [review](GuideStore& store)
+        {
             return outcome(store.adjustClock(review, now()), store);
         },
-        [this, review](const QVariantMap& result) {
-            if (result.value("ok").toBool()) {
+        [this, review](const QVariantMap& result)
+        {
+            if (result.value("ok").toBool())
+            {
                 m_clockReview.clear();
                 m_maintenanceAttempted.remove(review.value("channelId").toString());
                 emit changed();
@@ -680,7 +753,9 @@ bool GuideController::adjustClock() {
             }
         });
 }
-bool GuideController::createLocal(const QVariantMap& definition) {
+bool
+GuideController::createLocal(const QVariantMap& definition)
+{
     if (!m_previewReady || definition != m_previewDefinition)
         return fail(tr("Preview these exact channel settings before saving."));
     const auto candidates = m_candidates;
@@ -692,7 +767,8 @@ bool GuideController::createLocal(const QVariantMap& definition) {
     const auto profile = m_profileDirectory;
     const auto remapping = m_importRemapping;
     return submit(
-        [definition, candidates, package, assets, profile, remapping](GuideStore& store) {
+        [definition, candidates, package, assets, profile, remapping](GuideStore& store)
+        {
             for (auto it = assets.cbegin(); it != assets.cend(); ++it)
                 if (!GuideAssets::write(profile,
                                         it.key(),
@@ -702,8 +778,10 @@ bool GuideController::createLocal(const QVariantMap& definition) {
                                        {"error", "Cannot save the imported station artwork. No channel was created."}};
             return outcome(store.createLocal(definition, candidates, now(), -1, package, remapping), store);
         },
-        [this, id](const QVariantMap& r) {
-            if (r.value("ok").toBool()) {
+        [this, id](const QVariantMap& r)
+        {
+            if (r.value("ok").toBool())
+            {
                 m_previewReady = false;
                 m_candidates.clear();
                 m_importPackage.clear();
@@ -712,13 +790,17 @@ bool GuideController::createLocal(const QVariantMap& definition) {
             }
         });
 }
-bool GuideController::exportChannel(const QString& id, const QString& path, bool includeSchedule) {
+bool
+GuideController::exportChannel(const QString& id, const QString& path, bool includeSchedule)
+{
     if (!portablePath(path))
         return fail(tr("Choose an absolute .json file path without symbolic links."));
     const auto profile = m_profileDirectory;
     return submit(
-        [id, path, includeSchedule, profile](GuideStore& store) {
-            if (path.endsWith(".xsp", Qt::CaseInsensitive)) {
+        [id, path, includeSchedule, profile](GuideStore& store)
+        {
+            if (path.endsWith(".xsp", Qt::CaseInsensitive))
+            {
                 if (includeSchedule)
                     return QVariantMap{{"ok", false},
                                        {"error",
@@ -731,9 +813,12 @@ bool GuideController::exportChannel(const QString& id, const QString& path, bool
                 if (!portablePath(path) || QFileInfo::exists(path))
                     return QVariantMap{{"ok", false},
                                        {"error", "Choose a new playlist filename. Existing files are preserved."}};
-                if (!GuideAtomicFile::publish(path, bytes, [&store] {
-                        return !store.cancellationRequested();
-                    }))
+                if (!GuideAtomicFile::publish(path,
+                                              bytes,
+                                              [&store]
+                                              {
+                                                  return !store.cancellationRequested();
+                                              }))
                     return QVariantMap{
                         {"ok", false},
                         {"error", "Cannot atomically export this new playlist. Existing files were preserved."}};
@@ -743,7 +828,8 @@ bool GuideController::exportChannel(const QString& id, const QString& path, bool
             if (package.isEmpty())
                 return outcome(false, store);
             const auto logo = package.value("definition").toMap().value("logo").toString();
-            if (!logo.isEmpty()) {
+            if (!logo.isEmpty())
+            {
                 QFile asset(GuideAssets::path(profile, logo));
                 if (!asset.open(QIODevice::ReadOnly) || asset.size() > 20 * 1024 * 1024)
                     return QVariantMap{
@@ -761,36 +847,45 @@ bool GuideController::exportChannel(const QString& id, const QString& path, bool
             QString error;
             if (GuideStore::portableDefinition(package, &error).isEmpty())
                 return QVariantMap{{"ok", false}, {"error", error}};
-            if (!GuideAtomicFile::publish(path, bytes, [&store] {
-                    return !store.cancellationRequested();
-                }))
+            if (!GuideAtomicFile::publish(path,
+                                          bytes,
+                                          [&store]
+                                          {
+                                              return !store.cancellationRequested();
+                                          }))
                 return QVariantMap{{"ok", false},
                                    {"error",
                                     "Cannot atomically save this new channel package. Choose a writable folder and "
                                     "retry. Existing files were preserved."}};
             return outcome(true, store);
         },
-        [this](const QVariantMap& result) {
-            if (result.value("ok").toBool()) {
+        [this](const QVariantMap& result)
+        {
+            if (result.value("ok").toBool())
+            {
                 m_status =
                     tr("Channel exported. No media files, account credentials or Kodi configuration were included.");
                 emit changed();
             }
         });
 }
-bool GuideController::previewImport(const QString& path, bool restoreSchedule) {
+bool
+GuideController::previewImport(const QString& path, bool restoreSchedule)
+{
     if (!portablePath(path))
         return fail(tr("Choose an absolute .json channel-package path without symbolic links."));
     m_importRemapping.clear();
     const auto fresh = newDefinition();
     return submit(
-        [path, restoreSchedule, fresh](GuideStore& store) {
+        [path, restoreSchedule, fresh](GuideStore& store)
+        {
             if (!portablePath(path))
                 return QVariantMap{{"ok", false}, {"error", "The import path changed. Choose the package again."}};
             QFile file(path);
             if (!file.open(QIODevice::ReadOnly) || file.size() > 32 * 1024 * 1024)
                 return QVariantMap{{"ok", false}, {"error", "Cannot read this package within the 32 MiB limit."}};
-            if (path.endsWith(".xsp", Qt::CaseInsensitive)) {
+            if (path.endsWith(".xsp", Qt::CaseInsensitive))
+            {
                 if (restoreSchedule)
                     return QVariantMap{
                         {"ok", false},
@@ -823,7 +918,8 @@ bool GuideController::previewImport(const QString& path, bool restoreSchedule) {
             definition["number"] = fresh.value("number");
             if (!definition.contains("mediaKinds"))
                 definition["mediaKinds"] = QVariantList{"movie", "episode", "musicvideo", "song"};
-            if (restoreSchedule && !package.value("definition").toMap().contains("mediaKinds")) {
+            if (restoreSchedule && !package.value("definition").toMap().contains("mediaKinds"))
+            {
                 auto original = package.value("definition").toMap();
                 original["mediaKinds"] = definition.value("mediaKinds");
                 package["definition"] = original;
@@ -835,7 +931,8 @@ bool GuideController::previewImport(const QString& path, bool restoreSchedule) {
                 result["snapshot"] = package;
             return result;
         },
-        [this](const QVariantMap& result) {
+        [this](const QVariantMap& result)
+        {
             if (!result.value("ok").toBool())
                 return;
             const auto definition = result.value("definition").toMap();
@@ -849,23 +946,28 @@ bool GuideController::previewImport(const QString& path, bool restoreSchedule) {
             emit changed();
         });
 }
-QVariantList GuideController::importReview() const {
+QVariantList
+GuideController::importReview() const
+{
     QVariantList result;
     if (!m_valid || !m_previewReady || m_importPackage.value("draftId") != m_previewDefinition.value("id"))
         return result;
     const auto items = m_importPackage.value("snapshot").toMap().value("items").toList();
     QMap<QString, int> counts;
     QMap<QString, QVariantMap> byId;
-    const auto signature = [](const QVariantMap& item) {
+    const auto signature = [](const QVariantMap& item)
+    {
         return item.value("mediaType").toString() + QChar(0x1f) + item.value("title").toString() + QChar(0x1f) +
                QString::number(item.value("duration").toLongLong());
     };
-    for (const auto& v : m_candidates) {
+    for (const auto& v : m_candidates)
+    {
         const auto item = v.toMap();
         ++counts[signature(item)];
         byId[item.value("mediaType").toString() + ":" + item.value("mediaId").toString()] = item;
     }
-    for (const auto& v : items) {
+    for (const auto& v : items)
+    {
         auto old = v.toMap();
         const auto key = old.value("mediaType").toString() + ":" + old.value("mediaId").toString();
         int matches = 0;
@@ -873,11 +975,13 @@ QVariantList GuideController::importReview() const {
         matches = counts.value(signature(old));
         if (matches == 1)
             title = old.value("title").toString();
-        if (m_importRemapping.contains(key)) {
+        if (m_importRemapping.contains(key))
+        {
             const auto chosen = m_importRemapping.value(key).toMap();
             const auto item =
                 byId.value(chosen.value("mediaType").toString() + ":" + chosen.value("mediaId").toString());
-            if (!item.isEmpty()) {
+            if (!item.isEmpty())
+            {
                 title = item.value("title").toString();
                 matches = 1;
             }
@@ -890,13 +994,16 @@ QVariantList GuideController::importReview() const {
     }
     return result;
 }
-QVariantList GuideController::importChoices(int item, int first) const {
+QVariantList
+GuideController::importChoices(int item, int first) const
+{
     const auto review = importReview();
     QVariantList result;
     if (item < 0 || item >= review.size() || first < 0 || first >= m_candidates.size())
         return result;
     const auto duration = review[item].toMap().value("duration").toLongLong();
-    for (int i = first; i < std::min(first + 50, int(m_candidates.size())); ++i) {
+    for (int i = first; i < std::min(first + 50, int(m_candidates.size())); ++i)
+    {
         auto candidate = m_candidates[i].toMap();
         candidate["choice"] = i;
         candidate["fits"] = candidate.value("duration").toLongLong() == duration;
@@ -904,23 +1011,29 @@ QVariantList GuideController::importChoices(int item, int first) const {
     }
     return result;
 }
-bool GuideController::mapImportedItem(int item, int candidate) {
+bool
+GuideController::mapImportedItem(int item, int candidate)
+{
     const auto review = importReview();
     if (!m_valid || busy() || item < 0 || item >= review.size() || candidate < 0 || candidate >= m_candidates.size())
         return fail(tr("Preview current Kodi media before remapping."));
     const auto old = review[item].toMap(), choice = m_candidates[candidate].toMap();
     if (choice.value("duration").toLongLong() != old.value("duration").toLongLong())
-        return fail(tr("Choose a replacement with the same indexed duration. Import definition only when none fits; "
-                       "slot times stay unchanged."));
+        return fail(
+            tr("Choose a replacement with the same indexed duration. Import definition only when none fits; "
+               "slot times stay unchanged."));
     m_importRemapping[old.value("mediaType").toString() + ":" + old.value("mediaId").toString()] =
         QVariantMap{{"mediaType", choice.value("mediaType")}, {"mediaId", choice.value("mediaId")}};
     emit changed();
     return true;
 }
-QVariantMap GuideController::editableDefinition(const QString& id) const {
+QVariantMap
+GuideController::editableDefinition(const QString& id) const
+{
     if (!m_valid || !ComponentSchema::safeId(id))
         return {};
-    for (const auto& v : m_channels) {
+    for (const auto& v : m_channels)
+    {
         auto c = v.toMap();
         if (c.value("id") != id || c.contains("owner"))
             continue;
@@ -940,17 +1053,22 @@ QVariantMap GuideController::editableDefinition(const QString& id) const {
     }
     return {};
 }
-bool GuideController::updateLocal(const QVariantMap& definition, int revision) {
+bool
+GuideController::updateLocal(const QVariantMap& definition, int revision)
+{
     if (!m_previewReady || definition != m_previewDefinition)
         return fail(tr("Preview these exact updated rules before saving."));
     const auto candidates = m_candidates;
     const auto id = definition.value("id").toString();
     return submit(
-        [definition, candidates, revision](GuideStore& s) {
+        [definition, candidates, revision](GuideStore& s)
+        {
             return outcome(s.updateRules(definition, candidates, revision, now()), s);
         },
-        [this, id](const QVariantMap& r) {
-            if (r.value("ok").toBool()) {
+        [this, id](const QVariantMap& r)
+        {
+            if (r.value("ok").toBool())
+            {
                 m_previewReady = false;
                 m_candidates.clear();
                 emit channelCreated(id);
@@ -958,12 +1076,15 @@ bool GuideController::updateLocal(const QVariantMap& definition, int revision) {
             }
         });
 }
-bool GuideController::previewRegeneration(const QString& id) {
+bool
+GuideController::previewRegeneration(const QString& id)
+{
     if (!ComponentSchema::safeId(id))
         return fail(tr("Invalid local channel."));
     m_regenerationReview.clear();
     return submit(
-        [id](GuideStore& s) {
+        [id](GuideStore& s)
+        {
             const auto review = s.regenerationPreview(id, now());
             return QVariantMap{
                 {"ok", !review.isEmpty()},
@@ -973,33 +1094,42 @@ bool GuideController::previewRegeneration(const QString& id) {
                      ? QString("No future local schedule is available to replace. Check maintenance and retry.")
                      : QString()}};
         },
-        [this](const QVariantMap& r) {
+        [this](const QVariantMap& r)
+        {
             m_regenerationReview = r.value("review").toMap();
             emit changed();
         });
 }
-bool GuideController::regenerate() {
+bool
+GuideController::regenerate()
+{
     if (m_regenerationReview.isEmpty())
         return fail(tr("Review the future schedule boundary before regenerating."));
     const auto review = m_regenerationReview;
     const auto id = review.value("channelId").toString();
     return submit(
-        [id, review](GuideStore& s) {
+        [id, review](GuideStore& s)
+        {
             return outcome(s.regenerate(id, review, now()), s);
         },
-        [this](const QVariantMap& r) {
-            if (r.value("ok").toBool()) {
+        [this](const QVariantMap& r)
+        {
+            if (r.value("ok").toBool())
+            {
                 m_regenerationReview.clear();
                 emit changed();
             }
         });
 }
-bool GuideController::previewDuplicate(const QString& id, int revision) {
+bool
+GuideController::previewDuplicate(const QString& id, int revision)
+{
     const auto fresh = newDefinition();
     const auto newId = fresh.value("id").toString();
     const auto number = fresh.value("number");
     return submit(
-        [id, revision, newId, number](GuideStore& s) {
+        [id, revision, newId, number](GuideStore& s)
+        {
             auto def = s.definition(id);
             const auto items = s.candidateSnapshot(id);
             if (def.isEmpty() || def.contains("owner") || s.channel(id).value("revision").toInt() != revision ||
@@ -1013,7 +1143,8 @@ bool GuideController::previewDuplicate(const QString& id, int revision) {
             def["name"] = name.size() <= 160 ? name : QString("Channel copy");
             return QVariantMap{{"ok", true}, {"definition", def}, {"candidates", items}};
         },
-        [this](const QVariantMap& r) {
+        [this](const QVariantMap& r)
+        {
             if (!r.value("ok").toBool())
                 return;
             m_previewDefinition = r.value("definition").toMap();
@@ -1023,10 +1154,12 @@ bool GuideController::previewDuplicate(const QString& id, int revision) {
             emit duplicatePrepared(m_previewDefinition);
         });
 }
-bool GuideController::previewRepair(
-    const QString& id, const QString& slotId, int revision, int first, bool fitInterval) {
+bool
+GuideController::previewRepair(const QString& id, const QString& slotId, int revision, int first, bool fitInterval)
+{
     return submit(
-        [id, slotId, revision, first, fitInterval](GuideStore& s) {
+        [id, slotId, revision, first, fitInterval](GuideStore& s)
+        {
             const auto review = s.repairPreview(id, slotId, revision, now(), first, fitInterval);
             return QVariantMap{
                 {"ok", !review.isEmpty()},
@@ -1037,12 +1170,15 @@ bool GuideController::previewRepair(
                            "This local program changed or its channel needs repair. Refresh the selection and retry.")
                      : QString()}};
         },
-        [this](const QVariantMap& r) {
+        [this](const QVariantMap& r)
+        {
             m_repairReview = r.value("review").toMap();
             emit changed();
         });
 }
-bool GuideController::repair(const QVariant& choice) {
+bool
+GuideController::repair(const QVariant& choice)
+{
     const auto alternatives = m_repairReview.value("alternatives").toList();
     if (m_repairReview.isEmpty() || !integer(choice, -1, alternatives.size() - 1))
         return fail(tr("Review an available repair choice before applying it."));
@@ -1051,29 +1187,37 @@ bool GuideController::repair(const QVariant& choice) {
     const auto revision = m_repairReview.value("revision").toInt();
     const bool fitInterval = m_repairReview.value("fitInterval").toBool();
     return submit(
-        [id, slot, revision, item, fitInterval](GuideStore& s) {
+        [id, slot, revision, item, fitInterval](GuideStore& s)
+        {
             return outcome(
                 s.repairSlot(
                     id, slot, item.value("mediaType").toString(), item.value("mediaId").toInt(), revision, fitInterval),
                 s);
         },
-        [this](const QVariantMap& r) {
-            if (r.value("ok").toBool()) {
+        [this](const QVariantMap& r)
+        {
+            if (r.value("ok").toBool())
+            {
                 m_repairReview.clear();
                 emit changed();
             }
         });
 }
-bool GuideController::previewPvr() {
+bool
+GuideController::previewPvr()
+{
     if (!m_valid)
         return fail(tr("This guide profile is no longer active."));
-    if (m_busy) {
+    if (m_busy)
+    {
         if (m_background)
             return submit(
-                [](GuideStore& s) {
+                [](GuideStore& s)
+                {
                     return outcome(true, s);
                 },
-                [this](const QVariantMap&) {
+                [this](const QVariantMap&)
+                {
                     previewPvr();
                 });
         return fail(tr("Finish or cancel the current guide operation first."));
@@ -1083,7 +1227,8 @@ bool GuideController::previewPvr() {
     m_feedListings.clear();
     m_sourcePreview.clear();
     m_sourceRevisions.clear();
-    for (const auto& v : m_channels) {
+    for (const auto& v : m_channels)
+    {
         const auto c = v.toMap();
         m_sourceRevisions[c.value("id").toString()] = c.value("revision");
     }
@@ -1100,7 +1245,9 @@ bool GuideController::previewPvr() {
     emit changed();
     return true;
 }
-qint64 GuideController::pvrUtc(const QVariant& value) {
+qint64
+GuideController::pvrUtc(const QVariant& value)
+{
     if (value.metaType().id() != QMetaType::QString)
         return -1;
     const auto d = QDateTime::fromString(QString(value.toString()).replace(' ', 'T') + "Z", Qt::ISODate);
@@ -1108,144 +1255,47 @@ qint64 GuideController::pvrUtc(const QVariant& value) {
         return -1;
     return d.toSecsSinceEpoch();
 }
-void GuideController::consumePvr(const QVariantMap& result) {
+void
+GuideController::consumePvr(const QVariantMap& result)
+{
     const auto limits = result.value("limits").toMap();
     const auto key = m_sourceIndex < 0 ? QString("channels") : QString("broadcasts");
     const auto items = result.value(key).toList();
-    const int start = limits.value("start", -1).toInt(), end = limits.value("end", -1).toInt(),
-              total = limits.value("total", -1).toInt();
-    if (!integer(limits.value("start"), 0, 1024) || !integer(limits.value("end"), 0, 1024) ||
-        !integer(limits.value("total"), 0, 1024) || result.value(key).metaType().id() != QMetaType::QVariantList ||
-        start != m_page || end != start + items.size() || items.size() > 50 || total < end ||
-        total > (m_sourceIndex < 0 ? 1024 : 1000) || (end == start && total > end)) {
-        readFailure(tr("Kodi returned an invalid or oversized PVR page. Cached listings were preserved."));
+    const int end = limits.value("end", -1).toInt(), total = limits.value("total", -1).toInt();
+    if (!validatePvrPage(result, limits))
         return;
-    }
-    if (m_sourceIndex < 0) {
+    if (m_sourceIndex < 0)
+    {
         QSet<int> used;
         for (const auto& v : m_channels)
             used.insert(v.toMap().value("number").toInt());
         for (const auto& v : m_sourcePreview)
             used.insert(v.toMap().value("definition").toMap().value("number").toInt());
-        for (const auto& v : items) {
+        for (const auto& v : items)
+        {
             const auto item = v.toMap();
-            if (item.value("locked").metaType().id() != QMetaType::Bool ||
-                item.value("hidden").metaType().id() != QMetaType::Bool) {
-                readFailure(tr("Kodi did not report PVR availability safely."));
-                return;
-            }
-            if (item.value("locked").toBool() || item.value("hidden").toBool()) {
-                ++m_skipped;
-                continue;
-            }
-            const auto source = QVariantMap{{"instance", "kodi-pvr"},
-                                            {"channelId", item.value("channelid")},
-                                            {"clientId", item.value("clientid")},
-                                            {"uniqueId", item.value("uniqueid")},
-                                            {"number", item.value("channelnumber")}};
-            const auto id =
-                "pvr-" +
-                QString::fromLatin1(QCryptographicHash::hash(
-                                        QByteArray("kodi-pvr:") + QByteArray::number(source.value("clientId").toInt()) +
-                                            ":" + QByteArray::number(source.value("uniqueId").toInt()),
-                                        QCryptographicHash::Sha256)
-                                        .toHex());
+            QString id;
             int number = item.value("channelnumber").toInt();
-            const auto existing = std::find_if(m_channels.cbegin(), m_channels.cend(), [&id](const QVariant& c) {
-                return c.toMap().value("id") == id;
-            });
-            if (existing != m_channels.cend())
-                number = existing->toMap().value("number").toInt();
-            else if (number < 1 || used.contains(number)) {
-                number = 1;
-                while (used.contains(number) && number < 99999)
-                    ++number;
-            }
-            QVariantMap definition{
-                {"schemaVersion", 1},
-                {"id", id},
-                {"owner", "kodi-pvr"},
-                {"source", source},
-                {"number", number},
-                {"name", existing == m_channels.cend() ? item.value("label") : existing->toMap().value("name")},
-                {"sourceAvailable", true},
-                {"refreshedUtc", m_sourceRefreshed}};
-            QString error;
-            if (ComponentSchema::guideChannel(definition, &error).isEmpty() ||
-                std::any_of(m_sourcePreview.cbegin(), m_sourcePreview.cend(), [&id](const QVariant& c) {
-                    return c.toMap().value("definition").toMap().value("id") == id;
-                })) {
-                readFailure(tr("Invalid or ambiguous PVR channel identity. Cached listings were preserved."));
+            QVariantMap definition;
+            QVariantMap source;
+            if (!processNewPvrChannel(item, source, id, number, definition, used))
                 return;
-            }
             used.insert(number);
             m_sourcePreview.append(QVariantMap{{"definition", definition}, {"programs", QVariantList()}});
             m_snapshotBytes += QJsonDocument::fromVariant(definition).toJson(QJsonDocument::Compact).size() + 40;
         }
-    } else {
+    }
+    else
+    {
         auto entry = m_sourcePreview[m_sourceIndex].toMap();
         auto programs = entry.value("programs").toList();
-        for (const auto& v : items) {
-            const auto p = v.toMap();
-            const auto from = pvrUtc(p.value("starttime")), to = pvrUtc(p.value("endtime"));
-            if (from < 0 || to <= from || to - from > 7 * 86400 || !integer(p.value("broadcastid"), 1, 2147483647) ||
-                p.value("title").metaType().id() != QMetaType::QString ||
-                p.value("title").toString().trimmed().isEmpty() || p.value("title").toString().size() > 512) {
-                readFailure(tr("Invalid PVR broadcast interval or identity. Cached listings were preserved."));
-                return;
-            }
-            if (to < m_sourceRefreshed - 7 * 86400 || from > m_sourceRefreshed + 30 * 86400)
-                continue;
-            QVariantMap program{{"broadcastId", p.value("broadcastid").toString()},
-                                {"title", p.value("title")},
-                                {"startUtc", from},
-                                {"endUtc", to}};
-            programs.append(program);
-            m_snapshotBytes += QJsonDocument::fromVariant(program).toJson(QJsonDocument::Compact).size() + 1;
-        }
-        std::sort(programs.begin(), programs.end(), [](const QVariant& a, const QVariant& b) {
-            return a.toMap().value("startUtc").toLongLong() < b.toMap().value("startUtc").toLongLong();
-        });
-        entry["programs"] = programs;
-        m_sourcePreview[m_sourceIndex] = entry;
+        processPvrPrograms(items, entry, programs, m_sourceRefreshed, m_snapshotBytes);
     }
-    closeBridge();
-    if (m_snapshotBytes > 4 * 1024 * 1024 - 4096) {
-        readFailure(tr("PVR preview exceeds the 4 MiB cache generation limit."));
-        return;
-    }
-    if (end < total)
-        m_page = end;
-    else {
-        m_page = 0;
-        ++m_sourceIndex;
-        if (m_sourceIndex == 0 && m_sourcePreview.isEmpty()) {
-            readFailure(tr("No unlocked, visible PVR channels are configured in this Kodi profile. Set up a PVR "
-                           "source, then retry."));
-            return;
-        }
-    }
-    if (m_sourceIndex >= 0 && m_sourceIndex >= m_sourcePreview.size()) {
-        m_catalogDeadline.stop();
-        m_reading = m_busy = m_pvrReading = false;
-        m_sourcePreviewReady = true;
-        m_status =
-            tr("%1 PVR channels ready for mapping review · %2 hidden/locked channels skipped. Nothing imported yet.")
-                .arg(m_sourcePreview.size())
-                .arg(m_skipped);
-        emit changed();
-        return;
-    }
-    m_status =
-        tr("Reading PVR listings · channel %1 of %2").arg(std::max(0, m_sourceIndex) + 1).arg(m_sourcePreview.size());
-    emit changed();
-    const auto generation = m_catalogGeneration;
-    QTimer::singleShot(0, this, [this, generation] {
-        if (m_valid && m_reading && generation == m_catalogGeneration)
-            requestPage();
-    });
+    finalizePvrLoad(m_page, m_sourceIndex, m_sourcePreviewReady, end, total);
 }
-bool GuideController::importPvr() {
+bool
+GuideController::importPvr()
+{
     if (!m_sourcePreviewReady)
         return fail(tr("Preview the complete PVR source before importing."));
     const auto entries = m_sourcePreview;
@@ -1253,101 +1303,73 @@ bool GuideController::importPvr() {
     const auto refreshed = m_sourceRefreshed;
     const auto instance = m_sourceInstance;
     return submit(
-        [entries, revisions, refreshed, instance](GuideStore& store) {
+        [entries, revisions, refreshed, instance](GuideStore& store)
+        {
             return outcome(store.importPvr(instance, entries, refreshed, revisions), store);
         },
-        [this](const QVariantMap& r) {
-            if (r.value("ok").toBool()) {
+        [this](const QVariantMap& r)
+        {
+            if (r.value("ok").toBool())
+            {
                 m_sourcePreviewReady = false;
                 emit changed();
             }
         });
 }
-bool GuideController::previewFeed(const QString& instance,
-                                  const QString& playlistPath,
-                                  const QString& xmltvPath,
-                                  const QString& directUrl,
-                                  const QString& directName) {
-    if (!ComponentSchema::safeId(instance) || instance == "kodi-pvr")
+bool
+GuideController::previewFeed(const QString& instance,
+                             const QString& playlistPath,
+                             const QString& xmltvPath,
+                             const QString& directUrl,
+                             const QString& directName)
+{
+    if (!validateFeedInputs(instance, directUrl, directName))
         return fail(tr("Choose a unique source ID containing letters, numbers, dots, underscores or hyphens."));
-    if (!directUrl.isEmpty() && (!GuideFeeds::streamUrl(directUrl) || directName.trimmed().isEmpty() ||
-                                 directName.size() > 160 || directName.contains('\n') || directName.contains('\r')))
-        return fail(tr("Choose a station name and compatible stream URL without credentials or player options."));
     m_sourcePreviewReady = false;
     m_sourcePreview.clear();
     m_feedListings.clear();
     m_sourceInstance = instance;
     m_sourceRefreshed = now();
     m_sourceRevisions.clear();
-    for (const auto& v : m_channels) {
+    for (const auto& v : m_channels)
+    {
         const auto channel = v.toMap();
         m_sourceRevisions[channel.value("id").toString()] = channel.value("revision");
     }
     const auto refreshed = m_sourceRefreshed;
+    QByteArray playlist, xml;
+    if (directUrl.isEmpty())
+    {
+        if (!readFeedFile(playlistPath, 4 * 1024 * 1024, playlist))
+            return fail(tr("Cannot read a bounded local playlist file."));
+    }
+    else
+        playlist = "#EXTM3U\n#EXTINF:-1," + directName.toUtf8() + "\n" + directUrl.toUtf8() + "\n";
+    if (!xmltvPath.isEmpty() && !readFeedFile(xmltvPath, 16 * 1024 * 1024, xml))
+        return fail(tr("Cannot read a bounded local XMLTV file. Cached listings were preserved."));
     return submit(
-        [instance, playlistPath, xmltvPath, directUrl, directName, refreshed](GuideStore& store) {
-            const auto read = [](const QString& path, qint64 maximum, QByteArray& bytes) {
-                for (const auto c : path)
-                    if (c.unicode() < 32 || c.unicode() == 127)
-                        return false;
-                if (!QDir::isAbsolutePath(path) || QFileInfo(path).isSymLink() || !QFileInfo(path).isFile())
-                    return false;
-                QFile file(path);
-                if (!file.open(QIODevice::ReadOnly) || file.size() > maximum)
-                    return false;
-                bytes = file.read(maximum + 1);
-                return bytes.size() <= maximum && file.atEnd();
-            };
-            QByteArray playlist, xml;
-            if (directUrl.isEmpty()) {
-                if (!read(playlistPath, 4 * 1024 * 1024, playlist))
-                    return QVariantMap{{"ok", false}, {"error", "Cannot read a bounded local playlist file."}};
-            } else
-                playlist = "#EXTM3U\n#EXTINF:-1," + directName.toUtf8() + "\n" + directUrl.toUtf8() + "\n";
-            if (!xmltvPath.isEmpty() && !read(xmltvPath, 16 * 1024 * 1024, xml))
-                return QVariantMap{
-                    {"ok", false},
-                    {"error", "Cannot read a bounded local XMLTV file. Cached listings were preserved."}};
-            auto result = GuideFeeds::parse(playlist, xml, instance, refreshed, [&store] {
-                return store.cancellationRequested();
-            });
+        [instance, playlistPath, xmltvPath, directUrl, directName, refreshed, playlist, xml](GuideStore& store)
+        {
+            auto result = GuideFeeds::parse(playlist,
+                                            xml,
+                                            instance,
+                                            refreshed,
+                                            [&store]
+                                            {
+                                                return store.cancellationRequested();
+                                            });
             if (!result.value("ok").toBool())
                 return result;
-            auto entries = result.value("entries").toList();
+            QVariantList entries = result.value("entries").toList();
             const auto listings = result.value("listings").toMap();
             QSet<int> used;
             for (const auto& v : store.channels())
                 used.insert(v.toMap().value("number").toInt());
-            for (auto& v : entries) {
-                auto entry = v.toMap();
-                auto definition = entry.value("definition").toMap();
-                const auto old = store.channel(definition.value("id").toString());
-                int number = old.isEmpty() ? definition.value("number").toInt() : old.value("number").toInt();
-                if (old.isEmpty() && used.contains(number)) {
-                    number = 1;
-                    while (used.contains(number) && number < 99999)
-                        ++number;
-                }
-                if (!old.isEmpty()) {
-                    auto source = definition.value("source").toMap();
-                    const auto epg = old.value("source").toMap().value("epgId").toString();
-                    if (!epg.isEmpty() && !xml.isEmpty() && !listings.contains(epg))
-                        return QVariantMap{{"ok", false},
-                                           {"error",
-                                            "A previously mapped XMLTV channel is missing from this refresh. Cached "
-                                            "listings were preserved. Review a complete source file before retrying."}};
-                    source["epgId"] = epg;
-                    definition["source"] = source;
-                    entry["programs"] = listings.value(epg, QVariantList{});
-                }
-                definition["number"] = number;
-                used.insert(number);
-                QString error;
-                if (ComponentSchema::guideChannel(definition, &error).isEmpty())
-                    return QVariantMap{{"ok", false}, {"error", error}};
-                entry["definition"] = definition;
-                v = entry;
-            }
+            if (!processFeedEntries(entries, listings, used, store))
+                return QVariantMap{{"ok", false},
+                                   {"error",
+                                    "A previously mapped XMLTV channel is missing from this refresh. Cached "
+                                    "listings were preserved. Review a complete source file before retrying."}};
             if (QJsonDocument::fromVariant(entries).toJson(QJsonDocument::Compact).size() > 4 * 1024 * 1024)
                 return QVariantMap{{"ok", false},
                                    {"error",
@@ -1356,18 +1378,35 @@ bool GuideController::previewFeed(const QString& instance,
             result["entries"] = entries;
             return result;
         },
-        [this](const QVariantMap& result) {
-            if (result.value("ok").toBool()) {
-                m_sourcePreview = result.value("entries").toList();
-                m_feedListings = result.value("listings").toMap();
-                m_sourcePreviewReady = true;
-                m_status = tr("Review station numbers and EPG mappings. Refresh is manual; browsing makes no network "
-                              "requests. No listings still permits live tuning.");
+        [this](const QVariantMap& result)
+        {
+            if (result.value("ok").toBool())
+            {
+                QVariantList entries = result.value("entries").toList();
+                QVariantMap listings = result.value("listings").toMap();
+                finalizeFeedLoad(result, entries, m_sourcePreview, m_feedListings, m_sourcePreviewReady,
+                                 m_snapshotBytes);
+                m_status =
+                    tr("Review station numbers and EPG mappings. Refresh is manual; browsing makes no network "
+                       "requests. No listings still permits live tuning.");
                 emit changed();
             }
         });
 }
-bool GuideController::setSourceEpg(int index, const QString& epgId) {
+bool
+GuideController::validateFeedInputs(const QString& instance, const QString& directUrl,
+                                    const QString& directName)
+{
+    if (!ComponentSchema::safeId(instance) || instance == "kodi-pvr")
+        return false;
+    if (!directUrl.isEmpty() && (!GuideFeeds::streamUrl(directUrl) || directName.trimmed().isEmpty() ||
+                                 directName.size() > 160 || directName.contains('\n') || directName.contains('\r')))
+        return false;
+    return true;
+}
+bool
+GuideController::setSourceEpg(int index, const QString& epgId)
+{
     if (!m_valid || busy() || !m_sourcePreviewReady || index < 0 || index >= m_sourcePreview.size())
         return fail(tr("Preview the source before editing its EPG mapping."));
     auto entry = m_sourcePreview[index].toMap();
@@ -1387,7 +1426,9 @@ bool GuideController::setSourceEpg(int index, const QString& epgId) {
     emit changed();
     return true;
 }
-bool GuideController::setSourceNumber(int index, const QVariant& value) {
+bool
+GuideController::setSourceNumber(int index, const QVariant& value)
+{
     if (!m_valid || busy() || !m_sourcePreviewReady || index < 0 || index >= m_sourcePreview.size() ||
         !integer(value, 1, 99999))
         return fail(tr("Choose a whole preview channel number from 1 to 99999."));
@@ -1395,7 +1436,8 @@ bool GuideController::setSourceNumber(int index, const QVariant& value) {
     auto entry = m_sourcePreview[index].toMap();
     auto def = entry.value("definition").toMap();
     const auto id = def.value("id").toString();
-    for (const auto& v : m_channels) {
+    for (const auto& v : m_channels)
+    {
         const auto c = v.toMap();
         if (c.value("id") == id)
             return fail(tr("This channel already exists. Change its number in Manage, then preview the source again."));
@@ -1412,7 +1454,9 @@ bool GuideController::setSourceNumber(int index, const QVariant& value) {
     emit changed();
     return true;
 }
-void GuideController::cancel() {
+void
+GuideController::cancel()
+{
     ++m_catalogGeneration;
     m_completion = {};
     m_pendingJob = {};
@@ -1421,7 +1465,8 @@ void GuideController::cancel() {
     m_pendingKind.clear();
     if (m_cancel)
         m_cancel->store(true);
-    if (m_reading) {
+    if (m_reading)
+    {
         m_reading = m_busy = false;
         m_catalogDeadline.stop();
         closeBridge();
@@ -1439,23 +1484,36 @@ void GuideController::cancel() {
         m_busy ? tr("Cancellation requested. Waiting for the current transaction result…") : tr("Preview cancelled.");
     emit changed();
 }
-bool GuideController::setPreferences(const QString& id, const QVariantMap& p, int revision) {
-    return submit([id, p, revision](GuideStore& store) {
-        return outcome(store.setPreferences(id, p, revision), store);
-    });
+bool
+GuideController::setPreferences(const QString& id, const QVariantMap& p, int revision)
+{
+    return submit(
+        [id, p, revision](GuideStore& store)
+        {
+            return outcome(store.setPreferences(id, p, revision), store);
+        });
 }
-bool GuideController::setMetadata(const QString& id, const QVariantMap& p, int revision) {
-    return submit([id, p, revision](GuideStore& store) {
-        return outcome(store.setMetadata(id, p, revision), store);
-    });
+bool
+GuideController::setMetadata(const QString& id, const QVariantMap& p, int revision)
+{
+    return submit(
+        [id, p, revision](GuideStore& store)
+        {
+            return outcome(store.setMetadata(id, p, revision), store);
+        });
 }
-QString GuideController::stationLogo(const QString& relative) const {
+QString
+GuideController::stationLogo(const QString& relative) const
+{
     return m_valid ? GuideAssets::source(m_profileDirectory, relative) : QString();
 }
-bool GuideController::refreshRuleTemplates() {
+bool
+GuideController::refreshRuleTemplates()
+{
     const auto profile = m_profileDirectory;
     return submit(
-        [profile](GuideStore& store) {
+        [profile](GuideStore& store)
+        {
             const auto path = QDir(profile).filePath("guide-templates");
             if (QFileInfo(path).isSymLink())
                 return QVariantMap{{"ok", false}, {"error", "Template directory cannot be a symbolic link."}};
@@ -1464,7 +1522,8 @@ bool GuideController::refreshRuleTemplates() {
             if (files.size() > 64)
                 return QVariantMap{{"ok", false}, {"error", "A profile supports at most 64 saved channel templates."}};
             QVariantList templates;
-            for (const auto& info : files) {
+            for (const auto& info : files)
+            {
                 QFile file(info.absoluteFilePath());
                 if (info.isSymLink() || !file.open(QIODevice::ReadOnly) || file.size() > 256 * 1024)
                     return QVariantMap{
@@ -1485,14 +1544,18 @@ bool GuideController::refreshRuleTemplates() {
             result["templates"] = templates;
             return result;
         },
-        [this](const QVariantMap& result) {
-            if (result.value("ok").toBool()) {
+        [this](const QVariantMap& result)
+        {
+            if (result.value("ok").toBool())
+            {
                 m_ruleTemplates = result.value("templates").toList();
                 emit changed();
             }
         });
 }
-bool GuideController::saveRuleTemplate(const QString& name, const QVariantMap& definition) {
+bool
+GuideController::saveRuleTemplate(const QString& name, const QVariantMap& definition)
+{
     if (name.trimmed() != name || name.isEmpty() || name.size() > 80 ||
         ComponentSchema::guideChannel(definition).isEmpty() || definition.contains("owner"))
         return fail(tr("Choose a template name up to 80 characters and a valid local channel draft."));
@@ -1501,7 +1564,8 @@ bool GuideController::saveRuleTemplate(const QString& name, const QVariantMap& d
             return fail(tr("Use a plain-text template name."));
     const auto profile = m_profileDirectory;
     return submit(
-        [name, definition, profile](GuideStore& store) {
+        [name, definition, profile](GuideStore& store)
+        {
             const auto directory = QDir(profile).filePath("guide-templates");
             if (QFileInfo(directory).isSymLink() || !QDir().mkpath(directory))
                 return QVariantMap{{"ok", false}, {"error", "Cannot create the profile template directory."}};
@@ -1519,20 +1583,26 @@ bool GuideController::saveRuleTemplate(const QString& name, const QVariantMap& d
             const auto data =
                 QJsonDocument::fromVariant(QVariantMap{{"schemaVersion", 1}, {"name", name}, {"definition", copy}})
                     .toJson(QJsonDocument::Compact);
-            if (!GuideAtomicFile::publish(path, data, [&store] {
-                    return !store.cancellationRequested();
-                }))
+            if (!GuideAtomicFile::publish(path,
+                                          data,
+                                          [&store]
+                                          {
+                                              return !store.cancellationRequested();
+                                          }))
                 return QVariantMap{
                     {"ok", false},
                     {"error", "Cannot atomically save the new template. Previous templates were preserved."}};
             return outcome(true, store);
         },
-        [this](const QVariantMap& result) {
+        [this](const QVariantMap& result)
+        {
             if (result.value("ok").toBool())
                 refreshRuleTemplates();
         });
 }
-bool GuideController::useRuleTemplate(int index) {
+bool
+GuideController::useRuleTemplate(int index)
+{
     if (!m_valid || busy() || index < 0 || index >= m_ruleTemplates.size())
         return fail(tr("Choose a saved template from this profile."));
     auto definition = m_ruleTemplates[index].toMap().value("definition").toMap();
@@ -1548,62 +1618,88 @@ bool GuideController::useRuleTemplate(int index) {
     emit changed();
     return true;
 }
-bool GuideController::setStationLogo(const QString& id, const QString& path, int revision) {
+bool
+GuideController::setStationLogo(const QString& id, const QString& path, int revision)
+{
     const auto profile = m_profileDirectory;
-    return submit([id, path, revision, profile](GuideStore& store) {
-        if (path.isEmpty())
-            return outcome(store.setMetadata(id, {{"logo", QString()}}, revision), store);
-        const QFileInfo info(path);
-        if (!info.isAbsolute() || info.isSymLink() || !info.isFile())
-            return QVariantMap{{"ok", false}, {"error", "Choose a local PNG or JPEG file."}};
-        QFile input(path);
-        if (!input.open(QIODevice::ReadOnly) || input.size() > 20 * 1024 * 1024)
-            return QVariantMap{{"ok", false}, {"error", "Station artwork must fit within 20 MiB."}};
-        const auto data = input.read(20 * 1024 * 1024 + 1);
-        const auto name = GuideAssets::name(data);
-        if (name.isEmpty() || !GuideAssets::write(profile, name, data))
-            return QVariantMap{{"ok", false},
-                               {"error", "Cannot import this bounded station image. Previous artwork was preserved."}};
-        return outcome(store.setMetadata(id, {{"logo", name}}, revision), store);
-    });
+    return submit(
+        [id, path, revision, profile](GuideStore& store)
+        {
+            if (path.isEmpty())
+                return outcome(store.setMetadata(id, {{"logo", QString()}}, revision), store);
+            const QFileInfo info(path);
+            if (!info.isAbsolute() || info.isSymLink() || !info.isFile())
+                return QVariantMap{{"ok", false}, {"error", "Choose a local PNG or JPEG file."}};
+            QFile input(path);
+            if (!input.open(QIODevice::ReadOnly) || input.size() > 20 * 1024 * 1024)
+                return QVariantMap{{"ok", false}, {"error", "Station artwork must fit within 20 MiB."}};
+            const auto data = input.read(20 * 1024 * 1024 + 1);
+            const auto name = GuideAssets::name(data);
+            if (name.isEmpty() || !GuideAssets::write(profile, name, data))
+                return QVariantMap{
+                    {"ok", false},
+                    {"error", "Cannot import this bounded station image. Previous artwork was preserved."}};
+            return outcome(store.setMetadata(id, {{"logo", name}}, revision), store);
+        });
 }
-bool GuideController::swapNumbers(const QString& id, const QString& otherId, const QVariantMap& revisions) {
-    return submit([id, otherId, revisions](GuideStore& store) {
-        return outcome(store.swapNumbers(id, otherId, revisions), store);
-    });
+bool
+GuideController::swapNumbers(const QString& id, const QString& otherId, const QVariantMap& revisions)
+{
+    return submit(
+        [id, otherId, revisions](GuideStore& store)
+        {
+            return outcome(store.swapNumbers(id, otherId, revisions), store);
+        });
 }
-bool GuideController::reorder(const QStringList& ids, const QVariantMap& revisions) {
-    return submit([ids, revisions](GuideStore& store) {
-        return outcome(store.reorder(ids, revisions), store);
-    });
+bool
+GuideController::reorder(const QStringList& ids, const QVariantMap& revisions)
+{
+    return submit(
+        [ids, revisions](GuideStore& store)
+        {
+            return outcome(store.reorder(ids, revisions), store);
+        });
 }
-bool GuideController::remove(const QString& id, int revision) {
-    return submit([id, revision](GuideStore& store) {
-        return outcome(store.remove(id, revision), store);
-    });
+bool
+GuideController::remove(const QString& id, int revision)
+{
+    return submit(
+        [id, revision](GuideStore& store)
+        {
+            return outcome(store.remove(id, revision), store);
+        });
 }
-bool GuideController::markUnavailable(const QString& kind, int mediaId) {
+bool
+GuideController::markUnavailable(const QString& kind, int mediaId)
+{
     if (!QStringList{"movie", "episode", "musicvideo", "song"}.contains(kind) || mediaId < 1)
         return fail(tr("Invalid unavailable-media identity."));
     return submit(
-        [kind, mediaId](GuideStore& store) {
+        [kind, mediaId](GuideStore& store)
+        {
             return outcome(store.markUnavailable(kind, mediaId), store);
         },
-        [this](const QVariantMap& result) {
-            if (result.value("ok").toBool()) {
-                m_status = tr("Unavailable media marked only in affected programs. Select a program and review Repair; "
-                              "other programs keep their times.");
+        [this](const QVariantMap& result)
+        {
+            if (result.value("ok").toBool())
+            {
+                m_status =
+                    tr("Unavailable media marked only in affected programs. Select a program and review Repair; "
+                       "other programs keep their times.");
                 emit changed();
             }
         });
 }
-bool GuideController::tune(const QString& id, const QString& origin) {
+bool
+GuideController::tune(const QString& id, const QString& origin)
+{
     if (!m_clockWarning.isEmpty())
         return fail(tr("Review the device clock warning before tuning. Cached listings remain available."));
     if (!ComponentSchema::safeId(id) || (!origin.isEmpty() && !ComponentSchema::safeId(origin)))
         return fail(tr("Invalid guide selection."));
     return submit(
-        [id](GuideStore& store) {
+        [id](GuideStore& store)
+        {
             const auto target = store.tuneTarget(id, now());
             return QVariantMap{
                 {"ok", !target.isEmpty()},
@@ -1613,21 +1709,27 @@ bool GuideController::tune(const QString& id, const QString& origin) {
                      ? QString("This channel has no available scheduled program. Check its source or schedule.")
                      : QString()}};
         },
-        [this, origin](const QVariantMap& r) {
+        [this, origin](const QVariantMap& r)
+        {
             if (r.value("ok").toBool())
                 emit targetReady(r.value("target").toMap(), origin);
         });
 }
-bool GuideController::acceptDeviceClock() {
+bool
+GuideController::acceptDeviceClock()
+{
     const auto profile = m_profileDirectory;
     return submit(
-        [profile](GuideStore& store) {
+        [profile](GuideStore& store)
+        {
             if (!GuideClock::save(profile, GuideClock::observation()))
                 return QVariantMap{{"ok", false}, {"error", "Cannot save the reviewed device-clock choice."}};
             return outcome(true, store);
         },
-        [this](const QVariantMap& result) {
-            if (result.value("ok").toBool()) {
+        [this](const QVariantMap& result)
+        {
+            if (result.value("ok").toBool())
+            {
                 m_clockWarning.clear();
                 m_maintenanceAttempted.clear();
                 emit changed();
@@ -1635,19 +1737,25 @@ bool GuideController::acceptDeviceClock() {
             }
         });
 }
-bool GuideController::readDiagnostics() {
+bool
+GuideController::readDiagnostics()
+{
     return submit(
-        [](GuideStore& store) {
+        [](GuideStore& store)
+        {
             auto result = outcome(true, store);
             result["diagnostics"] = store.diagnostics();
             return result;
         },
-        [this](const QVariantMap& result) {
+        [this](const QVariantMap& result)
+        {
             m_diagnostics = result.value("diagnostics").toMap();
             emit changed();
         });
 }
-void GuideController::recordGuidePaint() {
+void
+GuideController::recordGuidePaint()
+{
     if (!m_valid || !m_ready || !m_paintPending)
         return;
     m_paintPending = false;
@@ -1656,17 +1764,322 @@ void GuideController::recordGuidePaint() {
                       << "VISIBLE_ROWS" << m_rows.size();
     emit changed();
 }
-bool GuideController::setSourceEnabled(const QString& instance, const QVariant& enabled) {
+bool
+GuideController::setSourceEnabled(const QString& instance, const QVariant& enabled)
+{
     if (enabled.metaType().id() != QMetaType::Bool)
         return fail(tr("Choose Enable or Disable for this source."));
     QVariantMap revisions;
-    for (const auto& v : m_channels) {
+    for (const auto& v : m_channels)
+    {
         const auto channel = v.toMap();
         if (channel.contains("owner") && channel.value("source").toMap().value("instance") == instance)
             revisions[channel.value("id").toString()] = channel.value("revision");
     }
-    return submit([instance, enabled, revisions](GuideStore& store) {
-        return outcome(store.setSourceEnabled(instance, enabled.toBool(), revisions), store);
-    });
+    return submit(
+        [instance, enabled, revisions](GuideStore& store)
+        {
+            return outcome(store.setSourceEnabled(instance, enabled.toBool(), revisions), store);
+        });
+}
+bool
+GuideController::validatePvrPage(const QVariantMap& result, const QVariantMap& limits)
+{
+    const auto key = result.value("limits").toMap().isEmpty() ? QString("channels") : QString("broadcasts");
+    const int start = limits.value("start", -1).toInt(), end = limits.value("end", -1).toInt(),
+              total = limits.value("total", -1).toInt();
+    const auto items = result.value(key).toList();
+    if (!integer(limits.value("start"), 0, 1024) || !integer(limits.value("end"), 0, 1024) ||
+        !integer(limits.value("total"), 0, 1024) || result.value(key).metaType().id() != QMetaType::QVariantList ||
+        start != m_page || end != start + items.size() || items.size() > 50 || total < end ||
+        total > (m_sourceIndex < 0 ? 1024 : 1000) || (end == start && total > end))
+    {
+        readFailure(tr("Kodi returned an invalid or oversized PVR page. Cached listings were preserved."));
+        return false;
+    }
+    return true;
+}
+bool
+GuideController::processNewPvrChannel(const QVariantMap& item, QVariantMap& source, QString& id, int& number,
+                                      QVariantMap& definition, QSet<int>& used)
+{
+    if (item.value("locked").metaType().id() != QMetaType::Bool ||
+        item.value("hidden").metaType().id() != QMetaType::Bool)
+    {
+        readFailure(tr("Kodi did not report PVR availability safely."));
+        return false;
+    }
+    if (item.value("locked").toBool() || item.value("hidden").toBool())
+    {
+        ++m_skipped;
+        return false;
+    }
+    source = QVariantMap{{"instance", "kodi-pvr"},
+                         {"channelId", item.value("channelid")},
+                         {"clientId", item.value("clientid")},
+                         {"uniqueId", item.value("uniqueid")},
+                         {"number", item.value("channelnumber")}};
+    id =
+        "pvr-" +
+        QString::fromLatin1(QCryptographicHash::hash(
+                                QByteArray("kodi-pvr:") + QByteArray::number(source.value("clientId").toInt()) +
+                                    ":" + QByteArray::number(source.value("uniqueId").toInt()),
+                                QCryptographicHash::Sha256)
+                                .toHex());
+    number = item.value("channelnumber").toInt();
+    const auto existing = std::find_if(m_channels.cbegin(),
+                                       m_channels.cend(),
+                                       [&id](const QVariant& c)
+                                       {
+                                           return c.toMap().value("id") == id;
+                                       });
+    if (existing != m_channels.cend())
+        number = existing->toMap().value("number").toInt();
+    else if (number < 1 || used.contains(number))
+    {
+        number = 1;
+        while (used.contains(number) && number < 99999)
+            ++number;
+    }
+    definition = QVariantMap{
+        {"schemaVersion", 1},
+        {"id", id},
+        {"owner", "kodi-pvr"},
+        {"source", source},
+        {"number", number},
+        {"name", existing == m_channels.cend() ? item.value("label") : existing->toMap().value("name")},
+        {"sourceAvailable", true},
+        {"refreshedUtc", m_sourceRefreshed}};
+    QString error;
+    if (ComponentSchema::guideChannel(definition, &error).isEmpty() ||
+        std::any_of(m_sourcePreview.cbegin(),
+                    m_sourcePreview.cend(),
+                    [&id](const QVariant& c)
+                    {
+                        return c.toMap().value("definition").toMap().value("id") == id;
+                    }))
+    {
+        readFailure(tr("Invalid or ambiguous PVR channel identity. Cached listings were preserved."));
+        return false;
+    }
+    return true;
+}
+void
+GuideController::processPvrPrograms(const QVariantList& items, QVariantMap& entry, QVariantList& programs,
+                                    qint64& sourceRefreshed, qint64& snapshotBytes)
+{
+    for (const auto& v : items)
+    {
+        const auto p = v.toMap();
+        const auto from = pvrUtc(p.value("starttime")), to = pvrUtc(p.value("endtime"));
+        if (from < 0 || to <= from || to - from > 7 * 86400 || !integer(p.value("broadcastid"), 1, 2147483647) ||
+            p.value("title").metaType().id() != QMetaType::QString ||
+            p.value("title").toString().trimmed().isEmpty() || p.value("title").toString().size() > 512)
+        {
+            readFailure(tr("Invalid PVR broadcast interval or identity. Cached listings were preserved."));
+            return;
+        }
+        if (to < sourceRefreshed - 7 * 86400 || from > sourceRefreshed + 30 * 86400)
+            continue;
+        QVariantMap program{{"broadcastId", p.value("broadcastid").toString()},
+                            {"title", p.value("title")},
+                            {"startUtc", from},
+                            {"endUtc", to}};
+        programs.append(program);
+        snapshotBytes += QJsonDocument::fromVariant(program).toJson(QJsonDocument::Compact).size() + 1;
+    }
+    std::sort(programs.begin(),
+              programs.end(),
+              [](const QVariant& a, const QVariant& b)
+              {
+                  return a.toMap().value("startUtc").toLongLong() < b.toMap().value("startUtc").toLongLong();
+              });
+    entry["programs"] = programs;
+    m_sourcePreview[m_sourceIndex] = entry;
+}
+void
+GuideController::finalizePvrLoad(int& page, int& sourceIndex, bool& sourcePreviewReady)
+{
+    closeBridge();
+    if (m_snapshotBytes > 4 * 1024 * 1024 - 4096)
+    {
+        readFailure(tr("PVR preview exceeds the 4 MiB cache generation limit."));
+        return;
+    }
+    if (end < total)
+        page = end;
+    else
+    {
+        page = 0;
+        ++sourceIndex;
+        if (sourceIndex == 0 && m_sourcePreview.isEmpty())
+        {
+            readFailure(
+                tr("No unlocked, visible PVR channels are configured in this Kodi profile. Set up a PVR "
+                   "source, then retry."));
+            return;
+        }
+    }
+    if (sourceIndex >= 0 && sourceIndex >= m_sourcePreview.size())
+    {
+        m_catalogDeadline.stop();
+        m_reading = m_busy = m_pvrReading = false;
+        sourcePreviewReady = true;
+        m_status =
+            tr("%1 PVR channels ready for mapping review · %2 hidden/locked channels skipped. Nothing imported yet.")
+                .arg(m_sourcePreview.size())
+                .arg(m_skipped);
+        emit changed();
+        return;
+    }
+    m_status =
+        tr("Reading PVR listings · channel %1 of %2").arg(std::max(0, sourceIndex) + 1).arg(m_sourcePreview.size());
+    emit changed();
+    const auto generation = m_catalogGeneration;
+    QTimer::singleShot(0,
+                       this,
+                       [this, generation]
+                       {
+                           if (m_valid && m_reading && generation == m_catalogGeneration)
+                               requestPage();
+                       });
+}
+bool
+GuideController::readFeedFile(const QString& path, qint64 maximum, QByteArray& bytes)
+{
+    for (const auto c : path)
+        if (c.unicode() < 32 || c.unicode() == 127)
+            return false;
+    if (!QDir::isAbsolutePath(path) || QFileInfo(path).isSymLink() || !QFileInfo(path).isFile())
+        return false;
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly) || file.size() > maximum)
+        return false;
+    bytes = file.read(maximum + 1);
+    return bytes.size() <= maximum && file.atEnd();
+}
+bool
+GuideController::processFeedEntries(QVariantList& entries, const QVariantMap& listings, QSet<int>& used,
+                                    GuideStore& store)
+{
+    for (auto& v : entries)
+    {
+        auto entry = v.toMap();
+        auto definition = entry.value("definition").toMap();
+        const auto old = store.channel(definition.value("id").toString());
+        int number = old.isEmpty() ? definition.value("number").toInt() : old.value("number").toInt();
+        if (old.isEmpty() && used.contains(number))
+        {
+            number = 1;
+            while (used.contains(number) && number < 99999)
+                ++number;
+        }
+        if (!old.isEmpty())
+        {
+            auto source = definition.value("source").toMap();
+            const auto epg = old.value("source").toMap().value("epgId").toString();
+            if (!epg.isEmpty() && listings.contains(epg))
+            {
+                source["epgId"] = epg;
+                definition["source"] = source;
+                entry["programs"] = listings.value(epg, QVariantList{});
+            }
+        }
+        definition["number"] = number;
+        used.insert(number);
+        QString error;
+        if (ComponentSchema::guideChannel(definition, &error).isEmpty())
+            return false;
+        entry["definition"] = definition;
+        v = entry;
+    }
+    return true;
+}
+void
+GuideController::finalizeFeedLoad(QVariantMap& result, QVariantList& entries, QVariantList& sourcePreview,
+                                  QVariantMap& feedListings, bool& sourcePreviewReady, qint64& snapshotBytes)
+{
+    sourcePreview = entries;
+    feedListings = result.value("listings").toMap();
+    sourcePreviewReady = true;
+    Q_UNUSED(snapshotBytes);
+}
+bool
+GuideController::validateGuidePage(const QVariantMap& result, const QVariantMap& limits, const QJsonArray& items,
+                                   int start, int end, int total, int skipped)
+{
+    if (!result.value("items").isArray() || start != m_page || end < start || end > start + 50 || total < end ||
+        total > 100000 || (end == start && total > end) || skipped < 0 || items.size() + skipped != end - start)
+    {
+        readFailure(tr("Kodi returned an invalid guide metadata page."));
+        return false;
+    }
+    return true;
+}
+bool
+GuideController::processGuideItems(const QJsonArray& items, QVariantList& candidates,
+                                   const QVariantMap& previewDefinition, qint64& snapshotBytes, int& skipped)
+{
+    for (const auto& v : items)
+    {
+        const auto item = v.toObject().toVariantMap();
+        if (!GuideRules::matchesChannel(previewDefinition, item))
+            continue;
+        snapshotBytes += QJsonDocument::fromVariant(item).toJson(QJsonDocument::Compact).size() + 1;
+        if (candidates.size() >= 10000 || snapshotBytes > 4 * 1024 * 1024 - 2)
+        {
+            readFailure(tr("More media matches than one channel can hold. Narrow the rules before saving."));
+            return false;
+        }
+        candidates.append(item);
+    }
+    return true;
+}
+void
+GuideController::finalizeGuideLoad(QVariantList& candidates, int& page, int& kindIndex, int& sourceIndex,
+                                   bool& previewReady, qint64& snapshotBytes, int end, int total, int skipped)
+{
+    Q_UNUSED(result);
+    m_candidates = candidates;
+    m_skipped += skipped;
+    closeBridge();
+    if (end < total)
+        page = end;
+    else
+    {
+        ++kindIndex;
+        page = 0;
+    }
+    if (kindIndex < m_kinds.size())
+    {
+        m_status = tr("Previewing local media · %1 matches").arg(m_candidates.size());
+        emit changed();
+        const auto generation = m_catalogGeneration;
+        QTimer::singleShot(0,
+                           this,
+                           [this, generation]
+                           {
+                               if (m_valid && m_reading && generation == m_catalogGeneration)
+                                   requestPage();
+                           });
+        return;
+    }
+    m_catalogDeadline.stop();
+    m_reading = m_busy = false;
+    previewReady = !m_candidates.isEmpty();
+    m_status =
+        tr("%1 matching items · %2 items skipped (remote or unknown duration)").arg(m_candidates.size()).arg(m_skipped);
+    if (m_previewDefinition.value("sequence") == "next-unwatched")
+        m_status +=
+            tr(" · Unwatched in Kodi at preview; repeats in episode order. Refresh rules to update watch "
+               "state; committed programs stay unchanged.");
+    if (m_importPackage.value("draftId") == m_previewDefinition.value("id") &&
+        !m_importPackage.value("snapshot").toMap().isEmpty())
+        m_status +=
+            tr(" · Review imported media mappings before Save. Imported UTC intervals stay unchanged; edited "
+               "matching rules apply beyond the snapshot.");
+    if (!previewReady)
+        m_error = tr("No playable local media matches. Adjust the rules or update Kodi's metadata.");
+    emit changed();
 }
 #include "GuideController.moc"

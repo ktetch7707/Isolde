@@ -3,21 +3,31 @@
 #include <QProcess>
 #include <QRegularExpression>
 
-NetworkSettings::NetworkSettings(QObject* parent) : QObject(parent) {
+NetworkSettings::NetworkSettings(QObject* parent) : QObject(parent)
+{
     refresh();
 }
 
-QString NetworkSettings::summary() const {
+QString
+NetworkSettings::summary() const
+{
     return m_summary;
 }
-QString NetworkSettings::connectivity() const {
+QString
+NetworkSettings::connectivity() const
+{
     return m_connectivity;
 }
-bool NetworkSettings::internetAvailable() const {
+bool
+NetworkSettings::internetAvailable() const
+{
     return m_connectivity == QStringLiteral("full");
 }
-bool NetworkSettings::localNetworkAvailable() const {
-    for (const auto& value : m_devices) {
+bool
+NetworkSettings::localNetworkAvailable() const
+{
+    for (const auto& value : m_devices)
+    {
         const auto device = value.toMap();
         if (device.value(QStringLiteral("type")).toString() == QStringLiteral("loopback"))
             continue;
@@ -26,26 +36,40 @@ bool NetworkSettings::localNetworkAvailable() const {
     }
     return false;
 }
-bool NetworkSettings::wifiEnabled() const {
+bool
+NetworkSettings::wifiEnabled() const
+{
     return m_wifiEnabled;
 }
-QVariantList NetworkSettings::devices() const {
+QVariantList
+NetworkSettings::devices() const
+{
     return m_devices;
 }
-QVariantList NetworkSettings::connectionDetails() const {
+QVariantList
+NetworkSettings::connectionDetails() const
+{
     return m_connectionDetails;
 }
-QVariantList NetworkSettings::savedConnections() const {
+QVariantList
+NetworkSettings::savedConnections() const
+{
     return m_savedConnections;
 }
-QVariantList NetworkSettings::wifiNetworks() const {
+QVariantList
+NetworkSettings::wifiNetworks() const
+{
     return m_wifiNetworks;
 }
-QString NetworkSettings::errorString() const {
+QString
+NetworkSettings::errorString() const
+{
     return m_errorString;
 }
 
-bool NetworkSettings::refresh() {
+bool
+NetworkSettings::refresh()
+{
     bool ok = false;
     const auto state = runNmcli(
         {QStringLiteral("-t"), QStringLiteral("-f"), QStringLiteral("STATE,CONNECTIVITY"), QStringLiteral("general")},
@@ -71,7 +95,8 @@ bool NetworkSettings::refresh() {
                                        &ok);
     if (!ok)
         return false;
-    for (const auto& line : deviceOutput.split(QLatin1Char('\n'), Qt::SkipEmptyParts)) {
+    for (const auto& line : deviceOutput.split(QLatin1Char('\n'), Qt::SkipEmptyParts))
+    {
         const auto parts = splitCells(line);
         const auto name = cleanCell(parts.value(0));
         const auto type = cleanCell(parts.value(1));
@@ -82,14 +107,16 @@ bool NetworkSettings::refresh() {
                                    {QStringLiteral("state"), deviceState},
                                    {QStringLiteral("connection"), connection}});
         if (activeDevice.isEmpty() && deviceState.contains(QStringLiteral("connected"), Qt::CaseInsensitive) &&
-            type != QStringLiteral("loopback")) {
+            type != QStringLiteral("loopback"))
+        {
             activeDevice = name;
         }
     }
     m_devices = devices;
 
     QVariantList details;
-    if (!activeDevice.isEmpty()) {
+    if (!activeDevice.isEmpty())
+    {
         const auto detailOutput = runNmcli({QStringLiteral("-t"),
                                             QStringLiteral("-f"),
                                             QStringLiteral("IP4.ADDRESS,IP4.GATEWAY,IP4.DNS"),
@@ -97,8 +124,10 @@ bool NetworkSettings::refresh() {
                                             QStringLiteral("show"),
                                             activeDevice},
                                            &ok);
-        if (ok) {
-            for (const auto& line : detailOutput.split(QLatin1Char('\n'), Qt::SkipEmptyParts)) {
+        if (ok)
+        {
+            for (const auto& line : detailOutput.split(QLatin1Char('\n'), Qt::SkipEmptyParts))
+            {
                 const auto separator = line.indexOf(QLatin1Char(':'));
                 if (separator <= 0)
                     continue;
@@ -128,7 +157,8 @@ bool NetworkSettings::refresh() {
                                             &ok);
     if (!ok)
         return false;
-    for (const auto& line : connectionsOutput.split(QLatin1Char('\n'), Qt::SkipEmptyParts)) {
+    for (const auto& line : connectionsOutput.split(QLatin1Char('\n'), Qt::SkipEmptyParts))
+    {
         const auto parts = splitCells(line);
         const auto uuid = cleanCell(parts.value(1));
         if (!isSafeUuid(uuid))
@@ -141,7 +171,8 @@ bool NetworkSettings::refresh() {
     m_savedConnections = savedConnections;
 
     QVariantList networks;
-    if (m_wifiEnabled) {
+    if (m_wifiEnabled)
+    {
         const auto wifiOutput = runNmcli({QStringLiteral("-t"),
                                           QStringLiteral("-f"),
                                           QStringLiteral("IN-USE,SSID,SIGNAL,SECURITY"),
@@ -153,7 +184,8 @@ bool NetworkSettings::refresh() {
                                          &ok);
         if (!ok)
             return false;
-        for (const auto& line : wifiOutput.split(QLatin1Char('\n'), Qt::SkipEmptyParts)) {
+        for (const auto& line : wifiOutput.split(QLatin1Char('\n'), Qt::SkipEmptyParts))
+        {
             const auto parts = splitCells(line);
             const auto ssid = cleanCell(parts.value(1));
             if (ssid.isEmpty())
@@ -170,7 +202,9 @@ bool NetworkSettings::refresh() {
     return true;
 }
 
-bool NetworkSettings::setWifiEnabled(bool enabled) {
+bool
+NetworkSettings::setWifiEnabled(bool enabled)
+{
     bool ok = false;
     runNmcli({QStringLiteral("radio"), QStringLiteral("wifi"), enabled ? QStringLiteral("on") : QStringLiteral("off")},
              &ok);
@@ -179,9 +213,12 @@ bool NetworkSettings::setWifiEnabled(bool enabled) {
     return refresh();
 }
 
-bool NetworkSettings::reconnect(const QString& uuid) {
+bool
+NetworkSettings::reconnect(const QString& uuid)
+{
     const auto cleanUuid = uuid.trimmed();
-    if (!isSafeUuid(cleanUuid)) {
+    if (!isSafeUuid(cleanUuid))
+    {
         setError(tr("Choose a saved network first."));
         return false;
     }
@@ -193,9 +230,12 @@ bool NetworkSettings::reconnect(const QString& uuid) {
     return refresh();
 }
 
-bool NetworkSettings::forgetConnection(const QString& uuid) {
+bool
+NetworkSettings::forgetConnection(const QString& uuid)
+{
     const auto cleanUuid = uuid.trimmed();
-    if (!isSafeUuid(cleanUuid)) {
+    if (!isSafeUuid(cleanUuid))
+    {
         setError(tr("Choose a saved network first."));
         return false;
     }
@@ -207,23 +247,29 @@ bool NetworkSettings::forgetConnection(const QString& uuid) {
     return refresh();
 }
 
-bool NetworkSettings::connectToWifi(const QString& ssid, const QString& password) {
+bool
+NetworkSettings::connectToWifi(const QString& ssid, const QString& password)
+{
     const auto cleanSsid = ssid.trimmed();
-    if (cleanSsid.isEmpty()) {
+    if (cleanSsid.isEmpty())
+    {
         setError(tr("Choose a Wi-Fi network first."));
         return false;
     }
 
     bool secured = false;
-    for (const auto& value : m_wifiNetworks) {
+    for (const auto& value : m_wifiNetworks)
+    {
         const auto network = value.toMap();
         if (network.value(QStringLiteral("ssid")).toString() == cleanSsid &&
-            !network.value(QStringLiteral("security")).toString().trimmed().isEmpty()) {
+            !network.value(QStringLiteral("security")).toString().trimmed().isEmpty())
+        {
             secured = true;
             break;
         }
     }
-    if (secured && password.isEmpty()) {
+    if (secured && password.isEmpty())
+    {
         setError(tr("This Wi-Fi network requires a password."));
         return false;
     }
@@ -238,7 +284,9 @@ bool NetworkSettings::connectToWifi(const QString& ssid, const QString& password
     return refresh();
 }
 
-QString NetworkSettings::runNmcli(const QStringList& arguments, bool* ok) const {
+QString
+NetworkSettings::runNmcli(const QStringList& arguments, bool* ok) const
+{
     QProcess process;
     process.start(QStringLiteral("nmcli"), arguments);
     const bool finished = process.waitForFinished(8000);
@@ -252,24 +300,36 @@ QString NetworkSettings::runNmcli(const QStringList& arguments, bool* ok) const 
     return output;
 }
 
-QString NetworkSettings::cleanCell(QString value) {
+QString
+NetworkSettings::cleanCell(QString value)
+{
     return value.replace(QStringLiteral("\\:"), QStringLiteral(":")).trimmed();
 }
 
-QStringList NetworkSettings::splitCells(const QString& line) {
+QStringList
+NetworkSettings::splitCells(const QString& line)
+{
     QStringList cells;
     QString cell;
     bool escaping = false;
-    for (const auto character : line) {
-        if (escaping) {
+    for (const auto character : line)
+    {
+        if (escaping)
+        {
             cell.append(character);
             escaping = false;
-        } else if (character == QLatin1Char('\\')) {
+        }
+        else if (character == QLatin1Char('\\'))
+        {
             escaping = true;
-        } else if (character == QLatin1Char(':')) {
+        }
+        else if (character == QLatin1Char(':'))
+        {
             cells.append(cell.trimmed());
             cell.clear();
-        } else {
+        }
+        else
+        {
             cell.append(character);
         }
     }
@@ -279,13 +339,17 @@ QStringList NetworkSettings::splitCells(const QString& line) {
     return cells;
 }
 
-bool NetworkSettings::isSafeUuid(const QString& uuid) {
+bool
+NetworkSettings::isSafeUuid(const QString& uuid)
+{
     static const QRegularExpression pattern(
         QStringLiteral("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"));
     return pattern.match(uuid).hasMatch();
 }
 
-void NetworkSettings::setError(const QString& message) {
+void
+NetworkSettings::setError(const QString& message)
+{
     if (m_errorString == message)
         return;
     m_errorString = message;

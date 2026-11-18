@@ -5,7 +5,8 @@
 #include <QtTest>
 #include <functional>
 
-class FakeSerialDevice final : public QIODevice {
+class FakeSerialDevice final : public QIODevice
+{
   public:
     explicit FakeSerialDevice(QObject* parent = nullptr) : QIODevice(parent) {}
     QByteArray written;
@@ -14,15 +15,21 @@ class FakeSerialDevice final : public QIODevice {
     bool completeSynchronously = false;
     std::function<void()> duringWrite;
 
-    bool openForWriting() {
+    bool
+    openForWriting()
+    {
         return open(QIODevice::WriteOnly);
     }
 
   protected:
-    qint64 readData(char*, qint64) override {
+    qint64
+    readData(char*, qint64) override
+    {
         return -1;
     }
-    qint64 writeData(const char* data, qint64 size) override {
+    qint64
+    writeData(const char* data, qint64 size) override
+    {
         const auto count = writeLimit < 0 ? size : qMin(size, writeLimit);
         written.append(data, count);
         if (duringWrite)
@@ -30,27 +37,41 @@ class FakeSerialDevice final : public QIODevice {
         if (completeSynchronously)
             emit bytesWritten(count);
         else if (completionDelayMs >= 0)
-            QTimer::singleShot(completionDelayMs, this, [this, count] {
-                emit bytesWritten(count);
-            });
+            QTimer::singleShot(completionDelayMs,
+                               this,
+                               [this, count]
+                               {
+                                   emit bytesWritten(count);
+                               });
         return count;
     }
 };
 
-class SerialCommandWriterTests final : public QObject {
+class SerialCommandWriterTests final : public QObject
+{
     Q_OBJECT
   private slots:
-    void completesOnlyAfterAllBytesAreWritten();
-    void timesOutAndCanRetryAfterReconnect();
-    void cancellationIgnoresLateCompletion();
-    void reportsTransportFailureAndShortWrite();
-    void deviceDisconnectIsRecoverable();
-    void closeBeforeWriteCompletionFails();
-    void synchronousFailureIsNotReportedAsAccepted();
-    void cancellationDuringStateNotificationPreventsWriting();
+    void
+    completesOnlyAfterAllBytesAreWritten();
+    void
+    timesOutAndCanRetryAfterReconnect();
+    void
+    cancellationIgnoresLateCompletion();
+    void
+    reportsTransportFailureAndShortWrite();
+    void
+    deviceDisconnectIsRecoverable();
+    void
+    closeBeforeWriteCompletionFails();
+    void
+    synchronousFailureIsNotReportedAsAccepted();
+    void
+    cancellationDuringStateNotificationPreventsWriting();
 };
 
-void SerialCommandWriterTests::completesOnlyAfterAllBytesAreWritten() {
+void
+SerialCommandWriterTests::completesOnlyAfterAllBytesAreWritten()
+{
     SerialCommandWriter writer;
     FakeSerialDevice device;
     QVERIFY(device.openForWriting());
@@ -72,7 +93,9 @@ void SerialCommandWriterTests::completesOnlyAfterAllBytesAreWritten() {
     QCOMPARE(writer.state(), QString("sent"));
 }
 
-void SerialCommandWriterTests::timesOutAndCanRetryAfterReconnect() {
+void
+SerialCommandWriterTests::timesOutAndCanRetryAfterReconnect()
+{
     SerialCommandWriter writer;
     FakeSerialDevice stalled;
     QVERIFY(stalled.openForWriting());
@@ -92,7 +115,9 @@ void SerialCommandWriterTests::timesOutAndCanRetryAfterReconnect() {
     QCOMPARE(writer.state(), QString("sent"));
 }
 
-void SerialCommandWriterTests::cancellationIgnoresLateCompletion() {
+void
+SerialCommandWriterTests::cancellationIgnoresLateCompletion()
+{
     SerialCommandWriter writer;
     FakeSerialDevice device;
     QVERIFY(device.openForWriting());
@@ -106,7 +131,9 @@ void SerialCommandWriterTests::cancellationIgnoresLateCompletion() {
     QCOMPARE(writer.state(), QString("cancelled"));
 }
 
-void SerialCommandWriterTests::reportsTransportFailureAndShortWrite() {
+void
+SerialCommandWriterTests::reportsTransportFailureAndShortWrite()
+{
     SerialCommandWriter writer;
     FakeSerialDevice device;
     QVERIFY(device.openForWriting());
@@ -125,7 +152,9 @@ void SerialCommandWriterTests::reportsTransportFailureAndShortWrite() {
     QCOMPARE(failed.size(), 2);
 }
 
-void SerialCommandWriterTests::deviceDisconnectIsRecoverable() {
+void
+SerialCommandWriterTests::deviceDisconnectIsRecoverable()
+{
     SerialCommandWriter writer;
     auto* disconnected = new FakeSerialDevice;
     QVERIFY(disconnected->openForWriting());
@@ -144,7 +173,9 @@ void SerialCommandWriterTests::deviceDisconnectIsRecoverable() {
     QCOMPARE(reconnected.written, QByteArray("7\r"));
 }
 
-void SerialCommandWriterTests::closeBeforeWriteCompletionFails() {
+void
+SerialCommandWriterTests::closeBeforeWriteCompletionFails()
+{
     SerialCommandWriter writer;
     FakeSerialDevice device;
     QVERIFY(device.openForWriting());
@@ -156,11 +187,14 @@ void SerialCommandWriterTests::closeBeforeWriteCompletionFails() {
     QVERIFY(failed.first().first().toString().contains("closed"));
 }
 
-void SerialCommandWriterTests::synchronousFailureIsNotReportedAsAccepted() {
+void
+SerialCommandWriterTests::synchronousFailureIsNotReportedAsAccepted()
+{
     SerialCommandWriter writer;
     FakeSerialDevice device;
     QVERIFY(device.openForWriting());
-    device.duringWrite = [&writer] {
+    device.duringWrite = [&writer]
+    {
         writer.fail("synchronous transport failure");
     };
     QSignalSpy failed(&writer, &SerialCommandWriter::failed);
@@ -171,14 +205,20 @@ void SerialCommandWriterTests::synchronousFailureIsNotReportedAsAccepted() {
     QCOMPARE(completed.size(), 0);
 }
 
-void SerialCommandWriterTests::cancellationDuringStateNotificationPreventsWriting() {
+void
+SerialCommandWriterTests::cancellationDuringStateNotificationPreventsWriting()
+{
     SerialCommandWriter writer;
     FakeSerialDevice device;
     QVERIFY(device.openForWriting());
-    connect(&writer, &SerialCommandWriter::stateChanged, &writer, [&writer] {
-        if (writer.isSending())
-            writer.cancel();
-    });
+    connect(&writer,
+            &SerialCommandWriter::stateChanged,
+            &writer,
+            [&writer]
+            {
+                if (writer.isSending())
+                    writer.cancel();
+            });
     QVERIFY(!writer.start(&device, QByteArray("3\r"), 200));
     QCOMPARE(writer.state(), QString("cancelled"));
     QVERIFY(device.written.isEmpty());

@@ -9,10 +9,13 @@
 #include <fcntl.h>
 #include <unistd.h>
 #endif
-namespace GuideAtomicFile {
+namespace GuideAtomicFile
+{
 // Publish a new standalone export/template without an exists/rename overwrite
 // race. Profile database transactions remain SQLite's responsibility.
-inline bool publish(const QString& path, const QByteArray& bytes, const std::function<bool()>& allowed = {}) {
+inline bool
+publish(const QString& path, const QByteArray& bytes, const std::function<bool()>& allowed = {})
+{
     for (const auto c : path)
         if (c.unicode() < 32 || c.unicode() == 127)
             return false;
@@ -24,8 +27,10 @@ inline bool publish(const QString& path, const QByteArray& bytes, const std::fun
     if (directory < 0)
         return false;
     const auto parts = info.absolutePath().split('/', Qt::SkipEmptyParts);
-    for (const auto& part : parts) {
-        if (part == "." || part == "..") {
+    for (const auto& part : parts)
+    {
+        if (part == "." || part == "..")
+        {
             ::close(directory);
             return false;
         }
@@ -40,15 +45,18 @@ inline bool publish(const QString& path, const QByteArray& bytes, const std::fun
     const auto name = info.fileName().toUtf8();
     const int file =
         ::openat(directory, temporary.constData(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC | O_NOFOLLOW, 0600);
-    if (file < 0) {
+    if (file < 0)
+    {
         ::close(directory);
         return false;
     }
     qsizetype written = 0;
     bool ok = true;
-    while (written < bytes.size()) {
+    while (written < bytes.size())
+    {
         const auto count = ::write(file, bytes.constData() + written, size_t(bytes.size() - written));
-        if (count <= 0) {
+        if (count <= 0)
+        {
             ok = false;
             break;
         }
@@ -59,7 +67,8 @@ inline bool publish(const QString& path, const QByteArray& bytes, const std::fun
     bool published = false;
     if (ok && allowed && !allowed())
         ok = false;
-    if (ok) {
+    if (ok)
+    {
         published = ::linkat(directory, temporary.constData(), directory, name.constData(), 0) == 0;
         ok = published && ::fsync(directory) == 0;
     }

@@ -7,36 +7,53 @@
 #include <QPointer>
 #include <QTimer>
 
-class SerialCommandWriter final : public QObject {
+class SerialCommandWriter final : public QObject
+{
     Q_OBJECT
     Q_PROPERTY(QString state READ state NOTIFY stateChanged)
     Q_PROPERTY(qint64 elapsedMs READ elapsedMs NOTIFY stateChanged)
   public:
     explicit SerialCommandWriter(QObject* parent = nullptr);
 
-    QString state() const {
+    QString
+    state() const
+    {
         return m_state;
     }
-    qint64 elapsedMs() const;
-    qint64 pendingBytes() const {
+    qint64
+    elapsedMs() const;
+    qint64
+    pendingBytes() const
+    {
         return m_pendingBytes;
     }
-    Q_INVOKABLE bool isSending() const {
+    Q_INVOKABLE bool
+    isSending() const
+    {
         return m_state == "sending";
     }
-    bool start(QIODevice* device, const QByteArray& payload, int timeoutMs = 2500);
-    Q_INVOKABLE void cancel();
-    Q_INVOKABLE void fail(const QString& reason);
+    bool
+    start(QIODevice* device, const QByteArray& payload, int timeoutMs = 2500);
+    Q_INVOKABLE void
+    cancel();
+    Q_INVOKABLE void
+    fail(const QString& reason);
 
   signals:
-    void stateChanged();
-    void completed(qint64 elapsedMs);
-    void failed(const QString& reason);
+    void
+    stateChanged();
+    void
+    completed(qint64 elapsedMs);
+    void
+    failed(const QString& reason);
 
   private:
-    void finish(const QString& state);
-    void disconnectDevice();
-    void completeIfWritten();
+    void
+    finish(const QString& state);
+    void
+    disconnectDevice();
+    void
+    completeIfWritten();
 
     QPointer<QIODevice> m_device;
     QMetaObject::Connection m_bytesConnection;

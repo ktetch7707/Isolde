@@ -4,15 +4,20 @@
 #include <QtTest>
 #include "settings/AudioSettings.h"
 
-class AudioTests : public QObject {
+class AudioTests : public QObject
+{
     Q_OBJECT
     QTemporaryDir config;
-    static void write(const QString& path, const QByteArray& data) {
+    static void
+    write(const QString& path, const QByteArray& data)
+    {
         QFile file(path);
         QVERIFY(file.open(QIODevice::WriteOnly));
         QCOMPARE(file.write(data), data.size());
     }
-    static QString mixer(QTemporaryDir& dir, const QString& name = "wpctl") {
+    static QString
+    mixer(QTemporaryDir& dir, const QString& name = "wpctl")
+    {
         const auto path = dir.filePath(name);
         if (!QFile::copy(AUDIO_FIXTURE, path))
             return {};
@@ -20,16 +25,22 @@ class AudioTests : public QObject {
         return path;
     }
   private slots:
-    void initTestCase() {
+    void
+    initTestCase()
+    {
         QCoreApplication::setApplicationName("AudioBackendTests");
         QCoreApplication::setOrganizationName({}); // Production must not depend on this.
         QSettings::setDefaultFormat(QSettings::IniFormat);
         QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, config.path());
     }
-    void init() {
+    void
+    init()
+    {
         QSettings(QSettings::IniFormat, QSettings::UserScope, "Isolde", "AudioBackendTests").clear();
     }
-    void startup_data() {
+    void
+    startup_data()
+    {
         QTest::addColumn<QString>("policy");
         QTest::addColumn<int>("volume");
         QTest::addColumn<bool>("mute");
@@ -37,7 +48,9 @@ class AudioTests : public QObject {
         QTest::newRow("fixed") << "fixed" << 25 << false;
         QTest::newRow("muted") << "muted" << 42 << true;
     }
-    void startup() {
+    void
+    startup()
+    {
         QFETCH(QString, policy);
         QFETCH(int, volume);
         QFETCH(bool, mute);
@@ -55,18 +68,23 @@ class AudioTests : public QObject {
         audio.initialize(); // Initialization is idempotent.
         AudioSettings restored(nullptr, mixerPathUnused());
         QCOMPARE(restored.volume(), volume);
-        if (mute) {
+        if (mute)
+        {
             QFile log(dir.filePath("commands"));
             QVERIFY(log.open(QIODevice::ReadOnly));
             QVERIFY(log.readAll().startsWith("set-mute"));
         }
     }
-    void confirmedReadAndFailure_data() {
+    void
+    confirmedReadAndFailure_data()
+    {
         QTest::addColumn<QString>("backend");
         QTest::newRow("pipewire") << "wpctl";
         QTest::newRow("pulse") << "pactl";
     }
-    void confirmedReadAndFailure() {
+    void
+    confirmedReadAndFailure()
+    {
         QFETCH(QString, backend);
         QTemporaryDir dir;
         AudioSettings audio(nullptr, mixer(dir, backend));
@@ -93,7 +111,9 @@ class AudioTests : public QObject {
         audio.nextVolumeMode();
         QCOMPARE(audio.volumeMode(), QString("isolde"));
     }
-    void timeoutDoesNotBlock() {
+    void
+    timeoutDoesNotBlock()
+    {
         QTemporaryDir dir;
         AudioSettings audio(nullptr, mixer(dir));
         write(dir.filePath("mode"), "hang");
@@ -104,7 +124,9 @@ class AudioTests : public QObject {
         QTRY_VERIFY_WITH_TIMEOUT(audio.backendStatus().contains("timed out"), 4000);
         QCOMPARE(audio.volume(), 50);
     }
-    void rejectsMalformed() {
+    void
+    rejectsMalformed()
+    {
         QTemporaryDir dir;
         AudioSettings audio(nullptr, mixer(dir));
         write(dir.filePath("mode"), "malformed");
@@ -112,7 +134,9 @@ class AudioTests : public QObject {
         QTRY_VERIFY(audio.backendStatus().contains("Invalid"));
         QVERIFY(!audio.mixerAvailable());
     }
-    void choosesOnlyDiscoveredPlaybackOutputs() {
+    void
+    choosesOnlyDiscoveredPlaybackOutputs()
+    {
         QTemporaryDir dir;
         AudioSettings audio(nullptr, mixer(dir));
         audio.refreshBackend();
@@ -127,7 +151,9 @@ class AudioTests : public QObject {
         QTRY_COMPARE(audio.outputs().size(), 1);
         QVERIFY(!audio.selectOutput("77"));
     }
-    void pulseAudioRouteSelectionIsConfirmedAndBounded() {
+    void
+    pulseAudioRouteSelectionIsConfirmedAndBounded()
+    {
         QTemporaryDir dir;
         AudioSettings audio(nullptr, mixer(dir, "pactl"));
         audio.refreshBackend();
@@ -150,7 +176,9 @@ class AudioTests : public QObject {
         QTRY_COMPARE(audio.outputs().size(), 1);
         QVERIFY(!audio.selectOutput("isolde_usb_speakers"));
     }
-    void startupWaitsForAudioService() {
+    void
+    startupWaitsForAudioService()
+    {
         QSettings settings(QSettings::IniFormat, QSettings::UserScope, "Isolde", "AudioBackendTests");
         settings.setValue("audio/startupPolicy", "muted");
         settings.sync();
@@ -163,7 +191,9 @@ class AudioTests : public QObject {
         QTRY_VERIFY_WITH_TIMEOUT(audio.mixerAvailable(), 6000);
         QVERIFY(audio.muted());
     }
-    void selectionMustBeConfirmed() {
+    void
+    selectionMustBeConfirmed()
+    {
         QTemporaryDir dir;
         AudioSettings audio(nullptr, mixer(dir));
         audio.refreshBackend();
@@ -174,7 +204,9 @@ class AudioTests : public QObject {
         QVERIFY(audio.outputs()[0].toMap().value("active").toBool());
         QVERIFY(!audio.outputs()[1].toMap().value("active").toBool());
     }
-    void soundTestPlaybackAndStop() {
+    void
+    soundTestPlaybackAndStop()
+    {
         QTemporaryDir dir;
         const auto player = dir.filePath("test-player");
         QVERIFY(QFile::copy(AUDIO_PLAYER_FIXTURE, player));
@@ -196,7 +228,9 @@ class AudioTests : public QObject {
         QVERIFY(!audio.testPlaying());
         QCOMPARE(audio.testStatus(), QString("Sound test stopped."));
     }
-    void soundTestRespectsMuteAndMissingPlayer() {
+    void
+    soundTestRespectsMuteAndMissingPlayer()
+    {
         QTemporaryDir dir;
         AudioSettings audio(nullptr, mixer(dir), "/nonexistent/player");
         audio.refreshBackend();
@@ -209,17 +243,21 @@ class AudioTests : public QObject {
         // Muted state can be published before the async confirmation queue
         // becomes idle. Retry the safe, muted request until confirmation
         // completes instead of assuming the backend finishes within 100 ms.
-        QTRY_VERIFY_WITH_TIMEOUT(([&] {
-                                     audio.playTestSound();
-                                     return audio.testStatus().contains("Unmute");
-                                 })(),
+        QTRY_VERIFY_WITH_TIMEOUT((
+                                     [&]
+                                     {
+                                         audio.playTestSound();
+                                         return audio.testStatus().contains("Unmute");
+                                     })(),
                                  5000);
         QVERIFY(!audio.testPlaying());
         QVERIFY(audio.muted());
     }
 
   private:
-    static QString mixerPathUnused() {
+    static QString
+    mixerPathUnused()
+    {
         return "/nonexistent/test-mixer";
     }
 };

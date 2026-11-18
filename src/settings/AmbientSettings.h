@@ -4,7 +4,8 @@
 #include <QStringList>
 #include <QVariantList>
 
-class AmbientSettings final : public QObject {
+class AmbientSettings final : public QObject
+{
     Q_OBJECT
     Q_PROPERTY(bool enabled READ enabled NOTIFY changed)
     Q_PROPERTY(int timeoutMinutes READ timeoutMinutes NOTIFY changed)
@@ -24,49 +25,85 @@ class AmbientSettings final : public QObject {
   public:
     explicit AmbientSettings(QObject* parent = nullptr);
 
-    [[nodiscard]] bool enabled() const;
-    [[nodiscard]] int timeoutMinutes() const;
-    [[nodiscard]] QString mode() const;
-    QStringList pageIds() const {
+    [[nodiscard]] bool
+    enabled() const;
+    [[nodiscard]] int
+    timeoutMinutes() const;
+    [[nodiscard]] QString
+    mode() const;
+    QStringList
+    pageIds() const
+    {
         return m_pageIds;
     }
-    Q_INVOKABLE bool setPageIds(const QStringList& ids);
-    [[nodiscard]] int slideshowSeconds() const;
-    [[nodiscard]] bool showClock() const;
-    [[nodiscard]] bool showDate() const;
-    [[nodiscard]] bool showSystemHint() const;
-    [[nodiscard]] QString photoDirectory() const;
-    [[nodiscard]] QVariantList photoUrls() const;
-    [[nodiscard]] int photoCount() const;
-    [[nodiscard]] QString imageFit() const;
-    [[nodiscard]] bool shuffle() const;
-    [[nodiscard]] QString errorString() const;
+    Q_INVOKABLE bool
+    setPageIds(const QStringList& ids);
+    [[nodiscard]] int
+    slideshowSeconds() const;
+    [[nodiscard]] bool
+    showClock() const;
+    [[nodiscard]] bool
+    showDate() const;
+    [[nodiscard]] bool
+    showSystemHint() const;
+    [[nodiscard]] QString
+    photoDirectory() const;
+    [[nodiscard]] QVariantList
+    photoUrls() const;
+    [[nodiscard]] int
+    photoCount() const;
+    [[nodiscard]] QString
+    imageFit() const;
+    [[nodiscard]] bool
+    shuffle() const;
+    [[nodiscard]] QString
+    errorString() const;
 
-    Q_INVOKABLE void toggleEnabled();
-    Q_INVOKABLE void adjustTimeout(int delta);
-    Q_INVOKABLE void nextMode();
-    Q_INVOKABLE void adjustSlideshowSeconds(int delta);
-    Q_INVOKABLE void toggleClock();
-    Q_INVOKABLE void toggleDate();
-    Q_INVOKABLE void toggleSystemHint();
-    Q_INVOKABLE void useManagedPhotoDirectory();
-    Q_INVOKABLE bool setPhotoDirectory(const QString& path);
-    Q_INVOKABLE bool importSamplePhotos();
-    Q_INVOKABLE void rescanPhotos();
-    Q_INVOKABLE void nextImageFit();
-    Q_INVOKABLE void toggleShuffle();
-    Q_INVOKABLE void reset();
+    Q_INVOKABLE void
+    toggleEnabled();
+    Q_INVOKABLE void
+    adjustTimeout(int delta);
+    Q_INVOKABLE void
+    nextMode();
+    Q_INVOKABLE void
+    adjustSlideshowSeconds(int delta);
+    Q_INVOKABLE void
+    toggleClock();
+    Q_INVOKABLE void
+    toggleDate();
+    Q_INVOKABLE void
+    toggleSystemHint();
+    Q_INVOKABLE void
+    useManagedPhotoDirectory();
+    Q_INVOKABLE bool
+    setPhotoDirectory(const QString& path);
+    Q_INVOKABLE bool
+    importSamplePhotos();
+    Q_INVOKABLE void
+    rescanPhotos();
+    Q_INVOKABLE void
+    nextImageFit();
+    Q_INVOKABLE void
+    toggleShuffle();
+    Q_INVOKABLE void
+    reset();
 
   signals:
-    void changed();
+    void
+    changed();
 
   private:
     const QString m_settingsGroup;
-    void load();
-    void save() const;
-    void scanPhotos();
-    QString defaultPhotoDirectory() const;
-    static int clamp(int value, int minimum, int maximum);
+    void
+    load();
+    void
+    save() const;
+    void
+    scanPhotos();
+    QString
+    defaultPhotoDirectory() const;
+    static int
+    clamp(int value, int minimum, int maximum);
 
     bool m_enabled = true;
     int m_timeoutMinutes = 5;

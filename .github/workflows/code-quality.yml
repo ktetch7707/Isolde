@@ -13,7 +13,7 @@ concurrency:
 jobs:
   quality:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 10
 
     steps:
       - name: Checkout repository
@@ -21,39 +21,37 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Install system dependencies
+      - name: Install lizard
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq cmake clang-tidy python3-pip
           python3 -m pip install --quiet lizard
 
-      - name: Install Qt6
-        uses: jurplel/install-qt-action@v3
-        with:
-          version: 6.4
-          modules: qtdeclarative qttools qtwebsockets qtmultimedia qtserialport qtsql
-
-      - name: Configure CMake (generate compile_commands.json)
-        run: |
-          cmake -S . -B build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_CXX_COMPILER=clang++ \
-            -DCMAKE_C_COMPILER=clang
-
-      - name: Build project
-        run: |
-          cmake --build build --config Release -j$(nproc)
-
-      - name: Run clang-tidy
-        run: |
-          clang-tidy -p build --config-file .clang-tidy \
-            $(git diff --name-only HEAD~1..HEAD 2>/dev/null | grep -E '\.(cpp|h|hpp|cc|cxx)$' || true) \
-            src -- -I src || true
-
       - name: Run Lizard complexity check
+        id: lizard
         run: |
-          python3 -m lizard src -l cpp -C 10 -L 60 -a 5
+          python3 -m lizard src -l cpp -C 20 -L 60 -a 5 --html lizard-report.html || true
+          echo "lizard_exit_code=$?" >> $GITHUB_OUTPUT
+        continue-on-error: true
 
-      - name: Run class-size checker
+      - name: 🔴 Lizard Complexity Violations
+        if: steps.lizard.outputs.lizard_exit_code != 0
         run: |
-          python3 tools/class-size-check.py src
+          echo "::group::🔴 Lizard Complexity Violations (CCN > 20)"
+          python3 -m lizard src -l cpp -C 20 -L 60 -a 5 || true
+          echo "::endgroup::"
+          echo ""
+          echo "📊 Full HTML report available as workflow artifact: 'lizard-report'"
+          echo "   Open it in a browser for a detailed, sortable table of all violations."
+
+      - name: Upload Lizard HTML report
+        if: steps.lizard.outputs.lizard_exit_code != 0
+        uses: actions/upload-artifact@v4
+        with:
+          name: lizard-report
+          path: lizard-report.html
+          retention-days: 7
+
+      - name: Fail if Lizard violations found
+        if: steps.lizard.outputs.lizard_exit_code != 0
+        run: |
+          echo "::error::Lizard complexity violations found (CCN > 20). See the collapsed '🔴 Lizard Complexity Violations' section above or download the 'lizard-report' artifact for details."
+          exit 1

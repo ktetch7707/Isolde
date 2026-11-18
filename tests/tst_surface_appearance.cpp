@@ -14,18 +14,25 @@
 #include <QtTest>
 #include <memory>
 
-namespace {
-QByteArray read(const QString& path) {
+namespace
+{
+QByteArray
+read(const QString& path)
+{
     QFile file(path);
     return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray{};
 }
 
-bool write(const QString& path, const QByteArray& bytes) {
+bool
+write(const QString& path, const QByteArray& bytes)
+{
     QFile file(path);
     return file.open(QIODevice::WriteOnly) && file.write(bytes) == bytes.size();
 }
 
-QByteArray fixture() {
+QByteArray
+fixture()
+{
     return R"({"schemaVersion":2,"theme":{"surfaceColor":"#202126","selectedColor":"#353039"},
       "components":[],"categories":[],"homePageId":"home-page","pages":[
       {"id":"home-page","name":"Pastel Home","layout":{"schemaVersion":2,"composition":{"schemaVersion":1,"enabled":false},"components":[],"categories":[],
@@ -34,34 +41,50 @@ QByteArray fixture() {
         "theme":{"surfaceColor":"#102030","selectedColor":"#263850","textColor":"#ffffff","mutedColor":"#cccccc","focusColor":"#ffffff"}}}]})";
 }
 
-QVariantMap policy(const QString& surface, const QString& mode, const QVariantMap& tokens = {}) {
+QVariantMap
+policy(const QString& surface, const QString& mode, const QVariantMap& tokens = {})
+{
     return {{surface, QVariantMap{{"schemaVersion", 1}, {"mode", mode}, {"tokens", tokens}}}};
 }
 
-QVariantMap patch(const QVariantMap& policies) {
+QVariantMap
+patch(const QVariantMap& policies)
+{
     return {{"scope", "theme"}, {"value", QVariantMap{{"surfaceThemes", policies}}}};
 }
 } // namespace
 
-class SurfaceAppearanceTests : public QObject {
+class SurfaceAppearanceTests : public QObject
+{
     Q_OBJECT
   private slots:
-    void initTestCase() {
+    void
+    initTestCase()
+    {
         QStandardPaths::setTestModeEnabled(true);
     }
-    void policiesRejectUnsafeAndUnboundedData();
-    void paletteHasReadableSemanticRolesWithoutMutatingInput();
-    void resolverUsesHomeForSettingsAndRetainsOriginWithoutWrites();
-    void overridesPreviewCancelUndoAndPersistAtomically();
-    void reloadAndRejectedOverridesDoNotLeakContext();
-    void installedThemeFixturesContainRenderablePages();
+    void
+    policiesRejectUnsafeAndUnboundedData();
+    void
+    paletteHasReadableSemanticRolesWithoutMutatingInput();
+    void
+    resolverUsesHomeForSettingsAndRetainsOriginWithoutWrites();
+    void
+    overridesPreviewCancelUndoAndPersistAtomically();
+    void
+    reloadAndRejectedOverridesDoNotLeakContext();
+    void
+    installedThemeFixturesContainRenderablePages();
 };
 
-void SurfaceAppearanceTests::installedThemeFixturesContainRenderablePages() {
+void
+SurfaceAppearanceTests::installedThemeFixturesContainRenderablePages()
+{
     const auto data = read(QFINDTESTDATA("fixtures/shell-theme-routes.json"));
     const auto documents = QJsonDocument::fromJson(data).array();
     QCOMPARE(documents.size(), 3);
-    for (const auto& entry : documents) {
+    for (const auto& entry : documents)
+    {
         QTemporaryDir dir;
         AppRegistry registry;
         HomeLayout home(&registry);
@@ -79,7 +102,9 @@ void SurfaceAppearanceTests::installedThemeFixturesContainRenderablePages() {
     }
 }
 
-void SurfaceAppearanceTests::policiesRejectUnsafeAndUnboundedData() {
+void
+SurfaceAppearanceTests::policiesRejectUnsafeAndUnboundedData()
+{
     QVERIFY(ComponentSchema::validSurfaceThemes(policy("search", "origin")));
     QVERIFY(ComponentSchema::validSurfaceThemes(policy("settings", "home")));
     QVERIFY(!ComponentSchema::validSurfaceThemes(policy("settings", "origin")));
@@ -94,7 +119,8 @@ void SurfaceAppearanceTests::policiesRejectUnsafeAndUnboundedData() {
                                                  {{"highContrast", "true"}},
                                                  {{"spacing", 100}}})
         QVERIFY(!ComponentSchema::validSurfaceThemes(policy("search", "custom", tokens)));
-    for (const auto& version : QVariantList{true, "1", 2, 1.5}) {
+    for (const auto& version : QVariantList{true, "1", 2, 1.5})
+    {
         auto item = policy("search", "home");
         auto value = item["search"].toMap();
         value["schemaVersion"] = version;
@@ -108,7 +134,9 @@ void SurfaceAppearanceTests::policiesRejectUnsafeAndUnboundedData() {
     QVERIFY(!ComponentSchema::readableSurfaceThemes(dark, bad));
 }
 
-void SurfaceAppearanceTests::paletteHasReadableSemanticRolesWithoutMutatingInput() {
+void
+SurfaceAppearanceTests::paletteHasReadableSemanticRolesWithoutMutatingInput()
+{
     const QVariantMap pastel{{"surfaceColor", "#ffffff"},
                              {"selectedColor", "#000000"},
                              {"textColor", "#ffffff"},
@@ -166,7 +194,9 @@ void SurfaceAppearanceTests::paletteHasReadableSemanticRolesWithoutMutatingInput
         QCOMPARE(split[role].toString(), QString("#000000"));
 }
 
-void SurfaceAppearanceTests::resolverUsesHomeForSettingsAndRetainsOriginWithoutWrites() {
+void
+SurfaceAppearanceTests::resolverUsesHomeForSettingsAndRetainsOriginWithoutWrites()
+{
     QTemporaryDir dir;
     AppRegistry registry;
     HomeLayout home(&registry);
@@ -175,7 +205,8 @@ void SurfaceAppearanceTests::resolverUsesHomeForSettingsAndRetainsOriginWithoutW
     QVERIFY(write(user, fixture()));
     QVERIFY2(home.load(defaults, user), qPrintable(home.errorString()));
     const auto saved = read(user);
-    for (int i = 0; i < 5; ++i) {
+    for (int i = 0; i < 5; ++i)
+    {
         QCOMPARE(home.surfaceAppearance("settings", "films")["surfaceColor"].toString(), QString("#f5edf3"));
         QCOMPARE(home.surfaceAppearance("settings", "films")["themeSource"].toString(), QString("Pastel Home"));
         QCOMPARE(home.surfaceAppearance("search", "films")["surfaceColor"].toString(), QString("#102030"));
@@ -212,7 +243,9 @@ void SurfaceAppearanceTests::resolverUsesHomeForSettingsAndRetainsOriginWithoutW
     QCOMPARE(home.surfaceAppearance("settings", "films")["surfaceColor"].toString(), QString("#f5edf3"));
 }
 
-void SurfaceAppearanceTests::overridesPreviewCancelUndoAndPersistAtomically() {
+void
+SurfaceAppearanceTests::overridesPreviewCancelUndoAndPersistAtomically()
+{
     QTemporaryDir dir;
     AppRegistry registry;
     HomeLayout home(&registry);
@@ -262,7 +295,9 @@ void SurfaceAppearanceTests::overridesPreviewCancelUndoAndPersistAtomically() {
     QVERIFY(retry.isDirty());
 }
 
-void SurfaceAppearanceTests::reloadAndRejectedOverridesDoNotLeakContext() {
+void
+SurfaceAppearanceTests::reloadAndRejectedOverridesDoNotLeakContext()
+{
     QTemporaryDir dir;
     AppRegistry registry;
     HomeLayout home(&registry);

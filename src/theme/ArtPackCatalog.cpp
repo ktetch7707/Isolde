@@ -12,40 +12,68 @@
 
 ArtPackCatalog::ArtPackCatalog(QObject* parent) : QObject(parent) {}
 
-QVariantList ArtPackCatalog::packs() const {
+QVariantList
+ArtPackCatalog::packs() const
+{
     return m_packs;
 }
-QVariantList ArtPackCatalog::artwork() const {
+QVariantList
+ArtPackCatalog::artwork() const
+{
     return m_artwork;
 }
-QVariantList ArtPackCatalog::themes() const {
+QVariantList
+ArtPackCatalog::themes() const
+{
     return m_themes;
 }
-QString ArtPackCatalog::errorString() const {
+QString
+ArtPackCatalog::errorString() const
+{
     return m_errorString;
 }
 
-bool ArtPackCatalog::load(const QString& path) {
+bool
+ArtPackCatalog::load(const QString& path)
+{
+    return loadFromFile(
+        resolveConfigPath(path, QStringLiteral("config/art-packs.json"), QStringLiteral(":/config/art-packs.json")));
+}
+
+QString
+ArtPackCatalog::resolveConfigPath(const QString& path, const QString& defaultName, const QString& resourceName)
+{
     QString resolvedPath = path;
-    if (resolvedPath.isEmpty()) {
-        resolvedPath = QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("config/art-packs.json"));
+    if (resolvedPath.isEmpty())
+    {
+        resolvedPath = QDir(QCoreApplication::applicationDirPath()).filePath(defaultName);
         if (!QFile::exists(resolvedPath))
-            resolvedPath = QStringLiteral(":/config/art-packs.json");
+            resolvedPath = resourceName;
     }
+    return resolvedPath;
+}
+
+bool
+ArtPackCatalog::loadFromFile(const QString& resolvedPath)
+{
     QFile file(resolvedPath);
-    if (!file.open(QIODevice::ReadOnly)) {
+    if (!file.open(QIODevice::ReadOnly))
+    {
         setError(tr("Unable to open art pack catalog: %1").arg(resolvedPath));
         return false;
     }
     return loadFromData(file.readAll());
 }
 
-bool ArtPackCatalog::loadFromData(const QByteArray& data) {
+bool
+ArtPackCatalog::loadFromData(const QByteArray& data)
+{
     QJsonParseError parseError;
     const auto document = QJsonDocument::fromJson(data, &parseError);
     if (parseError.error != QJsonParseError::NoError || !document.isObject() ||
         document.object().value(QStringLiteral("schemaVersion")).toInt() != 1 ||
-        !document.object().value(QStringLiteral("packs")).isArray()) {
+        !document.object().value(QStringLiteral("packs")).isArray())
+    {
         setError(tr("Invalid art pack catalog: %1").arg(parseError.errorString()));
         return false;
     }
@@ -57,18 +85,21 @@ bool ArtPackCatalog::loadFromData(const QByteArray& data) {
     QSet<QString> packIds;
     QSet<QString> artworkKeys;
     QSet<QString> themeKeys;
-    for (const auto& packValue : document.object().value(QStringLiteral("packs")).toArray()) {
+    for (const auto& packValue : document.object().value(QStringLiteral("packs")).toArray())
+    {
         const auto pack = packValue.toObject();
         const auto packId = pack.value(QStringLiteral("id")).toString().trimmed();
         const auto packName = pack.value(QStringLiteral("name")).toString().trimmed();
         if (!safeId.match(packId).hasMatch() || packName.isEmpty() || packIds.contains(packId) ||
-            !pack.value(QStringLiteral("artwork")).isArray()) {
+            !pack.value(QStringLiteral("artwork")).isArray())
+        {
             setError(tr("Art packs require unique IDs, names, and artwork arrays."));
             return false;
         }
         packIds.insert(packId);
         QVariantList packThemes;
-        for (const auto& themeValue : pack.value(QStringLiteral("themes")).toArray()) {
+        for (const auto& themeValue : pack.value(QStringLiteral("themes")).toArray())
+        {
             const auto theme = themeValue.toObject();
             const auto themeId = theme.value(QStringLiteral("id")).toString().trimmed();
             const auto name = theme.value(QStringLiteral("name")).toString().trimmed();
@@ -87,18 +118,22 @@ bool ArtPackCatalog::loadFromData(const QByteArray& data) {
             const auto key = packId + QStringLiteral("/") + themeId;
             if (!safeId.match(themeId).hasMatch() || name.isEmpty() || !start.isValid() || !end.isValid() ||
                 !focus.isValid() || roundness < 0.0 || roundness > 1.0 || typographyScale < 0.8 ||
-                typographyScale > 1.3 || tileOpacity < 0.2 || tileOpacity > 1.0 || themeKeys.contains(key)) {
-                setError(tr("Theme entries require unique IDs, names, valid colors, roundness from 0 to 1, typography "
-                            "scale from 0.8 to 1.3, and tile opacity from 0.2 to 1."));
+                typographyScale > 1.3 || tileOpacity < 0.2 || tileOpacity > 1.0 || themeKeys.contains(key))
+            {
+                setError(
+                    tr("Theme entries require unique IDs, names, valid colors, roundness from 0 to 1, typography "
+                       "scale from 0.8 to 1.3, and tile opacity from 0.2 to 1."));
                 return false;
             }
             QVariantMap suggestedArtwork;
             const auto suggested = theme.value(QStringLiteral("suggestedArtwork")).toObject();
-            for (auto it = suggested.constBegin(); it != suggested.constEnd(); ++it) {
+            for (auto it = suggested.constBegin(); it != suggested.constEnd(); ++it)
+            {
                 const auto suggestion = it.value().toObject();
                 const auto symbol = suggestion.value(QStringLiteral("symbol")).toString().trimmed();
                 const QColor accent(suggestion.value(QStringLiteral("accent")).toString());
-                if (!safeId.match(it.key()).hasMatch() || symbol.isEmpty() || !accent.isValid()) {
+                if (!safeId.match(it.key()).hasMatch() || symbol.isEmpty() || !accent.isValid())
+                {
                     setError(tr("Theme suggested artwork mappings require safe IDs."));
                     return false;
                 }
@@ -123,7 +158,8 @@ bool ArtPackCatalog::loadFromData(const QByteArray& data) {
             themes.append(entry);
         }
         QVariantList packArtwork;
-        for (const auto& artValue : pack.value(QStringLiteral("artwork")).toArray()) {
+        for (const auto& artValue : pack.value(QStringLiteral("artwork")).toArray())
+        {
             const auto art = artValue.toObject();
             const auto artId = art.value(QStringLiteral("id")).toString().trimmed();
             const auto name = art.value(QStringLiteral("name")).toString().trimmed();
@@ -131,7 +167,8 @@ bool ArtPackCatalog::loadFromData(const QByteArray& data) {
             const QColor accent(art.value(QStringLiteral("accent")).toString());
             const auto key = packId + QStringLiteral("/") + artId;
             if (!safeId.match(artId).hasMatch() || name.isEmpty() || symbol.isEmpty() || !accent.isValid() ||
-                artworkKeys.contains(key)) {
+                artworkKeys.contains(key))
+            {
                 setError(tr("Artwork entries require unique IDs, names, symbols, and valid accent colors."));
                 return false;
             }
@@ -161,7 +198,9 @@ bool ArtPackCatalog::loadFromData(const QByteArray& data) {
     return true;
 }
 
-void ArtPackCatalog::setError(const QString& message) {
+void
+ArtPackCatalog::setError(const QString& message)
+{
     if (m_errorString == message)
         return;
     m_errorString = message;

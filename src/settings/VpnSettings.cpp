@@ -6,29 +6,40 @@
 #include <QJsonObject>
 #include "VpnSettings.h"
 
-VpnSettings::VpnSettings(QString profile, QObject* parent) : QObject(parent), m_profile(std::move(profile)) {
+VpnSettings::VpnSettings(QString profile, QObject* parent) : QObject(parent), m_profile(std::move(profile))
+{
     m_timer.setSingleShot(true);
-    connect(&m_timer, &QTimer::timeout, this, [this] {
-        if (m_stopping) {
-            m_process.kill();
-            return;
-        }
-        m_stopping = true;
-        m_process.terminate();
-        m_timer.start(45000);
-    });
-    connect(&m_process, &QProcess::errorOccurred, this, [this](QProcess::ProcessError error) {
-        if (error != QProcess::FailedToStart)
-            return;
-        m_timer.stop();
-        m_busy = false;
-        m_message = tr("VPN support could not start. Reinstall Isolde support files.");
-        emit changed();
-    });
+    connect(&m_timer,
+            &QTimer::timeout,
+            this,
+            [this]
+            {
+                if (m_stopping)
+                {
+                    m_process.kill();
+                    return;
+                }
+                m_stopping = true;
+                m_process.terminate();
+                m_timer.start(45000);
+            });
+    connect(&m_process,
+            &QProcess::errorOccurred,
+            this,
+            [this](QProcess::ProcessError error)
+            {
+                if (error != QProcess::FailedToStart)
+                    return;
+                m_timer.stop();
+                m_busy = false;
+                m_message = tr("VPN support could not start. Reinstall Isolde support files.");
+                emit changed();
+            });
     connect(&m_process,
             qOverload<int, QProcess::ExitStatus>(&QProcess::finished),
             this,
-            [this](int code, QProcess::ExitStatus exit) {
+            [this](int code, QProcess::ExitStatus exit)
+            {
                 m_timer.stop();
                 m_busy = false;
                 const auto bytes = m_process.readAllStandardOutput();
@@ -55,21 +66,35 @@ VpnSettings::VpnSettings(QString profile, QObject* parent) : QObject(parent), m_
                     emit refreshed();
             });
 }
-VpnSettings::~VpnSettings() {
+VpnSettings::~VpnSettings()
+{
     m_timer.stop();
     m_process.disconnect(this);
-    if (m_process.state() != QProcess::NotRunning) {
-        m_process.terminate();
-        if (!m_process.waitForFinished(45000)) {
-            m_process.kill();
-            m_process.waitForFinished(1000);
+    stopProcess(m_process);
+}
+
+void
+stopProcess(QProcess& process)
+{
+    if (process.state() != QProcess::NotRunning)
+    {
+        process.terminate();
+        if (!waitForProcessFinished(process, 45000))
+        {
+            process.kill();
+            process.waitForFinished(1000);
         }
     }
 }
-void VpnSettings::perform(const QString& action,
-                          const QString& target,
-                          const QString& provider,
-                          const QString& country) {
+
+bool
+waitForProcessFinished(QProcess& process, int msecs)
+{
+    return process.waitForFinished(msecs);
+}
+void
+VpnSettings::perform(const QString& action, const QString& target, const QString& provider, const QString& country)
+{
     if (m_busy)
         return;
     if (!QStringList{"status", "install", "defaults", "open", "account", "capture", "import", "connect", "disconnect"}
@@ -78,7 +103,8 @@ void VpnSettings::perform(const QString& action,
     if ((action == "install" || action == "open" || action == "account") &&
         !QStringList{"surfshark", "protonvpn"}.contains(target))
         return;
-    if (action == "open" || action == "account") {
+    if (action == "open" || action == "account")
+    {
         m_externalAction = action;
         m_externalTarget = target;
         m_busy = true;
@@ -89,7 +115,9 @@ void VpnSettings::perform(const QString& action,
     }
     launchHelper(action, target, provider, country);
 }
-void VpnSettings::resumeExternal() {
+void
+VpnSettings::resumeExternal()
+{
     if (m_externalAction.isEmpty())
         return;
     const auto action = m_externalAction, target = m_externalTarget;
@@ -97,7 +125,9 @@ void VpnSettings::resumeExternal() {
     m_externalTarget.clear();
     launchHelper(action, target, "surfshark", "CA");
 }
-void VpnSettings::cancelExternal() {
+void
+VpnSettings::cancelExternal()
+{
     if (m_externalAction.isEmpty())
         return;
     m_externalAction.clear();
@@ -106,10 +136,9 @@ void VpnSettings::cancelExternal() {
     m_message = tr("Provider opening cancelled. No account settings changed.");
     emit changed();
 }
-void VpnSettings::launchHelper(const QString& action,
-                               const QString& target,
-                               const QString& provider,
-                               const QString& country) {
+void
+VpnSettings::launchHelper(const QString& action, const QString& target, const QString& provider, const QString& country)
+{
     m_stopping = false;
     auto script = QCoreApplication::applicationDirPath() + "/../share/isolde/vpn-setup.py";
     if (!QFileInfo::exists(script))

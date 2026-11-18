@@ -14,7 +14,8 @@
  * persisted flag and is reported honestly by the UI. Each runtime captures its
  * active profile; atomic sync failure retains the previous visible/stored value.
  */
-class SearchSettings final : public QObject {
+class SearchSettings final : public QObject
+{
     Q_OBJECT
     Q_PROPERTY(bool webEnabled READ webEnabled WRITE setWebEnabled NOTIFY changed)
     Q_PROPERTY(QString discoveryRegion READ discoveryRegion WRITE setDiscoveryRegion NOTIFY changed)
@@ -23,21 +24,31 @@ class SearchSettings final : public QObject {
   public:
     explicit SearchSettings(QObject* parent = nullptr, const QString& settingsPath = {}, const QString& profile = {});
 
-    [[nodiscard]] bool webEnabled() const {
+    [[nodiscard]] bool
+    webEnabled() const
+    {
         return m_webEnabled;
     }
-    [[nodiscard]] QString discoveryRegion() const {
+    [[nodiscard]] QString
+    discoveryRegion() const
+    {
         return m_discoveryRegion;
     }
-    QString errorString() const {
+    QString
+    errorString() const
+    {
         return m_error;
     }
-    void setWebEnabled(bool enabled);
-    Q_INVOKABLE void setDiscoveryRegion(const QString& region);
-    Q_INVOKABLE void toggleWebEnabled();
+    void
+    setWebEnabled(bool enabled);
+    Q_INVOKABLE void
+    setDiscoveryRegion(const QString& region);
+    Q_INVOKABLE void
+    toggleWebEnabled();
 
   signals:
-    void changed();
+    void
+    changed();
 
   private:
     bool m_webEnabled = false;

@@ -18,14 +18,18 @@
 #include <QtMath>
 #include <functional>
 
-namespace {
+namespace
+{
 
-QVariantList normalizedActionForItem(const QJsonObject& object) {
+QVariantList
+normalizedActionForItem(const QJsonObject& object)
+{
     auto actionList = object.value(QStringLiteral("actions")).toArray();
     if (actionList.isEmpty() && object.value("kind") == "app")
         actionList = QJsonArray{QJsonObject{{"type", "launch-app"}, {"appId", object.value("appId")}}};
     QVariantList result;
-    for (const auto& entry : actionList) {
+    for (const auto& entry : actionList)
+    {
         auto normalized = ComponentSchema::action(entry.toObject().toVariantMap());
         if (!normalized.isEmpty())
             result.append(normalized);
@@ -36,35 +40,46 @@ QVariantList normalizedActionForItem(const QJsonObject& object) {
 } // namespace
 
 PageModel::PageModel(HomeLayout* owner, const QString& id, QObject* parent)
-    : QObject(parent), m_owner(owner), m_pageId(id) {
+    : QObject(parent), m_owner(owner), m_pageId(id)
+{
     if (!m_owner)
         return;
     m_inheritedAppearance = m_owner->homeAppearance();
     m_sharedStyles = m_owner->m_composition.value("designLibrary").toMap().value("styles").toList();
-    connect(m_owner, &HomeLayout::layoutChanged, this, [this] {
-        const auto inherited = m_owner->homeAppearance();
-        if (inherited != m_inheritedAppearance) {
-            m_inheritedAppearance = inherited;
-            emit presentationChanged();
-        }
-        const auto styles = m_owner->m_composition.value("designLibrary").toMap().value("styles").toList();
-        if (styles != m_sharedStyles) {
-            m_sharedStyles = styles;
-            emit placementsChanged();
-        }
-    });
+    connect(m_owner,
+            &HomeLayout::layoutChanged,
+            this,
+            [this]
+            {
+                const auto inherited = m_owner->homeAppearance();
+                if (inherited != m_inheritedAppearance)
+                {
+                    m_inheritedAppearance = inherited;
+                    emit presentationChanged();
+                }
+                const auto styles = m_owner->m_composition.value("designLibrary").toMap().value("styles").toList();
+                if (styles != m_sharedStyles)
+                {
+                    m_sharedStyles = styles;
+                    emit placementsChanged();
+                }
+            });
 }
 
-bool PageModel::loadDocument(const QByteArray& data, bool /*userDocument*/) {
+bool
+PageModel::loadDocument(const QByteArray& data, bool /*userDocument*/)
+{
     if (!m_owner)
         return false;
     const auto doc = QJsonDocument::fromJson(data);
-    if (doc.isNull() || !doc.isObject()) {
+    if (doc.isNull() || !doc.isObject())
+    {
         m_owner->setError(tr("Invalid page document."));
         return false;
     }
     const auto object = doc.object();
-    if (!object.contains("composition") || !object.value("composition").isObject()) {
+    if (!object.contains("composition") || !object.value("composition").isObject())
+    {
         m_owner->setError(tr("Page document is missing a composition."));
         return false;
     }
@@ -79,15 +94,19 @@ bool PageModel::loadDocument(const QByteArray& data, bool /*userDocument*/) {
     return true;
 }
 
-bool PageModel::storePage() {
+bool
+PageModel::storePage()
+{
     if (!m_owner)
         return false;
     auto document = m_pageDocument;
     QJsonArray components;
-    for (const auto& entry : document.value("components").toArray()) {
+    for (const auto& entry : document.value("components").toArray())
+    {
         QString error;
         const auto normalized = ComponentSchema::component(entry.toObject().toVariantMap(), true, &error);
-        if (normalized.isEmpty()) {
+        if (normalized.isEmpty())
+        {
             m_owner->setError(error);
             return false;
         }
@@ -101,19 +120,23 @@ bool PageModel::storePage() {
     return ok;
 }
 
-bool PageModel::setSectionPresentation(const QString& id, const QVariantMap& value) {
+bool
+PageModel::setSectionPresentation(const QString& id, const QVariantMap& value)
+{
     if (!ComponentSchema::validPresentation(value, true))
         return false;
     const auto previous = m_pageDocument;
     auto categories = m_pageDocument.value("categories").toArray();
-    for (qsizetype i = 0; i < categories.size(); ++i) {
+    for (qsizetype i = 0; i < categories.size(); ++i)
+    {
         auto category = categories[i].toObject();
         if (category.value("id").toString() != id)
             continue;
         category["presentation"] = QJsonObject::fromVariantMap(value);
         categories[i] = category;
         m_pageDocument["categories"] = categories;
-        if (!storePage()) {
+        if (!storePage())
+        {
             m_pageDocument = previous;
             return false;
         }
@@ -123,11 +146,15 @@ bool PageModel::setSectionPresentation(const QString& id, const QVariantMap& val
     return false;
 }
 
-QVariantMap PageModel::document() const {
+QVariantMap
+PageModel::document() const
+{
     return m_pageDocument.toVariantMap();
 }
 
-QVariantMap PageModel::themeDefaults() const {
+QVariantMap
+PageModel::themeDefaults() const
+{
     return {{"focusColor", "#c994a5"},
             {"surfaceColor", "#202126"},
             {"selectedColor", "#353039"},
@@ -141,66 +168,94 @@ QVariantMap PageModel::themeDefaults() const {
             {"fontFamily", "DejaVu Sans"}};
 }
 
-QVariantList PageModel::resolveItems(const QJsonArray& components) const {
+QVariantList
+PageModel::resolveItems(const QJsonArray& components) const
+{
     QVariantList result;
     const auto* registry = m_owner ? m_owner->registry() : nullptr;
-    for (const auto& value : components) {
+    for (const auto& value : components)
+    {
         const auto object = value.toObject();
         auto item = object.toVariantMap();
         if (m_owner)
             item["presentation"] = m_owner->componentPresentation(item.value("presentation").toMap());
         const auto actionList = normalizedActionForItem(object);
-        if (!actionList.isEmpty()) {
+        if (!actionList.isEmpty())
+        {
             item.insert("actionType", actionList.first().toMap().value(QStringLiteral("type")).toString());
             item.insert("actions", actionList);
         }
-        if (item.value("kind") == QStringLiteral("app")) {
-            const auto appId = item.value("appId").toString();
-            const auto* app = registry ? registry->find(appId) : nullptr;
-            item.insert("name",
-                        !item.value("name").toString().isEmpty() ? item.value("name")
-                        : app                                    ? app->name
-                                                                 : appId);
-            item.insert("section", app ? app->section : QStringLiteral("Missing app"));
-            const auto tileSymbol = item.value("symbol").toString();
-            const auto tileAccent = item.value("accent").toString();
-            item.insert("symbol", tileSymbol.isEmpty() ? (app ? app->symbol : QStringLiteral("?")) : tileSymbol);
-            item.insert("accent",
-                        tileAccent.isEmpty() ? (app ? app->accent.name() : QStringLiteral("#64748B")) : tileAccent);
-            item.insert("presentationMode", app ? app->presentationMode : QStringLiteral("native-tv"));
-            item.insert("networkRequirement", app ? app->networkRequirement : QStringLiteral("none"));
-        } else if (item.value("kind") == QStringLiteral("action")) {
-            const auto section = item.value("section").toString();
-            const auto symbol = item.value("symbol").toString();
-            const auto accent = item.value("accent").toString();
-            const auto networkRequirement = item.value("networkRequirement").toString();
-            item.insert("section", section.isEmpty() ? QCoreApplication::translate("PageModel", "Custom") : section);
-            item.insert("symbol", symbol.isEmpty() ? QStringLiteral("•") : symbol);
-            item.insert("accent", accent.isEmpty() ? QStringLiteral("#64748B") : accent);
-            item.insert("networkRequirement",
-                        networkRequirement.isEmpty() ? QStringLiteral("none") : networkRequirement);
-        }
+        if (item.value("kind") == QStringLiteral("app"))
+            item = resolveItemAppFields(item, registry);
+        else if (item.value("kind") == QStringLiteral("action"))
+            item = resolveItemActionFields(item);
         const auto logoFile = item.value("customLogo").toString();
         item.insert("logoSource", m_owner ? m_owner->resolveArtwork(logoFile) : QString());
-        auto unavailable =
-            ComponentSchema::unavailable(actionList.isEmpty() ? QVariantMap() : actionList.first().toMap(),
-                                         registry,
-                                         m_owner ? m_owner->m_collections : QVariantList{});
-        if (unavailable.isEmpty() && !actionList.isEmpty() &&
-            actionList.first().toMap().value("type").toString() == QStringLiteral("switch-input") &&
-            (!m_owner || !m_owner->m_captureInputsReady)) {
-            unavailable = QCoreApplication::translate("PageModel", "Configure Settings → System → HDMI Inputs");
-        }
-        if (object.value("requiredCapability") == "capture-inputs" && (!m_owner || !m_owner->m_captureInputsReady))
-            unavailable =
-                QCoreApplication::translate("PageModel", "HDMI capture unavailable · configure inputs in Settings");
+        const auto unavailable = resolveItemUnavailableReason(item, actionList, registry);
         item.insert("unavailableReason", unavailable);
         result.append(ComponentSchema::component(item, true));
     }
     return result;
 }
 
-QVariantMap PageModel::composition() const {
+QVariantMap
+PageModel::resolveItemAppFields(const QVariantMap& item, const ComponentRegistry* registry) const
+{
+    const auto appId = item.value("appId").toString();
+    const auto* app = registry ? registry->find(appId) : nullptr;
+    auto updated = item;
+    updated.insert("name",
+                   !updated.value("name").toString().isEmpty() ? updated.value("name") : app ? app->name : appId);
+    updated.insert("section", app ? app->section : QStringLiteral("Missing app"));
+    const auto tileSymbol = updated.value("symbol").toString();
+    const auto tileAccent = updated.value("accent").toString();
+    updated.insert("symbol", tileSymbol.isEmpty() ? (app ? app->symbol : QStringLiteral("?")) : tileSymbol);
+    updated.insert("accent",
+                   tileAccent.isEmpty() ? (app ? app->accent.name() : QStringLiteral("#64748B")) : tileAccent);
+    updated.insert("presentationMode", app ? app->presentationMode : QStringLiteral("native-tv"));
+    updated.insert("networkRequirement", app ? app->networkRequirement : QStringLiteral("none"));
+    return updated;
+}
+
+QVariantMap
+PageModel::resolveItemActionFields(const QVariantMap& item) const
+{
+    const auto section = item.value("section").toString();
+    const auto symbol = item.value("symbol").toString();
+    const auto accent = item.value("accent").toString();
+    const auto networkRequirement = item.value("networkRequirement").toString();
+    auto updated = item;
+    updated.insert("section", section.isEmpty() ? QCoreApplication::translate("PageModel", "Custom") : section);
+    updated.insert("symbol", symbol.isEmpty() ? QStringLiteral("•") : symbol);
+    updated.insert("accent", accent.isEmpty() ? QStringLiteral("#64748B") : accent);
+    updated.insert("networkRequirement",
+                   networkRequirement.isEmpty() ? QStringLiteral("none") : networkRequirement);
+    return updated;
+}
+
+QString
+PageModel::resolveItemUnavailableReason(const QVariantMap& item, const QVariantList& actionList,
+                                        const ComponentRegistry* registry) const
+{
+    auto unavailable =
+        ComponentSchema::unavailable(actionList.isEmpty() ? QVariantMap() : actionList.first().toMap(),
+                                     registry,
+                                     m_owner ? m_owner->m_collections : QVariantList{});
+    if (unavailable.isEmpty() && !actionList.isEmpty() &&
+        actionList.first().toMap().value("type").toString() == QStringLiteral("switch-input") &&
+        (!m_owner || !m_owner->m_captureInputsReady))
+    {
+        unavailable = QCoreApplication::translate("PageModel", "Configure Settings → System → HDMI Inputs");
+    }
+    if (item.value("requiredCapability") == "capture-inputs" && (!m_owner || !m_owner->m_captureInputsReady))
+        unavailable =
+            QCoreApplication::translate("PageModel", "HDMI capture unavailable · configure inputs in Settings");
+    return unavailable;
+}
+
+QVariantMap
+PageModel::composition() const
+{
     if (m_documentLoaded && m_pageDocument.contains("composition"))
         return m_pageDocument.value("composition").toObject().toVariantMap();
     if (!m_owner)
@@ -208,10 +263,13 @@ QVariantMap PageModel::composition() const {
     return m_owner->composition();
 }
 
-bool PageModel::setComposition(const QVariantMap& value) {
+bool
+PageModel::setComposition(const QVariantMap& value)
+{
     if (!m_owner)
         return false;
-    if (!ComponentSchema::validComposition(value)) {
+    if (!ComponentSchema::validComposition(value))
+    {
         m_owner->setError(tr("Invalid page composition."));
         return false;
     }
@@ -220,13 +278,15 @@ bool PageModel::setComposition(const QVariantMap& value) {
     QJsonArray itemsForFit;
     for (const auto& v : components)
         itemsForFit.append(v);
-    if (!ComponentSchema::layoutPlacementsFit(itemsForFit, value, m_pageDocument["categories"].toArray())) {
+    if (!ComponentSchema::layoutPlacementsFit(itemsForFit, value, m_pageDocument["categories"].toArray()))
+    {
         m_owner->setError(tr("Placed widgets do not fit this page composition's grid."));
         return false;
     }
     const auto previous = m_pageDocument;
     m_pageDocument["composition"] = QJsonObject::fromVariantMap(value);
-    if (!storePage()) {
+    if (!storePage())
+    {
         m_pageDocument = previous;
         return false;
     }
@@ -237,8 +297,11 @@ bool PageModel::setComposition(const QVariantMap& value) {
     return true;
 }
 
-QVariantMap PageModel::grid() const {
-    if (m_documentLoaded && m_pageDocument.contains("composition")) {
+QVariantMap
+PageModel::grid() const
+{
+    if (m_documentLoaded && m_pageDocument.contains("composition"))
+    {
         const auto comp = m_pageDocument.value("composition").toObject();
         if (comp.contains("grid"))
             return ComponentSchema::normalizedGrid(comp.value("grid").toObject().toVariantMap());
@@ -248,10 +311,13 @@ QVariantMap PageModel::grid() const {
     return m_owner->grid();
 }
 
-bool PageModel::setGrid(const QVariantMap& value) {
+bool
+PageModel::setGrid(const QVariantMap& value)
+{
     if (!m_owner)
         return false;
-    if (!ComponentSchema::validGrid(value)) {
+    if (!ComponentSchema::validGrid(value))
+    {
         m_owner->setError(tr("Invalid page grid."));
         return false;
     }
@@ -264,7 +330,8 @@ bool PageModel::setGrid(const QVariantMap& value) {
         itemsForFit.append(v);
     auto proposed = composition();
     proposed["grid"] = updated;
-    if (!ComponentSchema::layoutPlacementsFit(itemsForFit, proposed, m_pageDocument["categories"].toArray())) {
+    if (!ComponentSchema::layoutPlacementsFit(itemsForFit, proposed, m_pageDocument["categories"].toArray()))
+    {
         m_owner->setError(tr("This grid would move placed widgets outside its bounds."));
         return false;
     }
@@ -275,12 +342,17 @@ bool PageModel::setGrid(const QVariantMap& value) {
     return setComposition(config);
 }
 
-QVariantList PageModel::placements() const {
+QVariantList
+PageModel::placements() const
+{
     QVariantList result;
-    if (m_pageDocument.contains("components")) {
-        for (const auto& value : m_pageDocument.value("components").toArray()) {
+    if (m_pageDocument.contains("components"))
+    {
+        for (const auto& value : m_pageDocument.value("components").toArray())
+        {
             const auto object = value.toObject();
-            if (object.contains("placement")) {
+            if (object.contains("placement"))
+            {
                 result.append(QVariantMap{{"id", object.value("id").toString()},
                                           {"placement", object.value("placement").toObject().toVariantMap()}});
             }
@@ -289,7 +361,9 @@ QVariantList PageModel::placements() const {
     return result;
 }
 
-QVariantMap PageModel::presentation() const {
+QVariantMap
+PageModel::presentation() const
+{
     if (m_documentLoaded && m_pageDocument.contains("presentation"))
         return m_pageDocument.value("presentation").toObject().toVariantMap();
     if (!m_owner)
@@ -297,12 +371,15 @@ QVariantMap PageModel::presentation() const {
     return m_owner->composition().value("presentation").toMap();
 }
 
-bool PageModel::setPresentation(const QVariantMap& value) {
+bool
+PageModel::setPresentation(const QVariantMap& value)
+{
     if (!m_owner)
         return false;
     const auto previous = m_pageDocument;
     m_pageDocument["presentation"] = QJsonObject::fromVariantMap(value);
-    if (!storePage()) {
+    if (!storePage())
+    {
         m_pageDocument = previous;
         return false;
     }
@@ -311,17 +388,21 @@ bool PageModel::setPresentation(const QVariantMap& value) {
     return true;
 }
 
-QVariantList PageModel::items() const {
+QVariantList
+PageModel::items() const
+{
     QJsonArray components;
     if (m_pageDocument.contains("components"))
         components = m_pageDocument.value("components").toArray();
-    if (m_owner && !m_owner->m_draftOnly) {
+    if (m_owner && !m_owner->m_draftOnly)
+    {
         QSet<QString> hidden;
         for (const auto& entry : components)
             if (entry.toObject().value("hidden").toBool())
                 hidden.insert(entry.toObject()["id"].toString());
         for (int depth = 0; depth < 4; ++depth)
-            for (const auto& entry : components) {
+            for (const auto& entry : components)
+            {
                 const auto item = entry.toObject();
                 if (hidden.contains(item.value("parentId").toString()))
                     hidden.insert(item["id"].toString());
@@ -335,15 +416,19 @@ QVariantList PageModel::items() const {
     return resolveItems(components);
 }
 
-QVariantList PageModel::sections() const {
+QVariantList
+PageModel::sections() const
+{
     QVariantList result;
-    if (!m_pageDocument.contains("categories")) {
+    if (!m_pageDocument.contains("categories"))
+    {
         if (!m_owner)
             return {};
         return m_owner->sections();
     }
     const auto resolved = items();
-    for (const auto& categoryValue : m_pageDocument.value("categories").toArray()) {
+    for (const auto& categoryValue : m_pageDocument.value("categories").toArray())
+    {
         const auto category = categoryValue.toObject();
         QVariantList categoryItems;
         for (const auto& itemValue : resolved)
@@ -352,7 +437,8 @@ QVariantList PageModel::sections() const {
                 categoryItems.append(itemValue);
         if (!categoryItems.isEmpty() ||
             category.value("presentation").toObject().value("variant").toString() == QStringLiteral("library") ||
-            grid().value("mode") == "sections") {
+            grid().value("mode") == "sections")
+        {
             auto section = category.toVariantMap();
             section["items"] = categoryItems;
             result.append(section);
@@ -369,87 +455,36 @@ QVariantList PageModel::sections() const {
     return result;
 }
 
-QString PageModel::backgroundStart() const {
+QString
+PageModel::backgroundStart() const
+{
     return appearance().value("backgroundStart").toString();
 }
-QString PageModel::backgroundEnd() const {
+QString
+PageModel::backgroundEnd() const
+{
     return appearance().value("backgroundEnd").toString();
 }
 
-QVariantMap PageModel::appearance() const {
+QVariantMap
+PageModel::appearance() const
+{
     return ThemeColors::resolve(m_owner ? m_owner->homeAppearance() : themeDefaults(),
                                 m_documentLoaded ? m_pageDocument.value("theme").toObject().toVariantMap()
                                                  : QVariantMap{});
 }
 
-bool PageModel::setAppearance(const QVariantMap& changes) {
+bool
+PageModel::setAppearance(const QVariantMap& changes)
+{
     if (!m_owner)
         return false;
     auto normalized = changes;
     const auto defaults = themeDefaults();
-    for (auto it = normalized.begin(); it != normalized.end(); ++it) {
-        const auto key = it.key();
-        if (key == "colorTheme") {
-            if (!ThemeColors::valid(it.value()))
-                return false;
-            continue;
-        }
-        if (key == "sourcePolicy") {
-            if (it.value().metaType().id() != QMetaType::QVariantMap ||
-                !ComponentSchema::validSourcePolicy(it.value().toMap())) {
-                m_owner->setError(tr("Invalid source display policy."));
-                return false;
-            }
-            continue;
-        }
-        if (key == "surfaceThemes") {
-            if (!ComponentSchema::validSurfaceThemes(it.value())) {
-                m_owner->setError(tr("Invalid shell appearance policy."));
-                return false;
-            }
-            continue;
-        }
-        if (key.endsWith("Color") || key == "backgroundStart" || key == "backgroundEnd") {
-            const QColor color(it.value().toString());
-            if (!color.isValid() || color.alpha() != 255) {
-                m_owner->setError(tr("Choose valid opaque colors and appearance values within the displayed ranges."));
-                return false;
-            }
-            it.value() = color.name();
-        } else if (key == "fontFamily") {
-            if (it.value().metaType().id() != QMetaType::QString || it.value().toString().trimmed().isEmpty() ||
-                it.value().toString().size() > 80 || it.value().toString().contains(QChar::Null)) {
-                m_owner->setError(tr("Invalid font family."));
-                return false;
-            }
-        } else if (key == "motionEnabled" || key == "highContrast") {
-            if (it.value().metaType().id() != QMetaType::Bool) {
-                m_owner->setError(tr("Motion and contrast choices must be boolean values."));
-                return false;
-            }
-        } else {
-            if (!defaults.contains(key) && key != "tileRoundness") {
-                m_owner->setError(tr("Unknown appearance key."));
-                return false;
-            }
-            if (it.value().metaType().id() == QMetaType::QString || it.value().metaType().id() == QMetaType::Bool) {
-                m_owner->setError(tr("Appearance value must be a number."));
-                return false;
-            }
-            bool ok = false;
-            const double number = it.value().toDouble(&ok);
-            const double low = key == "typographyScale" ? 0.8 : key == "homeColumns" ? 2 : key == "spacing" ? 8 : 0;
-            const double high = key == "typographyScale" ? 1.3 : key == "homeColumns" ? 6 : key == "spacing" ? 40 : 1;
-            if (!ok || !qIsFinite(number) || number < low || number > high ||
-                ((key == "homeColumns" || key == "spacing") && number != qFloor(number))) {
-                m_owner->setError(tr("Appearance value out of range."));
-                return false;
-            }
-        }
-        if (!defaults.contains(key) && !ThemeColors::role(key) && key != "tileRoundness") {
-            m_owner->setError(tr("Unknown appearance key."));
+    for (auto it = normalized.begin(); it != normalized.end(); ++it)
+    {
+        if (!validateAppearanceKey(it.key(), it.value(), defaults))
             return false;
-        }
     }
     const auto previous = m_pageDocument;
     QJsonObject theme;
@@ -464,7 +499,8 @@ bool PageModel::setAppearance(const QVariantMap& changes) {
     for (auto it = normalized.cbegin(); it != normalized.cend(); ++it)
         theme.insert(it.key(), QJsonValue::fromVariant(it.value()));
     m_pageDocument["theme"] = theme;
-    if (!storePage()) {
+    if (!storePage())
+    {
         m_pageDocument = previous;
         return false;
     }
@@ -473,15 +509,151 @@ bool PageModel::setAppearance(const QVariantMap& changes) {
     return true;
 }
 
-QString PageModel::wallpaperSource() const {
+bool
+PageModel::validateAppearanceKey(const QString& key, const QVariant& value, const QVariantMap& defaults)
+{
+    if (key == "colorTheme")
+        return validateColorThemeValue(value);
+    if (key == "sourcePolicy")
+        return validateSourcePolicyValue(value);
+    if (key == "surfaceThemes")
+        return validateSurfaceThemesValue(value);
+    if (isColorAppearanceKey(key))
+        return validateColorValue(value);
+    if (key == "fontFamily")
+        return validateFontFamilyValue(value);
+    if (key == "motionEnabled" || key == "highContrast")
+        return validateBooleanValue(value);
+    return validateNumericValue(key, value);
+}
+
+bool
+PageModel::validateColorThemeValue(const QVariant& value)
+{
+    if (!ThemeColors::valid(value))
+    {
+        m_owner->setError(tr("Invalid color theme."));
+        return false;
+    }
+    return true;
+}
+
+bool
+PageModel::validateSourcePolicyValue(const QVariant& value)
+{
+    if (value.metaType().id() != QMetaType::QVariantMap ||
+        !ComponentSchema::validSourcePolicy(value.toMap()))
+    {
+        m_owner->setError(tr("Invalid source display policy."));
+        return false;
+    }
+    return true;
+}
+
+bool
+PageModel::validateSurfaceThemesValue(const QVariant& value)
+{
+    if (!ComponentSchema::validSurfaceThemes(value))
+    {
+        m_owner->setError(tr("Invalid shell appearance policy."));
+        return false;
+    }
+    return true;
+}
+
+bool
+PageModel::isColorAppearanceKey(const QString& key)
+{
+    return key.endsWith("Color") || key == "backgroundStart" || key == "backgroundEnd";
+}
+
+bool
+PageModel::validateColorValue(const QVariant& value)
+{
+    const QColor color(value.toString());
+    if (!color.isValid() || color.alpha() != 255)
+    {
+        m_owner->setError(tr("Choose valid opaque colors and appearance values within the displayed ranges."));
+        return false;
+    }
+    return true;
+}
+
+bool
+PageModel::validateFontFamilyValue(const QVariant& value)
+{
+    if (value.metaType().id() != QMetaType::QString || value.toString().trimmed().isEmpty() ||
+        value.toString().size() > 80 || value.toString().contains(QChar::Null))
+    {
+        m_owner->setError(tr("Invalid font family."));
+        return false;
+    }
+    return true;
+}
+
+bool
+PageModel::validateBooleanValue(const QVariant& value)
+{
+    if (value.metaType().id() != QMetaType::Bool)
+    {
+        m_owner->setError(tr("Motion and contrast choices must be boolean values."));
+        return false;
+    }
+    return true;
+}
+
+bool
+PageModel::validateNumericValue(const QString& key, const QVariant& value)
+{
+    const auto defaults = themeDefaults();
+    if (!isKnownAppearanceKey(key, defaults))
+        return false;
+    if (value.metaType().id() == QMetaType::QString || value.metaType().id() == QMetaType::Bool)
+    {
+        m_owner->setError(tr("Appearance value must be a number."));
+        return false;
+    }
+    bool ok = false;
+    const double number = value.toDouble(&ok);
+    if (!validateNumericRange(key, number, ok))
+        return false;
+    return true;
+}
+
+bool
+PageModel::validateNumericRange(const QString& key, double number, bool ok)
+{
+    if (!ok || !qIsFinite(number))
+        return false;
+    const double low = key == "typographyScale" ? 0.8 : key == "homeColumns" ? 2 : key == "spacing" ? 8 : 0;
+    const double high = key == "typographyScale" ? 1.3 : key == "homeColumns" ? 6 : key == "spacing" ? 40 : 1;
+    if (number < low || number > high ||
+        ((key == "homeColumns" || key == "spacing") && number != qFloor(number)))
+        return false;
+    return true;
+}
+
+bool
+PageModel::isKnownAppearanceKey(const QString& key, const QVariantMap& defaults)
+{
+    if (!defaults.contains(key) && key != "tileRoundness")
+        return false;
+    return true;
+}
+
+QString
+PageModel::wallpaperSource() const
+{
     if (m_documentLoaded && m_pageDocument.contains("composition") && m_owner)
         return m_owner->resolveArtwork(m_pageDocument["composition"].toObject()["wallpaper"].toString());
-    if (m_documentLoaded && m_pageDocument.contains("composition")) {
+    if (m_documentLoaded && m_pageDocument.contains("composition"))
+    {
         const auto comp = m_pageDocument.value("composition").toObject();
         if (comp.contains("wallpaperSource"))
             return comp.value("wallpaperSource").toString();
     }
-    if (m_documentLoaded && m_pageDocument.contains("theme")) {
+    if (m_documentLoaded && m_pageDocument.contains("theme"))
+    {
         const auto theme = m_pageDocument.value("theme").toObject();
         if (theme.contains("wallpaperSource"))
             return theme.value("wallpaperSource").toString();
@@ -491,8 +663,11 @@ QString PageModel::wallpaperSource() const {
     return m_owner->wallpaperSource();
 }
 
-double PageModel::tileRoundness() const {
-    if (m_documentLoaded && m_pageDocument.contains("theme")) {
+double
+PageModel::tileRoundness() const
+{
+    if (m_documentLoaded && m_pageDocument.contains("theme"))
+    {
         const auto theme = m_pageDocument.value("theme").toObject();
         if (theme.contains("tileRoundness"))
             return qBound(0.0, theme.value("tileRoundness").toDouble(0.18), 1.0);
@@ -502,8 +677,11 @@ double PageModel::tileRoundness() const {
     return m_owner->homeAppearance().value("tileRoundness", m_owner->tileRoundness()).toDouble();
 }
 
-bool PageModel::brandVisible() const {
-    if (m_documentLoaded && m_pageDocument.contains("theme")) {
+bool
+PageModel::brandVisible() const
+{
+    if (m_documentLoaded && m_pageDocument.contains("theme"))
+    {
         const auto theme = m_pageDocument.value("theme").toObject();
         if (theme.contains("brandVisible"))
             return theme.value("brandVisible").toBool(false);
@@ -513,20 +691,25 @@ bool PageModel::brandVisible() const {
     return m_owner->brandVisible();
 }
 
-QString PageModel::errorString() const {
+QString
+PageModel::errorString() const
+{
     if (!m_owner)
         return QString();
     return m_owner->errorString();
 }
 
-bool PageModel::addWidget(const QString& widgetType) {
+bool
+PageModel::addWidget(const QString& widgetType)
+{
     if (!m_owner)
         return false;
     if (widgetType != QStringLiteral("clock") && widgetType != "text")
         return false;
     QString id = widgetType;
     int suffix = 2;
-    const auto idExists = [this](const QString& candidate) {
+    const auto idExists = [this](const QString& candidate)
+    {
         if (!m_pageDocument.contains("components"))
             return false;
         for (const auto& value : m_pageDocument.value("components").toArray())
@@ -537,7 +720,8 @@ bool PageModel::addWidget(const QString& widgetType) {
     while (idExists(id))
         id = widgetType + QString::number(suffix++);
     QJsonObject item{{"kind", "widget"}, {"id", id}, {"widgetType", widgetType}, {"size", "standard"}};
-    if (widgetType == "text") {
+    if (widgetType == "text")
+    {
         item.insert("name", QStringLiteral("Text"));
         item.insert(
             "presentation",
@@ -549,7 +733,8 @@ bool PageModel::addWidget(const QString& widgetType) {
         components = m_pageDocument.value("components").toArray();
     components.append(item);
     m_pageDocument["components"] = components;
-    if (!storePage()) {
+    if (!storePage())
+    {
         m_pageDocument = previous;
         return false;
     }
@@ -558,7 +743,9 @@ bool PageModel::addWidget(const QString& widgetType) {
     return true;
 }
 
-bool PageModel::addButton() {
+bool
+PageModel::addButton()
+{
     if (!m_owner)
         return false;
     QString id = QStringLiteral("button-") + QUuid::createUuid().toString(QUuid::WithoutBraces);
@@ -570,7 +757,8 @@ bool PageModel::addButton() {
                      {"actions", QJsonArray{QJsonObject{{"type", "open-apps"}}}}};
     QString error;
     const auto normalized = ComponentSchema::component(item.toVariantMap(), true, &error);
-    if (normalized.isEmpty()) {
+    if (normalized.isEmpty())
+    {
         m_owner->setError(error);
         return false;
     }
@@ -581,7 +769,8 @@ bool PageModel::addButton() {
         components = m_pageDocument.value("components").toArray();
     components.append(item);
     m_pageDocument["components"] = components;
-    if (!storePage()) {
+    if (!storePage())
+    {
         m_pageDocument = previous;
         return false;
     }
@@ -590,58 +779,78 @@ bool PageModel::addButton() {
     return true;
 }
 
-bool PageModel::setItemName(const QString& id, const QString& name) {
-    if (name.trimmed().isEmpty() || name.trimmed().size() > 80) {
+bool
+PageModel::setItemName(const QString& id, const QString& name)
+{
+    if (name.trimmed().isEmpty() || name.trimmed().size() > 80)
+    {
         m_owner->setError(tr("Use a card name of 1-80 characters."));
         return false;
     }
-    return setItemField(id, [name](QJsonObject& item) {
-        item.insert("name", name.trimmed());
-    });
+    return setItemField(id,
+                        [name](QJsonObject& item)
+                        {
+                            item.insert("name", name.trimmed());
+                        });
 }
 
-bool PageModel::setItemAction(const QString& id, const QVariantList& actions) {
-    if (actions.isEmpty()) {
+bool
+PageModel::setItemAction(const QString& id, const QVariantList& actions)
+{
+    if (actions.isEmpty())
+    {
         m_owner->setError(tr("Choose at least one action for the button."));
         return false;
     }
     QVariantList normalized;
-    for (const auto& entry : actions) {
-        if (entry.metaType().id() != QMetaType::QVariantMap) {
+    for (const auto& entry : actions)
+    {
+        if (entry.metaType().id() != QMetaType::QVariantMap)
+        {
             m_owner->setError(tr("Each action must be an action map."));
             return false;
         }
         const auto n = ComponentSchema::action(entry.toMap());
-        if (n.isEmpty()) {
+        if (n.isEmpty())
+        {
             m_owner->setError(tr("Choose a valid action and destination."));
             return false;
         }
         normalized.append(n);
     }
-    return setItemField(id, [normalized](QJsonObject& item) {
-        if (item.value("componentType") != "button" && item.value("componentType") != "image")
-            item.insert("kind", QStringLiteral("action"));
-        item.insert("actions", QJsonArray::fromVariantList(normalized));
-        item.remove("action");
-        item.remove("appId");
-        if (item.value("name").toString().isEmpty())
-            item.insert("name", QStringLiteral("Link"));
-    });
+    return setItemField(id,
+                        [normalized](QJsonObject& item)
+                        {
+                            if (item.value("componentType") != "button" && item.value("componentType") != "image")
+                                item.insert("kind", QStringLiteral("action"));
+                            item.insert("actions", QJsonArray::fromVariantList(normalized));
+                            item.remove("action");
+                            item.remove("appId");
+                            if (item.value("name").toString().isEmpty())
+                                item.insert("name", QStringLiteral("Link"));
+                        });
 }
 
-bool PageModel::setItemPresentation(const QString& id, const QVariantMap& value) {
-    return setItemField(id, [value](QJsonObject& item) {
-        item.insert("presentation", QJsonObject::fromVariantMap(value));
-    });
+bool
+PageModel::setItemPresentation(const QString& id, const QVariantMap& value)
+{
+    return setItemField(id,
+                        [value](QJsonObject& item)
+                        {
+                            item.insert("presentation", QJsonObject::fromVariantMap(value));
+                        });
 }
 
-QString PageModel::addLibraryWidget(const QString& name, const QString& kind) {
+QString
+PageModel::addLibraryWidget(const QString& name, const QString& kind)
+{
     if (!m_owner)
         return QString();
     if (name.trimmed().isEmpty() || !QStringList{"movies", "shows"}.contains(kind))
         return QString();
     auto comp = m_pageDocument.value("composition").toObject();
-    if (!comp.value("enabled").toBool()) {
+    if (!comp.value("enabled").toBool())
+    {
         comp.insert("schemaVersion", 1);
         comp.insert("enabled", true);
         comp.insert("fit", false);
@@ -660,7 +869,8 @@ QString PageModel::addLibraryWidget(const QString& name, const QString& kind) {
                                                {"libraryLayout", "grid"},
                                                {"libraryColumns", 4}}}});
     m_pageDocument["categories"] = categories;
-    if (!storePage()) {
+    if (!storePage())
+    {
         m_pageDocument = previous;
         return QString();
     }
@@ -669,12 +879,15 @@ QString PageModel::addLibraryWidget(const QString& name, const QString& kind) {
     return id;
 }
 
-bool PageModel::setItemPlacement(const QString& id, const QVariantMap& placement) {
+bool
+PageModel::setItemPlacement(const QString& id, const QVariantMap& placement)
+{
     if (!m_owner)
         return false;
     auto proposed = m_pageDocument["components"].toArray();
     bool found = false;
-    for (int i = 0; i < proposed.size(); ++i) {
+    for (int i = 0; i < proposed.size(); ++i)
+    {
         auto item = proposed[i].toObject();
         if (item["id"] != id)
             continue;
@@ -684,25 +897,33 @@ bool PageModel::setItemPlacement(const QString& id, const QVariantMap& placement
     }
     if (!found)
         return false;
-    if (!ComponentSchema::layoutPlacementsFit(proposed, composition(), m_pageDocument["categories"].toArray())) {
+    if (!ComponentSchema::layoutPlacementsFit(proposed, composition(), m_pageDocument["categories"].toArray()))
+    {
         m_owner->setError(tr("The placement exceeds its grid or overlaps another component in that section."));
         return false;
     }
-    return setItemField(id, [placement](QJsonObject& item) {
-        item.insert("placement", QJsonObject::fromVariantMap(placement));
-    });
+    return setItemField(id,
+                        [placement](QJsonObject& item)
+                        {
+                            item.insert("placement", QJsonObject::fromVariantMap(placement));
+                        });
 }
 
-bool PageModel::clearItemPlacement(const QString& id) {
+bool
+PageModel::clearItemPlacement(const QString& id)
+{
     if (!m_owner)
         return false;
     const auto previous = m_pageDocument;
     bool found = false;
-    if (m_pageDocument.contains("components")) {
+    if (m_pageDocument.contains("components"))
+    {
         QJsonArray components;
-        for (const auto& value : m_pageDocument.value("components").toArray()) {
+        for (const auto& value : m_pageDocument.value("components").toArray())
+        {
             auto item = value.toObject();
-            if (item.value("id").toString() == id && item.contains("placement")) {
+            if (item.value("id").toString() == id && item.contains("placement"))
+            {
                 item.remove("placement");
                 found = true;
             }
@@ -712,7 +933,8 @@ bool PageModel::clearItemPlacement(const QString& id) {
     }
     if (!found)
         return false;
-    if (!storePage()) {
+    if (!storePage())
+    {
         m_pageDocument = previous;
         return false;
     }
@@ -720,10 +942,14 @@ bool PageModel::clearItemPlacement(const QString& id) {
     return true;
 }
 
-QVariantList PageModel::pageSearchSources() const {
+QVariantList
+PageModel::pageSearchSources() const
+{
     QVariantList sources;
-    const auto collect = [&sources](const QJsonArray& entries) {
-        for (const auto& value : entries) {
+    const auto collect = [&sources](const QJsonArray& entries)
+    {
+        for (const auto& value : entries)
+        {
             const auto entry = value.toObject();
             const auto presentation = entry.value("presentation").toObject();
             if (presentation.value("variant").toString() != QStringLiteral("library"))
@@ -747,23 +973,29 @@ QVariantList PageModel::pageSearchSources() const {
     return sources;
 }
 
-bool PageModel::setItemField(const QString& id, std::function<void(QJsonObject&)> mutate) {
+bool
+PageModel::setItemField(const QString& id, std::function<void(QJsonObject&)> mutate)
+{
     if (!m_owner)
         return false;
     const auto previousDoc = m_pageDocument;
     bool found = false;
-    if (m_pageDocument.contains("components")) {
+    if (m_pageDocument.contains("components"))
+    {
         QJsonArray components;
-        for (const auto& value : m_pageDocument.value("components").toArray()) {
+        for (const auto& value : m_pageDocument.value("components").toArray())
+        {
             auto item = value.toObject();
-            if (item.value("id").toString() != id) {
+            if (item.value("id").toString() != id)
+            {
                 components.append(item);
                 continue;
             }
             mutate(item);
             QString error;
             item = QJsonObject::fromVariantMap(ComponentSchema::component(item.toVariantMap(), true, &error));
-            if (item.isEmpty()) {
+            if (item.isEmpty())
+            {
                 m_owner->setError(error);
                 return false;
             }
@@ -773,10 +1005,13 @@ bool PageModel::setItemField(const QString& id, std::function<void(QJsonObject&)
         if (!found)
             return false;
         m_pageDocument["components"] = components;
-    } else {
+    }
+    else
+    {
         return false;
     }
-    if (!storePage()) {
+    if (!storePage())
+    {
         m_pageDocument = previousDoc;
         return false;
     }

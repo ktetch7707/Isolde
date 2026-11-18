@@ -9,8 +9,11 @@
 #include "input/InputManager.h"
 #include "settings/InterfaceSounds.h"
 
-namespace {
-QByteArray wave(int milliseconds = 30) {
+namespace
+{
+QByteArray
+wave(int milliseconds = 30)
+{
     const int samples = 48 * milliseconds;
     QByteArray result;
     QDataStream out(&result, QIODevice::WriteOnly);
@@ -25,16 +28,22 @@ QByteArray wave(int milliseconds = 30) {
         out << qint16(i % 100);
     return result;
 }
-bool write(const QString& path, const QByteArray& bytes) {
+bool
+write(const QString& path, const QByteArray& bytes)
+{
     QDir().mkpath(QFileInfo(path).absolutePath());
     QFile file(path);
     return file.open(QIODevice::WriteOnly) && file.write(bytes) == bytes.size();
 }
-QByteArray read(const QString& path) {
+QByteArray
+read(const QString& path)
+{
     QFile file(path);
     return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray{};
 }
-QString pack(const QString& root, const QString& name = "Fixture") {
+QString
+pack(const QString& root, const QString& name = "Fixture")
+{
     const auto directory = root + "/resource.uisounds.fixture";
     write(directory + "/addon.xml",
           ("<addon id=\"resource.uisounds.fixture\" name=\"" + name +
@@ -49,10 +58,13 @@ QString pack(const QString& root, const QString& name = "Fixture") {
 }
 } // namespace
 
-class InterfaceSoundTests : public QObject {
+class InterfaceSoundTests : public QObject
+{
     Q_OBJECT
   private slots:
-    void optionsAndWaveBounds() {
+    void
+    optionsAndWaveBounds()
+    {
         auto options = QJsonDocument::fromJson(read(INTERFACE_SOUND_DEFAULTS)).object().toVariantMap();
         QVERIFY(InterfaceSounds::validOptions(options));
         auto invalid = options;
@@ -78,7 +90,9 @@ class InterfaceSoundTests : public QObject {
         QVERIFY(!InterfaceSounds::validWave(damaged));
         QVERIFY(!InterfaceSounds::validWave(QByteArray(600000, 'x')));
     }
-    void kodiMappingAndPathBoundaries() {
+    void
+    kodiMappingAndPathBoundaries()
+    {
         QTemporaryDir dir;
         const auto root = pack(dir.path());
         QString error;
@@ -91,7 +105,8 @@ class InterfaceSoundTests : public QObject {
                                                   "/tmp/outside.wav",
                                                   "https://example.invalid/audio.wav",
                                                   "sub/../../outside.wav",
-                                                  "sub\\outside.wav"}) {
+                                                  "sub\\outside.wav"})
+        {
             auto unsafe = original;
             unsafe.replace("click.wav", path);
             QVERIFY(write(root + "/resources/sounds.xml", unsafe));
@@ -107,7 +122,9 @@ class InterfaceSoundTests : public QObject {
         QVERIFY(QFile::link(dir.path() + "/outside.wav", root + "/resources/click.wav"));
         QVERIFY(InterfaceSounds::readKodiTheme(root).isEmpty());
     }
-    void preferencesAreAtomicAndProfileLocal() {
+    void
+    preferencesAreAtomicAndProfileLocal()
+    {
         QTemporaryDir dir;
         const auto file = dir.filePath("a/interface-sounds.json");
         const auto otherFile = dir.filePath("b/interface-sounds.json");
@@ -140,7 +157,9 @@ class InterfaceSoundTests : public QObject {
         QVERIFY(!malformed.errorString().isEmpty());
         QCOMPARE(read(otherFile), QByteArray("{broken"));
     }
-    void feedbackPolicyPreviewAndPrivateImport() {
+    void
+    feedbackPolicyPreviewAndPrivateImport()
+    {
         QTemporaryDir dir;
         const auto root = dir.path() + "/addons";
         const auto source = pack(root);
@@ -191,7 +210,9 @@ class InterfaceSoundTests : public QObject {
         QVERIFY(!sounds.selectTheme("resource.uisounds.missing"));
         QCOMPARE(sounds.theme(), "resource.uisounds.fixture");
     }
-    void teardownCancelsPreviewAndRemovesPrivateSamples() {
+    void
+    teardownCancelsPreviewAndRemovesPrivateSamples()
+    {
         QTemporaryDir dir;
         auto* sounds = new InterfaceSounds(dir.filePath("prefs.json"), {}, nullptr, INTERFACE_SOUND_DEFAULTS, false);
         QSignalSpy cues(sounds, &InterfaceSounds::cueRequested);
@@ -204,7 +225,9 @@ class InterfaceSoundTests : public QObject {
         QTest::qWait(300);
         QCOMPARE(cues.count(), 1);
     }
-    void brokenSelectedPackFallsBackWithoutRewritingTheChoice() {
+    void
+    brokenSelectedPackFallsBackWithoutRewritingTheChoice()
+    {
         QTemporaryDir dir;
         const auto root = dir.path() + "/addons";
         const auto source = pack(root);

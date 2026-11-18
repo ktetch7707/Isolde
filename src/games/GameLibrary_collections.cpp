@@ -1,13 +1,15 @@
-﻿#include "GameLibrary.h"
-#include "OpticalDiscIdentity.h"
-#include <QFileInfo>
+﻿#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QSaveFile>
 #include <QSqlQuery>
 #include <QUuid>
+#include "GameLibrary.h"
+#include "OpticalDiscIdentity.h"
 
-QVariantList GameLibrary::collections() {
+QVariantList
+GameLibrary::collections()
+{
     QVariantList result;
     if (!m_ready)
         return result;
@@ -16,8 +18,9 @@ QVariantList GameLibrary::collections() {
     QSqlQuery query(m_db);
     const auto smartPlatform =
         m_hasEditions
-            ? QString("(SELECT count(*) FROM games g WHERE lower(g.platform)=lower(c.filter_value) OR EXISTS(SELECT 1 "
-                      "FROM game_editions e WHERE e.game_id=g.id AND lower(e.platform)=lower(c.filter_value)))")
+            ? QString(
+                  "(SELECT count(*) FROM games g WHERE lower(g.platform)=lower(c.filter_value) OR EXISTS(SELECT 1 "
+                  "FROM game_editions e WHERE e.game_id=g.id AND lower(e.platform)=lower(c.filter_value)))")
             : QString("(SELECT count(*) FROM games g WHERE lower(g.platform)=lower(c.filter_value))");
     const auto countExpression =
         "CASE WHEN c.kind='manual' THEN count(m.game_id) "
@@ -35,7 +38,8 @@ QVariantList GameLibrary::collections() {
         "0 END";
     if (!query.exec("SELECT c.id,c.name,c.kind,c.filter_type,c.filter_value," + countExpression +
                     " FROM game_collections c LEFT JOIN game_collection_members m ON m.collection_id=c.id GROUP BY "
-                    "c.id ORDER BY c.name COLLATE NOCASE,c.id")) {
+                    "c.id ORDER BY c.name COLLATE NOCASE,c.id"))
+    {
         fail(query.lastError().text());
         return {};
     }
@@ -49,38 +53,95 @@ QVariantList GameLibrary::collections() {
     return result;
 }
 
-QString GameLibrary::createCollection(const QString& name,
-                                      const QString& kind,
-                                      const QString& filterType,
-                                      const QString& filterValue) {
+QString
+GameLibrary::createCollection(const QString& name,
+                              const QString& kind,
+                              const QString& filterType,
+                              const QString& filterValue)
+{
     const auto clean = name.trimmed();
-    if (!m_ready || clean.isEmpty() || clean != name || clean.size() > 80 || clean.contains(QChar::Null)) {
+    if (!createCollectionValidName(clean, name))
+        return {};
+    if (!createCollectionValidKind(kind, filterType, filterValue))
+        return {};
+    if (!createCollectionEnsureSchema(filterType))
+        return {};
+    if (!createCollectionCheckLimit())
+        return {};
+    return createCollectionInsert(clean, kind, filterType, filterValue);
+}
+
+bool
+GameLibrary::createCollectionValidName(const QString& clean, const QString& name)
+{
+    if (!m_ready || clean.isEmpty() || clean != name || clean.size() > 80 || clean.contains(QChar::Null))
+    {
         fail(tr("Choose a collection name of up to 80 characters."));
-        return {};
+        return false;
     }
-    if (kind == "manual") {
-        if (!filterType.isEmpty() || !filterValue.isEmpty()) {
-            fail(tr("Manual collections do not accept executable filters."));
-            return {};
-        }
-    } else if (kind == "smart") {
-        if (!QStringList{"platform", "favorite", "title", "franchise", "tag", "recent"}.contains(filterType) ||
-            filterValue.size() > 80 || filterValue.contains(QChar::Null) ||
-            (!QStringList{"favorite", "recent"}.contains(filterType) && filterValue.trimmed().isEmpty()) ||
-            (QStringList{"favorite", "recent"}.contains(filterType) && !filterValue.isEmpty())) {
-            fail(tr("Choose one supported declarative smart collection rule."));
-            return {};
-        }
-    } else {
-        fail(tr("Choose a manual or smart collection."));
-        return {};
+    return true;
+}
+
+bool
+GameLibrary::createCollectionValidKind(const QString& kind, const QString& filterType,
+                                       const QString& filterValue)
+{
+    if (kind == "manual")
+        return createCollectionValidManual(filterType, filterValue);
+    if (kind == "smart")
+        return createCollectionValidSmart(filterType, filterValue);
+    fail(tr("Choose a manual or smart collection."));
+    return false;
+}
+
+bool
+GameLibrary::createCollectionValidManual(const QString& filterType, const QString& filterValue)
+{
+    if (!filterType.isEmpty() || !filterValue.isEmpty())
+    {
+        fail(tr("Manual collections do not accept executable filters."));
+        return false;
     }
+    return true;
+}
+
+bool
+GameLibrary::createCollectionValidSmart(const QString& filterType, const QString& filterValue)
+{
+    if (!QStringList{"platform", "favorite", "title", "franchise", "tag", "recent"}.contains(filterType) ||
+        filterValue.size() > 80 || filterValue.contains(QChar::Null) ||
+        (!QStringList{"favorite", "recent"}.contains(filterType) && filterValue.trimmed().isEmpty()) ||
+        (QStringList{"favorite", "recent"}.contains(filterType) && !filterValue.isEmpty()))
+    {
+        fail(tr("Choose one supported declarative smart collection rule."));
+        return false;
+    }
+    return true;
+}
+
+bool
+GameLibrary::createCollectionEnsureSchema(const QString& filterType)
+{
     if ((!m_hasCollections || (filterType == "recent" && !m_hasActivity)) && !ensureOrganizationSchema())
-        return {};
-    if (collections().size() >= MaxCollections) {
+        return false;
+    return true;
+}
+
+bool
+GameLibrary::createCollectionCheckLimit()
+{
+    if (collections().size() >= MaxCollections)
+    {
         fail(tr("This profile already has 256 game collections."));
-        return {};
+        return false;
     }
+    return true;
+}
+
+QVariantMap
+GameLibrary::createCollectionInsert(const QString& clean, const QString& kind, const QString& filterType,
+                                    const QString& filterValue)
+{
     const auto id = "collection-" + QUuid::createUuid().toString(QUuid::WithoutBraces);
     QSqlQuery query(m_db);
     query.prepare("INSERT INTO game_collections(id,name,kind,filter_type,filter_value) VALUES(?,?,?,?,?)");
@@ -89,7 +150,8 @@ QString GameLibrary::createCollection(const QString& name,
     query.addBindValue(kind);
     query.addBindValue(filterType.isNull() ? QStringLiteral("") : filterType);
     query.addBindValue(filterValue.isNull() ? QStringLiteral("") : filterValue);
-    if (!query.exec()) {
+    if (!query.exec())
+    {
         fail(tr("Collection was not created. Its name may already be in use. %1").arg(query.lastError().text()));
         return {};
     }
@@ -99,13 +161,14 @@ QString GameLibrary::createCollection(const QString& name,
     return id;
 }
 
-bool GameLibrary::updateCollection(const QString& id,
-                                   const QString& name,
-                                   const QString& filterType,
-                                   const QString& filterValue) {
+bool
+GameLibrary::updateCollection(const QString& id,
+                              const QString& name,
+                              const QString& filterType,
+                              const QString& filterValue)
+{
     const auto clean = name.trimmed();
-    if (!m_ready || !m_hasCollections || !ComponentSchema::safeId(id) || clean.isEmpty() || clean != name ||
-        clean.size() > 80 || clean.contains(QChar::Null))
+    if (!updateCollectionValidArgs(id, clean, name))
         return fail(tr("Choose a collection name of up to 80 characters."));
     QSqlQuery current(m_db);
     current.prepare("SELECT kind FROM game_collections WHERE id=?");
@@ -114,17 +177,57 @@ bool GameLibrary::updateCollection(const QString& id,
         return fail(tr("Collection not found in this profile."));
     const auto kind = current.value(0).toString();
     current.finish();
-    if (kind == "manual") {
-        if (!filterType.isEmpty() || !filterValue.isEmpty())
-            return fail(tr("Manual collections do not accept executable filters."));
-    } else if (kind == "smart") {
-        if (!QStringList{"platform", "favorite", "title", "franchise", "tag", "recent"}.contains(filterType) ||
-            filterValue.size() > 80 || filterValue.contains(QChar::Null) ||
-            (!QStringList{"favorite", "recent"}.contains(filterType) && filterValue.trimmed().isEmpty()) ||
-            (QStringList{"favorite", "recent"}.contains(filterType) && !filterValue.isEmpty()))
-            return fail(tr("Choose one supported declarative smart collection rule."));
-    } else
-        return fail(tr("Collection type is invalid."));
+    if (!updateCollectionValidKind(kind, filterType, filterValue))
+        return false;
+    if (!updateCollectionSave(id, clean, filterType, filterValue))
+        return false;
+    m_error.clear();
+    emit errorChanged();
+    emit changed();
+    return true;
+}
+
+bool
+GameLibrary::updateCollectionValidArgs(const QString& id, const QString& clean, const QString& name)
+{
+    return m_ready && m_hasCollections && ComponentSchema::safeId(id) && !clean.isEmpty() && clean == name &&
+           clean.size() <= 80 && !clean.contains(QChar::Null);
+}
+
+bool
+GameLibrary::updateCollectionValidKind(const QString& kind, const QString& filterType,
+                                       const QString& filterValue)
+{
+    if (kind == "manual")
+        return updateCollectionValidManual(filterType, filterValue);
+    if (kind == "smart")
+        return updateCollectionValidSmart(filterType, filterValue);
+    return fail(tr("Collection type is invalid."));
+}
+
+bool
+GameLibrary::updateCollectionValidManual(const QString& filterType, const QString& filterValue)
+{
+    if (!filterType.isEmpty() || !filterValue.isEmpty())
+        return fail(tr("Manual collections do not accept executable filters."));
+    return true;
+}
+
+bool
+GameLibrary::updateCollectionValidSmart(const QString& filterType, const QString& filterValue)
+{
+    if (!QStringList{"platform", "favorite", "title", "franchise", "tag", "recent"}.contains(filterType) ||
+        filterValue.size() > 80 || filterValue.contains(QChar::Null) ||
+        (!QStringList{"favorite", "recent"}.contains(filterType) && filterValue.trimmed().isEmpty()) ||
+        (QStringList{"favorite", "recent"}.contains(filterType) && !filterValue.isEmpty()))
+        return fail(tr("Choose one supported declarative smart collection rule."));
+    return true;
+}
+
+bool
+GameLibrary::updateCollectionSave(const QString& id, const QString& clean, const QString& filterType,
+                                  const QString& filterValue)
+{
     if (!m_db.transaction())
         return fail(m_db.lastError().text());
     QSqlQuery query(m_db);
@@ -133,18 +236,18 @@ bool GameLibrary::updateCollection(const QString& id,
     query.addBindValue(filterType.isNull() ? QStringLiteral("") : filterType);
     query.addBindValue(filterValue.isNull() ? QStringLiteral("") : filterValue);
     query.addBindValue(id);
-    if (!query.exec() || query.numRowsAffected() != 1 || !m_db.commit()) {
+    if (!query.exec() || query.numRowsAffected() != 1 || !m_db.commit())
+    {
         const auto error = query.lastError().text();
         m_db.rollback();
         return fail(tr("Collection was not updated. Its previous settings were preserved. %1").arg(error));
     }
-    m_error.clear();
-    emit errorChanged();
-    emit changed();
     return true;
 }
 
-bool GameLibrary::removeCollection(const QString& id) {
+bool
+GameLibrary::removeCollection(const QString& id)
+{
     if (!m_ready || !m_hasCollections || !ComponentSchema::safeId(id))
         return fail(tr("Collection not found in this profile."));
     QSqlQuery query(m_db);
@@ -158,7 +261,9 @@ bool GameLibrary::removeCollection(const QString& id) {
     return true;
 }
 
-bool GameLibrary::setCollectionMember(const QString& collectionId, const QString& gameId, bool member) {
+bool
+GameLibrary::setCollectionMember(const QString& collectionId, const QString& gameId, bool member)
+{
     if (!m_ready || !m_hasCollections || !ComponentSchema::safeId(collectionId) || details(gameId).isEmpty())
         return fail(tr("Choose a game and collection from this profile."));
     QSqlQuery query(m_db);
@@ -170,24 +275,30 @@ bool GameLibrary::setCollectionMember(const QString& collectionId, const QString
         return fail(tr("Smart collection membership is determined by its saved rule."));
     if (!m_db.transaction())
         return fail(m_db.lastError().text());
-    if (member) {
+    if (member)
+    {
         query.prepare("SELECT count(*) FROM game_collection_members WHERE collection_id=?");
         query.addBindValue(collectionId);
-        if (!query.exec() || !query.next() || query.value(0).toInt() >= MaxGames) {
+        if (!query.exec() || !query.next() || query.value(0).toInt() >= MaxGames)
+        {
             m_db.rollback();
             return fail(tr("Manual collection is full."));
         }
-        query.prepare("INSERT OR IGNORE INTO game_collection_members(collection_id,game_id,position) SELECT "
-                      "?,?,COALESCE(MAX(position),-1)+1 FROM game_collection_members WHERE collection_id=?");
+        query.prepare(
+            "INSERT OR IGNORE INTO game_collection_members(collection_id,game_id,position) SELECT "
+            "?,?,COALESCE(MAX(position),-1)+1 FROM game_collection_members WHERE collection_id=?");
         query.addBindValue(collectionId);
         query.addBindValue(gameId);
         query.addBindValue(collectionId);
-    } else {
+    }
+    else
+    {
         query.prepare("DELETE FROM game_collection_members WHERE collection_id=? AND game_id=?");
         query.addBindValue(collectionId);
         query.addBindValue(gameId);
     }
-    if (!query.exec() || !m_db.commit()) {
+    if (!query.exec() || !m_db.commit())
+    {
         const auto error = query.lastError().text();
         m_db.rollback();
         return fail(tr("Collection membership was not changed. %1").arg(error));
@@ -198,9 +309,10 @@ bool GameLibrary::setCollectionMember(const QString& collectionId, const QString
     return true;
 }
 
-bool GameLibrary::moveCollectionMember(const QString& collectionId, const QString& gameId, int direction) {
-    if (!m_ready || !m_hasCollections || !ComponentSchema::safeId(collectionId) || !ComponentSchema::safeId(gameId) ||
-        (direction != -1 && direction != 1))
+bool
+GameLibrary::moveCollectionMember(const QString& collectionId, const QString& gameId, int direction)
+{
+    if (!moveCollectionValidArgs(collectionId, gameId, direction))
         return fail(tr("Choose a valid manual collection and game."));
     QSqlQuery kind(m_db);
     kind.prepare("SELECT kind FROM game_collections WHERE id=?");
@@ -208,32 +320,57 @@ bool GameLibrary::moveCollectionMember(const QString& collectionId, const QStrin
     if (!kind.exec() || !kind.next() || kind.value(0).toString() != "manual")
         return fail(tr("Only manual collection order can be changed."));
     kind.finish();
+    QList<QPair<QString, int>> members;
+    if (!moveCollectionLoadMembers(collectionId, members))
+        return fail(m_db.lastError().text());
+    auto index = -1;
+    for (qsizetype i = 0; i < members.size(); ++i)
+        if (members.at(i).first == gameId)
+        {
+            index = int(i);
+            break;
+        }
+    if (index < 0)
+        return fail(tr("Game is not in this collection."));
+    const auto target = qsizetype(index) + direction;
+    if (target < 0 || target >= members.size())
+    {
+        m_error.clear();
+        emit errorChanged();
+        return true;
+    }
+    return moveCollectionSwap(collectionId, gameId, members, index, target);
+}
+
+bool
+GameLibrary::moveCollectionValidArgs(const QString& collectionId, const QString& gameId, int direction)
+{
+    return m_ready && m_hasCollections && ComponentSchema::safeId(collectionId) &&
+           ComponentSchema::safeId(gameId) && (direction == -1 || direction == 1);
+}
+
+bool
+GameLibrary::moveCollectionLoadMembers(const QString& collectionId, QList<QPair<QString, int>>& members)
+{
     QSqlQuery query(m_db);
     query.prepare(
         "SELECT game_id,position FROM game_collection_members WHERE collection_id=? ORDER BY position,game_id");
     query.addBindValue(collectionId);
     if (!query.exec())
-        return fail(query.lastError().text());
-    QList<QPair<QString, int>> members;
+        return false;
     while (query.next())
         members.append({query.value(0).toString(), query.value(1).toInt()});
     query.finish();
-    auto index = -1;
-    for (qsizetype i = 0; i < members.size(); ++i)
-        if (members.at(i).first == gameId) {
-            index = int(i);
-            break;
-        }
-    const auto target = qsizetype(index) + direction;
-    if (index < 0)
-        return fail(tr("Game is not in this collection."));
-    if (target < 0 || target >= members.size()) {
-        m_error.clear();
-        emit errorChanged();
-        return true;
-    }
+    return true;
+}
+
+bool
+GameLibrary::moveCollectionSwap(const QString& collectionId, const QString& gameId,
+                                const QList<QPair<QString, int>>& members, int index, qsizetype target)
+{
     if (!m_db.transaction())
         return fail(m_db.lastError().text());
+    QSqlQuery query(m_db);
     query.prepare("UPDATE game_collection_members SET position=-1 WHERE collection_id=? AND game_id=?");
     query.addBindValue(collectionId);
     query.addBindValue(gameId);
@@ -248,7 +385,8 @@ bool GameLibrary::moveCollectionMember(const QString& collectionId, const QStrin
     query.addBindValue(collectionId);
     query.addBindValue(gameId);
     ok = ok && query.exec();
-    if (!ok || !m_db.commit()) {
+    if (!ok || !m_db.commit())
+    {
         const auto error = query.lastError().text();
         m_db.rollback();
         return fail(tr("Collection order was not changed. %1").arg(error));
@@ -259,7 +397,9 @@ bool GameLibrary::moveCollectionMember(const QString& collectionId, const QStrin
     return true;
 }
 
-bool GameLibrary::collectionContains(const QString& collectionId, const QString& gameId) {
+bool
+GameLibrary::collectionContains(const QString& collectionId, const QString& gameId)
+{
     if (!m_ready || !m_hasCollections || !ComponentSchema::safeId(collectionId) || !ComponentSchema::safeId(gameId))
         return false;
     QSqlQuery query(m_db);
@@ -269,65 +409,36 @@ bool GameLibrary::collectionContains(const QString& collectionId, const QString&
     return query.exec() && query.next();
 }
 
-QVariantList GameLibrary::pageCollection(const QString& id, int offset) {
-    if (!m_ready || !m_hasCollections || !ComponentSchema::safeId(id) || offset < 0 || offset >= MaxGames ||
-        offset % PageSize) {
+QVariantList
+GameLibrary::pageCollection(const QString& id, int offset)
+{
+    if (!pageCollectionValidArgs(id, offset))
+    {
         fail(tr("Invalid game collection query."));
         return {};
     }
     QSqlQuery collection(m_db);
     collection.prepare("SELECT kind,filter_type,filter_value FROM game_collections WHERE id=?");
     collection.addBindValue(id);
-    if (!collection.exec() || !collection.next()) {
+    if (!collection.exec() || !collection.next())
+    {
         fail(tr("Collection not found in this profile."));
         return {};
     }
     const auto kind = collection.value(0).toString(), filter = collection.value(1).toString(),
                filterValue = collection.value(2).toString();
-    QString sql =
-        "SELECT g.id,g.title,g.platform,g.runtime,g.favorite,COALESCE(m.franchise,''),COALESCE(m.tags,'[]')" +
-        (m_hasRichMetadata ? QString(",COALESCE(m.aliases,'[]'),COALESCE(m.summary,'')") : QString(",'[]',''")) +
-        (m_hasArtwork ? QString(",COALESCE(m.artwork_hash,'')") : QString(",''")) +
-        " FROM games g LEFT JOIN game_metadata m ON m.game_id=g.id";
-    if (kind == "manual")
-        sql += " JOIN game_collection_members cm ON cm.game_id=g.id";
-    sql += " WHERE ";
-    if (kind == "manual")
-        sql += "cm.collection_id=? ORDER BY cm.position, g.id";
-    else if (filter == "platform") {
-        sql += "lower(g.platform)=lower(?)";
-        if (m_hasEditions)
-            sql += " OR EXISTS(SELECT 1 FROM game_editions e WHERE e.game_id=g.id AND lower(e.platform)=lower(?))";
-        sql += " ORDER BY g.title COLLATE NOCASE,g.id";
-    } else if (filter == "favorite")
-        sql += "g.favorite=1 ORDER BY g.title COLLATE NOCASE,g.id";
-    else if (filter == "title")
-        sql += "instr(lower(g.title),lower(?))>0 ORDER BY g.title COLLATE NOCASE,g.id";
-    else if (filter == "franchise")
-        sql += "instr(lower(COALESCE(m.franchise,'')),lower(?))>0 ORDER BY g.title COLLATE NOCASE,g.id";
-    else if (filter == "tag")
-        sql += "EXISTS(SELECT 1 FROM json_each(COALESCE(m.tags,'[]')) tag WHERE lower(tag.value)=lower(?)) ORDER BY "
-               "g.title COLLATE NOCASE,g.id";
-    else if (filter == "recent" && m_hasActivity)
-        sql += "EXISTS(SELECT 1 FROM game_activity a WHERE a.game_id=g.id) ORDER BY (SELECT a.last_played FROM "
-               "game_activity a WHERE a.game_id=g.id) DESC,g.id";
-    else {
+    QString sql = pageCollectionBaseSql(m_hasRichMetadata, m_hasArtwork);
+    if (!pageCollectionBuildWhere(kind, filter, filterValue, m_hasEditions, sql))
+    {
         fail(tr("Collection rule is invalid. No results were changed."));
         return {};
     }
     sql += " LIMIT 50 OFFSET ?";
     QSqlQuery query(m_db);
     query.prepare(sql);
-    if (kind == "manual")
-        query.addBindValue(id);
-    else if (filter == "platform") {
-        query.addBindValue(filterValue);
-        if (m_hasEditions)
-            query.addBindValue(filterValue);
-    } else if (filter == "title" || filter == "franchise" || filter == "tag")
-        query.addBindValue(filterValue);
-    query.addBindValue(offset);
-    if (!query.exec()) {
+    pageCollectionBindValues(kind, filter, filterValue, m_hasEditions, id, offset, query);
+    if (!query.exec())
+    {
         fail(query.lastError().text());
         return {};
     }
@@ -337,10 +448,150 @@ QVariantList GameLibrary::pageCollection(const QString& id, int offset) {
     return result;
 }
 
-bool GameLibrary::exportCatalog(const QString& destination) {
+bool
+GameLibrary::pageCollectionValidArgs(const QString& id, int offset)
+{
+    return m_ready && m_hasCollections && ComponentSchema::safeId(id) && offset >= 0 && offset < MaxGames &&
+           offset % PageSize == 0;
+}
+
+QString
+GameLibrary::pageCollectionBaseSql(bool hasRichMetadata, bool hasArtwork)
+{
+    QString sql =
+        "SELECT g.id,g.title,g.platform,g.runtime,g.favorite,COALESCE(m.franchise,''),COALESCE(m.tags,'[]')" +
+        (hasRichMetadata ? QString(",COALESCE(m.aliases,'[]'),COALESCE(m.summary,'')") : QString(",'[]',''")) +
+        (hasArtwork ? QString(",COALESCE(m.artwork_hash,'')") : QString(",''")) +
+        " FROM games g LEFT JOIN game_metadata m ON m.game_id=g.id";
+    return sql;
+}
+
+bool
+GameLibrary::pageCollectionBuildWhere(const QString& kind, const QString& filter, const QString& filterValue,
+                                      bool hasEditions, QString& sql)
+{
+    if (kind == "manual")
+    {
+        sql += " JOIN game_collection_members cm ON cm.game_id=g.id WHERE cm.collection_id=? ORDER BY cm.position, "
+               "g.id";
+        return true;
+    }
+    if (filter == "platform")
+    {
+        sql += " WHERE lower(g.platform)=lower(?)";
+        if (hasEditions)
+            sql += " OR EXISTS(SELECT 1 FROM game_editions e WHERE e.game_id=g.id AND lower(e.platform)=lower(?))";
+        sql += " ORDER BY g.title COLLATE NOCASE,g.id";
+        return true;
+    }
+    if (filter == "favorite")
+    {
+        sql += " WHERE g.favorite=1 ORDER BY g.title COLLATE NOCASE,g.id";
+        return true;
+    }
+    if (filter == "title")
+    {
+        sql += " WHERE instr(lower(g.title),lower(?))>0 ORDER BY g.title COLLATE NOCASE,g.id";
+        return true;
+    }
+    if (filter == "franchise")
+    {
+        sql += " WHERE instr(lower(COALESCE(m.franchise,'')),lower(?))>0 ORDER BY g.title COLLATE NOCASE,g.id";
+        return true;
+    }
+    if (filter == "tag")
+    {
+        sql +=
+            " WHERE EXISTS(SELECT 1 FROM json_each(COALESCE(m.tags,'[]')) tag WHERE lower(tag.value)=lower(?)) ORDER "
+            "BY g.title COLLATE NOCASE,g.id";
+        return true;
+    }
+    if (filter == "recent" && hasEditions)
+    {
+        sql +=
+            " WHERE EXISTS(SELECT 1 FROM game_activity a WHERE a.game_id=g.id) ORDER BY (SELECT a.last_played FROM "
+            "game_activity a WHERE a.game_id=g.id) DESC,g.id";
+        return true;
+    }
+    return false;
+}
+
+void
+GameLibrary::pageCollectionBindValues(const QString& kind, const QString& filter, const QString& filterValue,
+                                      bool hasEditions, const QString& id, int offset, QSqlQuery& query)
+{
+    if (kind == "manual")
+        query.addBindValue(id);
+    else if (filter == "platform")
+    {
+        query.addBindValue(filterValue);
+        if (hasEditions)
+            query.addBindValue(filterValue);
+    }
+    else if (filter == "title" || filter == "franchise" || filter == "tag")
+        query.addBindValue(filterValue);
+    query.addBindValue(offset);
+}
+
+bool
+GameLibrary::exportCatalog(const QString& destination)
+{
+    if (!exportCatalogValidateDestination(destination))
+        return fail(tr("Choose a JSON file in a specifically approved media folder."));
+    QJsonObject archive{{"schemaVersion", 4}};
+    QJsonArray games, editionsArray, collectionArray, provenanceArray;
+    qsizetype estimatedArchiveBytes = 256;
+    QSqlQuery query(m_db);
+    if (!exportCatalogReadGames(query, games, estimatedArchiveBytes))
+        return fail(tr("Cannot read the games catalog for export."));
+    if (m_hasEditions)
+    {
+        if (!query.exec("SELECT id,game_id,title,platform,runtime,root,target FROM game_editions ORDER BY id"))
+            return fail(tr("Cannot read game editions for export."));
+        while (query.next())
+        {
+            if (editionsArray.size() >= MaxGames)
+                return fail(tr("Game editions exceed the export bound."));
+            editionsArray.append(
+                QJsonObject{{"id", query.value(0).toString()},
+                            {"gameId", query.value(1).toString()},
+                            {"title", query.value(2).toString()},
+                            {"platform", query.value(3).toString()},
+                            {"runtimeId", query.value(4).toString()},
+                            {"root", query.value(5).toString()},
+                            {"target", query.value(6).toString()}});
+            estimatedArchiveBytes += QJsonDocument(editionsArray.last()).toJson(QJsonDocument::Compact).size() + 1;
+            if (estimatedArchiveBytes > MaxCatalogArchiveBytes)
+                return fail(tr("Catalog export exceeds the 32 MiB size limit."));
+        }
+        query.finish();
+    }
+    if (m_hasCollections)
+    {
+        if (!exportCatalogReadCollections(query, collectionArray, estimatedArchiveBytes))
+            return fail(tr("Cannot read game collections for export."));
+    }
+    if (m_hasProvenance)
+    {
+        if (!exportCatalogReadProvenance(query, provenanceArray, estimatedArchiveBytes))
+            return fail(tr("Cannot read immutable acquisition provenance for export."));
+    }
+    archive.insert("games", games);
+    archive.insert("editions", editionsArray);
+    archive.insert("collections", collectionArray);
+    archive.insert("provenance", provenanceArray);
+    const auto bytes = QJsonDocument(archive).toJson(QJsonDocument::Compact);
+    if (bytes.size() > MaxCatalogArchiveBytes)
+        return fail(tr("Catalog export exceeds the 32 MiB size limit."));
+    return exportCatalogWriteFile(destination, bytes);
+}
+
+bool
+GameLibrary::exportCatalogValidateDestination(const QString& destination)
+{
     if (!m_ready || !QDir::isAbsolutePath(destination) || QDir::cleanPath(destination) != destination ||
         !destination.endsWith(".json", Qt::CaseInsensitive) || QFileInfo(destination).isSymLink())
-        return fail(tr("Choose a JSON file in a specifically approved media folder."));
+        return false;
     const auto parent = QFileInfo(destination).absolutePath();
     const auto grant = MediaGrants::validate(parent);
     if (!grant.isEmpty())
@@ -350,10 +601,12 @@ bool GameLibrary::exportCatalog(const QString& destination) {
     if (QFileInfo::exists(destination) &&
         (!QFileInfo(destination).isFile() || QFileInfo(destination).canonicalFilePath() != destination))
         return fail(tr("The catalog export target is not a regular file. Nothing was replaced."));
-    QJsonObject archive{{"schemaVersion", 4}};
-    QJsonArray games, editionsArray, collectionArray, provenanceArray;
-    qsizetype estimatedArchiveBytes = 256;
-    QSqlQuery query(m_db);
+    return true;
+}
+
+bool
+GameLibrary::exportCatalogReadGames(QSqlQuery& query, QJsonArray& games, qsizetype& estimatedArchiveBytes)
+{
     const QString gameSql =
         "SELECT g.id,g.title,g.platform,g.runtime,g.root,g.target,g.favorite,g.added," +
         (m_hasMetadata ? QString("COALESCE(m.franchise,''),COALESCE(m.tags,'[]')") : QString("'','[]'")) +
@@ -363,54 +616,22 @@ bool GameLibrary::exportCatalog(const QString& destination) {
         (m_hasMetadata ? QString(" LEFT JOIN game_metadata m ON m.game_id=g.id") : QString()) +
         (m_hasActivity ? QString(" LEFT JOIN game_activity a ON a.game_id=g.id") : QString()) + " ORDER BY g.id";
     if (!query.exec(gameSql))
-        return fail(tr("Cannot read the games catalog for export."));
-    while (query.next()) {
+        return false;
+    while (query.next())
+    {
         if (games.size() >= MaxGames)
             return fail(tr("Games catalog exceeds the export bound."));
         QJsonArray tags;
-        const auto tagDocument = QJsonDocument::fromJson(query.value(9).toByteArray());
-        if (!tagDocument.isArray() || tagDocument.array().size() > MaxTags)
-            return fail(tr("Game organization metadata is corrupt. Export was canceled."));
-        const auto tagList = tagDocument.array();
-        for (const auto& tag : tagList) {
-            if (!tag.isString() || tag.toString().isEmpty() || tag.toString() != tag.toString().trimmed() ||
-                tag.toString().size() > 64 || tag.toString().contains(',') || tag.toString().contains(QChar::Null))
-                return fail(tr("Game tags are corrupt. Export was canceled."));
-            tags.append(tag);
-        }
-        const auto aliasDocument = QJsonDocument::fromJson(query.value(10).toByteArray());
-        if (!aliasDocument.isArray() || aliasDocument.array().size() > MaxTags)
-            return fail(tr("Game aliases are corrupt. Export was canceled."));
-        const auto aliasList = aliasDocument.array();
+        if (!exportCatalogReadGameTags(query.value(9).toByteArray(), tags))
+            return false;
         QJsonArray aliases;
-        for (const auto& alias : aliasList) {
-            if (!alias.isString() || alias.toString().isEmpty() || alias.toString() != alias.toString().trimmed() ||
-                alias.toString().size() > 160 || alias.toString().contains(';') ||
-                alias.toString().contains(QChar::Null))
-                return fail(tr("Game aliases are corrupt. Export was canceled."));
-            aliases.append(alias);
-        }
-        if (query.value(8).toString().size() > 160 ||
-            query.value(8).toString() != query.value(8).toString().trimmed() ||
-            query.value(8).toString().contains(QChar::Null) || query.value(11).toString().size() > 4096 ||
-            query.value(11).toString().contains(QChar::Null))
-            return fail(tr("Game summary is corrupt. Export was canceled."));
+        if (!exportCatalogReadGameAliases(query.value(10).toByteArray(), aliases))
+            return false;
+        if (!exportCatalogValidateGameSummary(query.value(8), query.value(11)))
+            return false;
         QString encodedArtwork;
-        const auto hash = query.value(13).toString();
-        if (!hash.isEmpty()) {
-            if (!m_hasArtwork || !QRegularExpression("^[0-9a-f]{64}$").match(hash).hasMatch())
-                return fail(tr("Managed artwork reference is invalid. Export was canceled."));
-            const auto path = artworkDirectory() + "/" + hash + ".png";
-            QFile artwork(path);
-            if (QFileInfo(path).isSymLink() || !QFileInfo(path).isFile() ||
-                QFileInfo(path).canonicalFilePath() != path || QFileInfo(path).size() < 1 ||
-                QFileInfo(path).size() > MaxManagedArtworkBytes || !artwork.open(QIODevice::ReadOnly))
-                return fail(tr("Managed artwork is unavailable. Export was canceled."));
-            const auto artworkBytes = artwork.readAll();
-            if (artworkHash(artworkBytes) != hash || normalizeArtwork(artworkBytes).isEmpty())
-                return fail(tr("Managed artwork failed integrity validation. Export was canceled."));
-            encodedArtwork = QString::fromLatin1(artworkBytes.toBase64());
-        }
+        if (!exportCatalogReadGameArtwork(query.value(13).toString(), encodedArtwork))
+            return false;
         const QJsonObject gameRecord{{"id", query.value(0).toString()},
                                      {"title", query.value(1).toString()},
                                      {"platform", query.value(2).toString()},
@@ -431,90 +652,148 @@ bool GameLibrary::exportCatalog(const QString& destination) {
         games.append(gameRecord);
     }
     query.finish();
-    if (m_hasEditions) {
-        if (!query.exec("SELECT id,game_id,title,platform,runtime,root,target FROM game_editions ORDER BY id"))
-            return fail(tr("Cannot read game editions for export."));
-        while (query.next()) {
-            if (editionsArray.size() >= MaxGames)
-                return fail(tr("Game editions exceed the export bound."));
-            const QJsonObject editionRecord{{"id", query.value(0).toString()},
-                                            {"gameId", query.value(1).toString()},
-                                            {"title", query.value(2).toString()},
-                                            {"platform", query.value(3).toString()},
-                                            {"runtimeId", query.value(4).toString()},
-                                            {"root", query.value(5).toString()},
-                                            {"target", query.value(6).toString()}};
-            estimatedArchiveBytes += QJsonDocument(editionRecord).toJson(QJsonDocument::Compact).size() + 1;
-            if (estimatedArchiveBytes > MaxCatalogArchiveBytes)
-                return fail(tr("Catalog export exceeds the 32 MiB size limit."));
-            editionsArray.append(editionRecord);
-        }
-        query.finish();
+    return true;
+}
+
+bool
+GameLibrary::exportCatalogReadGameTags(const QByteArray& data, QJsonArray& tags)
+{
+    const auto tagDocument = QJsonDocument::fromJson(data);
+    if (!tagDocument.isArray() || tagDocument.array().size() > MaxTags)
+        return fail(tr("Game organization metadata is corrupt. Export was canceled."));
+    const auto tagList = tagDocument.array();
+    for (const auto& tag : tagList)
+    {
+        if (!tag.isString() || tag.toString().isEmpty() || tag.toString() != tag.toString().trimmed() ||
+            tag.toString().size() > 64 || tag.toString().contains(',') || tag.toString().contains(QChar::Null))
+            return fail(tr("Game tags are corrupt. Export was canceled."));
+        tags.append(tag);
     }
-    if (m_hasCollections) {
-        if (!query.exec("SELECT id,name,kind,filter_type,filter_value FROM game_collections ORDER BY id"))
-            return fail(tr("Cannot read game collections for export."));
-        while (query.next()) {
-            if (collectionArray.size() >= MaxCollections)
-                return fail(tr("Game collections exceed the export bound."));
-            const auto collectionId = query.value(0).toString();
-            QJsonArray members;
-            QSqlQuery memberQuery(m_db);
-            memberQuery.prepare(
-                "SELECT game_id FROM game_collection_members WHERE collection_id=? ORDER BY position,game_id");
-            memberQuery.addBindValue(collectionId);
-            if (!memberQuery.exec())
-                return fail(tr("Cannot read collection membership for export."));
-            while (memberQuery.next()) {
-                if (members.size() >= MaxGames)
-                    return fail(tr("Manual collection exceeds the export bound."));
-                members.append(memberQuery.value(0).toString());
-            }
-            const QJsonObject collectionRecord{{"id", collectionId},
-                                               {"name", query.value(1).toString()},
-                                               {"kind", query.value(2).toString()},
-                                               {"filterType", query.value(3).toString()},
-                                               {"filterValue", query.value(4).toString()},
-                                               {"members", members}};
-            estimatedArchiveBytes += QJsonDocument(collectionRecord).toJson(QJsonDocument::Compact).size() + 1;
-            if (estimatedArchiveBytes > MaxCatalogArchiveBytes)
-                return fail(tr("Catalog export exceeds the 32 MiB size limit."));
-            collectionArray.append(collectionRecord);
-        }
+    return true;
+}
+
+bool
+GameLibrary::exportCatalogReadGameAliases(const QByteArray& data, QJsonArray& aliases)
+{
+    const auto aliasDocument = QJsonDocument::fromJson(data);
+    if (!aliasDocument.isArray() || aliasDocument.array().size() > MaxTags)
+        return fail(tr("Game aliases are corrupt. Export was canceled."));
+    const auto aliasList = aliasDocument.array();
+    for (const auto& alias : aliasList)
+    {
+        if (!alias.isString() || alias.toString().isEmpty() || alias.toString() != alias.toString().trimmed() ||
+            alias.toString().size() > 160 || alias.toString().contains(';') ||
+            alias.toString().contains(QChar::Null))
+            return fail(tr("Game aliases are corrupt. Export was canceled."));
+        aliases.append(alias);
     }
-    if (m_hasProvenance) {
-        if (!query.exec(
-                "SELECT entity_id,entity_type,source_kind,origin,source_reference,source_fingerprint,recorded_at FROM "
-                "game_provenance ORDER BY entity_id"))
-            return fail(tr("Cannot read immutable acquisition provenance for export."));
-        while (query.next()) {
-            if (provenanceArray.size() >= MaxProvenanceRecords)
-                return fail(tr("Acquisition provenance exceeds the export record bound."));
-            const QJsonObject record{{"entityId", query.value(0).toString()},
-                                     {"entityType", query.value(1).toString()},
-                                     {"sourceKind", query.value(2).toString()},
-                                     {"origin", query.value(3).toString()},
-                                     {"sourceReference", query.value(4).toString()},
-                                     {"sourceFingerprint", query.value(5).toString()},
-                                     {"recordedAt", query.value(6).toLongLong()}};
-            estimatedArchiveBytes += QJsonDocument(record).toJson(QJsonDocument::Compact).size() + 1;
-            if (estimatedArchiveBytes > MaxCatalogArchiveBytes)
-                return fail(tr("Catalog export exceeds the 32 MiB size limit."));
-            provenanceArray.append(record);
+    return true;
+}
+
+bool
+GameLibrary::exportCatalogValidateGameSummary(const QVariant& franchise, const QVariant& summary)
+{
+    if (franchise.toString().size() > 160 || franchise.toString() != franchise.toString().trimmed() ||
+        franchise.toString().contains(QChar::Null) || summary.toString().size() > 4096 ||
+        summary.toString().contains(QChar::Null))
+        return fail(tr("Game summary is corrupt. Export was canceled."));
+    return true;
+}
+
+bool
+GameLibrary::exportCatalogReadGameArtwork(const QString& hash, QString& encodedArtwork)
+{
+    if (hash.isEmpty())
+        return true;
+    if (!m_hasArtwork || !QRegularExpression("^[0-9a-f]{64}$").match(hash).hasMatch())
+        return fail(tr("Managed artwork reference is invalid. Export was canceled."));
+    const auto path = artworkDirectory() + "/" + hash + ".png";
+    QFile artwork(path);
+    if (QFileInfo(path).isSymLink() || !QFileInfo(path).isFile() ||
+        QFileInfo(path).canonicalFilePath() != path || QFileInfo(path).size() < 1 ||
+        QFileInfo(path).size() > MaxManagedArtworkBytes || !artwork.open(QIODevice::ReadOnly))
+        return fail(tr("Managed artwork is unavailable. Export was canceled."));
+    const auto artworkBytes = artwork.readAll();
+    if (artworkHash(artworkBytes) != hash || normalizeArtwork(artworkBytes).isEmpty())
+        return fail(tr("Managed artwork failed integrity validation. Export was canceled."));
+    encodedArtwork = QString::fromLatin1(artworkBytes.toBase64());
+    return true;
+}
+
+bool
+GameLibrary::exportCatalogReadCollections(QSqlQuery& query, QJsonArray& collectionArray,
+                                          qsizetype& estimatedArchiveBytes)
+{
+    if (!query.exec("SELECT id,name,kind,filter_type,filter_value FROM game_collections ORDER BY id"))
+        return fail(tr("Cannot read game collections for export."));
+    while (query.next())
+    {
+        if (collectionArray.size() >= MaxCollections)
+            return fail(tr("Game collections exceed the export bound."));
+        const auto collectionId = query.value(0).toString();
+        QJsonArray members;
+        QSqlQuery memberQuery(m_db);
+        memberQuery.prepare(
+            "SELECT game_id FROM game_collection_members WHERE collection_id=? ORDER BY position,game_id");
+        memberQuery.addBindValue(collectionId);
+        if (!memberQuery.exec())
+            return fail(tr("Cannot read collection membership for export."));
+        while (memberQuery.next())
+        {
+            if (members.size() >= MaxGames)
+                return fail(tr("Manual collection exceeds the export bound."));
+            members.append(memberQuery.value(0).toString());
         }
-        query.finish();
+        const QJsonObject collectionRecord{{"id", collectionId},
+                                           {"name", query.value(1).toString()},
+                                           {"kind", query.value(2).toString()},
+                                           {"filterType", query.value(3).toString()},
+                                           {"filterValue", query.value(4).toString()},
+                                           {"members", members}};
+        estimatedArchiveBytes += QJsonDocument(collectionRecord).toJson(QJsonDocument::Compact).size() + 1;
+        if (estimatedArchiveBytes > MaxCatalogArchiveBytes)
+            return fail(tr("Catalog export exceeds the 32 MiB size limit."));
+        collectionArray.append(collectionRecord);
     }
-    archive.insert("games", games);
-    archive.insert("editions", editionsArray);
-    archive.insert("collections", collectionArray);
-    archive.insert("provenance", provenanceArray);
-    const auto bytes = QJsonDocument(archive).toJson(QJsonDocument::Compact);
-    if (bytes.size() > MaxCatalogArchiveBytes)
-        return fail(tr("Catalog export exceeds the 32 MiB size limit."));
+    return true;
+}
+
+bool
+GameLibrary::exportCatalogReadProvenance(QSqlQuery& query, QJsonArray& provenanceArray,
+                                         qsizetype& estimatedArchiveBytes)
+{
+    if (!query.exec(
+            "SELECT entity_id,entity_type,source_kind,origin,source_reference,source_fingerprint,recorded_at FROM "
+            "game_provenance ORDER BY entity_id"))
+        return fail(tr("Cannot read immutable acquisition provenance for export."));
+    while (query.next())
+    {
+        if (provenanceArray.size() >= MaxProvenanceRecords)
+            return fail(tr("Acquisition provenance exceeds the export record bound."));
+        const QJsonObject record{{"entityId", query.value(0).toString()},
+                                 {"entityType", query.value(1).toString()},
+                                 {"sourceKind", query.value(2).toString()},
+                                 {"origin", query.value(3).toString()},
+                                 {"sourceReference", query.value(4).toString()},
+                                 {"sourceFingerprint", query.value(5).toString()},
+                                 {"recordedAt", query.value(6).toLongLong()}};
+        estimatedArchiveBytes += QJsonDocument(record).toJson(QJsonDocument::Compact).size() + 1;
+        if (estimatedArchiveBytes > MaxCatalogArchiveBytes)
+            return fail(tr("Catalog export exceeds the 32 MiB size limit."));
+        provenanceArray.append(record);
+    }
+    query.finish();
+    return true;
+}
+
+bool
+GameLibrary::exportCatalogWriteFile(const QString& destination, const QByteArray& bytes)
+{
     QSaveFile file(destination);
     file.setDirectWriteFallback(false);
     if (!file.open(QIODevice::WriteOnly) || !file.setPermissions(QFile::ReadOwner | QFile::WriteOwner) ||
-        file.write(bytes) != bytes.size() || !file.commit()) {
+        file.write(bytes) != bytes.size() || !file.commit())
+    {
         file.cancelWriting();
         return fail(tr("Catalog export failed. The previous file was preserved. %1").arg(file.errorString()));
     }
@@ -523,13 +802,12 @@ bool GameLibrary::exportCatalog(const QString& destination) {
     return true;
 }
 
-bool GameLibrary::restoreCatalog(const QString& source, bool confirmed) {
+bool
+GameLibrary::restoreCatalog(const QString& source, bool confirmed)
+{
     if (m_portablePhase.startsWith("uninstall"))
         return fail(tr("Wait for the managed uninstall to finish before restoring the catalog."));
-    if (!m_ready || !confirmed || !QDir::isAbsolutePath(source) || QDir::cleanPath(source) != source ||
-        QFileInfo(source).isSymLink() || !QFileInfo(source).isFile() ||
-        QFileInfo(source).canonicalFilePath() != source || QFileInfo(source).size() < 1 ||
-        QFileInfo(source).size() > MaxCatalogArchiveBytes)
+    if (!restoreCatalogValidateArgs(source, confirmed))
         return fail(tr("Review and confirm a readable Games JSON backup from an approved folder."));
     const auto grant = MediaGrants::validate(QFileInfo(source).absolutePath());
     if (!grant.isEmpty())
@@ -544,25 +822,16 @@ bool GameLibrary::restoreCatalog(const QString& source, bool confirmed) {
     if (parse.error != QJsonParseError::NoError || !document.isObject())
         return fail(tr("Invalid Games backup JSON."));
     const auto archive = document.object();
-    const auto archiveVersion = archive.value("schemaVersion").toInt(-1);
-    const auto archiveKeys = archiveVersion == 4
-                                 ? QStringList{"schemaVersion", "games", "editions", "collections", "provenance"}
-                                 : QStringList{"schemaVersion", "games", "editions", "collections"};
-    if (!exactKeys(archive, archiveKeys) || !archive.value("schemaVersion").isDouble() ||
-        archive.value("schemaVersion").toDouble() != archiveVersion ||
-        (archiveVersion != 1 && archiveVersion != 2 && archiveVersion != 3 && archiveVersion != 4) ||
-        !archive.value("games").isArray() || archive.value("games").toArray().size() > MaxGames ||
-        !archive.value("editions").isArray() || archive.value("editions").toArray().size() > MaxGames ||
-        !archive.value("collections").isArray() || archive.value("collections").toArray().size() > MaxCollections ||
-        (archiveVersion == 4 && (!archive.value("provenance").isArray() ||
-                                 archive.value("provenance").toArray().size() > MaxProvenanceRecords)))
-        return fail(tr("Unsupported Games backup version or catalog bounds."));
-
     QList<QVariantMap> games, editionsData, collectionsData, provenanceData;
     QSet<QString> ids, gameIds, editionIds, platforms, names, installations;
     QMap<QString, int> editionCounts;
     qint64 restoreArtworkBytes = 0;
-    for (const auto& entry : archive.value("games").toArray()) {
+    if (!restoreCatalogValidateArchive(archive, ids, gameIds, editionIds, platforms, names, installations,
+                                       editionCounts, games, editionsData, collectionsData, provenanceData,
+                                       restoreArtworkBytes))
+        return false;
+    for (const auto& entry : archive.value("games").toArray())
+    {
         if (!entry.isObject())
             return fail(tr("Invalid game record in backup."));
         const auto object = entry.toObject();
@@ -645,7 +914,8 @@ bool GameLibrary::restoreCatalog(const QString& source, bool confirmed) {
         ids.insert(gameId);
         gameIds.insert(gameId);
         QSet<QString> tagSet;
-        for (const auto& tag : object.value("tags").toArray()) {
+        for (const auto& tag : object.value("tags").toArray())
+        {
             if (!tag.isString() || tag.toString().isEmpty() || tag.toString() != tag.toString().trimmed() ||
                 tag.toString().size() > 64 || tag.toString().contains(',') || tag.toString().contains(QChar::Null) ||
                 tagSet.contains(tag.toString().toCaseFolded()))
@@ -654,7 +924,8 @@ bool GameLibrary::restoreCatalog(const QString& source, bool confirmed) {
         }
         const auto archiveAliases = archiveVersion >= 2 ? object.value("aliases").toArray() : QJsonArray{};
         QSet<QString> aliasSet;
-        for (const auto& alias : archiveAliases) {
+        for (const auto& alias : archiveAliases)
+        {
             if (!alias.isString() || alias.toString().isEmpty() || alias.toString() != alias.toString().trimmed() ||
                 alias.toString().size() > 160 || alias.contains(';') || alias.contains(QChar::Null) ||
                 aliasSet.contains(alias.toString().toCaseFolded()))
@@ -680,9 +951,11 @@ bool GameLibrary::restoreCatalog(const QString& source, bool confirmed) {
         value["aliases"] = archiveAliasValues;
         value["summary"] = archiveVersion >= 2 ? object.value("summary").toString() : QString();
         QByteArray artworkBytes;
-        if (archiveVersion >= 3) {
+        if (archiveVersion >= 3)
+        {
             const auto encoded = object.value("artwork").toString().toLatin1();
-            if (!encoded.isEmpty()) {
+            if (!encoded.isEmpty())
+            {
                 const auto decoded = QByteArray::fromBase64(encoded, QByteArray::AbortOnBase64DecodingErrors);
                 if (decoded.isEmpty() || decoded.size() > MaxManagedArtworkBytes || decoded.toBase64() != encoded)
                     return fail(tr("Invalid encoded artwork in backup."));
@@ -697,7 +970,8 @@ bool GameLibrary::restoreCatalog(const QString& source, bool confirmed) {
         value["artworkBytes"] = artworkBytes;
         games.append(value);
     }
-    for (const auto& entry : archive.value("editions").toArray()) {
+    for (const auto& entry : archive.value("editions").toArray())
+    {
         if (!entry.isObject())
             return fail(tr("Invalid edition record in backup."));
         const auto object = entry.toObject();
@@ -738,7 +1012,8 @@ bool GameLibrary::restoreCatalog(const QString& source, bool confirmed) {
         value["gameId"] = gameId;
         editionsData.append(value);
     }
-    for (const auto& entry : archive.value("collections").toArray()) {
+    for (const auto& entry : archive.value("collections").toArray())
+    {
         if (!entry.isObject())
             return fail(tr("Invalid collection record in backup."));
         const auto object = entry.toObject();
@@ -758,20 +1033,25 @@ bool GameLibrary::restoreCatalog(const QString& source, bool confirmed) {
         names.insert(foldedName);
         const auto filterType = object.value("filterType").toString(),
                    filterValue = object.value("filterValue").toString();
-        if (kind == "manual") {
+        if (kind == "manual")
+        {
             if (!filterType.isEmpty() || !filterValue.isEmpty())
                 return fail(tr("Manual collections cannot contain filter expressions."));
-        } else if (kind == "smart") {
+        }
+        else if (kind == "smart")
+        {
             if (!QStringList{"platform", "favorite", "title", "franchise", "tag", "recent"}.contains(filterType) ||
                 filterValue.size() > 80 || filterValue.contains(QChar::Null) ||
                 (!QStringList{"favorite", "recent"}.contains(filterType) && filterValue.trimmed().isEmpty()) ||
                 (QStringList{"favorite", "recent"}.contains(filterType) && !filterValue.isEmpty()) ||
                 !object.value("members").toArray().isEmpty())
                 return fail(tr("Invalid smart collection rule in backup."));
-        } else
+        }
+        else
             return fail(tr("Unknown collection type in backup."));
         QSet<QString> memberSet;
-        for (const auto& member : object.value("members").toArray()) {
+        for (const auto& member : object.value("members").toArray())
+        {
             if (!member.isString() || !gameIds.contains(member.toString()) || memberSet.contains(member.toString()))
                 return fail(tr("Collection refers to an unknown or duplicate game."));
             memberSet.insert(member.toString());
@@ -784,13 +1064,15 @@ bool GameLibrary::restoreCatalog(const QString& source, bool confirmed) {
                                 {"filterValue", filterValue},
                                 {"members", object.value("members").toArray().toVariantList()}});
     }
-    if (archiveVersion == 4) {
+    if (archiveVersion == 4)
+    {
         QSet<QString> provenanceIds;
         const QSet<QString> sourceKinds{
             "steam-app", "optical-media", "isolde-managed-install", "external-folder", "runtime-entry"};
         const QSet<QString> origins{
             "steam-import", "folder-import", "optical-registration", "portable-install", "manual-registration"};
-        for (const auto& entry : archive.value("provenance").toArray()) {
+        for (const auto& entry : archive.value("provenance").toArray())
+        {
             if (!entry.isObject())
                 return fail(tr("Invalid acquisition provenance record in backup."));
             const auto object = entry.toObject();
@@ -841,29 +1123,34 @@ bool GameLibrary::restoreCatalog(const QString& source, bool confirmed) {
         }
         if (!ensureProvenanceSchema())
             return false;
-        for (const auto& record : provenanceData) {
+        for (const auto& record : provenanceData)
+        {
             QSqlQuery existing(m_db);
-            existing.prepare("SELECT entity_type,source_kind,origin,source_reference,source_fingerprint,recorded_at "
-                             "FROM game_provenance WHERE entity_id=?");
+            existing.prepare(
+                "SELECT entity_type,source_kind,origin,source_reference,source_fingerprint,recorded_at "
+                "FROM game_provenance WHERE entity_id=?");
             existing.addBindValue(record.value("entityId"));
             if (!existing.exec())
                 return fail(tr("Could not verify existing immutable provenance."));
-            if (existing.next()) {
-                for (int index = 0; index < 6; ++index) {
+            if (existing.next())
+            {
+                for (int index = 0; index < 6; ++index)
+                {
                     const auto key =
                         QStringList{
                             "entityType", "sourceKind", "origin", "sourceReference", "sourceFingerprint", "recordedAt"}
                             .at(index);
                     if (existing.value(index).toString() != record.value(key).toString())
-                        return fail(
-                            tr("Backup conflicts with immutable acquisition provenance. No catalog data was replaced."));
+                        return fail(tr(
+                            "Backup conflicts with immutable acquisition provenance. No catalog data was replaced."));
                 }
             }
         }
     }
     if (!ensureArtworkSchema())
         return false;
-    for (auto& game : games) {
+    for (auto& game : games)
+    {
         const auto bytes = game.value("artworkBytes").toByteArray();
         if (bytes.isEmpty())
             continue;
@@ -881,7 +1168,8 @@ bool GameLibrary::restoreCatalog(const QString& source, bool confirmed) {
     backup.addBindValue(backupPath);
     if (!backup.exec())
         return fail(tr("Could not preserve the current catalog before restore. Nothing was replaced."));
-    if (!QFile::setPermissions(backupPath, QFile::ReadOwner | QFile::WriteOwner)) {
+    if (!QFile::setPermissions(backupPath, QFile::ReadOwner | QFile::WriteOwner))
+    {
         QFile::remove(backupPath);
         return fail(tr("Could not secure the private recovery copy. Nothing was replaced."));
     }
@@ -895,11 +1183,13 @@ bool GameLibrary::restoreCatalog(const QString& source, bool confirmed) {
     ok = ok && query.exec("DELETE FROM games");
     const bool needEditionTable = !editionsData.isEmpty() && !m_hasEditions;
     if (ok && needEditionTable)
-        ok = query.exec("CREATE TABLE game_editions(id TEXT PRIMARY KEY,game_id TEXT NOT NULL REFERENCES games(id) ON "
-                        "DELETE CASCADE,title TEXT NOT NULL,platform TEXT NOT NULL,runtime TEXT NOT NULL,root TEXT NOT "
-                        "NULL,target TEXT NOT NULL,UNIQUE(runtime,root,target))") &&
+        ok = query.exec(
+                 "CREATE TABLE game_editions(id TEXT PRIMARY KEY,game_id TEXT NOT NULL REFERENCES games(id) ON "
+                 "DELETE CASCADE,title TEXT NOT NULL,platform TEXT NOT NULL,runtime TEXT NOT NULL,root TEXT NOT "
+                 "NULL,target TEXT NOT NULL,UNIQUE(runtime,root,target))") &&
              query.exec("CREATE INDEX game_editions_owner ON game_editions(game_id)");
-    for (const auto& game : games) {
+    for (const auto& game : games)
+    {
         query.prepare(
             "INSERT INTO games(id,title,platform,runtime,root,target,favorite,added) VALUES(?,?,?,?,?,?,?,?)");
         for (const auto& key :
@@ -910,75 +1200,33 @@ bool GameLibrary::restoreCatalog(const QString& source, bool confirmed) {
             "INSERT INTO game_metadata(game_id,franchise,tags,aliases,summary,artwork_hash) VALUES(?,?,?,?,?,?)");
         query.addBindValue(game.value("id"));
         query.addBindValue(sqlText(game.value("franchise")));
-        QJsonArray tags;
-        for (const auto& tag : game.value("tags").toStringList())
-            tags.append(tag);
-        QJsonArray aliases;
-        for (const auto& alias : game.value("aliases").toStringList())
-            aliases.append(alias);
-        query.addBindValue(QJsonDocument(tags).toJson(QJsonDocument::Compact));
-        query.addBindValue(QJsonDocument(aliases).toJson(QJsonDocument::Compact));
-        query.addBindValue(sqlText(game.value("summary")));
-        query.addBindValue(sqlText(game.value("artworkHash")));
-        ok = ok && query.exec();
-        if (game.value("lastPlayed").toLongLong() > 0) {
-            query.prepare("INSERT INTO game_activity(game_id,last_played) VALUES(?,?)");
-            query.addBindValue(game.value("id"));
-            query.addBindValue(game.value("lastPlayed"));
-            ok = ok && query.exec();
-        }
+    for (const auto& game : games)
+    {
         if (!ok)
             break;
+        ok = restoreCatalogApplyGame(query, game);
     }
-    for (const auto& edition : editionsData) {
+    for (const auto& edition : editionsData)
+    {
         if (!ok)
             break;
-        query.prepare("INSERT INTO game_editions(id,game_id,title,platform,runtime,root,target) VALUES(?,?,?,?,?,?,?)");
-        for (const auto& key : QStringList{"id", "gameId", "title", "platform", "runtimeId", "root", "target"})
-            query.addBindValue(edition.value(key));
-        ok = query.exec();
+        ok = restoreCatalogApplyEdition(query, edition);
     }
-    for (const auto& collection : collectionsData) {
+    for (const auto& collection : collectionsData)
+    {
         if (!ok)
             break;
-        query.prepare("INSERT INTO game_collections(id,name,kind,filter_type,filter_value) VALUES(?,?,?,?,?)");
-        for (const auto& key : QStringList{"id", "name", "kind", "filterType", "filterValue"})
-            query.addBindValue(collection.value(key));
-        ok = query.exec();
-        const auto members = collection.value("members").toList();
-        for (qsizetype position = 0; position < members.size(); ++position) {
-            if (!ok)
-                break;
-            query.prepare("INSERT INTO game_collection_members(collection_id,game_id,position) VALUES(?,?,?)");
-            query.addBindValue(collection.value("id"));
-            query.addBindValue(members.at(position));
-            query.addBindValue(position);
-            ok = query.exec();
-        }
+        ok = restoreCatalogApplyCollection(query, collection);
     }
-    for (const auto& record : provenanceData) {
+    for (const auto& record : provenanceData)
+    {
         if (!ok)
             break;
-        query.prepare("INSERT OR IGNORE INTO "
-                      "game_provenance(entity_id,entity_type,source_kind,origin,source_reference,source_fingerprint,"
-                      "recorded_at) VALUES(?,?,?,?,?,?,?)");
-        for (const auto& key : QStringList{"entityId",
-                                           "entityType",
-                                           "sourceKind",
-                                           "origin",
-                                           "sourceReference",
-                                           "sourceFingerprint",
-                                           "recordedAt"})
-            query.addBindValue(record.value(key));
-        ok = query.exec();
+        ok = restoreCatalogApplyProvenanceRecord(query, record);
     }
-    if (ok && m_hasProvenance) {
-        if (!query.exec("SELECT count(*) FROM game_provenance") || !query.next() ||
-            query.value(0).toInt() > MaxProvenanceRecords)
-            ok = false;
-    }
-    ok = ok && query.exec("PRAGMA user_version=6");
-    if (!ok || !m_db.commit()) {
+    ok = restoreCatalogApplyFinal(query, ok, m_hasProvenance, backupPath);
+    if (!ok || !m_db.commit())
+    {
         const auto reason = query.lastError().text();
         m_db.rollback();
         return fail(
@@ -996,4 +1244,115 @@ bool GameLibrary::restoreCatalog(const QString& source, bool confirmed) {
     return true;
 }
 
+bool
+GameLibrary::restoreCatalogApplyGame(QSqlQuery& query, const QVariantMap& game)
+{
+    query.prepare(
+        "INSERT INTO games(id,title,platform,runtime,root,target,favorite,added) VALUES(?,?,?,?,?,?,?,?)");
+    for (const auto& key :
+         QStringList{"id", "title", "platform", "runtimeId", "root", "target", "favorite", "added"})
+        query.addBindValue(game.value(key));
+    if (!query.exec())
+        return false;
+    query.prepare(
+        "INSERT INTO game_metadata(game_id,franchise,tags,aliases,summary,artwork_hash) VALUES(?,?,?,?,?,?)");
+    query.addBindValue(game.value("id"));
+    QJsonArray tags;
+    for (const auto& tag : game.value("tags").toStringList())
+        tags.append(tag);
+    QJsonArray aliases;
+    for (const auto& alias : game.value("aliases").toStringList())
+        aliases.append(alias);
+    query.addBindValue(QJsonDocument(tags).toJson(QJsonDocument::Compact));
+    query.addBindValue(QJsonDocument(aliases).toJson(QJsonDocument::Compact));
+    query.addBindValue(sqlText(game.value("summary")));
+    query.addBindValue(sqlText(game.value("artworkHash")));
+    if (!query.exec())
+        return false;
+    if (game.value("lastPlayed").toLongLong() > 0)
+    {
+        query.prepare("INSERT INTO game_activity(game_id,last_played) VALUES(?,?)");
+        query.addBindValue(game.value("id"));
+        query.addBindValue(game.value("lastPlayed"));
+        if (!query.exec())
+            return false;
+    }
+    return true;
+}
 
+bool
+GameLibrary::restoreCatalogApplyEdition(QSqlQuery& query, const QVariantMap& edition)
+{
+    query.prepare("INSERT INTO game_editions(id,game_id,title,platform,runtime,root,target) VALUES(?,?,?,?,?,?,?)");
+    for (const auto& key : QStringList{"id", "gameId", "title", "platform", "runtimeId", "root", "target"})
+        query.addBindValue(edition.value(key));
+    return query.exec();
+}
+
+bool
+GameLibrary::restoreCatalogApplyCollection(QSqlQuery& query, const QVariantMap& collection)
+{
+    query.prepare("INSERT INTO game_collections(id,name,kind,filter_type,filter_value) VALUES(?,?,?,?,?)");
+    for (const auto& key : QStringList{"id", "name", "kind", "filterType", "filterValue"})
+        query.addBindValue(collection.value(key));
+    if (!query.exec())
+        return false;
+    const auto members = collection.value("members").toList();
+    for (qsizetype position = 0; position < members.size(); ++position)
+    {
+        query.prepare("INSERT INTO game_collection_members(collection_id,game_id,position) VALUES(?,?,?)");
+        query.addBindValue(collection.value("id"));
+        query.addBindValue(members.at(position));
+        query.addBindValue(position);
+        if (!query.exec())
+            return false;
+    }
+    return true;
+}
+
+bool
+GameLibrary::restoreCatalogApplyProvenanceRecord(QSqlQuery& query, const QVariantMap& record)
+{
+    query.prepare(
+        "INSERT OR IGNORE INTO "
+        "game_provenance(entity_id,entity_type,source_kind,origin,source_reference,source_fingerprint,"
+        "recorded_at) VALUES(?,?,?,?,?,?,?)");
+    for (const auto& key : QStringList{"entityId",
+                                       "entityType",
+                                       "sourceKind",
+                                       "origin",
+                                       "sourceReference",
+                                       "sourceFingerprint",
+                                       "recordedAt"})
+        query.addBindValue(record.value(key));
+    return query.exec();
+}
+
+bool
+GameLibrary::restoreCatalogApplyFinal(QSqlQuery& query, bool ok, bool hasProvenance, const QString& backupPath)
+{
+    if (ok && hasProvenance)
+    {
+        if (!query.exec("SELECT count(*) FROM game_provenance") || !query.next() ||
+            query.value(0).toInt() > MaxProvenanceRecords)
+            ok = false;
+    }
+    ok = ok && query.exec("PRAGMA user_version=6");
+    if (!ok || !query.exec("COMMIT"))
+    {
+        const auto reason = query.lastError().text();
+        query.exec("ROLLBACK");
+        return fail(
+            tr("Restore failed; the prior catalog remains intact. Recovery copy: %1. %2").arg(backupPath, reason));
+    }
+    m_hasActivity = true;
+    m_hasMetadata = true;
+    m_hasCollections = true;
+    m_hasRichMetadata = true;
+    m_hasArtwork = true;
+    m_hasEditions = m_hasEditions || !m_editionsData.empty();
+    m_error.clear();
+    emit errorChanged();
+    emit changed();
+    return true;
+}

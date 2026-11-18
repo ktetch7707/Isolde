@@ -10,7 +10,8 @@
 #include <functional>
 #include <memory>
 
-class SessionManager final : public QObject {
+class SessionManager final : public QObject
+{
     Q_OBJECT
     Q_PROPERTY(bool active READ hasActiveSession NOTIFY activeChanged)
     Q_PROPERTY(QString currentAppId READ currentAppId NOTIFY currentAppChanged)
@@ -29,76 +30,127 @@ class SessionManager final : public QObject {
   public:
     explicit SessionManager(AppRegistry* registry, QObject* parent = nullptr);
     ~SessionManager() override;
-    void setLaunchGuard(std::function<QString(const QString&)> guard) {
+    void
+    setLaunchGuard(std::function<QString(const QString&)> guard)
+    {
         m_launchGuard = std::move(guard);
     }
-    void setLaunchPreparation(std::function<bool(const AppDefinition&)> prepare) {
+    void
+    setLaunchPreparation(std::function<bool(const AppDefinition&)> prepare)
+    {
         m_launchPreparation = std::move(prepare);
     }
-    bool resumePreparedLaunch(const AppDefinition& definition);
-    bool resumingPreparedLaunch() const {
+    bool
+    resumePreparedLaunch(const AppDefinition& definition);
+    bool
+    resumingPreparedLaunch() const
+    {
         return m_resumingPrepared;
     }
 
-    [[nodiscard]] bool hasActiveSession() const;
-    [[nodiscard]] QString currentAppId() const;
-    [[nodiscard]] QString currentAppName() const;
-    [[nodiscard]] QString currentAppAccent() const;
-    [[nodiscard]] QString currentAppType() const;
-    [[nodiscard]] QString currentPresentationMode() const;
-    [[nodiscard]] QString currentLaunchUrl() const;
-    [[nodiscard]] QStringList currentAllowedOrigins() const;
-    [[nodiscard]] QString previousFocusId() const;
-    [[nodiscard]] QVariantMap opticalSessionStatus() const {
+    [[nodiscard]] bool
+    hasActiveSession() const;
+    [[nodiscard]] QString
+    currentAppId() const;
+    [[nodiscard]] QString
+    currentAppName() const;
+    [[nodiscard]] QString
+    currentAppAccent() const;
+    [[nodiscard]] QString
+    currentAppType() const;
+    [[nodiscard]] QString
+    currentPresentationMode() const;
+    [[nodiscard]] QString
+    currentLaunchUrl() const;
+    [[nodiscard]] QStringList
+    currentAllowedOrigins() const;
+    [[nodiscard]] QString
+    previousFocusId() const;
+    [[nodiscard]] QVariantMap
+    opticalSessionStatus() const
+    {
         return m_opticalSessionStatus;
     }
-    [[nodiscard]] QVariantMap steamProviderState() const {
+    [[nodiscard]] QVariantMap
+    steamProviderState() const
+    {
         return m_steamProviderState;
     }
-    [[nodiscard]] QVariantMap steamRecoveryStatuses() const {
+    [[nodiscard]] QVariantMap
+    steamRecoveryStatuses() const
+    {
         return m_steamRecoveryStatuses;
     }
-    [[nodiscard]] QVariantMap gamepadSessionStatus() const {
+    [[nodiscard]] QVariantMap
+    gamepadSessionStatus() const
+    {
         return m_gamepadSessionStatus;
     }
 
-    Q_INVOKABLE bool launch(const QString& appId);
-    Q_INVOKABLE bool launchAction(const QVariantMap& action);
-    Q_INVOKABLE bool acknowledgeSteamRecovery(const QString& steamAppId);
+    Q_INVOKABLE bool
+    launch(const QString& appId);
+    Q_INVOKABLE bool
+    launchAction(const QVariantMap& action);
+    Q_INVOKABLE bool
+    acknowledgeSteamRecovery(const QString& steamAppId);
     // Only the identity-resolving Games dispatcher supplies this grant. It is
     // deliberately not a QML/layout action argument.
-    bool launchGameFile(const QVariantMap& action, const QString& sourceRoot);
-    bool launchSteamGame(const QString& steamAppId);
-    Q_INVOKABLE void exitCurrent();
-    Q_INVOKABLE void goHome();
+    bool
+    launchGameFile(const QVariantMap& action, const QString& sourceRoot);
+    bool
+    launchSteamGame(const QString& steamAppId);
+    Q_INVOKABLE void
+    exitCurrent();
+    Q_INVOKABLE void
+    goHome();
 
   signals:
-    void launchDeferred(const QString& reason);
-    void launching(const QString& appId);
-    void appOpened(const QString& appId);
-    void steamGameProcessObserved(const QString& steamAppId);
-    void steamProviderStateChanged();
-    void steamRecoveryStatusesChanged();
-    void activeChanged();
-    void currentAppChanged();
-    void previousFocusIdChanged();
-    void sessionRejected(const QString& reason);
-    void sessionFailed(const QString& appId, const QString& reason);
-    void steamGameFailed(const QString& steamAppId, const QString& reason);
-    void returnedHome(const QString& focusId);
-    void opticalSessionStatusChanged();
-    void gamepadSessionStatusChanged();
+    void
+    launchDeferred(const QString& reason);
+    void
+    launching(const QString& appId);
+    void
+    appOpened(const QString& appId);
+    void
+    steamGameProcessObserved(const QString& steamAppId);
+    void
+    steamProviderStateChanged();
+    void
+    steamRecoveryStatusesChanged();
+    void
+    activeChanged();
+    void
+    currentAppChanged();
+    void
+    previousFocusIdChanged();
+    void
+    sessionRejected(const QString& reason);
+    void
+    sessionFailed(const QString& appId, const QString& reason);
+    void
+    steamGameFailed(const QString& steamAppId, const QString& reason);
+    void
+    returnedHome(const QString& focusId);
+    void
+    opticalSessionStatusChanged();
+    void
+    gamepadSessionStatusChanged();
 
   private:
     friend class ComponentTests;
-    void handleSteamProviderState(const QVariantMap& state);
-    bool launchFileAction(const QVariantMap& action,
-                          const QString& sourceRoot,
-                          const QString& opticalMediaId = {},
-                          const QString& opticalReference = {});
-    bool launchDefinition(AppDefinition definition);
-    void refreshOpticalSession();
-    void finishSession(AppSession* session);
+    void
+    handleSteamProviderState(const QVariantMap& state);
+    bool
+    launchFileAction(const QVariantMap& action,
+                     const QString& sourceRoot,
+                     const QString& opticalMediaId = {},
+                     const QString& opticalReference = {});
+    bool
+    launchDefinition(AppDefinition definition);
+    void
+    refreshOpticalSession();
+    void
+    finishSession(AppSession* session);
 
     AppRegistry* m_registry;
     const QString m_profileId;

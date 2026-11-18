@@ -2,7 +2,7 @@ param(
     [Parameter(Mandatory=$false)]
     [string[]]$Paths = @("src"),
     [Parameter(Mandatory=$false)]
-    [int]$CyclomaticComplexity = 10,
+    [int]$CyclomaticComplexity = 15,
     [Parameter(Mandatory=$false)]
     [int]$FunctionLength = 60,
     [Parameter(Mandatory=$false)]

@@ -7,40 +7,55 @@
 #include <QVariantMap>
 
 // Incremental, bounded parsing of the trusted helper's line protocol.
-class SteamSessionOutput {
+class SteamSessionOutput
+{
   public:
     explicit SteamSessionOutput(const QString& identity)
-        : m_identity(identity), m_marker("STEAM_GAME_PROCESS_OBSERVED " + identity.toLatin1()) {}
+        : m_identity(identity), m_marker("STEAM_GAME_PROCESS_OBSERVED " + identity.toLatin1())
+    {
+    }
 
-    bool consume(const QByteArray& bytes) {
+    bool
+    consume(const QByteArray& bytes)
+    {
         bool observed = false;
-        for (const char c : bytes) {
-            if (c == '\n') {
+        for (const char c : bytes)
+        {
+            if (c == '\n')
+            {
                 if (!m_discard && m_line == m_marker)
                     observed = true;
                 if (!m_discard && m_line.startsWith("STEAM_PROVIDER_STATE "))
                     parseState(m_line.mid(21));
                 m_line.clear();
                 m_discard = false;
-            } else if (!m_discard) {
-                if (m_line.size() >= 2048) {
+            }
+            else if (!m_discard)
+            {
+                if (m_line.size() >= 2048)
+                {
                     m_line.clear();
                     m_discard = true;
-                } else
+                }
+                else
                     m_line.append(c);
             }
         }
         return observed;
     }
 
-    QVariantMap takeState() {
+    QVariantMap
+    takeState()
+    {
         auto result = m_state;
         m_state.clear();
         return result;
     }
 
   private:
-    void parseState(const QByteArray& json) {
+    void
+    parseState(const QByteArray& json)
+    {
         QJsonParseError error;
         const auto document = QJsonDocument::fromJson(json, &error);
         if (error.error != QJsonParseError::NoError || !document.isObject() ||

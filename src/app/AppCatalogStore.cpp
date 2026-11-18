@@ -5,8 +5,11 @@
 #include <QRegularExpression>
 #include "app/AppCatalog.h"
 
-bool AppCatalog::setAndroidContainment(const QString& mode) {
-    if (busy() || (mode != "fullscreen" && mode != "windowed")) {
+bool
+AppCatalog::setAndroidContainment(const QString& mode)
+{
+    if (busy() || (mode != "fullscreen" && mode != "windowed"))
+    {
         setError(tr("Choose Fullscreen or Windowed after the current operation finishes."));
         return false;
     }
@@ -14,7 +17,8 @@ bool AppCatalog::setAndroidContainment(const QString& mode) {
         return true;
     const auto previous = m_androidContainment;
     m_androidContainment = mode;
-    if (!saveState()) {
+    if (!saveState())
+    {
         m_androidContainment = previous;
         return false;
     }
@@ -22,8 +26,11 @@ bool AppCatalog::setAndroidContainment(const QString& mode) {
     return true;
 }
 
-bool AppCatalog::checkForUpdates() {
-    if (busy() || !m_onlineStoreSearch || !m_provider) {
+bool
+AppCatalog::checkForUpdates()
+{
+    if (busy() || !m_onlineStoreSearch || !m_provider)
+    {
         setError(tr("Enable F-Droid access before checking for updates."));
         return false;
     }
@@ -32,7 +39,8 @@ bool AppCatalog::checkForUpdates() {
         if (isInstalled(entry.core.app.id) && entry.setup.custom && entry.core.app.type == "android" &&
             !m_updatesDisabled.contains(entry.core.app.id))
             packages.append(QJsonDocument::fromJson(entry.setup.manifestData).object().value("packageName").toString());
-    if (packages.isEmpty()) {
+    if (packages.isEmpty())
+    {
         setError(tr("No apps are subscribed to update notifications."));
         return false;
     }
@@ -44,11 +52,14 @@ bool AppCatalog::checkForUpdates() {
     return true;
 }
 
-bool AppCatalog::setUpdatesEnabled(const QString& id, bool enabled) {
+bool
+AppCatalog::setUpdatesEnabled(const QString& id, bool enabled)
+{
     const auto* entry = findEntry(id);
     if (busy() || !entry || !isInstalled(id) || !entry->setup.custom || entry->core.app.type != "android")
         return false;
-    if (!enabled && !m_updatesDisabled.contains(id) && m_updatesDisabled.size() >= 256) {
+    if (!enabled && !m_updatesDisabled.contains(id) && m_updatesDisabled.size() >= 256)
+    {
         setError(tr("This profile has reached its 256 saved update preferences."));
         return false;
     }
@@ -57,7 +68,8 @@ bool AppCatalog::setUpdatesEnabled(const QString& id, bool enabled) {
         m_updatesDisabled.remove(id);
     else
         m_updatesDisabled.insert(id);
-    if (!saveState()) {
+    if (!saveState())
+    {
         if (previous)
             m_updatesDisabled.insert(id);
         else
@@ -70,25 +82,33 @@ bool AppCatalog::setUpdatesEnabled(const QString& id, bool enabled) {
     return true;
 }
 
-bool AppCatalog::updateApp(const QString& id) {
-    if (!isInstalled(id) || m_updatesDisabled.contains(id) || !m_availableUpdates.contains(id)) {
+bool
+AppCatalog::updateApp(const QString& id)
+{
+    if (!isInstalled(id) || m_updatesDisabled.contains(id) || !m_availableUpdates.contains(id))
+    {
         setError(tr("Subscribe and check for updates before choosing Update."));
         return false;
     }
     return beginDownload(m_availableUpdates.value(id), true);
 }
 
-bool AppCatalog::commitUpdate(const Entry& entry) {
+bool
+AppCatalog::commitUpdate(const Entry& entry)
+{
     for (auto& current : m_entries)
-        if (current.core.app.id == entry.core.app.id) {
+        if (current.core.app.id == entry.core.app.id)
+        {
             const Entry previous = current;
-            if (!m_registry->replaceApp(entry.core.app)) {
+            if (!m_registry->replaceApp(entry.core.app))
+            {
                 setError(tr("Unable to register the updated app."));
                 return false;
             }
             current = entry;
             m_customPackages.insert(entry.core.app.id, entry.core.version);
-            if (!saveState()) {
+            if (!saveState())
+            {
                 current = previous;
                 m_customPackages.insert(previous.core.app.id, previous.core.version);
                 m_registry->replaceApp(previous.core.app);
@@ -101,25 +121,31 @@ bool AppCatalog::commitUpdate(const Entry& entry) {
     return false;
 }
 
-void AppCatalog::androidEvent(const QJsonObject& event) {
+void
+AppCatalog::androidEvent(const QJsonObject& event)
+{
     const auto type = event.value("event").toString();
-    if (type == "error") {
+    if (type == "error")
+    {
         setError(event.value("message").toString().left(512));
         return;
     }
-    if (type == "status") {
+    if (type == "status")
+    {
         m_operationStatus = event.value("message").toString().left(512);
         emit entriesChanged();
         return;
     }
-    if (type == "cancelled") {
+    if (type == "cancelled")
+    {
         m_operationStatus = tr("Cancelled; restoring the previous Android data...");
         if (event.value("rolledBack").toBool())
             setError(tr("Cancelled. The previous Android data was restored."));
         emit entriesChanged();
         return;
     }
-    if (type == "starting" || type == "installing" || type == "removing") {
+    if (type == "starting" || type == "installing" || type == "removing")
+    {
         m_operationStatus = type == "starting"     ? tr("Starting this profile's Android session...")
                             : type == "installing" ? tr("Installing the verified package...")
                                                    : tr("Removing the app...");
@@ -136,7 +162,8 @@ void AppCatalog::androidEvent(const QJsonObject& event) {
     const auto token = event.value("token").toString();
     if (m_cancelRequested || profile != m_operationProfile || event.value("operation") != m_operation ||
         !QRegularExpression("^[a-f0-9]{32}$").match(token).hasMatch() ||
-        !event.value(m_operation == "install" ? "packagePresent" : "packageAbsent").toBool()) {
+        !event.value(m_operation == "install" ? "packagePresent" : "packageAbsent").toBool())
+    {
         m_androidProcess.write("rollback\n");
         return;
     }
@@ -157,32 +184,44 @@ void AppCatalog::androidEvent(const QJsonObject& event) {
     m_androidProcess.write(m_activationCommitted ? "commit\n" : "rollback\n");
 }
 
-void AppCatalog::cancelOperation() {
+void
+AppCatalog::cancelOperation()
+{
     if (!canCancelOperation())
         return;
     m_cancelRequested = true;
     m_operationStatus = m_operation == "setup" ? tr("Cancelling after the current system step...")
                                                : tr("Cancelling and restoring the previous Android data...");
+    abortDownloadOrProcess();
+    emit entriesChanged();
+}
+
+void
+AppCatalog::abortDownloadOrProcess()
+{
     if (m_downloadReply)
         m_downloadReply->abort();
     else if (m_operation == "setup")
         m_androidProcess.write("cancel\n");
     else
         m_androidProcess.terminate();
-    emit entriesChanged();
 }
 
-bool AppCatalog::setupAndroid(bool softwareRendering) {
+bool
+AppCatalog::setupAndroid(bool softwareRendering)
+{
     if (busy())
         return false;
     QString helper;
     const auto base = QCoreApplication::applicationDirPath();
     for (const auto& path : {base + "/../share/isolde/android-setup.py", base + "/share/isolde/android-setup.py"})
-        if (QFileInfo(path).isFile()) {
+        if (QFileInfo(path).isFile())
+        {
             helper = path;
             break;
         }
-    if (helper.isEmpty()) {
+    if (helper.isEmpty())
+    {
         setError(tr("Android setup support is missing. Repair the Isolde distribution."));
         return false;
     }
@@ -196,42 +235,60 @@ bool AppCatalog::setupAndroid(bool softwareRendering) {
     setError({});
     m_operationStatus = tr("Preparing Android setup; administrator approval may be requested...");
     m_androidProcess.disconnect(this);
-    connect(&m_androidProcess, &QProcess::readyReadStandardOutput, this, [this] {
-        m_operationEvents += m_androidProcess.readAllStandardOutput();
-        if (m_operationEvents.size() > 65536) {
-            cancelOperation();
-            return;
-        }
-        while (m_operationEvents.contains('\n')) {
-            const auto end = m_operationEvents.indexOf('\n');
-            const auto event = QJsonDocument::fromJson(m_operationEvents.left(end)).object();
-            m_operationEvents.remove(0, end + 1);
-            if (event.value("event") == "completed")
-                m_activationCommitted = event.value("ready").toBool();
-            else
-                androidEvent(event);
-        }
-    });
-    connect(&m_androidProcess, &QProcess::readyReadStandardError, this, [this] {
-        m_androidProcess.readAllStandardError();
-    });
-    connect(&m_androidProcess, &QProcess::errorOccurred, this, [this](QProcess::ProcessError error) {
-        if (error == QProcess::FailedToStart) {
-            m_operationId.clear();
-            setError(tr("Android setup could not start. Retry setup."));
-            emit entriesChanged();
-        }
-    });
+    connect(&m_androidProcess,
+            &QProcess::readyReadStandardOutput,
+            this,
+            [this]
+            {
+                m_operationEvents += m_androidProcess.readAllStandardOutput();
+                if (m_operationEvents.size() > 65536)
+                {
+                    cancelOperation();
+                    return;
+                }
+                while (m_operationEvents.contains('\n'))
+                {
+                    const auto end = m_operationEvents.indexOf('\n');
+                    const auto event = QJsonDocument::fromJson(m_operationEvents.left(end)).object();
+                    m_operationEvents.remove(0, end + 1);
+                    if (event.value("event") == "completed")
+                        m_activationCommitted = event.value("ready").toBool();
+                    else
+                        androidEvent(event);
+                }
+            });
+    connect(&m_androidProcess,
+            &QProcess::readyReadStandardError,
+            this,
+            [this]
+            {
+                m_androidProcess.readAllStandardError();
+            });
+    connect(&m_androidProcess,
+            &QProcess::errorOccurred,
+            this,
+            [this](QProcess::ProcessError error)
+            {
+                if (error == QProcess::FailedToStart)
+                {
+                    m_operationId.clear();
+                    setError(tr("Android setup could not start. Retry setup."));
+                    emit entriesChanged();
+                }
+            });
     connect(&m_androidProcess,
             qOverload<int, QProcess::ExitStatus>(&QProcess::finished),
             this,
-            [this](int code, QProcess::ExitStatus status) {
-                if (!code && status == QProcess::NormalExit && m_activationCommitted) {
+            [this](int code, QProcess::ExitStatus status)
+            {
+                if (!code && status == QProcess::NormalExit && m_activationCommitted)
+                {
                     setError({});
                     m_operationStatus = tr("Android setup complete. Choose an app to install.");
                     if (m_onlineStoreSearch && m_provider)
                         m_provider->requestSearch(m_storeQuery);
-                } else if (m_errorString.isEmpty())
+                }
+                else if (m_errorString.isEmpty())
                     setError(m_cancelRequested
                                  ? tr("Setup cancelled at a safe checkpoint. Retry to continue.")
                                  : tr("Android setup did not finish. Review administrator approval and retry."));
