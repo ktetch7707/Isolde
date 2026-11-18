@@ -370,41 +370,69 @@ HomeLayout::skinPageUpdates(const QString& id) const
         for (const auto& entry : document["pages"].toArray())
             if (entry.toObject()["id"] == m_homePageId)
                 home = entry.toObject()["layout"].toObject();
+    return buildSkinPageUpdateResults(skin, recipes, home["components"].toArray(), m_homePageId);
+}
+
+bool
+HomeLayout::validateSkinPageUpdateRecipe(const QJsonObject& recipe) const
+{
+    const auto componentId = recipe["componentId"].toString();
+    const auto pageId = recipe["targetPageId"].toString();
+    return recipe.size() == 3 && ComponentSchema::safeId(componentId) &&
+           ComponentSchema::safeId(pageId);
+}
+
+QJsonObject
+HomeLayout::findSkinPageLayout(const QJsonObject& skin, const QString& pageId) const
+{
+    for (const auto& entry : skin["layout"].toObject()["pages"].toArray())
+        if (entry.toObject()["id"] == pageId)
+            return entry.toObject();
+    return QJsonObject();
+}
+
+bool
+HomeLayout::validateSkinPageArtwork(const QJsonObject& target) const
+{
+    bool hasArtwork = false;
+    artwork(target,
+            [&](const QString& path)
+            {
+                hasArtwork = true;
+                return path;
+            });
+    return hasArtwork;
+}
+
+QVariantList
+HomeLayout::buildSkinPageUpdateResults(const QJsonObject& skin, const QJsonArray& recipes,
+                                       const QVariantList& homeComponents,
+                                       const QString& homePageId) const
+{
     QVariantList result;
     for (const auto& value : recipes)
     {
         const auto recipe = value.toObject();
+        if (!validateSkinPageUpdateRecipe(recipe))
+            return {};
         const auto componentId = recipe["componentId"].toString();
         const auto pageId = recipe["targetPageId"].toString();
-        if (recipe.size() != 3 || !ComponentSchema::safeId(componentId) || !ComponentSchema::safeId(pageId))
-            return {};
-        QJsonObject target;
-        for (const auto& entry : skin["layout"].toObject()["pages"].toArray())
-            if (entry.toObject()["id"] == pageId)
-                target = entry.toObject();
+        QJsonObject target = findSkinPageLayout(skin, pageId);
         if (target.isEmpty())
             return {};
-        // Updates contain only data and never import or replace managed artwork.
-        bool hasArtwork = false;
-        artwork(target,
-                [&](const QString& path)
-                {
-                    hasArtwork = true;
-                    return path;
-                });
-        if (hasArtwork)
+        if (validateSkinPageArtwork(target))
             return {};
         QString actionError;
         const auto fromAction = ComponentSchema::action(recipe["fromAction"].toObject().toVariantMap(), &actionError);
         if (!actionError.isEmpty() || fromAction.isEmpty())
             return {};
-        for (const auto& entry : home["components"].toArray())
+        for (const auto& entry : homeComponents.toList())
         {
             const auto component = entry.toObject();
             if (component["id"] != componentId)
                 continue;
             const auto compAction = component.contains("actions") && component["actions"].isArray() &&
-                                            !component["actions"].toArray().isEmpty()
+                                                !component["actions"].toArray().isEmpty()
                                         ? component["actions"].toArray().first().toObject().toVariantMap()
                                         : component["action"].toObject().toVariantMap();
             if (compAction != fromAction)

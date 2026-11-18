@@ -180,6 +180,15 @@ class HomeLayout final : public QObject
     applySkin(const QString& id);
     Q_INVOKABLE QVariantList
     skinPageUpdates(const QString& id) const;
+    bool
+    validateSkinPageUpdateRecipe(const QJsonObject& recipe) const;
+    QJsonObject
+    findSkinPageLayout(const QJsonObject& skin, const QString& pageId) const;
+    bool
+    validateSkinPageArtwork(const QJsonObject& target) const;
+    QVariantList
+    buildSkinPageUpdateResults(const QJsonObject& skin, const QJsonArray& recipes,
+                               const QVariantList& homeComponents, const QString& homePageId) const;
     Q_INVOKABLE bool
     applySkinPageUpdates(const QString& id);
     Q_INVOKABLE bool
