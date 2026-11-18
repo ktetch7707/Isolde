@@ -1042,22 +1042,12 @@ SubtitleService::importOnlineSubtitle(const QString& title,
                                       const QString& srtText,
                                       int repositoryFileId)
 {
-    if (m_jobs.size() >= MaxQueuedJobs)
-    {
-        m_error = QStringLiteral(
-            "Subtitle queue is full (maximum 16 jobs). Complete or forget a finished job before importing another.");
-        emit changed();
+    if (!validateImportInput(title, language, srtText, repositoryFileId))
         return {};
-    }
-    m_error.clear();
-    const auto normalizedTitle = title.trimmed();
-    const auto normalizedLanguage = language.trimmed().toLower();
-    const auto bytes = srtText.toUtf8();
+    QByteArray bytes = srtText.toUtf8();
     QVector<Cue> cues;
     QString validationError;
-    if (normalizedTitle.isEmpty() || normalizedTitle.size() > 200 || !validLanguage(normalizedLanguage) ||
-        repositoryFileId <= 0 || bytes.isEmpty() || bytes.size() > MaxSubtitleBytes ||
-        QString::fromUtf8(bytes).toUtf8() != bytes || !parseSrt(srtText, &cues, &validationError))
+    if (!parseSrt(srtText, &cues, &validationError))
     {
         m_error = validationError.isEmpty() ? QStringLiteral("Downloaded subtitle metadata or UTF-8 SRT is invalid.")
                                             : validationError;
@@ -1070,13 +1060,77 @@ SubtitleService::importOnlineSubtitle(const QString& title,
         emit changed();
         return {};
     }
-    QString safeTitle = normalizedTitle;
+    QString safeTitle = title.trimmed();
     safeTitle.replace(QRegularExpression(QStringLiteral("[^\\p{L}\\p{N}._-]+")), QStringLiteral("-"));
     safeTitle.remove(QRegularExpression(QStringLiteral("^\\.+")));
     if (safeTitle.size() > 64)
         safeTitle.truncate(64);
     if (safeTitle.isEmpty())
         safeTitle = QStringLiteral("subtitle");
+    QString output = findAvailableOutputPath(safeTitle, language.trimmed().toLower());
+    if (output.isEmpty())
+    {
+        m_error = QStringLiteral("Could not find a non-overwriting name for the downloaded subtitle.");
+        emit changed();
+        return {};
+    }
+    Job job;
+    job.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    job.mode = QStringLiteral("download");
+    job.source = QStringLiteral("OpenSubtitles.com file %1 · %2").arg(repositoryFileId).arg(language.trimmed().toLower());
+    job.sourceLanguage = language.trimmed().toLower();
+    job.targetLanguage = language.trimmed().toLower();
+    job.output = output;
+    job.sourceHash = QString::fromLatin1(QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex());
+    job.provenance = QStringLiteral("User-requested OpenSubtitles.com API download; local review required");
+    job.qualityReport = evaluateQuality(job, cues);
+    QString writeError;
+    if (!writeOutput(job, srtText, &writeError))
+    {
+        m_error = writeError;
+        m_status = QStringLiteral("Downloaded subtitle was not stored; existing files were left unchanged.");
+        emit changed();
+        return {};
+    }
+    job.state = QStringLiteral("Ready for review");
+    m_jobs.append(job);
+    m_error.clear();
+    m_status = QStringLiteral("OpenSubtitles download saved in Isolde's managed cache. Review it before loading in Kodi.");
+    emit changed();
+    return job.id;
+}
+
+bool
+SubtitleService::validateImportInput(const QString& title, const QString& language, const QString& srtText,
+                                     int repositoryFileId) const
+{
+    if (m_jobs.size() >= MaxQueuedJobs)
+    {
+        m_error = QStringLiteral(
+            "Subtitle queue is full (maximum 16 jobs). Complete or forget a finished job before importing another.");
+        emit changed();
+        return false;
+    }
+    const auto normalizedTitle = title.trimmed();
+    const auto normalizedLanguage = language.trimmed().toLower();
+    const auto bytes = srtText.toUtf8();
+    QVector<Cue> cues;
+    QString validationError;
+    if (normalizedTitle.isEmpty() || normalizedTitle.size() > 200 || !validLanguage(normalizedLanguage) ||
+        repositoryFileId <= 0 || bytes.isEmpty() || bytes.size() > MaxSubtitleBytes ||
+        QString::fromUtf8(bytes).toUtf8() != bytes || !parseSrt(srtText, &cues, &validationError))
+    {
+        m_error = validationError.isEmpty() ? QStringLiteral("Downloaded subtitle metadata or UTF-8 SRT is invalid.")
+                                            : validationError;
+        emit changed();
+        return false;
+    }
+    return true;
+}
+
+QString
+SubtitleService::findAvailableOutputPath(const QString& safeTitle, const QString& normalizedLanguage) const
+{
     const auto directory = QDir(m_cacheRoot).filePath(QStringLiteral("online-subtitles"));
     if (!QDir().mkpath(directory))
     {
@@ -1097,31 +1151,7 @@ SubtitleService::importOnlineSubtitle(const QString& title,
         }
         output = QDir(directory).filePath(base + QStringLiteral(".isolde-%1.srt").arg(version));
     }
-    Job job;
-    job.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
-    job.mode = QStringLiteral("download");
-    job.source = QStringLiteral("OpenSubtitles.com file %1 · %2").arg(repositoryFileId).arg(normalizedTitle);
-    job.sourceLanguage = normalizedLanguage;
-    job.targetLanguage = normalizedLanguage;
-    job.output = output;
-    job.sourceHash = QString::fromLatin1(QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex());
-    job.provenance = QStringLiteral("User-requested OpenSubtitles.com API download; local review required");
-    job.qualityReport = evaluateQuality(job, cues);
-    QString writeError;
-    if (!writeOutput(job, srtText, &writeError))
-    {
-        m_error = writeError;
-        m_status = QStringLiteral("Downloaded subtitle was not stored; existing files were left unchanged.");
-        emit changed();
-        return {};
-    }
-    job.state = QStringLiteral("Ready for review");
-    m_jobs.append(job);
-    m_error.clear();
-    m_status =
-        QStringLiteral("OpenSubtitles download saved in Isolde's managed cache. Review it before loading in Kodi.");
-    emit changed();
-    return job.id;
+    return output;
 }
 
 void

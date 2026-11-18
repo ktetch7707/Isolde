@@ -126,6 +126,11 @@ class SubtitleService final : public QObject
     validateReviewJob(int index) const;
     bool
     parseReviewSrt(const QString& srtText, QVector<Cue>& cues, QString* error) const;
+    bool
+    validateImportInput(const QString& title, const QString& language, const QString& srtText,
+                        int repositoryFileId) const;
+    QString
+    findAvailableOutputPath(const QString& safeTitle, const QString& normalizedLanguage) const;
     void
     finishLanguagePackProcess(int exitCode, QProcess::ExitStatus exitStatus);
     bool
