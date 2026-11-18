@@ -121,37 +121,8 @@ KodiService::KodiService(const QString& profile, QObject* parent)
         m_frontend = "isolde";
     m_modeDeadline.setSingleShot(true);
     m_modeDeadline.setInterval(20000);
-    connect(&m_modeDeadline,
-            &QTimer::timeout,
-            this,
-            [this]
-            {
-                if (m_pendingFrontend == "folders")
-                    m_folderStatus =
-                        "Kodi has not finished saving. Folder permissions are unchanged; stop playback/scanning "
-                        "and press Menu to retry.";
-                m_pendingFrontend.clear();
-                m_status =
-                    "Kodi has not exited cleanly. Mode unchanged; no forced shutdown was used. Exit Kodi normally, "
-                    "then retry.";
-                emit changed();
-            });
-    connect(&m_modeClient,
-            &KodiMedia::quitReply,
-            this,
-            [this](bool accepted)
-            {
-                if (!switching() || accepted)
-                    return;
-                if (m_pendingFrontend == "folders")
-                    m_folderStatus =
-                        "Stop playback and wait for scans to finish, then press Menu to retry. Folder permissions "
-                        "are unchanged.";
-                m_modeDeadline.stop();
-                m_pendingFrontend.clear();
-                m_status = "Could not switch safely. Stop playback, wait for scans, and retry. Mode unchanged.";
-                emit changed();
-            });
+    connect(&m_modeDeadline, &QTimer::timeout, this, &KodiService::onModeDeadlineTimeout);
+    connect(&m_modeClient, &KodiMedia::quitReply, this, &KodiService::onModeClientQuitReply);
     m_enabled = QSettings(QSettings::defaultFormat(), QSettings::UserScope, "Isolde", "Kodi")
                     .value("profiles/" + profile + "/kodi/autoStart", true)
                     .toBool();
@@ -161,91 +132,30 @@ KodiService::KodiService(const QString& profile, QObject* parent)
     if (!m_enabled)
         m_status = "Automatic startup is off.";
     m_probe.setInterval(1000);
-    connect(&m_probe,
-            &QTimer::timeout,
-            this,
-            [this]
-            {
-                if (++m_checks > 30)
-                {
-                    fail("Kodi did not become ready. Retry or open Kodi directly.");
-                    return;
-                }
-                emit probeRequested();
-            });
-    connect(&m_process,
-            &QProcess::readyReadStandardOutput,
-            this,
-            [this]
-            {
-                m_process.readAllStandardOutput();
-            });
-    connect(&m_process,
-            &QProcess::readyReadStandardError,
-            this,
-            [this]
-            {
-                m_process.readAllStandardError();
-            });
-    connect(&m_process,
-            &QProcess::errorOccurred,
-            this,
-            [this](QProcess::ProcessError error)
-            {
+    connect(&m_probe, &QTimer::timeout, this, &KodiService::onProbeTimeout);
+    connect(&m_process, &QProcess::readyReadStandardOutput, this,
+            [this]() { m_process.readAllStandardOutput(); });
+    connect(&m_process, &QProcess::readyReadStandardError, this,
+            [this]() { m_process.readAllStandardError(); });
+    connect(&m_process, &QProcess::errorOccurred, this,
+            [this](QProcess::ProcessError error) {
                 if (!m_stopping && error == QProcess::FailedToStart)
                     fail("Kodi could not start. Check the installation and retry.");
             });
-    connect(&m_process,
-            qOverload<int, QProcess::ExitStatus>(&QProcess::finished),
-            this,
-            [this](int code, QProcess::ExitStatus exitStatus)
-            {
+    connect(&m_process, qOverload<int, QProcess::ExitStatus>(&QProcess::finished),
+            this, [this](int code, QProcess::ExitStatus exitStatus) {
                 m_probe.stop();
                 m_ready = false;
-                if (switching())
-                {
+                if (switching()) {
                     const auto requested = m_pendingFrontend;
                     m_pendingFrontend.clear();
                     m_modeDeadline.stop();
                     m_lock.reset();
                     m_overlay.reset();
                     emit unavailable("Kodi closed for frontend switching.");
-                    if (requested == "folders")
-                    {
-                        if (code == 0 && exitStatus == QProcess::NormalExit)
-                        {
-                            m_folderEditing = !m_cancelFolderPreparing;
-                            m_folderStatus =
-                                m_folderEditing
-                                    ? "Ready · Kodi saved and paused safely. Folder access changes stay read-only."
-                                    : "Folder editing cancelled. No permissions changed.";
-                            if (m_cancelFolderPreparing && m_resumeAfterFolders && m_enabled)
-                                start();
-                        }
-                        else
-                            m_folderStatus =
-                                "Kodi did not exit cleanly. Folder permissions are unchanged; retry when ready.";
-                        emit changed();
-                        return;
-                    }
-                    if (code == 0 && exitStatus == QProcess::NormalExit)
-                        commitFrontend(requested);
-                    else
-                    {
-                        m_status = "Kodi did not exit normally. Mode unchanged.";
-                        emit changed();
-                    }
-                    return;
-                }
-                if (!m_stopping)
-                {
-                    m_status = "Kodi stopped. Retry to start it again.";
-                    emit unavailable(m_status);
-                    emit changed();
-                }
-                m_lock.reset();
-            });
-}
+                    if (requested == "folders") {
+
+
 KodiService::~KodiService()
 {
     stop();

@@ -705,10 +705,7 @@ NativeSandbox::buildSandboxArguments(NativeSandboxPlan& plan, const QProcessEnvi
     if (!steamGameId.isEmpty())
         args << "--steam-session";
     args << "--";
-    if (opticalNoExec)
-        args << "/usr/bin/python3" << "/run/isolde-optical-exec.py" << plan.actionTarget;
-    else
-        args << (nativeGame ? plan.actionTarget : executable);
+    args << (nativeGame ? plan.actionTarget : executable);
 }
 
 bool

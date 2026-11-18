@@ -200,6 +200,8 @@ class StudioSession final : public QObject
     bool
     validateArtworkFormat(const QByteArray& data, QImageReader& reader, bool& gif) const;
     bool
+    validateCleanIconInput(int strength, const QString& background) const;
+    bool
     checkArtworkBudget(const QByteArray& data, const QString& relative) const;
     Q_INVOKABLE QVariantMap
     cleanIconArtwork(const QString& source, int strength = 1, const QString& background = {});

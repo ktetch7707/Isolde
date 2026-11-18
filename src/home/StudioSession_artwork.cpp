@@ -126,12 +126,8 @@ StudioSession::artworkPreview(const QString& source)
 QVariantMap
 StudioSession::cleanIconArtwork(const QString& source, int strength, const QString& background)
 {
-    if (strength < 0 || strength > 2 ||
-        (!background.isEmpty() && (!QColor(background).isValid() || QColor(background).alpha() != 255)))
-    {
-        setError(tr("Choose a supported cleanup strength and opaque background colour."));
+    if (!validateCleanIconInput(strength, background))
         return {};
-    }
     const auto original = stageArtwork(source);
     if (original.isEmpty())
         return {};
@@ -143,8 +139,10 @@ StudioSession::cleanIconArtwork(const QString& source, int strength, const QStri
         return {};
     }
     const auto size = reader.size();
-    if (size.width() > 512 || size.height() > 512)
+    if (!validateArtworkSize(size))
+    {
         reader.setScaledSize(size.scaled(512, 512, Qt::KeepAspectRatio));
+    }
     const auto cleaned = AppArtwork::cleanBackground(reader.read(), strength, QColor(background));
     if (!cleaned.accepted)
     {
@@ -165,10 +163,7 @@ StudioSession::cleanIconArtwork(const QString& source, int strength, const QStri
     const auto target = QDir(m_assetStage->path()).filePath(QFileInfo(relative).fileName());
     if (!m_stagedAssets.contains(relative))
     {
-        qint64 total = bytes.size();
-        for (const auto& path : m_stagedAssets)
-            total += QFileInfo(path).size();
-        if (m_stagedAssets.size() >= 128 || total > 64 * 1024 * 1024)
+        if (!validateArtworkBudget(bytes.size()))
         {
             setError(tr("This draft's artwork budget is 128 images / 64 MiB. Original retained."));
             return {};
@@ -300,6 +295,26 @@ StudioSession::validateArtworkFormat(const QByteArray& data, QImageReader& reade
         return false;
     }
     return true;
+}
+
+bool
+StudioSession::validateCleanIconInput(int strength, const QString& background) const
+{
+    if (strength < 0 || strength > 2)
+        return false;
+    if (!background.isEmpty())
+    {
+        const QColor color(background);
+        if (!color.isValid() || color.alpha() != 255)
+            return false;
+    }
+    return true;
+}
+
+bool
+StudioSession::validateArtworkSize(const QSize& size) const
+{
+    return size.width() <= 512 && size.height() <= 512;
 }
 
 bool
