@@ -514,18 +514,34 @@ StudioSession::findFreePlacement(QJsonObject& destination, QJsonObject layout, c
         for (int x = 0; x < grid.value("columns", 8).toInt(); ++x)
         {
             QVariantMap proposed{{"x", x}, {"y", y}, {"width", width}, {"height", height}};
-            if (!ComponentSchema::validPlacement(
-                    proposed, grid.value("columns", 8).toInt(), grid.value("rows", 5).toInt()))
+            if (!ComponentSchema::validPlacement(proposed, grid.value("columns", 8).toInt(), grid.value("rows", 5).toInt()))
                 continue;
-            bool collision = false;
-            for (const auto& value : layout["components"].toArray())
+            if (placementFits(destination, proposed, layout))
             {
-                const auto node = value.toObject();
-                if (node["parentId"].toString() == destination.value("parentId").toString() &&
-                    node["categoryId"].toString() == destination.value("categoryId").toString() &&
-                    ComponentSchema::placementsOverlap(proposed, node["placement"].toObject().toVariantMap()))
-                    collision = true;
+                destination["placement"] = QJsonObject::fromVariantMap(proposed);
+                return true;
             }
+        }
+    }
+    return false;
+}
+
+bool
+StudioSession::placementFits(const QJsonObject& destination, const QVariantMap& proposed,
+                             const QJsonObject& layout) const
+{
+    QVariantMap proposedVariantMap = proposed.toVariantMap();
+    for (const auto& value : layout["components"].toArray())
+    {
+        const auto node = value.toObject();
+        if (node["parentId"].toString() != destination.value("parentId").toString() &&
+            node["categoryId"].toString() != destination.value("categoryId").toString())
+            continue;
+        if (ComponentSchema::placementsOverlap(proposedVariantMap, node["placement"].toObject().toVariantMap()))
+            return false;
+    }
+    return true;
+}
             if (!collision)
             {
                 destination["placement"] = QJsonObject::fromVariantMap(proposed);
