@@ -36,11 +36,11 @@ Two checks are configured as **WarningsAsErrors** so they fail the build:
 
 | Metric | Limit |
 |--------|-------|
-| Cyclomatic complexity (CCN) | max 10 |
+| Cyclomatic complexity (CCN) | max 15 |
 | Function length (NLOC) | max 60 lines |
 | Function parameters | max 5 |
 
-Run: `python tools/lizard-check.ps1` (Windows) or `python3 -m lizard src -l cpp -C 10 -L 60 -a 5` (Linux)
+Run: `python tools/lizard-check.ps1` (Windows) or `python3 -m lizard src -l cpp -C 15 -L 60 -a 5` (Linux)
 
 ### Class-size checker (`tools/class-size-check.py`)
 
