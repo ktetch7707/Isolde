@@ -30,8 +30,11 @@ jobs:
       - name: Install Qt6
         uses: jurplel/install-qt-action@v3
         with:
-          version: 6.4
+          version: 6.5
           modules: qtdeclarative qttools qtwebsockets qtmultimedia qtserialport qtsql
+          target: desktop
+          arch: desktop
+          arch_sub: gcc_64
 
       - name: Configure CMake (generate compile_commands.json)
         run: |
