@@ -86,12 +86,11 @@ class StoreUpdateProvider
     }
 };
 
-class StoreArtifactProvider : public QObject
+class StoreArtifactProvider
 {
-    Q_OBJECT
   public:
-    explicit StoreArtifactProvider(QObject* parent = nullptr) : QObject(parent) {}
-    ~StoreArtifactProvider() override = default;
+    StoreArtifactProvider() = default;
+    virtual ~StoreArtifactProvider() = default;
 
     [[nodiscard]] virtual QUrl
     artifactUrl(const QString& storeId) const = 0;
@@ -99,10 +98,6 @@ class StoreArtifactProvider : public QObject
     artifactHash(const QString& storeId) const = 0;
     [[nodiscard]] virtual QString
     provenanceText(const QString& storeId) const = 0;
-
-  signals:
-    void
-    providerError(const QString& message);
 };
 
 // StoreProvider composes all provider roles into a single store plugin interface.
@@ -113,7 +108,6 @@ class StoreProvider : public StoreIdentityProvider,
 {
     Q_OBJECT
   public:
-    using StoreArtifactProvider::StoreArtifactProvider;
     using StoreIdentityProvider::StoreIdentityProvider;
     using StoreSearchProvider::StoreSearchProvider;
     using StoreUpdateProvider::StoreUpdateProvider;

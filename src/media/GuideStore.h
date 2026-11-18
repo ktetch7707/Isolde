@@ -159,7 +159,7 @@ class GuideStore final : public QObject
     bool
     adjustClock(const QVariantMap& review, qint64 nowUtc);
     bool
-    clockAdjustmentPreviewArgsValid(const QString& id, qint64 deltaSeconds, int expectedRevision, qint64 nowUtc);
+    clockAdjustmentPreviewArgsValid(const QString& id, qint64 deltaSeconds, int expectedRevision, qint64 nowUtc) const;
     bool
     adjustClockArgsValid(const QVariantMap& review, qint64 nowUtc);
     void
@@ -225,6 +225,10 @@ class GuideStore final : public QObject
     validateSchemas();
     // Creation / import helpers
     bool
+    executeChannelQuery(QSqlQuery& q) const;
+    bool
+    isReady() const;
+    bool
     candidatesAreValid(const QVariantList& candidates, QString* error) const;
     bool
     validateEligibleItem(const QVariantMap& item,
@@ -232,18 +236,38 @@ class GuideStore final : public QObject
                          QSet<QString>& seen,
                          QString* error) const;
     bool
+    createLocalPrepare(const QVariantMap& definition,
+                       const QVariantList& candidates,
+                       qint64 now,
+                       int& days,
+                       QVariantMap& valid,
+                       QVariantList& selected,
+                       qint64& initial,
+                       QString& error);
+    bool
+    createLocalRestoreSnapshot(const QVariantMap& valid,
+                               const QVariantList& selected,
+                               const QVariantMap& snapshot,
+                               const QVariantMap& remapping);
+    bool
+    createLocalValidateRemapping(const QVariantList& selected,
+                                 const QVariantMap& remapping,
+                                 const QMap<QString, QVariantMap>& oldItems,
+                                 QMap<QString, QVariantMap>& explicitItems,
+                                 QString& error);
+    static bool
     portablePackageValid(const QVariantMap& package, QVariantMap& def, QString* error);
-    bool
+    static bool
     portableAssetsValid(const QVariantMap& package, const QVariantMap& def, QString* error);
-    bool
+    static bool
     portableSlotsValid(const QVariantMap& package, QSet<QString>& identities, QString* error);
-    bool
+    static bool
     portableItemsValid(const QVariantList& items, QSet<QString>& identities, QString* error);
-    bool
+    static bool
     portableSlotsListValid(const QVariantList& slots, const QSet<QString>& identities, QString* error);
-    bool
+    static bool
     portableSlotShapeValid(const QVariantMap& slot);
-    bool
+    static bool
     portableSlotTimingValid(const QVariantMap& slot, qint64 previous, const QSet<QString>& identities);
     bool
     restoreSnapshotSlots(const QVariantMap& snapshot,
@@ -409,15 +433,6 @@ class GuideStore final : public QObject
                       QVariantMap& program,
                       qint64& delta) const;
     bool
-    repairPreviewAlternatives(const QString& id,
-                              qint64 start,
-                              qint64 end,
-                              int first,
-                              bool fitInterval,
-                              QVariantList& choices,
-                              int& total,
-                              int& incompatible) const;
-    bool
     repairSlotReplace(const QString& id,
                       const QString& slotId,
                       int revision,
@@ -427,8 +442,6 @@ class GuideStore final : public QObject
                       bool fitInterval,
                       QSqlQuery& q);
     // Metadata / clock helpers
-    bool
-    setMetadataUpdate(const QString& id, const QVariantMap& metadata, int revision, QSqlQuery& q);
     bool
     clockAdjustmentApply(const QVariantMap& review, qint64 wall, QSqlQuery& q);
     bool

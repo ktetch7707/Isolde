@@ -32,12 +32,12 @@ class OpticalDiscIdentify
     identityForDevice(const QString& device) = 0;
     virtual QVariantMap
     identityForContent(QVariantMap descriptor, const QString& contentId) = 0;
-    virtual QString
-    rootReference(const QVariantMap& disc) = 0;
-    virtual bool
-    isRootReference(const QString& root) = 0;
-    virtual QString
-    mediaIdFromRoot(const QString& root) = 0;
+    static QString
+    rootReference(const QVariantMap& disc);
+    static bool
+    isRootReference(const QString& root);
+    static QString
+    mediaIdFromRoot(const QString& root);
 };
 
 class OpticalDiscClassify
@@ -47,8 +47,8 @@ class OpticalDiscClassify
 
     virtual QVariantMap
     currentMedia(const QString& mediaId) = 0;
-    virtual QVariantMap
-    resolveRootReference(const QString& root) = 0;
+    static QVariantMap
+    resolveRootReference(const QString& root);
     virtual QVariantMap
     classifyRootReference(const QString& root, const QVariantList& currentDiscs) = 0;
     virtual QVariantMap
@@ -64,13 +64,13 @@ class OpticalDiscHash
   public:
     virtual ~OpticalDiscHash() = default;
 
-    virtual QVariantList
-    mountedDiscs() = 0;
-    virtual QVariantMap
-    contentIdentity(const QString& device) = 0;
-    virtual QByteArray
-    hashContent(QIODevice* input, quint64 size) = 0;
-    virtual QString
+    static QVariantList
+    mountedDiscs();
+    static QVariantMap
+    contentIdentity(const QString& device);
+    static QByteArray
+    hashContent(QIODevice* input, quint64 size);
+    static QString
     mountObservationId(const QString& device,
                        const QString& filesystem,
                        const QString& label,
@@ -78,7 +78,7 @@ class OpticalDiscHash
                        const QString& sequence,
                        const QString& hashState,
                        const QString& mediaId,
-                       const QString& mountInstance) = 0;
+                       const QString& mountInstance);
 };
 
 class OpticalDiscProbe

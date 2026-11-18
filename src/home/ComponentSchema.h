@@ -10,6 +10,15 @@ class AppRegistry;
  */
 namespace ComponentSchema {
 
+/** Validates a safe component identity: starts with alphanumeric, bounded length, rejects "." and "..".
+ * @brief Validates a component identity string.
+ * @details Checks that the id starts with an alphanumeric character, is within MaxComponentIdLength, and is not "." or "..".
+ * @why Component ids are used as keys in maps and file paths; unsafe ids could cause collisions or path traversal.
+ * @param id The identity string to validate.
+ * @return true if the id is valid, false otherwise.
+ */
+bool safeId(const QString& id);
+
 /** Validates the Settings navigation document.
  * @brief Validates a Settings navigation document: exact category set and route table, bounded labels and descriptions.
  * @details Ensures the navigation map has exactly schemaVersion=1 and categories list, that every category has a unique id from the allowed set, a non-empty name/description within length limits, and either a route or rows. Every route across all categories must be unique and drawn from the known route set.

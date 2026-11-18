@@ -50,6 +50,8 @@ path(const QString& profile, const QString& relative)
         return {};
     return target;
 }
+bool
+canWriteArtwork(const QString& profile, const QString& relative, const QByteArray& bytes);
 inline bool
 write(const QString& profile, const QString& relative, const QByteArray& bytes)
 {

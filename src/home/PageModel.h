@@ -7,6 +7,7 @@
 #include <functional>
 
 class HomeLayout;
+class ComponentRegistry;
 
 /**
  * @brief Page-scoped Home composition.

@@ -5,6 +5,7 @@
 #include <QSet>
 #include <QTemporaryDir>
 #include <QTimer>
+#include <QXmlStreamReader>
 #include <QUrl>
 #include <QVariantList>
 #include <QVariantMap>

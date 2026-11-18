@@ -14,6 +14,8 @@
 #include <QVariantList>
 #include <optional>
 
+class AppCatalogEntry;
+
 class AppCatalog final : public QObject
 {
     Q_OBJECT
@@ -371,7 +373,7 @@ class AppCatalog final : public QObject
     QString m_operation;
     bool m_committing = false;
     QByteArray m_operationEvents;
-    QPointer<StoreProvider> m_provider;
+    StoreProvider* m_provider;
     bool m_onlineStoreSearch = false;
     QString m_storeQuery;
     QVariantList m_providerResults;

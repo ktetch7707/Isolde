@@ -221,7 +221,7 @@ class GuideController final : public QObject
     bool
     processFeedEntries(QVariantList& entries, const QVariantMap& listings, QSet<int>& used, GuideStore& store);
     void
-    finalizeFeedLoad(QVariantMap& result, QVariantList& entries, QVariantList& sourcePreview,
+    finalizeFeedLoad(const QVariantMap& result, QVariantList& entries, QVariantList& sourcePreview,
                      QVariantMap& feedListings, bool& sourcePreviewReady, qint64& snapshotBytes);
     bool
     validateFeedInputs(const QString& instance, const QString& directUrl, const QString& directName);
@@ -309,7 +309,7 @@ class GuideController final : public QObject
     void
     processPvrPrograms(const QVariantList& items, QVariantMap& entry, QVariantList& programs, qint64& m_sourceRefreshed, qint64& m_snapshotBytes);
     void
-    finalizePvrLoad(int& m_page, int& m_sourceIndex, bool& m_sourcePreviewReady, bool& m_sourcePreviewIsEmpty);
+    finalizePvrLoad(int& m_page, int& m_sourceIndex, bool& m_sourcePreviewReady, int end, int total);
     void
     closeBridge();
     void
@@ -350,8 +350,8 @@ class GuideController final : public QObject
     bool m_pvrReading = false, m_sourcePreviewReady = false;
     QStringList m_kinds;
     qint64 m_from = 0, m_to = 0;
-    int m_first = 0, m_page = 0, m_requestId = 0, m_descriptor = -1, m_skipped = 0, m_kindIndex = 0,
-        m_snapshotBytes = 0;
+    int m_first = 0, m_page = 0, m_requestId = 0, m_descriptor = -1, m_skipped = 0, m_kindIndex = 0;
+    qint64 m_snapshotBytes = 0;
     quint64 m_jobId = 0;
     quint64 m_catalogGeneration = 0;
     bool m_ready = false, m_busy = false, m_valid = true, m_reading = false, m_previewReady = false,

@@ -7,6 +7,7 @@
 #include <QUrl>
 #include <memory>
 #include "KodiMedia.h"
+#include "sessions/NativeSandbox.h"
 
 class KodiService final : public QObject
 {
@@ -139,8 +140,6 @@ class KodiService final : public QObject
     bool
     resolveKodiExecutable(QString& executable);
     bool
-    resolveKodiExecutable(QString& executable);
-    bool
     setupSandboxEnvironment(QProcessEnvironment& environment);
     bool
     prepareKodiEnvironment(QString& executable, QProcessEnvironment& environment, NativeSandboxPlan& plan);
@@ -176,6 +175,7 @@ class KodiService final : public QObject
     std::unique_ptr<QTemporaryDir> m_overlay;
     std::unique_ptr<QLockFile> m_lock;
     QString m_frontend = "isolde", m_pendingFrontend;
+    QString m_status;
     KodiMedia m_modeClient;
     QTimer m_modeDeadline;
     QString m_folderStatus;

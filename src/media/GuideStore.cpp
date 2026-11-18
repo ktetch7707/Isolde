@@ -7,6 +7,8 @@
 #include <QSqlError>
 #include <QSqlQuery>
 #include <QUuid>
+#include <QVariantList>
+#include <QList>
 #include <algorithm>
 #include <cmath>
 #include "GuideAssets.h"
@@ -49,7 +51,7 @@ number(const QVariant& v, qint64 low, qint64 high)
         return false;
     bool ok = false;
     const auto n = v.toDouble(&ok);
-    return ok && std::isfinite(n) && n == std::floor(n) && n >= low && n <= high;
+    return ok && std::isfinite(n) && n == std::floor(n) && n >= static_cast<double>(low) && n <= static_cast<double>(high);
 }
 QVariantMap
 channelRow(const QSqlQuery& q)
@@ -620,11 +622,11 @@ GuideStore::createLocalRestoreSnapshot(const QVariantMap& valid,
         return rollback(slotError);
     const bool rulesChanged =
         original.value("rule") != valid.value("rule") || original.value("mediaKinds") != valid.value("mediaKinds");
-    q.prepare("UPDATE channels SET cursor=?,clock_utc=? WHERE id=?");
-    q.addBindValue(rulesChanged ? QVariant(0) : snapshot.value("cursor"));
-    q.addBindValue(snapshot.value("clockUtc"));
-    q.addBindValue(valid.value("id"));
-    if (!q.exec())
+    insert.prepare("UPDATE channels SET cursor=?,clock_utc=? WHERE id=?");
+    insert.addBindValue(rulesChanged ? QVariant(0) : snapshot.value("cursor"));
+    insert.addBindValue(snapshot.value("clockUtc"));
+    insert.addBindValue(valid.value("id"));
+    if (!insert.exec())
         return rollback(tr("Cannot restore imported schedule continuity."));
     return true;
 }
@@ -685,6 +687,11 @@ GuideStore::restoreSnapshotSlots(const QVariantMap& snapshot,
         const auto slot = v.toMap();
         const auto start = slot.value("startUtc").toLongLong(), end = slot.value("endUtc").toLongLong();
         const auto oldKey = mediaKey(slot);
+        const auto portableKey = [](const QVariantMap& item)
+        {
+            return item.value("mediaType").toString() + QChar(0x1f) + item.value("title").toString() + QChar(0x1f) +
+                   QString::number(item.value("duration").toLongLong());
+        };
         const auto key = portableKey(oldItems.value(oldKey));
         const auto item = explicitItems.contains(oldKey) ? explicitItems.value(oldKey) : remap.value(key);
         if (item.isEmpty() || (!explicitItems.contains(oldKey) && ambiguous.contains(key)))
@@ -854,10 +861,10 @@ GuideStore::portableItemsValid(const QVariantList& items, QSet<QString>& identit
 }
 
 bool
-GuideStore::portableSlotsListValid(const QVariantList& slots, const QSet<QString>& identities, QString* error)
+GuideStore::portableSlotsListValid(const QVariantList& slotList, const QSet<QString>& identities, QString* error)
 {
     qint64 previous = -1;
-    for (const auto& v : slots)
+    for (const auto& v : slotList)
     {
         const auto slot = v.toMap();
         if (!portableSlotShapeValid(slot) || !portableSlotTimingValid(slot, previous, identities))
@@ -868,7 +875,7 @@ GuideStore::portableSlotsListValid(const QVariantList& slots, const QSet<QString
         }
         previous = slot.value("endUtc").toLongLong();
     }
-    if (previous - slots.first().toMap().value("startUtc").toLongLong() > 38 * Day)
+    if (previous - slotList.first().toMap().value("startUtc").toLongLong() > 38 * Day)
     {
         if (error)
             *error = tr("A portable schedule spans at most 38 days including retained history.");
@@ -1287,6 +1294,7 @@ GuideStore::retryConstrainedGap(const QVariantMap& def,
                                 qint64 cooldown,
                                 qint64& retry)
 {
+    Q_UNUSED(def);
     for (const auto& v : ordered)
     {
         const auto candidate = v.toMap();
@@ -1323,6 +1331,8 @@ GuideStore::appendOneSlot(QSqlQuery& insert,
                           QMap<QString, qint64>& lastEnds,
                           qint64 cycleDuration)
 {
+    Q_UNUSED(until);
+    Q_UNUSED(cooldown);
     if (++iterations > 200000)
     {
         fail(
@@ -2599,7 +2609,7 @@ GuideStore::clockAdjustmentPreview(const QString& id, qint64 delta, int revision
 }
 
 bool
-GuideStore::clockAdjustmentPreviewArgsValid(const QString& id, qint64 delta, int revision, qint64 wall)
+GuideStore::clockAdjustmentPreviewArgsValid(const QString& id, qint64 delta, int revision, qint64 wall) const
 {
     return ComponentSchema::safeId(id) && instant(wall) && revision >= 1 && revision < 2147483647 && delta != 0 &&
            delta >= -31 * Day && delta <= 31 * Day;

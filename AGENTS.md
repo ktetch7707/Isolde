@@ -67,3 +67,7 @@ Before VM actions, read `docs/vm-oracle.md`. Use `tools/vm-test.ps1` for Test/Vi
 68:     - EVERY function MUST have a comment explaining what it does and why it exists.
 69:     - Comments must explain intent and rationale, not just restate the code.
 70:     - Document the "why" behind each function, not just the "what."
+
+14. Restore consent (user revision 2026-11-18):
+    - NEVER restore a previous version of any file (git checkout/restore/revert) without explicit human consent for that specific file.
+    - Keep the refactoring done; fix problems properly rather than undoing changes.

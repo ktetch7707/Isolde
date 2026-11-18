@@ -36,6 +36,11 @@ validatePlaylistRoot(QXmlStreamReader& reader, QString& kind)
 }
 
 inline bool
+parsePlaylistName(QXmlStreamReader& reader, QString& name);
+inline bool
+parsePlaylistMatch(QXmlStreamReader& reader, QString& match);
+
+inline bool
 parsePlaylistElement(QXmlStreamReader& reader, QString& name, QString& match, QVariantList& rules)
 {
     if (reader.name() == u"name")

@@ -2,6 +2,7 @@
 
 #include <QMap>
 #include <QObject>
+#include <QKeyEvent>
 #include <QPointer>
 #include <QSet>
 #include <QString>

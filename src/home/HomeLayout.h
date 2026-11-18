@@ -7,6 +7,7 @@
 #include <QJsonObject>
 #include <QObject>
 #include <QSet>
+#include <QVariant>
 #include <QVariantList>
 
 class PageModel;
@@ -497,14 +498,6 @@ class HomeLayout final : public QObject
     bool
     validateStudioStylePresets(const QJsonArray& presets);
     bool
-    validateStudioDesktop(const QJsonObject& desktop);
-    bool
-    validateStudioThemeGroups(const QJsonArray& groups);
-    bool
-    validateStudioSchemes(const QJsonArray& schemes);
-    bool
-    validateStudioStylePresets(const QJsonArray& presets);
-    bool
     validateStudioTrialDurations(const QJsonArray& trials);
     bool
     validateStudioMenuWidth(const QJsonValue& value);
@@ -535,16 +528,15 @@ class HomeLayout final : public QObject
     bool
     rebindItemAt(qsizetype i, const QJsonObject& item, const QString& sourceId);
     QJsonObject
-    validateStudioCatalog(const QVariantArray& catalog, const QVariantMap& presets);
+    validateStudioCatalog(const QVariantList& catalog, const QVariantMap& presets);
     bool
-    validateStudioActions(const QVariantArray& actions);
+    validateStudioActions(const QVariantList& actions);
     bool
-    validateStudioActionCategories(const QVariantArray& categories);
+    validateStudioActionCategories(const QVariantList& categories);
     bool
-    validateStudioGridModes(const QVariantArray& modes, const QVariantMap& defaultGrid);
+    validateStudioGridModes(const QVariantList& modes, const QVariantMap& defaultGrid);
     bool
-    validateStudioOverlayKeys(const QVariantArray& overlayKeys, const QVariantMap& guide);
-    validateStudioCatalog(const QVariantArray& catalog, const QVariantMap& presets);
+    validateStudioOverlayKeys(const QVariantList& overlayKeys, const QVariantMap& guide);
     bool
     validateStudioComponentVariants(const QJsonObject& object, const QJsonObject& presets) const;
     bool
@@ -562,8 +554,6 @@ class HomeLayout final : public QObject
     bool
     validateStudioCatalogIds(const QJsonObject& object, const QJsonObject& presets) const;
     bool
-    validateStudioCatalogIds(const QJsonObject& object, const QJsonObject& presets) const;
-    bool
     validateStudioActionCategoryTypes(const QJsonArray& categories) const;
     bool
     validateStudioActionCategory(const QJsonObject& category, const QStringList& pickerTypes) const;
@@ -572,13 +562,10 @@ class HomeLayout final : public QObject
     bool
     applyStudioDefaults(QVariantMap& result, const QVariantMap& guide) const;
     bool
-    validateStudioActions(const QVariantArray& actions, const QVariantMap& listings);
+    validateStudioActions(const QVariantList& actions, const QVariantMap& listings);
     bool
-    validateStudioActionCategories(const QVariantArray& categories, const QVariantMap& listings);
-    bool
-    validateStudioGridModes(const QVariantArray& modes, const QVariantMap& defaultGrid);
-    bool
-    validateStudioOverlayKeys(const QVariantArray& overlayKeys, const QVariantMap& guide);
+    validateStudioActionCategories(const QVariantList& categories, const QVariantMap& listings);
+    QJsonObject
     previousItem(qsizetype i) const;
     void
     setAppId(QJsonObject& first, const QJsonObject& item, const QString& sourceId);

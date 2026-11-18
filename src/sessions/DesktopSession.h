@@ -1,6 +1,7 @@
 #pragma once
 
 #include "sessions/AppSession.h"
+#include "sessions/NativeSandbox.h"
 #include "sessions/SteamSessionOutput.h"
 
 #include <QLockFile>

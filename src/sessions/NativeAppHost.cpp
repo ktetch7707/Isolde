@@ -80,21 +80,38 @@ connectedGamepadNodes()
 QSet<QString>
 attachGamepadNodes(const QSet<QString>& connected,
                    const QSet<QString>& boundAtLaunch,
+                   QMap<QString, quint64>* createdNodes);
+bool
+attachGamepadNode(const QSet<QString>& connected,
+                  const QSet<QString>& boundAtLaunch,
+                  QMap<QString, quint64>* createdNodes,
+                  QSet<QString>& dynamicEvents,
+                  const QDir& sysInput,
+                  const QString& name);
+bool
+attachExistingGamepadNode(QMap<QString, quint64>::iterator& it,
+                          QMap<QString, quint64>* createdNodes,
+                          const QSet<QString>& connected,
+                          QSet<QString>& dynamicEvents);
+
+QSet<QString>
+attachGamepadNodes(const QSet<QString>& connected,
+                   const QSet<QString>& boundAtLaunch,
                    QMap<QString, quint64>* createdNodes)
 {
     QSet<QString> dynamicEvents;
 #ifdef Q_OS_LINUX
+    const QDir sysInput("/sys/class/input");
     for (auto it = createdNodes->begin(); it != createdNodes->end();)
     {
-        if (attachExistingGamepadNode(it, connected, dynamicEvents))
+        if (attachExistingGamepadNode(it, createdNodes, connected, dynamicEvents))
             ++it;
         else
             it = createdNodes->erase(it);
     }
-    const QDir sysInput("/sys/class/input");
     for (const auto& name : connected)
     {
-        attachGamepadNode(connected, boundAtLaunch, createdNodes, dynamicEvents, name);
+        attachGamepadNode(connected, boundAtLaunch, createdNodes, dynamicEvents, sysInput, name);
     }
 #else
     Q_UNUSED(connected);
@@ -109,6 +126,7 @@ attachGamepadNode(const QSet<QString>& connected,
                   const QSet<QString>& boundAtLaunch,
                   QMap<QString, quint64>* createdNodes,
                   QSet<QString>& dynamicEvents,
+                  const QDir& sysInput,
                   const QString& name)
 {
     if (boundAtLaunch.contains(name) || createdNodes->contains(name))
@@ -207,11 +225,59 @@ setupGamepadMonitoring(QCoreApplication& app, QTimer& gamepadTimer, bool gameSes
 
 auto
 makeStopHandler(QProcess& child, QCoreApplication& app, qint64& childGroup,
-                bool& stopping, bool steamSession);
+                 bool& stopping, bool steamSession)
+{
+    return [&]
+    {
+        if (stopping)
+            return;
+        stopping = true;
+#ifdef Q_OS_UNIX
+        if (child.state() != QProcess::NotRunning)
+            ::kill(pid_t(child.processId()), SIGTERM);
+#else
+        child.terminate();
+#endif
+        QTimer::singleShot(steamSession ? 14000 : 2000,
+                           &app,
+                           [&]
+                           {
+#ifdef Q_OS_UNIX
+                               if (child.state() != QProcess::NotRunning)
+                                   ::kill(-pid_t(childGroup), SIGKILL);
+#else
+                               child.kill();
+#endif
+                           });
+    };
+}
 
 auto
 makeChildFinishedHandler(QProcess& child, QCoreApplication& app, qint64& childGroup,
-                         bool& stopping, bool& remoteFailed, bool steamSession);
+                         bool& stopping, bool& remoteFailed, bool steamSession)
+{
+    return [&](int code, QProcess::ExitStatus status)
+    {
+        if (!stopping)
+        {
+            app.exit(status == QProcess::NormalExit ? code : 1);
+            return;
+        }
+#ifdef Q_OS_UNIX
+        ::kill(-pid_t(childGroup), SIGTERM);
+#endif
+        QTimer::singleShot(
+            1500,
+            &app,
+            [&, code, status]
+            {
+#ifdef Q_OS_UNIX
+                ::kill(-pid_t(childGroup), SIGKILL);
+#endif
+                app.exit(remoteFailed || (steamSession && (status != QProcess::NormalExit || code != 0)) ? 1 : 0);
+            });
+    };
+}
 
 #ifdef Q_OS_LINUX
 bool
@@ -410,61 +476,6 @@ setupGamepadMonitoring(QCoreApplication& app, QTimer& gamepadTimer, bool gameSes
     QObject::connect(&gamepadTimer, &QTimer::timeout, &app, updateGamepads);
     updateGamepads();
     gamepadTimer.start();
-}
-
-auto
-makeStopHandler(QProcess& child, QCoreApplication& app, qint64& childGroup, bool& stopping, bool steamSession)
-{
-    return [&]
-    {
-        if (stopping)
-            return;
-        stopping = true;
-#ifdef Q_OS_UNIX
-        if (child.state() != QProcess::NotRunning)
-            ::kill(pid_t(child.processId()), SIGTERM);
-#else
-        child.terminate();
-#endif
-        QTimer::singleShot(steamSession ? 14000 : 2000,
-                           &app,
-                           [&]
-                           {
-#ifdef Q_OS_UNIX
-                               if (child.state() != QProcess::NotRunning)
-                                   ::kill(-pid_t(childGroup), SIGKILL);
-#else
-                               child.kill();
-#endif
-                           });
-    };
-}
-
-auto
-makeChildFinishedHandler(QProcess& child, QCoreApplication& app, qint64& childGroup,
-                         bool& stopping, bool& remoteFailed, bool steamSession)
-{
-    return [&](int code, QProcess::ExitStatus status)
-    {
-        if (!stopping)
-        {
-            app.exit(status == QProcess::NormalExit ? code : 1);
-            return;
-        }
-#ifdef Q_OS_UNIX
-        ::kill(-pid_t(childGroup), SIGTERM);
-#endif
-        QTimer::singleShot(
-            1500,
-            &app,
-            [&, code, status]
-            {
-#ifdef Q_OS_UNIX
-                ::kill(-pid_t(childGroup), SIGKILL);
-#endif
-                app.exit(remoteFailed || (steamSession && (status != QProcess::NormalExit || code != 0)) ? 1 : 0);
-            });
-    };
 }
 
 #ifdef Q_OS_LINUX

@@ -29,7 +29,7 @@
 #endif
 
 QString
-GameLibrary::checkedTarget(const QString& root, const QString& relative)
+GameLibrary::checkedTarget(const QString& root, const QString& relative) const
 {
     QString validatedRoot = root;
     if (!validateOpticalTarget(root, validatedRoot))
