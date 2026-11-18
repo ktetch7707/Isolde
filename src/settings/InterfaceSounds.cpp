@@ -810,25 +810,50 @@ InterfaceSounds::prepare(const QString& id)
         else
             ++it;
     }
-    QVariantMap sounds;
-    if (id != Soft)
-    {
-        if (!m_themePaths.contains(id))
-        {
-            m_error = "That sound theme is unavailable. Refresh themes and retry.";
-            emit changed();
-            return false;
-        }
-        const auto pack = readKodiTheme(m_themePaths.value(id), &m_error);
-        if (pack.isEmpty())
-        {
-            emit changed();
-            return false;
-        }
-        sounds = pack.value("sounds").toMap();
-    }
+    QMap<QString, QByteArray> sounds;
+    if (id != Soft && !prepareThemeSounds(id, sounds))
+        return false;
     QMap<QString, QUrl> sources;
     QMap<QString, int> durations;
+    QSet<QString> cacheFiles;
+    if (!prepareEventSounds(id, sounds, sources, durations, cacheFiles))
+        return false;
+    m_cacheFiles = cacheFiles;
+    silence();
+    qDeleteAll(m_effects);
+    m_effects.clear();
+    m_sources = sources;
+    m_durations = durations;
+    m_prepared = id;
+    if (!createSoundEffects(sources))
+        return false;
+    return true;
+}
+
+bool
+InterfaceSounds::prepareThemeSounds(const QString& id, QMap<QString, QByteArray>& sounds) const
+{
+    if (!m_themePaths.contains(id))
+    {
+        m_error = "That sound theme is unavailable. Refresh themes and retry.";
+        emit changed();
+        return false;
+    }
+    const auto pack = readKodiTheme(m_themePaths.value(id), &m_error);
+    if (pack.isEmpty())
+    {
+        emit changed();
+        return false;
+    }
+    sounds = pack.value("sounds").toMap();
+    return true;
+}
+
+bool
+InterfaceSounds::prepareEventSounds(const QString& id, const QMap<QString, QByteArray>& sounds,
+                                    QMap<QString, QUrl>& sources, QMap<QString, int>& durations,
+                                    QSet<QString>& cacheFiles)
+{
     for (const auto& value : m_options.value("events").toList())
     {
         const auto event = value.toMap();
@@ -865,45 +890,46 @@ InterfaceSounds::prepare(const QString& id)
         }
         sources[key] = QUrl::fromLocalFile(path);
     }
-    silence();
-    qDeleteAll(m_effects);
-    m_effects.clear();
-    m_sources = sources;
-    m_durations = durations;
-    m_prepared = id;
-    if (m_audioBackend)
-        for (auto it = sources.cbegin(); it != sources.cend(); ++it)
-        {
-            auto* effect = new QSoundEffect(QMediaDevices::defaultAudioOutput(), this);
-            const auto key = it.key();
-            m_effects[key] = effect;
-            effect->setLoopCount(1);
-            connect(effect,
-                    &QSoundEffect::statusChanged,
-                    this,
-                    [this, effect, key]
+    return true;
+}
+
+bool
+InterfaceSounds::createSoundEffects(const QMap<QString, QUrl>& sources)
+{
+    if (!m_audioBackend)
+        return true;
+    for (auto it = sources.cbegin(); it != sources.cend(); ++it)
+    {
+        auto* effect = new QSoundEffect(QMediaDevices::defaultAudioOutput(), this);
+        const auto key = it.key();
+        m_effects[key] = effect;
+        effect->setLoopCount(1);
+        connect(effect,
+                &QSoundEffect::statusChanged,
+                this,
+                [this, effect, key]
+                {
+                    if (effect->status() == QSoundEffect::Error)
                     {
-                        if (effect->status() == QSoundEffect::Error)
-                        {
-                            if (m_pendingEvent == key)
-                                m_pendingEvent.clear();
-                            m_error =
-                                "Interface sound playback is unavailable. Check Sound Output or choose another theme.";
-                            emit changed();
-                        }
-                        else if (effect->status() == QSoundEffect::Ready && m_pendingEvent == key)
-                        {
+                        if (m_pendingEvent == key)
                             m_pendingEvent.clear();
-                            if (!quiet() && m_lastCue.isValid() && m_lastCue.elapsed() <= 150)
-                            {
-                                m_playing = effect;
-                                effect->setVolume(m_volume / 100.0);
-                                effect->play();
-                            }
+                        m_error =
+                            "Interface sound playback is unavailable. Check Sound Output or choose another theme.";
+                        emit changed();
+                    }
+                    else if (effect->status() == QSoundEffect::Ready && m_pendingEvent == key)
+                    {
+                        m_pendingEvent.clear();
+                        if (!quiet() && m_lastCue.isValid() && m_lastCue.elapsed() <= 150)
+                        {
+                            m_playing = effect;
+                            effect->setVolume(m_volume / 100.0);
+                            effect->play();
                         }
-                    });
-            effect->setSource(it.value());
-        }
+                    }
+                });
+        effect->setSource(it.value());
+    }
     return true;
 }
 

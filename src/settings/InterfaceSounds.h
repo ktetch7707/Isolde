@@ -173,6 +173,13 @@ class InterfaceSounds final : public QObject
     save(bool enabled, int volume, bool duringPlayback, const QString& theme);
     bool
     prepare(const QString& id);
+    bool
+    prepareThemeSounds(const QString& id, QMap<QString, QByteArray>& sounds) const;
+    bool
+    prepareEventSounds(const QString& id, const QMap<QString, QByteArray>& sounds,
+                       QMap<QString, QUrl>& sources, QMap<QString, int>& durations, QSet<QString>& cacheFiles);
+    bool
+    createSoundEffects(const QMap<QString, QUrl>& sources);
     void
     request(const QString& event, bool preview);
     void
