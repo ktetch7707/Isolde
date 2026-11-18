@@ -278,21 +278,52 @@ SubtitleService::outputPath(const QString& sourcePath, const QString& targetLang
 bool
 SubtitleService::writeOutput(Job& job, const QString& srtText, QString* error) const
 {
-    if (job.output.isEmpty() || QFileInfo::exists(job.output) ||
-        QFileInfo::exists(job.output + QStringLiteral(".isolde.json")))
+    if (!validateOutputPath(job.output, error))
+        return false;
+    if (!createOutputDirectory(job.output, error))
+        return false;
+    if (!reserveOutputPath(job.output, error))
+        return false;
+    if (!writeSubtitleFile(job.output, srtText, error))
+        return false;
+    if (!writeProvenanceFile(job.output, job, error))
+    {
+        QFile::remove(job.output);
+        return false;
+    }
+    return true;
+}
+
+bool
+SubtitleService::validateOutputPath(const QString& outputPath, QString* error) const
+{
+    if (outputPath.isEmpty() || QFileInfo::exists(outputPath) ||
+        QFileInfo::exists(outputPath + QStringLiteral(".isolde.json")))
     {
         if (error)
             *error = QStringLiteral("A subtitle already exists at the selected output path; no file was overwritten.");
         return false;
     }
-    const QFileInfo outputInfo(job.output);
+    return true;
+}
+
+bool
+SubtitleService::createOutputDirectory(const QString& outputPath, QString* error) const
+{
+    const QFileInfo outputInfo(outputPath);
     if (!QDir().mkpath(outputInfo.absolutePath()))
     {
         if (error)
             *error = QStringLiteral("Could not create the subtitle output directory.");
         return false;
     }
-    QFile reservation(job.output + QStringLiteral(".isolde-reserve"));
+    return true;
+}
+
+bool
+SubtitleService::reserveOutputPath(const QString& outputPath, QString* error) const
+{
+    QFile reservation(outputPath + QStringLiteral(".isolde-reserve"));
     if (!reservation.open(QIODevice::WriteOnly | QIODevice::NewOnly))
     {
         if (error)
@@ -305,13 +336,19 @@ SubtitleService::writeOutput(Job& job, const QString& srtText, QString* error) c
         {
             QFile::remove(reservation.fileName());
         });
-    if (QFileInfo::exists(job.output) || QFileInfo::exists(job.output + QStringLiteral(".isolde.json")))
+    if (QFileInfo::exists(outputPath) || QFileInfo::exists(outputPath + QStringLiteral(".isolde.json")))
     {
         if (error)
             *error = QStringLiteral("A subtitle already exists at the selected output path; no file was overwritten.");
         return false;
     }
-    QSaveFile subtitle(job.output);
+    return true;
+}
+
+bool
+SubtitleService::writeSubtitleFile(const QString& outputPath, const QString& srtText, QString* error) const
+{
+    QSaveFile subtitle(outputPath);
     if (!subtitle.open(QIODevice::WriteOnly) || subtitle.write(srtText.toUtf8()) != srtText.toUtf8().size() ||
         !subtitle.commit())
     {
@@ -319,7 +356,13 @@ SubtitleService::writeOutput(Job& job, const QString& srtText, QString* error) c
             *error = QStringLiteral("Could not save the subtitle atomically: %1").arg(subtitle.errorString());
         return false;
     }
-    const auto metadataPath = job.output + QStringLiteral(".isolde.json");
+    return true;
+}
+
+bool
+SubtitleService::writeProvenanceFile(const QString& outputPath, const Job& job, QString* error) const
+{
+    const auto metadataPath = outputPath + QStringLiteral(".isolde.json");
     const QJsonObject provenance{
         {QStringLiteral("format"), 1},
         {QStringLiteral("tool"), job.provenance},
@@ -337,9 +380,32 @@ SubtitleService::writeOutput(Job& job, const QString& srtText, QString* error) c
     const auto bytes = QJsonDocument(provenance).toJson(QJsonDocument::Indented);
     if (!sidecar.open(QIODevice::WriteOnly) || sidecar.write(bytes) != bytes.size() || !sidecar.commit())
     {
-        QFile::remove(job.output);
+        QFile::remove(outputPath);
         if (error)
             *error = QStringLiteral("Could not persist subtitle provenance; generated output was rolled back.");
+        return false;
+    }
+    return true;
+}
+
+bool
+SubtitleService::validateReviewJob(int index) const
+{
+    if (index < 0 || m_jobs.at(index).state != QStringLiteral("Ready for review"))
+    {
+        m_error = QStringLiteral("Only a completed subtitle can be reviewed and edited.");
+        emit changed();
+        return false;
+    }
+    return true;
+}
+
+bool
+SubtitleService::parseReviewSrt(const QString& srtText, QVector<Cue>& cues, QString* error) const
+{
+    if (!parseSrt(srtText, &cues, error))
+    {
+        emit changed();
         return false;
     }
     return true;
@@ -348,40 +414,11 @@ SubtitleService::writeOutput(Job& job, const QString& srtText, QString* error) c
 QVariantMap
 SubtitleService::evaluateQuality(const Job& job, const QVector<Cue>& outputCues) const
 {
-    const bool compareTimestamps = job.mode == QStringLiteral("translate");
-    int emptyCues = 0;
-    for (const auto& cue : outputCues)
-        if (cue.text.trimmed().isEmpty())
-            ++emptyCues;
-
-    int unchangedCues = 0;
-    int shortCues = 0;
-    bool timestampsPreserved = compareTimestamps && job.cues.size() == outputCues.size();
-    if (compareTimestamps)
-    {
-        const auto count = std::min(job.cues.size(), outputCues.size());
-        for (qsizetype i = 0; i < count; ++i)
-        {
-            if (job.cues.at(i).header != outputCues.at(i).header)
-                timestampsPreserved = false;
-            const auto sourceText = job.cues.at(i).text.simplified();
-            const auto targetText = outputCues.at(i).text.simplified();
-            if (!sourceText.isEmpty() && sourceText.compare(targetText, Qt::CaseInsensitive) == 0)
-                ++unchangedCues;
-            if (sourceText.size() >= 8 && targetText.size() < 3)
-                ++shortCues;
-        }
-    }
-
-    QStringList warnings;
-    if (emptyCues)
-        warnings.append(QStringLiteral("empty-cues"));
-    if (compareTimestamps && !timestampsPreserved)
-        warnings.append(QStringLiteral("cue-timing-or-count-changed"));
-    if (unchangedCues)
-        warnings.append(QStringLiteral("possible-untranslated-cues"));
-    if (shortCues)
-        warnings.append(QStringLiteral("suspiciously-short-cues"));
+    const auto compareTimestamps = job.mode == QStringLiteral("translate");
+    const auto emptyCues = countEmptyCues(outputCues);
+    const auto [unchangedCues, shortCues] = countUnchangedAndShortCues(job, outputCues);
+    const bool timestampsPreserved = compareTimestamps ? countMatchingTimestamps(job.cues, outputCues) == job.cues.size() && job.cues.size() == outputCues.size() : false;
+    const auto warnings = buildQualityWarnings(compareTimestamps, emptyCues, unchangedCues, shortCues);
     const auto unchangedPercent =
         job.mode == QStringLiteral("translate") && !job.cues.isEmpty() ? unchangedCues * 100 / job.cues.size() : 0;
     return {{QStringLiteral("assessment"),
@@ -401,6 +438,54 @@ SubtitleService::evaluateQuality(const Job& job, const QVector<Cue>& outputCues)
              : timestampsPreserved ? QStringLiteral("passed")
                                    : QStringLiteral("failed")},
             {QStringLiteral("warnings"), warnings}};
+}
+
+int
+SubtitleService::countEmptyCues(const QVector<Cue>& outputCues) const
+{
+    int count = 0;
+    for (const auto& cue : outputCues)
+        if (cue.text.trimmed().isEmpty())
+            ++count;
+    return count;
+}
+
+std::pair<int, int>
+SubtitleService::countUnchangedAndShortCues(const Job& job, const QVector<Cue>& outputCues) const
+{
+    int unchangedCues = 0;
+    int shortCues = 0;
+    if (job.mode == QStringLiteral("translate") && job.cues.size() == outputCues.size())
+    {
+        const auto count = std::min(job.cues.size(), outputCues.size());
+        for (qsizetype i = 0; i < count; ++i)
+        {
+            if (job.cues.at(i).header != outputCues.at(i).header)
+                continue;
+            const auto sourceText = job.cues.at(i).text.simplified();
+            const auto targetText = outputCues.at(i).text.simplified();
+            if (!sourceText.isEmpty() && sourceText.compare(targetText, Qt::CaseInsensitive) == 0)
+                ++unchangedCues;
+            if (sourceText.size() >= 8 && targetText.size() < 3)
+                ++shortCues;
+        }
+    }
+    return {unchangedCues, shortCues};
+}
+
+QStringList
+SubtitleService::buildQualityWarnings(bool compareTimestamps, int emptyCues, int unchangedCues, int shortCues) const
+{
+    QStringList warnings;
+    if (emptyCues)
+        warnings.append(QStringLiteral("empty-cues"));
+    if (compareTimestamps && unchangedCues == 0)
+        warnings.append(QStringLiteral("cue-timing-or-count-changed"));
+    if (unchangedCues)
+        warnings.append(QStringLiteral("possible-untranslated-cues"));
+    if (shortCues)
+        warnings.append(QStringLiteral("suspiciously-short-cues"));
+    return warnings;
 }
 
 QString
@@ -620,6 +705,7 @@ SubtitleService::startGeneration()
 }
 
 void
+void
 SubtitleService::processFinished(int exitCode, QProcess::ExitStatus exitStatus)
 {
     m_processTimeout.stop();
@@ -628,6 +714,21 @@ SubtitleService::processFinished(int exitCode, QProcess::ExitStatus exitStatus)
     auto& job = m_jobs[m_active];
     const bool timedOut = m_timeoutPending;
     m_timeoutPending = false;
+    if (handleCancelledOrTimedOut(job, timedOut))
+        return;
+    if (handleProcessExitStatus(job, exitStatus, exitCode))
+        return;
+    if (job.mode == QStringLiteral("translate"))
+    {
+        handleTranslateCompleted(job, m_process.readAllStandardOutput());
+        return;
+    }
+    handleWhisperCompleted(job);
+}
+
+bool
+SubtitleService::handleCancelledOrTimedOut(Job& job, bool timedOut)
+{
     if (job.cancelled || m_killPending)
     {
         m_killPending = false;
@@ -640,42 +741,55 @@ SubtitleService::processFinished(int exitCode, QProcess::ExitStatus exitStatus)
         m_status = QStringLiteral("Subtitle job cancelled. Completed outputs were retained.");
         emit changed();
         startNext();
-        return;
+        return true;
     }
     if (timedOut)
     {
         failCurrent(QStringLiteral("Local subtitle tool timed out; source and completed outputs were left unchanged."));
-        return;
+        return true;
     }
+    return false;
+}
+
+bool
+SubtitleService::handleProcessExitStatus(Job& job, QProcess::ExitStatus exitStatus, int exitCode)
+{
     if (exitStatus != QProcess::NormalExit || exitCode != 0)
     {
         failCurrent(QStringLiteral("Local subtitle tool returned exit code %1: %2")
                         .arg(exitCode)
                         .arg(safeError(QString::fromUtf8(m_process.readAllStandardError()))));
-        return;
+        return true;
     }
-    if (job.mode == QStringLiteral("translate"))
+    return false;
+}
+
+void
+SubtitleService::handleTranslateCompleted(Job& job, const QString& stdoutText)
+{
+    auto text = QString::fromUtf8(stdoutText);
+    while (text.endsWith(QLatin1Char('\n')) || text.endsWith(QLatin1Char('\r')))
+        text.chop(1);
+    if (text.isEmpty() || text.toUtf8().size() > MaxCueTextBytes)
     {
-        auto text = QString::fromUtf8(m_process.readAllStandardOutput());
-        while (text.endsWith(QLatin1Char('\n')) || text.endsWith(QLatin1Char('\r')))
-            text.chop(1);
-        if (text.isEmpty() || text.toUtf8().size() > MaxCueTextBytes)
-        {
-            failCurrent(QStringLiteral("Local translation returned an empty or oversized cue."));
-            return;
-        }
-        job.translatedBytes += text.toUtf8().size();
-        if (job.translatedBytes > MaxSubtitleBytes)
-        {
-            failCurrent(QStringLiteral("Local translation exceeded the 8 MiB subtitle output limit."));
-            return;
-        }
-        job.translatedCues.append(text);
-        ++job.nextCue;
-        startTranslationCue();
-        emit changed();
+        failCurrent(QStringLiteral("Local translation returned an empty or oversized cue."));
         return;
     }
+    job.translatedBytes += text.toUtf8().size();
+    if (job.translatedBytes > MaxSubtitleBytes)
+    {
+        failCurrent(QStringLiteral("Local translation exceeded the 8 MiB subtitle output limit."));
+        return;
+    }
+    job.translatedCues.append(text);
+    ++job.nextCue;
+    startTranslationCue();
+    emit changed();
+}
+
+void
+SubtitleService::handleWhisperCompleted(Job& job)
+{
     const auto stagedPath =
         QDir(job.stagingDirectory).filePath(QFileInfo(job.source).completeBaseName() + QStringLiteral(".srt"));
     QFile generated(stagedPath);
@@ -850,14 +964,10 @@ bool
 SubtitleService::saveReview(const QString& jobId, const QString& srtText)
 {
     const int index = jobIndex(jobId);
-    if (index < 0 || m_jobs.at(index).state != QStringLiteral("Ready for review"))
-    {
-        m_error = QStringLiteral("Only a completed subtitle can be reviewed and edited.");
-        emit changed();
+    if (!validateReviewJob(index))
         return false;
-    }
     QVector<Cue> cues;
-    if (!parseSrt(srtText, &cues, &m_error))
+    if (!parseReviewSrt(srtText, cues, &m_error))
     {
         emit changed();
         return false;
@@ -893,18 +1003,17 @@ SubtitleService::saveReview(const QString& jobId, const QString& srtText)
     auto reviewQuality = evaluateQuality(reviewJob, cues);
     reviewQuality.insert(QStringLiteral("reviewedByUser"), true);
     m_jobs[index].qualityReport = reviewQuality;
-    auto provenance = provenanceDocument.object();
-    provenance.insert(QStringLiteral("reviewedAt"), QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs));
-    provenance.insert(QStringLiteral("qualityReport"), QJsonObject::fromVariantMap(reviewQuality));
-    QSaveFile file(m_jobs[index].output);
-    const auto bytes = srtText.toUtf8();
-    if (!file.open(QIODevice::WriteOnly) || file.write(bytes) != bytes.size() || !file.commit())
+    QJsonDocument provenanceDocument = QJsonDocument::fromJson(provenanceFile.readAll(), &provenanceError);
+    provenanceFile.close();
+    if (provenanceError.error != QJsonParseError::NoError || !provenanceDocument.isObject())
     {
-        m_jobs[index].qualityReport = previousQuality;
-        m_error = QStringLiteral("Could not save subtitle edits atomically: %1").arg(file.errorString());
+        m_error = QStringLiteral("Subtitle provenance is invalid; the reviewed output was not changed.");
         emit changed();
         return false;
     }
+    auto provenance = provenanceDocument.object();
+    provenance.insert(QStringLiteral("reviewedAt"), QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs));
+    provenance.insert(QStringLiteral("qualityReport"), QJsonObject::fromVariantMap(reviewQuality));
     const auto provenanceBytes = QJsonDocument(provenance).toJson(QJsonDocument::Indented);
     QSaveFile updatedProvenance(m_jobs[index].output + QStringLiteral(".isolde.json"));
     if (!updatedProvenance.open(QIODevice::WriteOnly) ||
@@ -915,8 +1024,8 @@ SubtitleService::saveReview(const QString& jobId, const QString& srtText)
                               rollback.write(originalBytes) == originalBytes.size() && rollback.commit();
         m_error = restored ? QStringLiteral("Could not persist review provenance; subtitle edits were rolled back.")
                            : QStringLiteral(
-                                 "Could not persist review provenance or restore the original subtitle. "
-                                 "Check storage before using this file.");
+                               "Could not persist review provenance or restore the original subtitle. "
+                               "Check storage before using this file.");
         m_jobs[index].qualityReport = previousQuality;
         emit changed();
         return false;

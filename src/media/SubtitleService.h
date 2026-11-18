@@ -122,8 +122,36 @@ class SubtitleService final : public QObject
     finishCurrent(const QString& srtText);
     void
     cleanStaging(const Job& job) const;
+    bool
+    validateReviewJob(int index) const;
+    bool
+    parseReviewSrt(const QString& srtText, QVector<Cue>& cues, QString* error) const;
     void
     finishLanguagePackProcess(int exitCode, QProcess::ExitStatus exitStatus);
+    bool
+    handleCancelledOrTimedOut(Job& job, bool timedOut);
+    bool
+    handleProcessExitStatus(Job& job, QProcess::ExitStatus exitStatus, int exitCode);
+    void
+    handleTranslateCompleted(Job& job, const QString& stdoutText);
+    void
+    handleWhisperCompleted(Job& job);
+    bool
+    validateOutputPath(const QString& outputPath, QString* error) const;
+    bool
+    createOutputDirectory(const QString& outputPath, QString* error) const;
+    bool
+    reserveOutputPath(const QString& outputPath, QString* error) const;
+    bool
+    writeSubtitleFile(const QString& outputPath, const QString& srtText, QString* error) const;
+    bool
+    writeProvenanceFile(const QString& outputPath, const Job& job, QString* error) const;
+    int
+    countEmptyCues(const QVector<Cue>& outputCues) const;
+    std::pair<int, int>
+    countUnchangedAndShortCues(const Job& job, const QVector<Cue>& outputCues) const;
+    QStringList
+    buildQualityWarnings(bool compareTimestamps, int emptyCues, int unchangedCues, int shortCues) const;
 
     QString m_cacheRoot, m_pythonExecutable;
     QString m_status = QStringLiteral("Offline subtitle tools are idle."), m_error;
