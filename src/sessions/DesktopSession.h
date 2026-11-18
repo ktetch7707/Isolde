@@ -32,6 +32,8 @@ class DesktopSession final : public AppSession
                              QStringList& launchArguments);
     bool
     applyContainmentTimers(const QString& containmentMode);
+    bool
+    prepareLaunch(QJsonObject& resolvedLaunch, QStringList& launchArguments);
 
   private:
     bool

@@ -387,36 +387,12 @@ DesktopSession::launch()
 {
     auto environment = desktopEnvironment();
     const auto desktopId = definition().launchConfiguration.value(QStringLiteral("desktopId")).toString();
-    const auto launch = resolveDesktopLaunch(desktopId, environment);
-    if (!launch.error.isEmpty())
-    {
-        setError(launch.error);
-        qWarning() << "Desktop bridge refused to launch" << definition().id << launch.error;
-        setState(State::Exited);
-        return;
-    }
-    auto resolvedLaunch = launch;
-    const auto steamGame = definition().launchConfiguration.value("steamGameId").toString();
-    const auto managedGame = definition().launchConfiguration.value("managedGameExecutable").toString();
-    const auto configuration = definition().launchConfiguration;
-    auto sandbox = NativeSandbox::prepare(qApp->property("isoldeProfile").toString(),
-                                          definition().id,
-                                          resolvedLaunch.program,
-                                          environment,
-                                          configuration.value("actionTarget").toString(),
-                                          {},
-                                          definition().launchConfiguration.value("emulatorRuntime").toString(),
-                                          definition().launchConfiguration.value("gameSourceRoot").toString(),
-                                          steamGame,
-                                          definition().launchConfiguration.value("managedGameRoot").toString(),
-                                          definition().launchConfiguration.value("opticalMediaId").toString(),
-                                          definition().launchConfiguration.value("opticalObservationId").toString());
+    QJsonObject resolvedLaunch;
     QStringList launchArguments;
-    if (!applyLaunchConfiguration(configuration, steamGame, managedGame, resolvedLaunch, sandbox,
-                                  launchArguments))
+    if (!prepareLaunch(desktopId, environment, resolvedLaunch, launchArguments))
         return;
     qInfo() << "Isolated native session launching" << definition().id << "profile" << qApp->property("isoldeProfile");
-    m_launcher.setArguments(launchArguments + resolvedLaunch.arguments);
+    m_launcher.setArguments(resolvedLaunch.arguments);
     connect(&m_launcher, &QProcess::readyReadStandardError, this, &DesktopSession::readDiagnostics);
     connect(&m_launcher,
             &QProcess::readyReadStandardOutput,
@@ -451,6 +427,40 @@ DesktopSession::launch()
         setState(State::Running);
     if (!applyContainmentTimers(definition().launchConfiguration.value(QStringLiteral("containment")).toString()))
         return;
+}
+
+bool
+DesktopSession::prepareLaunch(const QString& desktopId, const QProcessEnvironment& environment,
+                              QJsonObject& resolvedLaunch, QStringList& launchArguments)
+{
+    const auto launch = resolveDesktopLaunch(desktopId, environment);
+    if (!launch.error.isEmpty())
+    {
+        setError(launch.error);
+        qWarning() << "Desktop bridge refused to launch" << definition().id << launch.error;
+        setState(State::Exited);
+        return false;
+    }
+    resolvedLaunch = launch;
+    const auto steamGame = definition().launchConfiguration.value("steamGameId").toString();
+    const auto managedGame = definition().launchConfiguration.value("managedGameExecutable").toString();
+    const auto configuration = definition().launchConfiguration;
+    auto sandbox = NativeSandbox::prepare(qApp->property("isoldeProfile").toString(),
+                                          definition().id,
+                                          resolvedLaunch.program,
+                                          environment,
+                                          configuration.value("actionTarget").toString(),
+                                          {},
+                                          definition().launchConfiguration.value("emulatorRuntime").toString(),
+                                          definition().launchConfiguration.value("gameSourceRoot").toString(),
+                                          steamGame,
+                                          definition().launchConfiguration.value("managedGameRoot").toString(),
+                                          definition().launchConfiguration.value("opticalMediaId").toString(),
+                                          definition().launchConfiguration.value("opticalObservationId").toString());
+    if (!applyLaunchConfiguration(configuration, steamGame, managedGame, resolvedLaunch, sandbox,
+                                  launchArguments))
+        return false;
+    return true;
 }
 
 bool
