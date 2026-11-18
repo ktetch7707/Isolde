@@ -67,17 +67,32 @@ validRule(const QVariantMap& v, int depth, int& count)
         return false;
     const auto op = v.value("op").toString();
     if (op == "all" || op == "any" || op == "not")
-    {
-        if (!keys(v, {"op", "rules"}) || v.value("rules").metaType().id() != QMetaType::QVariantList)
-            return false;
-        const auto children = v.value("rules").toList();
-        if (children.isEmpty() || children.size() > 32 || (op == "not" && children.size() != 1))
-            return false;
-        for (const auto& child : children)
-            if (child.metaType().id() != QMetaType::QVariantMap || !validRule(child.toMap(), depth + 1, count))
-                return false;
+        return validateCompoundRule(v, depth, count);
     return true;
 }
+
+bool
+validateCompoundRule(const QVariantMap& v, int depth, int& count)
+{
+    if (!keys(v, {"op", "rules"}) || v.value("rules").metaType().id() != QMetaType::QVariantList)
+        return false;
+    const auto children = v.value("rules").toList();
+    if (children.isEmpty() || children.size() > 32)
+        return false;
+    const auto op = v.value("op").toString();
+    if (op == "not" && children.size() != 1)
+        return false;
+    for (const auto& child : children)
+        if (child.metaType().id() != QMetaType::QVariantMap || !validRule(child.toMap(), depth + 1, count))
+            return false;
+    return true;
+}
+
+bool
+validateScheduleBlock(const QVariantMap& b, QString* error);
+bool
+scheduleBlocksOverlap(const QVariantMap& bi, const QVariantMap& bj, const QSet<int>& daysSetI,
+                      const QSet<int>& daysSetJ, QString* error);
 
 bool
 GuideRules::validateChannelScheduleBlocks(const QVariantList& blocks, QString* error)
@@ -87,33 +102,9 @@ GuideRules::validateChannelScheduleBlocks(const QVariantList& blocks, QString* e
     QList<QVariantMap> parsed;
     for (const auto& block : blocks)
     {
-        const auto b = block.toMap();
-        if (block.metaType().id() != QMetaType::QVariantMap ||
-            !keys(b, {"name", "days", "startMinute", "endMinute", "fromDate", "toDate", "rule"}) ||
-            !text(b.value("name"), 80) || !integer(b.value("startMinute"), 0, 1439) ||
-            !integer(b.value("endMinute"), 1, 1440) ||
-            b.value("startMinute").toInt() >= b.value("endMinute").toInt() ||
-            b.value("days").metaType().id() != QMetaType::QVariantList || b.value("days").toList().isEmpty() ||
-            b.value("days").toList().size() > 7 || b.value("rule").metaType().id() != QMetaType::QVariantMap ||
-            guideRule(b.value("rule").toMap()).isEmpty())
-            return reject(error, "Calendar blocks need a name, weekdays, increasing times and matching rules.");
-        QSet<int> days;
-        for (const auto& day : b.value("days").toList())
-        {
-            if (!integer(day, 1, 7) || days.contains(day.toInt()))
-                return reject(error, "Choose unique weekdays, Monday 1 through Sunday 7.");
-            days.insert(day.toInt());
-        }
-        for (const auto& key : QStringList{"fromDate", "toDate"})
-            if (b.contains(key) &&
-                (!text(b.value(key), 10) ||
-                 QDate::fromString(b.value(key).toString(), Qt::ISODate).toString(Qt::ISODate) !=
-                     b.value(key).toString()))
-                return reject(error, "Use calendar dates in YYYY-MM-DD form.");
-        if (b.contains("fromDate") && b.contains("toDate") &&
-            b.value("fromDate").toString() > b.value("toDate").toString())
-            return reject(error, "The last calendar date precedes the first.");
-        parsed.append(b);
+        if (!validateScheduleBlock(block.toMap(), error))
+            return false;
+        parsed.append(block.toMap());
     }
     for (int i = 0; i < parsed.size(); ++i)
     {
@@ -128,23 +119,60 @@ GuideRules::validateChannelScheduleBlocks(const QVariantList& blocks, QString* e
             QSet<int> daysSetJ;
             for (const auto& day : bj.value("days").toList())
                 daysSetJ.insert(day.toInt());
-            bool shared = false;
-            for (const auto& day : daysI)
-                if (daysSetJ.contains(day.toInt()))
-                    shared = true;
-            if (shared && bi.value("startMinute").toInt() < bj.value("endMinute").toInt() &&
-                bi.value("endMinute").toInt() > bj.value("startMinute").toInt() &&
-                bi.value("fromDate", "0001-01-01").toString() <=
-                    bj.value("toDate", "9999-12-31").toString() &&
-                bj.value("fromDate", "0001-01-01").toString() <= bi.value("toDate", "9999-12-31").toString())
-                return reject(error, "Calendar blocks overlap. Choose different times, days or dates.");
+            if (scheduleBlocksOverlap(bi, bj, daysSetI, daysSetJ, error))
+                return false;
         }
     }
     return true;
 }
-    return validateRuleLeaf(v, op);
+
+bool
+validateScheduleBlock(const QVariantMap& b, QString* error)
+{
+    if (b.metaType().id() != QMetaType::QVariantMap ||
+        !keys(b, {"name", "days", "startMinute", "endMinute", "fromDate", "toDate", "rule"}) ||
+        !text(b.value("name"), 80) || !integer(b.value("startMinute"), 0, 1439) ||
+        !integer(b.value("endMinute"), 1, 1440) ||
+        b.value("startMinute").toInt() >= b.value("endMinute").toInt() ||
+        b.value("days").metaType().id() != QMetaType::QVariantList || b.value("days").toList().isEmpty() ||
+        b.value("days").toList().size() > 7 || b.value("rule").metaType().id() != QMetaType::QVariantMap ||
+        guideRule(b.value("rule").toMap()).isEmpty())
+        return reject(error, "Calendar blocks need a name, weekdays, increasing times and matching rules.");
+    QSet<int> days;
+    for (const auto& day : b.value("days").toList())
+    {
+        if (!integer(day, 1, 7) || days.contains(day.toInt()))
+            return reject(error, "Choose unique weekdays, Monday 1 through Sunday 7.");
+        days.insert(day.toInt());
+    }
+    for (const auto& key : QStringList{"fromDate", "toDate"})
+        if (b.contains(key) &&
+            (!text(b.value(key), 10) ||
+             QDate::fromString(b.value(key).toString(), Qt::ISODate).toString(Qt::ISODate) !=
+                 b.value(key).toString()))
+            return reject(error, "Use calendar dates in YYYY-MM-DD form.");
+    if (b.contains("fromDate") && b.contains("toDate") &&
+        b.value("fromDate").toString() > b.value("toDate").toString())
+        return reject(error, "The last calendar date precedes the first.");
+    return true;
 }
 
+bool
+scheduleBlocksOverlap(const QVariantMap& bi, const QVariantMap& bj, const QSet<int>& daysSetI,
+                      const QSet<int>& daysSetJ, QString* error)
+{
+    bool shared = false;
+    for (const auto& day : bi.value("days").toList())
+        if (daysSetJ.contains(day.toInt()))
+            shared = true;
+    if (shared && bi.value("startMinute").toInt() < bj.value("endMinute").toInt() &&
+        bi.value("endMinute").toInt() > bj.value("startMinute").toInt() &&
+        bi.value("fromDate", "0001-01-01").toString() <=
+            bj.value("toDate", "9999-12-31").toString() &&
+        bj.value("fromDate", "0001-01-01").toString() <= bi.value("toDate", "9999-12-31").toString())
+        return reject(error, "Calendar blocks overlap. Choose different times, days or dates.");
+    return false;
+}
 
 bool
 validateRuleLeaf(const QVariantMap& v, const QString& op)
@@ -214,6 +242,56 @@ validateRuleLeafValue(const QVariant& value, bool numeric, const QString& op)
         return op == "before" || op == "after";
     return op == "contains" || op == "does-not-contain" || op == "starts-with";
 }
+
+bool
+validateNumericMatch(const QVariant& actual, const QVariant& expected, const QString& op)
+{
+    bool ok = false;
+    const auto n = actual.toDouble(&ok);
+    if (!ok || !std::isfinite(n))
+        return false;
+    if (op == "is")
+        return n == expected.toDouble();
+    if (op == "is-not")
+        return n != expected.toDouble();
+    if (op == "before")
+        return n < expected.toDouble();
+    if (op == "after")
+        return n > expected.toDouble();
+    if (op == "in-range")
+    {
+        const auto range = expected.toList();
+        return n >= range[0].toDouble() && n <= range[1].toDouble();
+    }
+    if (op == "one-of")
+    {
+        for (const auto& v : expected.toList())
+            if (n == v.toDouble())
+                return true;
+        return false;
+    }
+    return false;
+}
+
+bool
+validateStringMatch(const QStringList& values, const QString& target, const QString& op)
+{
+    bool found = false;
+    for (const auto& value : values)
+    {
+        if (op == "is" || op == "is-not")
+            found |= value.compare(target, Qt::CaseInsensitive) == 0;
+        else if (op == "contains" || op == "does-not-contain")
+            found |= value.contains(target, Qt::CaseInsensitive);
+        else if (op == "starts-with")
+            found |= value.startsWith(target, Qt::CaseInsensitive);
+        else if (op == "one-of")
+            for (const auto& v : target.split(','))
+                found |= value.compare(v.trimmed(), Qt::CaseInsensitive) == 0;
+    }
+    return op == "is-not" || op == "does-not-contain" ? !found : found;
+}
+
 } // namespace
 
 QVariantMap
@@ -410,36 +488,14 @@ GuideRules::calendarWindow(const QVariantMap& definition, qint64 utc)
 }
 
 bool
+matchCompoundRule(const QVariantMap& rule, const QVariantMap& metadata);
+
+bool
 GuideRules::matches(const QVariantMap& rule, const QVariantMap& metadata)
 {
     const auto op = rule.value("op").toString();
     if (op == "all" || op == "any" || op == "not")
-    {
-        const auto children = rule.value("rules").toList();
-        if (children.isEmpty())
-            return false;
-        if (op == "not")
-            return !matches(children.first().toMap(), metadata);
-        for (const auto& child : children)
-        {
-            const bool match = matches(child.toMap(), metadata);
-            if (op == "all" && !match)
-                return false;
-            if (op == "any" && match)
-    return true;
-}
-
-bool
-GuideRules::validateScheduleRules(const QVariantMap& policy, QString* error)
-{
-    for (const auto& key : QStringList{"fillerRule", "bumperRule"})
-        if (policy.contains(key) && (policy.value(key).metaType().id() != QMetaType::QVariantMap ||
-                                     guideRule(policy.value(key).toMap()).isEmpty()))
-            return reject(error, "Choose valid filler and bumper rules.");
-    return true;
-}
-        return op == "all";
-    }
+        return matchCompoundRule(rule, metadata);
     const auto field = rule.value("field").toString();
     const auto actual = metadata.value(field);
     const bool absent =
@@ -452,42 +508,7 @@ GuideRules::validateScheduleRules(const QVariantMap& policy, QString* error)
         return false;
     const auto expected = rule.value("value");
     if (numericField(field))
-    {
-        bool ok = false;
-        const auto n = actual.toDouble(&ok);
-        if (!ok || !std::isfinite(n))
-            return false;
-        if (op == "is")
-            return n == expected.toDouble();
-        if (op == "is-not")
-            return n != expected.toDouble();
-        if (op == "before")
-            return n < expected.toDouble();
-        if (op == "after")
-            return n > expected.toDouble();
-        if (op == "in-range")
-        {
-            const auto range = expected.toList();
-            return n >= range[0].toDouble() && n <= range[1].toDouble();
-        }
-        if (op == "one-of")
-        {
-            for (const auto& v : expected.toList())
-                if (n == v.toDouble())
-    return true;
-}
-
-bool
-GuideRules::validateSchedulePolicy(const QVariantMap& policy, QString* error)
-{
-    if (policy.metaType().id() != QMetaType::QVariantMap ||
-        !keys(policy, {"blocks", "cooldownSeconds", "fillerRule", "bumperRule"}) ||
-        (policy.contains("cooldownSeconds") && !integer(policy.value("cooldownSeconds"), 0, 7 * 86400)))
-        return reject(error, "Invalid bounded channel scheduling policy.");
-    return true;
-}
-        return false;
-    }
+        return validateNumericMatch(actual, expected, op);
     QStringList values;
     if (actual.metaType().id() == QMetaType::QStringList)
         values = actual.toStringList();
@@ -496,22 +517,40 @@ GuideRules::validateSchedulePolicy(const QVariantMap& policy, QString* error)
             values.append(v.toString());
     else
         values.append(actual.toString());
-    bool found = false;
-    for (const auto& value : values)
-    {
-        const auto target = expected.toString();
-        if (op == "is" || op == "is-not")
-            found |= value.compare(target, Qt::CaseInsensitive) == 0;
-        else if (op == "contains" || op == "does-not-contain")
-            found |= value.contains(target, Qt::CaseInsensitive);
-        else if (op == "starts-with")
-            found |= value.startsWith(target, Qt::CaseInsensitive);
-        else if (op == "one-of")
-            for (const auto& v : expected.toList())
-                found |= value.compare(v.toString(), Qt::CaseInsensitive) == 0;
-    }
-    return op == "is-not" || op == "does-not-contain" ? !found : found;
+    return validateStringMatch(values, expected.toString(), op);
 }
+
+bool
+matchCompoundRule(const QVariantMap& rule, const QVariantMap& metadata)
+{
+    const auto children = rule.value("rules").toList();
+    if (children.isEmpty())
+        return false;
+    const auto op = rule.value("op").toString();
+    if (op == "not")
+        return !matches(children.first().toMap(), metadata);
+    bool anyMatch = false;
+    for (const auto& child : children)
+    {
+        const bool match = matches(child.toMap(), metadata);
+        if (op == "all" && !match)
+            return false;
+        if (op == "any" && match)
+            anyMatch = true;
+    }
+    return op == "all" || anyMatch;
+}
+
+bool
+GuideRules::validateScheduleRules(const QVariantMap& policy, QString* error)
+{
+    for (const auto& key : QStringList{"fillerRule", "bumperRule"})
+        if (policy.contains(key) && (policy.value(key).metaType().id() != QMetaType::QVariantMap ||
+                                     guideRule(policy.value(key).toMap()).isEmpty()))
+            return reject(error, "Choose valid filler and bumper rules.");
+    return true;
+}
+
 
 bool
 GuideRules::validateChannelSchedule(const QVariantMap& v, QString* error)

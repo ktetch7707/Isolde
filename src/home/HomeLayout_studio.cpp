@@ -30,127 +30,69 @@ HomeLayout::studioOptions() const
     m_optionsBytes = bytes;
     m_optionsCache.clear();
     const auto object = QJsonDocument::fromJson(bytes).object();
-    if (!validateStudioSettings(object))
+    QVariantMap guide;
+    if (!validateStudioDefaults(object, guide))
         return {};
-    auto guide = object.contains("guide") ? ComponentSchema::guideOptions(object["guide"].toObject().toVariantMap())
-                                          : QVariantMap();
-    if (object.contains("guide") && guide.isEmpty())
+    QVariantMap result = object.toVariantMap();
+    if (!finalizeStudioOptions(result, guide))
         return {};
-    if (!validateStudioHeaderDefaults(object.value("headerDefaults").toObject()))
-        return {};
-    if (!validateStudioAppPicker(object.value("appPicker").toObject()))
-        return {};
-    if (!validateStudioDesktop(object.value("desktop").toObject()))
-        return {};
-    if (!validateStudioThemeGroups(simple["themeGroups"].toArray()))
-        return {};
-    if (!validateStudioSchemes(simple["schemes"].toArray()))
-        return {};
-    if (!validateStudioStylePresets(simple["stylePresets"].toArray()))
-        return {};
-    if (!validateStudioTrialDurations(object["trialDurations"].toArray()))
-        return {};
-    if (!validateStudioMenuWidth(object["menuWidth"]))
-        return {};
-    if (!validateStudioSectionHeight(object["sectionHeight"]))
-        return {};
-    if (!validateStudioWidgetSpans(object.value("widgetSpans").toObject()))
-        return {};
-    if (!validateStudioCatalog(object["catalog"].toArray(), presets))
-        return {};
-    if (!validateStudioActions(object["actions"].toArray()))
-        return {};
-    if (!validateStudioActionCategories(object["actionCategories"].toArray()))
-        return {};
-    if (!validateStudioGridModes(object["gridModes"].toArray(), object["defaultGrid"].toObject()))
-        return {};
-    const QStringList overlayKeys{"surface", "overlayWidth", "overlayHeight", "overlayRows", "overlayPosition"};
-    if (!validateStudioOverlayKeys(overlayKeys, {}))
-        return {};
+    result["maxScrollableRows"] = ComponentSchema::MaxScrollableRows;
+    m_optionsCache = result;
+    return m_optionsCache;
+}
+
+
+bool
+HomeLayout::validateStudioPanelPreset(const QJsonObject& object) const
+{
     const auto group = ComponentSchema::component(object["groupPreset"].toObject().toVariantMap(), true);
     if (group.isEmpty() || group.value("componentType") != "container")
-        return {};
+        return false;
     if (!panel["children"].isArray() || panel["children"].toArray().size() > 32)
-        return {};
+        return false;
     QJsonArray panelItems;
     const auto panelRoot = ComponentSchema::component(panel["root"].toObject().toVariantMap(), true);
     if (panelRoot.isEmpty() || panelRoot.value("componentType") != "container")
-        return {};
+        return false;
     panelItems.append(QJsonObject::fromVariantMap(panelRoot));
     for (const auto& entry : panel["children"].toArray())
     {
         const auto child = ComponentSchema::component(entry.toObject().toVariantMap(), true);
         if (child.isEmpty())
-            return {};
+            return false;
         panelItems.append(QJsonObject::fromVariantMap(child));
     }
     if (!ComponentSchema::hierarchyFits(
             panelItems,
             {{"schemaVersion", 1}, {"enabled", true}, {"grid", object["defaultGrid"].toObject().toVariantMap()}},
             {}))
-        return {};
-    const auto presets = object["componentPresets"].toObject();
-    if (object.contains("componentVariants") && !validateStudioComponentVariants(object, presets))
-        return {};
-    if (!validateStudioPresets(presets))
-        return {};
-    if (!validateStudioShapeChoices(object, presets))
-        return {};
-    if (!validateStudioReplacementChoices(object))
-        return {};
-    if (!validateStudioCatalogIds(object, presets))
-        return {};
-    for (const auto& entry : object["actions"].toArray())
+        return false;
+    return true;
+}
+
+
+bool
+HomeLayout::validateStudioActionsList(const QJsonArray& actions) const
+{
+    for (const auto& entry : actions)
     {
         const auto choice = entry.toObject();
         if (!choice["name"].isString() || choice["name"].toString().trimmed().isEmpty() ||
             choice["name"].toString().size() > 160)
-            return {};
+            return false;
         const auto actionList = choice["actions"].toArray();
         if (actionList.isEmpty() || ComponentSchema::action(actionList.first().toObject().toVariantMap()).isEmpty())
-            return {};
+            return false;
         if (choice.contains("aliases"))
         {
             if (!choice["aliases"].isArray() || choice["aliases"].toArray().size() > 8)
-                return {};
+                return false;
             for (const auto& alias : choice["aliases"].toArray())
                 if (!alias.isString() || alias.toString().size() > 80 || alias.toString().contains(QChar::Null))
-                    return {};
+                    return false;
         }
     }
-    const auto actionCategories = object["actionCategories"].toArray();
-    if (!object["actionCategories"].isArray() || actionCategories.isEmpty() || actionCategories.size() > 12)
-        return {};
-    if (!validateStudioActionCategoryTypes(actionCategories))
-        return {};
-    if (!validateStudioGridModeIds(object["gridModes"].toArray()))
-        return {};
-    const QStringList overlayKeys{"surface", "overlayWidth", "overlayHeight", "overlayRows", "overlayPosition"};
-    if (guide.isEmpty() || std::any_of(overlayKeys.cbegin(),
-                                       overlayKeys.cend(),
-                                       [&guide](const QString& key)
-                                       {
-                                           return !guide.contains(key);
-                                       }))
-    {
-        QFile packaged(":/config/studio-defaults.json");
-        if (!packaged.open(QIODevice::ReadOnly) || packaged.size() > 128 * 1024)
-            return {};
-        const auto defaults = ComponentSchema::guideOptions(
-            QJsonDocument::fromJson(packaged.readAll()).object()["guide"].toObject().toVariantMap());
-        if (defaults.isEmpty())
-            return {};
-        for (auto it = defaults.cbegin(); it != defaults.cend(); ++it)
-            if (!guide.contains(it.key()))
-                guide[it.key()] = it.value();
-    }
-    auto result = object.toVariantMap();
-    if (!applyStudioDefaults(result, guide))
-        return {};
-    result["guide"] = guide;
-    result["maxScrollableRows"] = ComponentSchema::MaxScrollableRows;
-    m_optionsCache = result;
-    return m_optionsCache;
+    return true;
 }
 
 bool
@@ -162,34 +104,50 @@ HomeLayout::validateStudioComponentVariants(const QJsonObject& object, const QJs
     const auto families = variants.toObject();
     for (auto family = families.begin(); family != families.end(); ++family)
     {
-        if (!QStringList{"button", "image", "text"}.contains(family.key()) || !family.value().isArray() ||
-            family.value().toArray().isEmpty() || family.value().toArray().size() > 8)
+        if (!validateStudioVariantFamily(family.key(), family.value().toArray(), presets))
             return false;
-        QSet<QString> variantsSeen;
-        for (const auto& value : family.value().toArray())
-        {
-            const auto variant = value.toObject();
-            const auto id = variant["id"].toString();
-            if (variant.size() != 5 || !variant["id"].isString() || !ComponentSchema::safeId(id) ||
-                variantsSeen.contains(id) || !variant["name"].isString() ||
-                variant["name"].toString().trimmed().isEmpty() || variant["name"].toString().size() > 80 ||
-                !variant["description"].isString() || variant["description"].toString().size() > 160 ||
-                !variant["presentation"].isObject() || !variant["span"].isObject() ||
-                variant["span"].toObject().size() != 2)
-                return false;
-            auto candidate = presets[family.key()].toObject(), style = candidate["presentation"].toObject();
-            const auto changes = variant["presentation"].toObject();
-            for (auto it = changes.begin(); it != changes.end(); ++it)
-                style[it.key()] = it.value();
-            candidate["presentation"] = style;
-            const auto span = variant["span"].toObject();
-            QJsonObject placement{{"x", 0}, {"y", 0}, {"width", span["width"]}, {"height", span["height"]}};
-            candidate["placement"] = placement;
-            if (ComponentSchema::component(candidate.toVariantMap(), true).isEmpty())
-                return false;
-            variantsSeen.insert(id);
-        }
     }
+    return true;
+}
+
+bool
+HomeLayout::validateStudioVariantFamily(const QString& familyKey, const QJsonArray& variants, const QJsonObject& presets) const
+{
+    if (!QStringList{"button", "image", "text"}.contains(familyKey) || !variants.isArray() ||
+        variants.isEmpty() || variants.size() > 8)
+        return false;
+    QSet<QString> variantsSeen;
+    for (const auto& value : variants)
+    {
+        if (!validateStudioVariant(value.toObject(), familyKey, presets, variantsSeen))
+            return false;
+    }
+    return true;
+}
+
+bool
+HomeLayout::validateStudioVariant(const QJsonObject& variant, const QString& familyKey, const QJsonObject& presets,
+                                  QSet<QString>& variantsSeen) const
+{
+    const auto id = variant["id"].toString();
+    if (variant.size() != 5 || !variant["id"].isString() || !ComponentSchema::safeId(id) ||
+        variantsSeen.contains(id) || !variant["name"].isString() ||
+        variant["name"].toString().trimmed().isEmpty() || variant["name"].toString().size() > 80 ||
+        !variant["description"].isString() || variant["description"].toString().size() > 160 ||
+        !variant["presentation"].isObject() || !variant["span"].isObject() ||
+        variant["span"].toObject().size() != 2)
+        return false;
+    auto candidate = presets[familyKey].toObject(), style = candidate["presentation"].toObject();
+    const auto changes = variant["presentation"].toObject();
+    for (auto it = changes.begin(); it != changes.end(); ++it)
+        style[it.key()] = it.value();
+    candidate["presentation"] = style;
+    const auto span = variant["span"].toObject();
+    QJsonObject placement{{"x", 0}, {"y", 0}, {"width", span["width"]}, {"height", span["height"]}};
+    candidate["placement"] = placement;
+    if (ComponentSchema::component(candidate.toVariantMap(), true).isEmpty())
+        return false;
+    variantsSeen.insert(id);
     return true;
 }
 
@@ -306,21 +264,28 @@ HomeLayout::validateStudioActionCategoryTypes(const QJsonArray& categories) cons
                                   "open-disc"};
     for (const auto& value : categories)
     {
-        const auto category = value.toObject();
-        if (category.size() != 2 || !category["name"].isString() || category["name"].toString().trimmed().isEmpty() ||
-            category["name"].toString().size() > 80 || !category["types"].isArray() ||
-            category["types"].toArray().size() > pickerTypes.size())
+        if (!validateStudioActionCategory(value.toObject(), pickerTypes))
             return false;
-        QSet<QString> types;
-        for (const auto& type : category["types"].toArray())
-        {
-            if (!type.isString() || !pickerTypes.contains(type.toString()) || types.contains(type.toString()))
-                return false;
-            types.insert(type.toString());
-        }
     }
     if (!categories.first().toObject()["types"].toArray().isEmpty())
         return false;
+    return true;
+}
+
+bool
+HomeLayout::validateStudioActionCategory(const QJsonObject& category, const QStringList& pickerTypes) const
+{
+    if (category.size() != 2 || !category["name"].isString() || category["name"].toString().trimmed().isEmpty() ||
+        category["name"].toString().size() > 80 || !category["types"].isArray() ||
+        category["types"].toArray().size() > pickerTypes.size())
+        return false;
+    QSet<QString> types;
+    for (const auto& type : category["types"].toArray())
+    {
+        if (!type.isString() || !pickerTypes.contains(type.toString()) || types.contains(type.toString()))
+            return false;
+        types.insert(type.toString());
+    }
     return true;
 }
 
@@ -984,3 +949,85 @@ HomeLayout::validateStudioOverlayKeys(const QVariantArray& overlayKeys, const QV
     Q_UNUSED(guide);
     return true;
 }
+
+bool
+HomeLayout::validateStudioDefaults(QJsonObject& object, QVariantMap& guide) const
+{
+    guide = object.contains("guide") ? ComponentSchema::guideOptions(object["guide"].toObject().toVariantMap())
+                                     : QVariantMap();
+    if (object.contains("guide") && guide.isEmpty())
+        return false;
+    if (!validateStudioHeaderDefaults(object.value("headerDefaults").toObject()))
+        return false;
+    if (!validateStudioAppPicker(object.value("appPicker").toObject()))
+        return false;
+    if (!validateStudioDesktop(object.value("desktop").toObject()))
+        return false;
+    if (!validateStudioThemeGroups(simple["themeGroups"].toArray()))
+        return false;
+    if (!validateStudioSchemes(simple["schemes"].toArray()))
+        return false;
+    if (!validateStudioStylePresets(simple["stylePresets"].toArray()))
+        return false;
+    if (!validateStudioTrialDurations(object["trialDurations"].toArray()))
+        return false;
+    if (!validateStudioMenuWidth(object["menuWidth"]))
+        return false;
+    if (!validateStudioSectionHeight(object["sectionHeight"]))
+        return false;
+    if (!validateStudioWidgetSpans(object.value("widgetSpans").toObject()))
+        return false;
+    const auto presets = object["componentPresets"].toObject();
+    if (!validateStudioCatalog(object["catalog"].toArray(), presets))
+        return false;
+    if (!validateStudioActions(object["actions"].toArray()))
+        return false;
+    if (!validateStudioActionCategories(object["actionCategories"].toArray()))
+        return false;
+    if (!validateStudioGridModes(object["gridModes"].toArray(), object["defaultGrid"].toObject()))
+        return false;
+    if (!validateStudioPanelPreset(object))
+        return false;
+    if (!validateStudioCatalogIds(object, presets))
+        return false;
+    if (!validateStudioActionsList(object["actions"].toArray()))
+        return false;
+    const auto actionCategories = object["actionCategories"].toArray();
+    if (!object["actionCategories"].isArray() || actionCategories.isEmpty() || actionCategories.size() > 12)
+        return false;
+    if (!validateStudioActionCategoryTypes(actionCategories))
+        return false;
+    if (!validateStudioGridModeIds(object["gridModes"].toArray()))
+        return false;
+    const QStringList overlayKeys{"surface", "overlayWidth", "overlayHeight", "overlayRows", "overlayPosition"};
+    if (!validateStudioOverlayKeys(overlayKeys, {}))
+        return false;
+    return true;
+}
+
+bool
+HomeLayout::finalizeStudioOptions(QVariantMap& result, const QVariantMap& guide) const
+{
+    result["guide"] = guide;
+    const QStringList overlayKeys{"surface", "overlayWidth", "overlayHeight", "overlayRows", "overlayPosition"};
+    if (guide.isEmpty() || std::any_of(overlayKeys.cbegin(),
+                                       overlayKeys.cend(),
+                                       [&guide](const QString& key)
+                                       {
+                                           return !guide.contains(key);
+                                       }))
+    {
+        QFile packaged(":/config/studio-defaults.json");
+        if (!packaged.open(QIODevice::ReadOnly) || packaged.size() > 128 * 1024)
+            return false;
+        const auto defaults = ComponentSchema::guideOptions(
+            QJsonDocument::fromJson(packaged.readAll()).object()["guide"].toObject().toVariantMap());
+        if (defaults.isEmpty())
+            return false;
+        for (auto it = defaults.cbegin(); it != defaults.cend(); ++it)
+            if (!guide.contains(it.key()))
+                guide[it.key()] = it.value();
+    }
+    return true;
+}
+

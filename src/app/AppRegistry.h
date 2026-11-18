@@ -46,6 +46,16 @@ class AppRegistry final : public QObject
     resolveConfigPath(const QString& path, const QString& defaultName, const QString& resourceName);
     bool
     loadFromFile(const QString& resolvedPath);
+    bool
+    resolvePackagedIcon(const AppDefinition& app, int role, QIcon& icon);
+    bool
+    resolveAbsolutePathIcon(const QString& name, QIcon& icon);
+    bool
+    resolveThemeIcon(const QString& name, const QStringList& roots, QIcon& icon);
+    bool
+    finalizeIconImage(const QIcon& icon, const QString& packaged, int role, QByteArray& bytes);
+    static bool
+    safeFile(const QString& path);
     QVector<AppDefinition> m_apps;
     QString m_errorString;
 };

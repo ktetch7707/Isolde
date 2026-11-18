@@ -480,17 +480,25 @@ class HomeLayout final : public QObject
     bool
     validateStudioComponentVariants(const QJsonObject& object, const QJsonObject& presets) const;
     bool
+    validateStudioVariantFamily(const QString& familyKey, const QJsonArray& variants, const QJsonObject& presets) const;
+    bool
+    validateStudioVariant(const QJsonObject& variant, const QString& familyKey, const QJsonObject& presets) const;
+    bool
     validateStudioPresets(const QJsonObject& presets) const;
     bool
     validateStudioShapeChoices(const QJsonObject& object, const QJsonObject& presets) const;
     bool
-    validateStudioReplacementChoices(const QJsonObject& object) const;
+    validateStudioPanelPreset(const QJsonObject& object) const;
+    bool
+    validateStudioActionsList(const QJsonArray& actions) const;
     bool
     validateStudioCatalogIds(const QJsonObject& object, const QJsonObject& presets) const;
     bool
     validateStudioCatalogIds(const QJsonObject& object, const QJsonObject& presets) const;
     bool
     validateStudioActionCategoryTypes(const QJsonArray& categories) const;
+    bool
+    validateStudioActionCategory(const QJsonObject& category, const QStringList& pickerTypes) const;
     bool
     validateStudioGridModeIds(const QJsonArray& modes) const;
     bool

@@ -449,22 +449,75 @@ StudioSession::proposeDesign(QJsonObject document,
                              const QString& pageId)
 {
     cancelPreview();
-    if (!editingPermitted())
+    if (!validateProposeInputs(scope, pageId))
         return {};
+    QJsonObject documentCopy = document;
+    if (!normalizeDesignDocument(documentCopy))
+        return {};
+    if (!applyScopeToDocument(documentCopy, scope))
+        return {};
+    if (!validateNonEmptyDocument(documentCopy))
+        return {};
+    // Stage only images referenced by the chosen scope; abandoned previews never import applied assets.
+    bool valid = false;
+    documentCopy = stageDesignArtwork(documentCopy, assets, &valid);
+    if (!valid)
+        return {};
+    QJsonObject candidate = QJsonDocument::fromJson(m_draft).object();
+    if (!resolveDesignDestination(documentCopy, candidate, scope, pageId))
+        return {};
+    const auto bytes = QJsonDocument(candidate).toJson();
+    if (!validDraft(bytes))
+        return {};
+    QVariantList changes = buildDesignChanges(QJsonDocument::fromJson(m_draft).object(), candidate);
+    if (!validatePageLinks(candidate))
+        return {};
+    m_proposed = bytes;
+    m_proposalBaseline = m_draft;
+    m_proposalModel = new HomeLayout(m_live->registry(), this);
+    configureWorker(*m_proposalModel, true);
+    if (!m_proposalModel->loadDocument(bytes, false))
+    {
+        cancelPreview();
+        setError(tr("Could not render the proposed design."));
+        return {};
+    }
+    setError({});
+    emit changed();
+    return {{"valid", true}, {"scope", scope}, {"changes", changes}};
+}
+
+bool
+StudioSession::validateProposeInputs(const QString& scope, const QString& pageId) const
+{
+    if (!editingPermitted())
+        return false;
     if (!currentProfile() || (scope != "page" && scope != "interface") || (m_live->isPage() && scope == "interface"))
     {
         setError(tr("Choose Current page or Whole interface in an active profile."));
-        return {};
+        return false;
     }
+    return true;
+}
+
+bool
+StudioSession::normalizeDesignDocument(QJsonObject& document) const
+{
     HomeLayout normalized(m_live->registry());
     configureWorker(normalized);
     if (!normalized.loadDocument(QJsonDocument(document).toJson(), false))
     {
         setError(normalized.errorString());
-        return {};
+        return false;
     }
     document = QJsonDocument::fromJson(normalized.documentData()).object();
     document.remove("studioAppearance");
+    return true;
+}
+
+bool
+StudioSession::applyScopeToDocument(QJsonObject& document, const QString& scope)
+{
     if (scope == "page")
     {
         const QJsonValue library = document["composition"].toObject().value("designLibrary");
@@ -476,17 +529,24 @@ StudioSession::proposeDesign(QJsonObject document,
             document["composition"] = composition;
         }
     }
+    return true;
+}
+
+bool
+StudioSession::validateNonEmptyDocument(const QJsonObject& document)
+{
     if (document.isEmpty())
     {
         setError(tr("The design has no usable Home page."));
-        return {};
+        return false;
     }
-    // Stage only images referenced by the chosen scope; abandoned previews never import applied assets.
-    bool valid = false;
-    document = stageDesignArtwork(document, assets, &valid);
-    if (!valid)
-        return {};
-    auto candidate = QJsonDocument::fromJson(m_draft).object();
+    return true;
+}
+
+bool
+StudioSession::resolveDesignDestination(QJsonObject& document, QJsonObject& candidate,
+                                        const QString& scope, const QString& pageId)
+{
     if (scope == "page")
     {
         const auto library =
@@ -529,7 +589,7 @@ StudioSession::proposeDesign(QJsonObject document,
             if (!found)
             {
                 setError(tr("The destination page no longer exists."));
-                return {};
+                return false;
             }
             candidate["pages"] = pages;
         }
@@ -540,39 +600,12 @@ StudioSession::proposeDesign(QJsonObject document,
             document["studioAppearance"] = candidate["studioAppearance"];
         candidate = document;
     }
-    const auto bytes = QJsonDocument(candidate).toJson();
-    if (!validDraft(bytes))
-        return {};
-    QSet<QString> destinations;
-    for (const auto& entry : candidate["pages"].toArray())
-        destinations.insert(entry.toObject()["id"].toString());
-    bool linksValid = true;
-    std::function<void(const QJsonValue&)> checkLinks = [&](const QJsonValue& value)
-    {
-        if (value.isArray())
-            for (const auto& entry : value.toArray())
-                checkLinks(entry);
-        else if (value.isObject())
-        {
-            const auto object = value.toObject();
-            if (object["type"] == "open-page" && !destinations.contains(object["pageId"].toString()))
-                linksValid = false;
-            if (object["type"] == "root-page" && candidate["rootPage"].toObject().contains("visible") &&
-                !candidate["rootPage"].toObject()["visible"].toBool())
-                linksValid = false;
-            for (auto it = object.begin(); it != object.end(); ++it)
-                checkLinks(it.value());
-        }
-    };
-    checkLinks(candidate);
-    if (!linksValid)
-    {
-        setError(
-            tr("This scope leaves a missing page destination. Import the whole interface or repair its page links "
-               "first."));
-        return {};
-    }
-    const auto baseline = QJsonDocument::fromJson(m_draft).object();
+    return true;
+}
+
+QVariantMap
+SubtitleService::buildDesignChanges(const QJsonObject& baseline, const QJsonObject& candidate)
+{
     QVariantList changes;
     if (selectedPage(baseline, {}) != selectedPage(candidate, {}) || baseline["rootPage"] != candidate["rootPage"])
         changes.append(QVariantMap{{"name", m_model->rootPageName()}, {"change", "replace"}});
@@ -595,19 +628,41 @@ StudioSession::proposeDesign(QJsonObject document,
     }
     if (baseline["homePageId"] != candidate["homePageId"])
         changes.append(QVariantMap{{"name", tr("Startup page")}, {"change", "replace"}});
-    m_proposed = bytes;
-    m_proposalBaseline = m_draft;
-    m_proposalModel = new HomeLayout(m_live->registry(), this);
-    configureWorker(*m_proposalModel, true);
-    if (!m_proposalModel->loadDocument(bytes, false))
+    return changes;
+}
+
+bool
+StudioSession::validatePageLinks(const QJsonObject& candidate)
+{
+    QSet<QString> destinations;
+    for (const auto& entry : candidate["pages"].toArray())
+        destinations.insert(entry.toObject()["id"].toString());
+    bool linksValid = true;
+    std::function<void(const QJsonValue&)> checkLinks = [&](const QJsonValue& value) {
+        if (value.isArray())
+            for (const auto& entry : value.toArray())
+                checkLinks(entry);
+        else if (value.isObject())
+        {
+            const auto object = value.toObject();
+            if (object["type"] == "open-page" && !destinations.contains(object["pageId"].toString()))
+                linksValid = false;
+            if (object["type"] == "root-page" && candidate["rootPage"].toObject().contains("visible") &&
+                !candidate["rootPage"].toObject()["visible"].toBool())
+                linksValid = false;
+            for (auto it = object.begin(); it != object.end(); ++it)
+                checkLinks(it.value());
+        }
+    };
+    checkLinks(candidate);
+    if (!linksValid)
     {
-        cancelPreview();
-        setError(tr("Could not render the proposed design."));
-        return {};
+        setError(
+            tr("This scope leaves a missing page destination. Import the whole interface or repair its page links "
+               "first."));
+        return false;
     }
-    setError({});
-    emit changed();
-    return {{"valid", true}, {"scope", scope}, {"changes", changes}};
+    return true;
 }
 QVariantMap
 StudioSession::previewImport(const QString& value,

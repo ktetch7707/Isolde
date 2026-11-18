@@ -10,6 +10,9 @@
 #include <QGuiApplication>
 #include <QIcon>
 #include <QImageReader>
+#include <QImage>
+#include <QPixmap>
+#include <QColor>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -54,24 +57,10 @@ appIcon(const AppDefinition& app, int role = 0)
         return {};
     auto name = app.launchConfiguration.value("icon", app.id).toString();
     const auto roots = QStandardPaths::standardLocations(QStandardPaths::GenericDataLocation);
-    const auto safeFile = [&](const QString& path)
-    {
-        const QFileInfo info(path);
-        if (!info.isFile() || info.size() < 1 || info.size() > 1024 * 1024)
-            return false;
-        const auto canonical = info.canonicalFilePath();
-        for (const auto& root : roots)
-        {
-            const auto base = QFileInfo(root).canonicalFilePath();
-            if (!base.isEmpty() && canonical.startsWith(base + "/"))
-                return true;
-        }
-        return false;
-    };
+    const auto desktopName = QRegularExpression("^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$");
     // Desktop entries are app-supplied metadata. Never execute their Exec line
     // while resolving artwork and never accept a remote Icon URL.
     auto desktopId = app.launchConfiguration.value("desktopId").toString();
-    static const QRegularExpression desktopName("^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$");
     QStringList desktopIds{desktopId};
     if (app.id != desktopId)
         desktopIds.append(app.id);
@@ -103,106 +92,23 @@ appIcon(const AppDefinition& app, int role = 0)
     QIcon icon;
     if (QFile::exists(packaged))
     {
-        if (role)
-        {
-            const auto metadata = iconRole(app);
-            const auto relative = metadata["foreground"].toString();
-            if (!QRegularExpression("^foreground/[a-z0-9][a-z0-9-]{0,127}\\.svg$").match(relative).hasMatch())
-                return role == 2 ? QString() : appIcon(app);
-            QFile file(":/config/app-icons/" + relative);
-            if (!file.open(QIODevice::ReadOnly))
-                return {};
-            auto svg = file.read(64 * 1024 + 1);
-            svg.replace("\r\n", "\n");
-            if (svg.size() > 64 * 1024 ||
-                QString::fromLatin1(QCryptographicHash::hash(svg, QCryptographicHash::Sha256).toHex()) !=
-                    metadata["foregroundSha256"].toString())
-                return {};
-            QBuffer buffer(&svg);
-            buffer.open(QIODevice::ReadOnly);
-            QImageReader reader(&buffer, "svg");
-            reader.setScaledSize(QSize(512, 512));
-            auto foreground = reader.read();
-            if (foreground.isNull())
-                return {};
-            if (role == 2)
-            {
-                const QColor ink(metadata["inkColour"].toString());
-                QList<QColor> excluded;
-                if (!ink.isValid() || metadata["inkExclude"].toArray().size() > 4)
-                    return {};
-                for (const auto& value : metadata["inkExclude"].toArray())
-                {
-                    const QColor colour(value.toString());
-                    if (!colour.isValid())
-                        return {};
-                    excluded.append(colour);
-                }
-                foreground = AppArtwork::inkMask(foreground, ink, excluded);
-            }
-            icon = QIcon(QPixmap::fromImage(foreground));
-        }
-        else
-            icon = QIcon(packaged);
+        if (!resolvePackagedIcon(app, role, icon))
+            return {};
     }
     else if (QDir::isAbsolutePath(name))
     {
-        if (!safeFile(name))
+        if (!resolveAbsolutePathIcon(name, icon))
             return {};
-        QImageReader reader(name);
-        const auto size = reader.size();
-        if (!reader.canRead() || size.width() < 1 || size.height() < 1 || size.width() > 4096 || size.height() > 4096)
-            return {};
-        icon = QIcon(name);
     }
     else
     {
         if (!desktopName.match(name).hasMatch())
             return {};
-        icon = QIcon::fromTheme(name);
-        if (icon.isNull())
-            for (const auto& root : roots)
-            {
-                for (const auto& folder : QStringList{"icons/hicolor/256x256/apps/",
-                                                      "icons/hicolor/128x128/apps/",
-                                                      "icons/hicolor/64x64/apps/",
-                                                      "icons/hicolor/48x48/apps/",
-                                                      "icons/hicolor/scalable/apps/",
-                                                      "pixmaps/"})
-                {
-                    for (const auto& extension : QStringList{".png", ".svg", ".xpm"})
-                    {
-                        const auto path = QDir(root).filePath(folder + name + extension);
-                        if (safeFile(path))
-                        {
-                            icon = QIcon(path);
-                            break;
-                        }
-                    }
-                    if (!icon.isNull())
-                        break;
-                }
-                if (!icon.isNull())
-                    break;
-            }
-    }
-    if (icon.isNull())
-        return {};
-    auto image = icon.pixmap(512, 512).toImage();
-    if (image.isNull())
-        return {};
-    if (role == 2 && !QFile::exists(packaged))
-        return {}; // Unreviewed rasters have no approved monochrome mask.
-    if (role == 1 && !QFile::exists(packaged))
-    {
-        const auto cleaned = AppArtwork::cleanBackground(image);
-        if (cleaned.accepted)
-            image = cleaned.image;
+        if (!resolveThemeIcon(name, roots, icon))
+            return {};
     }
     QByteArray bytes;
-    QBuffer buffer(&bytes);
-    buffer.open(QIODevice::WriteOnly);
-    if (!image.save(&buffer, "PNG") || bytes.size() > 1024 * 1024)
+    if (!finalizeIconImage(icon, packaged, role, bytes))
         return {};
     auto profile = QCoreApplication::instance()->property("isoldeProfile").toString();
     if (profile.isEmpty())
@@ -211,6 +117,140 @@ appIcon(const AppDefinition& app, int role = 0)
     if (path.isEmpty())
         return {};
     return QUrl::fromLocalFile(path).toString();
+}
+
+bool
+AppRegistry::resolvePackagedIcon(const AppDefinition& app, int role, QIcon& icon)
+{
+    const auto packaged = ":/config/app-icons/" + app.launchConfiguration.value("icon", app.id).toString() + ".svg";
+    if (role)
+    {
+        const auto metadata = iconRole(app);
+        const auto relative = metadata["foreground"].toString();
+        if (!QRegularExpression("^foreground/[a-z0-9][a-z0-9-]{0,127}\\.svg$").match(relative).hasMatch())
+            return role == 2;
+        QFile file(":/config/app-icons/" + relative);
+        if (!file.open(QIODevice::ReadOnly))
+            return false;
+        auto svg = file.read(64 * 1024 + 1);
+        svg.replace("\r\n", "\n");
+        if (svg.size() > 64 * 1024 ||
+            QString::fromLatin1(QCryptographicHash::hash(svg, QCryptographicHash::Sha256).toHex()) !=
+                metadata["foregroundSha256"].toString())
+            return false;
+        QBuffer buffer(&svg);
+        buffer.open(QIODevice::ReadOnly);
+        QImageReader reader(&buffer, "svg");
+        reader.setScaledSize(QSize(512, 512));
+        auto foreground = reader.read();
+        if (foreground.isNull())
+            return false;
+        if (role == 2)
+        {
+            const QColor ink(metadata["inkColour"].toString());
+            QList<QColor> excluded;
+            if (!ink.isValid() || metadata["inkExclude"].toArray().size() > 4)
+                return false;
+            for (const auto& value : metadata["inkExclude"].toArray())
+            {
+                const QColor colour(value.toString());
+                if (!colour.isValid())
+                    return false;
+                excluded.append(colour);
+            }
+            foreground = AppArtwork::inkMask(foreground, ink, excluded);
+        }
+        icon = QIcon(QPixmap::fromImage(foreground));
+    }
+    else
+        icon = QIcon(packaged);
+    return true;
+}
+
+bool
+AppRegistry::resolveAbsolutePathIcon(const QString& name, QIcon& icon)
+{
+    if (!safeFile(name))
+        return false;
+    QImageReader reader(name);
+    const auto size = reader.size();
+    if (!reader.canRead() || size.width() < 1 || size.height() < 1 || size.width() > 4096 || size.height() > 4096)
+        return false;
+    icon = QIcon(name);
+    return true;
+}
+
+bool
+AppRegistry::resolveThemeIcon(const QString& name, const QStringList& roots, QIcon& icon)
+{
+    icon = QIcon::fromTheme(name);
+    if (!icon.isNull())
+        return true;
+    for (const auto& root : roots)
+    {
+        for (const auto& folder : QStringList{"icons/hicolor/256x256/apps/",
+                                              "icons/hicolor/128x128/apps/",
+                                              "icons/hicolor/64x64/apps/",
+                                              "icons/hicolor/48x48/apps/",
+                                              "icons/hicolor/scalable/apps/",
+                                              "pixmaps/"})
+        {
+            for (const auto& extension : QStringList{".png", ".svg", ".xpm"})
+            {
+                const auto path = QDir(root).filePath(folder + name + extension);
+                if (safeFile(path))
+                {
+                    icon = QIcon(path);
+                    break;
+                }
+            }
+            if (!icon.isNull())
+                break;
+        }
+        if (!icon.isNull())
+            break;
+    }
+    return true;
+}
+
+bool
+AppRegistry::finalizeIconImage(const QIcon& icon, const QString& packaged, int role, QByteArray& bytes)
+{
+    if (icon.isNull())
+        return false;
+    auto image = icon.pixmap(512, 512).toImage();
+    if (image.isNull())
+        return false;
+    if (role == 2 && !QFile::exists(packaged))
+        return false; // Unreviewed rasters have no approved monochrome mask.
+    if (role == 1 && !QFile::exists(packaged))
+    {
+        const auto cleaned = AppArtwork::cleanBackground(image);
+        if (cleaned.accepted)
+            image = cleaned.image;
+    }
+    QBuffer buffer(&bytes);
+    buffer.open(QIODevice::WriteOnly);
+    if (!image.save(&buffer, "PNG") || bytes.size() > 1024 * 1024)
+        return false;
+    return true;
+}
+
+bool
+AppRegistry::safeFile(const QString& path)
+{
+    const QFileInfo info(path);
+    if (!info.isFile() || info.size() < 1 || info.size() > 1024 * 1024)
+        return false;
+    const auto canonical = info.canonicalFilePath();
+    const auto roots = QStandardPaths::standardLocations(QStandardPaths::GenericDataLocation);
+    for (const auto& root : roots)
+    {
+        const auto base = QFileInfo(root).canonicalFilePath();
+        if (!base.isEmpty() && canonical.startsWith(base + "/"))
+            return true;
+    }
+    return false;
 }
 
 static QString
@@ -394,7 +434,6 @@ AppRegistry::loadFromFile(const QString& resolvedPath)
         return false;
     }
     return loadFromData(file.readAll());
-}
 }
 
 bool
