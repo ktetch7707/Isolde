@@ -21,6 +21,8 @@ struct ResolvedDesktopLaunch
 {
     QString desktopPath;
     QString name;
+    QString type;
+    QString terminal;
     QString execLine;
     QString program;
     QStringList arguments;
@@ -263,7 +265,7 @@ appendActionArguments(ResolvedDesktopLaunch* launch, const QVariantMap& configur
     return false;
 }
 
-ResolvedDesktopLaunch
+QString
 resolveDesktopLaunch(const QString& desktopId, const QProcessEnvironment& environment)
 {
     ResolvedDesktopLaunch resolved;
@@ -273,17 +275,36 @@ resolveDesktopLaunch(const QString& desktopId, const QProcessEnvironment& enviro
         resolved.error = QStringLiteral("No readable desktop entry was found for \"%1\".").arg(desktopId);
         return resolved;
     }
-
     QFile desktopFile(resolved.desktopPath);
     if (!desktopFile.open(QIODevice::ReadOnly | QIODevice::Text))
     {
         resolved.error = QStringLiteral("Desktop entry could not be opened: %1").arg(desktopFile.errorString());
         return resolved;
     }
+    QString error;
+    if (!parseDesktopEntry(desktopFile, resolved, error))
+    {
+        resolved.error = error;
+        return resolved;
+    }
+    if (!validateDesktopEntry(resolved, error))
+    {
+        resolved.error = error;
+        return resolved;
+    }
+    const auto executable = resolveDesktopExecutablePath(resolved.execLine);
+    if (executable.isEmpty())
+    {
+        resolved.error = QStringLiteral("Desktop Exec program is not available: %1").arg(resolved.execLine);
+        return resolved;
+    }
+    resolved.program = executable;
+    return resolved;
+}
 
-    bool inDesktopEntry = false;
-    QString type;
-    QString terminal;
+bool
+parseDesktopEntry(QFile& desktopFile, ResolvedDesktopLaunch& resolved, QString& error)
+{
     QTextStream stream(&desktopFile);
     while (!stream.atEnd())
     {
@@ -292,14 +313,8 @@ resolveDesktopLaunch(const QString& desktopId, const QProcessEnvironment& enviro
             continue;
         if (line.startsWith(QLatin1Char('[')) && line.endsWith(QLatin1Char(']')))
         {
-            const auto section = line.mid(1, line.size() - 2);
-            if (inDesktopEntry && section != QStringLiteral("Desktop Entry"))
-                break;
-            inDesktopEntry = section == QStringLiteral("Desktop Entry");
             continue;
         }
-        if (!inDesktopEntry)
-            continue;
         const auto separator = line.indexOf(QLatin1Char('='));
         if (separator <= 0)
             continue;
@@ -308,67 +323,61 @@ resolveDesktopLaunch(const QString& desktopId, const QProcessEnvironment& enviro
         if (key == QStringLiteral("Name"))
             resolved.name = value;
         else if (key == QStringLiteral("Type"))
-            type = value;
+            resolved.type = value;
         else if (key == QStringLiteral("Terminal"))
-            terminal = value;
+            resolved.terminal = value;
         else if (key == QStringLiteral("Exec"))
             resolved.execLine = value;
     }
+    return true;
+}
 
-    if (type != QStringLiteral("Application"))
+bool
+validateDesktopEntry(const ResolvedDesktopLaunch& resolved, QString& error)
+{
+    if (resolved.type != QStringLiteral("Application"))
     {
-        resolved.error = QStringLiteral("Desktop entry is not an application.");
-        return resolved;
+        error = QStringLiteral("Desktop entry is not an application.");
+        return false;
     }
-    if (terminal.compare(QStringLiteral("true"), Qt::CaseInsensitive) == 0)
+    if (resolved.terminal.compare(QStringLiteral("true"), Qt::CaseInsensitive) == 0)
     {
-        resolved.error = QStringLiteral("Terminal desktop entries are not supported in TV mode.");
-        return resolved;
+        error = QStringLiteral("Terminal desktop entries are not supported in TV mode.");
+        return false;
     }
     if (resolved.execLine.trimmed().isEmpty())
     {
-        resolved.error = QStringLiteral("Desktop entry has no Exec line.");
-        return resolved;
+        error = QStringLiteral("Desktop entry has no Exec line.");
+        return false;
     }
-
     QString parseError;
     auto tokens = parseExecTokens(resolved.execLine, &parseError);
     if (!parseError.isEmpty())
     {
-        resolved.error = parseError;
-        return resolved;
+        error = parseError;
+        return false;
     }
     for (const auto& token : tokens)
     {
         if (tokenHasUnsafeShellSyntax(token))
         {
-            resolved.error =
-                QStringLiteral("Desktop Exec token contains shell syntax that Isolde will not run: %1").arg(token);
-            return resolved;
+            error = QStringLiteral("Desktop Exec token contains shell syntax that Isolde will not run: %1").arg(token);
+            return false;
         }
     }
+    return true;
+}
 
-    auto program = tokens.takeFirst();
-    QString executable;
+QString
+resolveDesktopExecutablePath(const QString& program)
+{
     if (QFileInfo(program).isAbsolute())
     {
         const QFileInfo programInfo(program);
         if (programInfo.isFile() && programInfo.isExecutable())
-            executable = programInfo.absoluteFilePath();
+            return programInfo.absoluteFilePath();
     }
-    else
-    {
-        executable = QStandardPaths::findExecutable(program);
-    }
-    if (executable.isEmpty())
-    {
-        resolved.error = QStringLiteral("Desktop Exec program is not available: %1").arg(program);
-        return resolved;
-    }
-
-    resolved.program = executable;
-    resolved.arguments = tokens;
-    return resolved;
+    return QStandardPaths::findExecutable(program);
 }
 
 } // namespace
