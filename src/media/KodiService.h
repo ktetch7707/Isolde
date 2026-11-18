@@ -136,7 +136,37 @@ class KodiService final : public QObject
     fail(const QString& reason);
     void
     commitFrontend(const QString& frontend);
-    QString m_profile, m_status = "Not started";
+    bool
+    resolveKodiExecutable(QString& executable);
+    bool
+    resolveKodiExecutable(QString& executable);
+    bool
+    setupSandboxEnvironment(QProcessEnvironment& environment);
+    bool
+    prepareKodiEnvironment(QString& executable, QProcessEnvironment& environment, NativeSandboxPlan& plan);
+    bool
+    acquireKodiLock();
+    bool
+    resolveBridgeAddon(QString& addon);
+    bool
+    validateKodiManifest(QByteArray& manifest);
+    bool
+    createKodiOverlay();
+    bool
+    linkDistroAddons(const QString& addonsOverlay, const QString& runtimeId);
+    bool
+    copyBridgeFiles(const QString& addon, const QString& destination);
+    bool
+    updateRuntimeManifest(QByteArray& manifest);
+    bool
+    initializeKodiBridge(QByteArray& manifest, QString& runtimeId, QString& addonsOverlay);
+    bool
+    setupKeymaps(const QString& originalKeys, const QString& runtimeKeys);
+    QStringList
+    buildSandboxExtras(const QString& addonsOverlay, const QString& overlayPath,
+                       const QStringList& libraryFolders);
+    void
+    startKodiProcess(const NativeSandboxPlan& plan, const QStringList& extra);
     bool m_enabled = true, m_stopping = false, m_suspended = false, m_ready = false;
     bool m_alAlwaysPlayLocally = true;
     bool m_folderEditing = false, m_resumeAfterFolders = false, m_cancelFolderPreparing = false;

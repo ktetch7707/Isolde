@@ -33,6 +33,8 @@ class DesktopSession final : public AppSession
     void
     stopProcess();
     void
+    onLauncherFinished(int exitCode, QProcess::ExitStatus exitStatus);
+    void
     readDiagnostics();
     bool m_stopping = false;
     QByteArray m_diagnostics;

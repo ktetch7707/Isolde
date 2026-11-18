@@ -491,52 +491,7 @@ DesktopSession::launch()
         &m_launcher,
         qOverload<int, QProcess::ExitStatus>(&QProcess::finished),
         this,
-        [this](int exitCode, QProcess::ExitStatus exitStatus)
-        {
-            qInfo() << "Isolated native session finished" << definition().id << exitCode << exitStatus;
-            readDiagnostics();
-            m_kodiLock.reset();
-            if (m_stopping)
-                return;
-            if ((exitStatus != QProcess::NormalExit || exitCode != 0) &&
-                definition().launchConfiguration.contains("steamGameId") && m_diagnostics.contains("Steam game: "))
-            {
-                setError(QString::fromUtf8(m_diagnostics).section("Steam game: ", -1).section('\n', 0, 0).left(400));
-            }
-            else if (m_steamOutput && !m_steamObserved)
-            {
-                setError(
-                    QStringLiteral("Steam ended without observing the selected game process. Check the active "
-                                   "account, offline availability and installation, then retry."));
-            }
-            else if ((exitStatus != QProcess::NormalExit || exitCode != 0) &&
-                     definition().launchConfiguration.contains("opticalMediaId") &&
-                     m_diagnostics.contains("Optical game: "))
-            {
-                setError(QString::fromUtf8(m_diagnostics).section("Optical game: ", -1).section('\n', 0, 0).left(400));
-            }
-            else if ((exitStatus != QProcess::NormalExit || exitCode != 0) &&
-                     definition().launchConfiguration.contains("emulatorRuntime") &&
-                     m_diagnostics.contains("Emulator setup: "))
-            {
-                const auto reason =
-                    QString::fromUtf8(m_diagnostics).section("Emulator setup: ", -1).section('\n', 0, 0).left(320);
-                setError(reason);
-            }
-            else if (exitStatus != QProcess::NormalExit || exitCode != 0)
-                setError(
-                    QStringLiteral(
-                        "%1 could not continue in its private profile (exit %2). No shared-account fallback was used.")
-                        .arg(definition().name)
-                        .arg(exitCode));
-            // Defer teardown until QProcess has finished delivering its signal.
-            QTimer::singleShot(0,
-                               this,
-                               [this]
-                               {
-                                   setState(State::Exited);
-                               });
-        });
+        &DesktopSession::onLauncherFinished);
     m_launcher.start();
     if (!m_launcher.waitForStarted(5000))
     {
@@ -556,6 +511,54 @@ DesktopSession::launch()
         QTimer::singleShot(12000, this, &DesktopSession::applyContainment);
         QTimer::singleShot(20000, this, &DesktopSession::applyContainment);
     }
+}
+
+void
+DesktopSession::onLauncherFinished(int exitCode, QProcess::ExitStatus exitStatus)
+{
+    qInfo() << "Isolated native session finished" << definition().id << exitCode << exitStatus;
+    readDiagnostics();
+    m_kodiLock.reset();
+    if (m_stopping)
+        return;
+    if ((exitStatus != QProcess::NormalExit || exitCode != 0) &&
+        definition().launchConfiguration.contains("steamGameId") && m_diagnostics.contains("Steam game: "))
+    {
+        setError(QString::fromUtf8(m_diagnostics).section("Steam game: ", -1).section('\n', 0, 0).left(400));
+    }
+    else if (m_steamOutput && !m_steamObserved)
+    {
+        setError(
+            QStringLiteral("Steam ended without observing the selected game process. Check the active "
+                           "account, offline availability and installation, then retry."));
+    }
+    else if ((exitStatus != QProcess::NormalExit || exitCode != 0) &&
+             definition().launchConfiguration.contains("opticalMediaId") &&
+             m_diagnostics.contains("Optical game: "))
+    {
+        setError(QString::fromUtf8(m_diagnostics).section("Optical game: ", -1).section('\n', 0, 0).left(400));
+    }
+    else if ((exitStatus != QProcess::NormalExit || exitCode != 0) &&
+             definition().launchConfiguration.contains("emulatorRuntime") &&
+             m_diagnostics.contains("Emulator setup: "))
+    {
+        const auto reason =
+            QString::fromUtf8(m_diagnostics).section("Emulator setup: ", -1).section('\n', 0, 0).left(320);
+        setError(reason);
+    }
+    else if (exitStatus != QProcess::NormalExit || exitCode != 0)
+        setError(
+            QStringLiteral(
+                "%1 could not continue in its private profile (exit %2). No shared-account fallback was used.")
+                .arg(definition().name)
+                .arg(exitCode));
+    // Defer teardown until QProcess has finished delivering its signal.
+    QTimer::singleShot(0,
+                       this,
+                       [this]
+                       {
+                           setState(State::Exited);
+                       });
 }
 
 void

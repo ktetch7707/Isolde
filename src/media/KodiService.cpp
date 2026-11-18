@@ -85,7 +85,6 @@ isValidCapabilityItem(const QJsonObject& row)
         return false;
     return true;
 }
-}
 
 QVariantList
 KodiService::libraryViews() const
@@ -600,28 +599,15 @@ KodiService::start()
     }
     if (!m_enabled || m_suspended || m_folderEditing || switching() || m_process.state() != QProcess::NotRunning)
         return;
-    auto executable = managedKodiExecutable();
-    if (executable.isEmpty())
-        executable = QStandardPaths::findExecutable("kodi");
-    if (executable.isEmpty())
+    QString executable;
+    QProcessEnvironment environment;
+    NativeSandboxPlan plan;
+    if (!prepareKodiEnvironment(executable, environment, plan))
     {
         m_status = "Install Kodi from the App Store to use the media library.";
         emit changed();
         return;
     }
-    auto environment = QProcessEnvironment::systemEnvironment();
-    const QDir runtime(environment.value("XDG_RUNTIME_DIR"));
-    const auto auth = runtime.entryList({".mutter-Xwaylandauth.*"}, QDir::Files | QDir::Hidden, QDir::Time);
-    if (!auth.isEmpty())
-        environment.insert("XAUTHORITY", runtime.filePath(auth.first()));
-    auto plan = NativeSandbox::prepare(m_profile, "kodi", executable, environment);
-    if (!plan.error.isEmpty())
-    {
-        fail(plan.error);
-        return;
-    }
-    // Managed foreground activation currently uses EWMH. Do not change native
-    // application-mode launch preferences or persistent Kodi configuration.
     if (!environment.value("DISPLAY").isEmpty() && !QStandardPaths::findExecutable("wmctrl").isEmpty())
         plan.arguments.append(QStringList{"--windowing=x11", "-fs"});
     m_lock = std::make_unique<QLockFile>(plan.homeDirectory + "/.isolde-managed.lock");
@@ -630,82 +616,13 @@ KodiService::start()
         fail("Kodi is already managed by another Isolde instance.");
         return;
     }
-    const auto applicationDir = QCoreApplication::applicationDirPath();
-    auto addon = applicationDir + "/../share/isolde/kodi/service.isolde.bridge";
-    if (!QFileInfo::exists(addon + "/addon.xml"))
-        addon = applicationDir + "/share/isolde/kodi/service.isolde.bridge";
-    QFile original("/usr/share/kodi/system/addon-manifest.xml");
-    if (!original.open(QIODevice::ReadOnly))
+    QByteArray manifest;
+    QString runtimeId, addonsOverlay;
+    if (!initializeKodiBridge(manifest, runtimeId, addonsOverlay))
     {
-        fail("This Kodi installation needs a supported system add-on manifest.");
+        fail("Cannot prepare Kodi startup files.");
         return;
     }
-    auto manifest = original.readAll();
-    if (!manifest.contains("</addons>"))
-    {
-        fail("Kodi's add-on manifest is invalid.");
-        return;
-    }
-    m_overlay = std::make_unique<QTemporaryDir>(QDir::tempPath() + "/isolde-kodi-XXXXXX");
-    if (!m_overlay->isValid())
-    {
-        fail("Cannot create Kodi startup files.");
-        return;
-    }
-    const QString runtimeId = "service.isolde.bridge.runtime";
-    const auto addonsOverlay = m_overlay->path() + "/addons";
-    if (!QDir().mkpath(addonsOverlay))
-    {
-        fail("Cannot create Kodi startup files.");
-        return;
-    }
-    // Preserve every distro add-on without writing beneath the read-only /usr.
-    // The original directory is mounted under /run inside this namespace only.
-    for (const auto& entry : QDir("/usr/share/kodi/addons").entryList(QDir::AllEntries | QDir::NoDotAndDotDot))
-    {
-        if (entry == runtimeId)
-        {
-            fail("A conflicting Kodi bridge is already installed.");
-            return;
-        }
-        if (!QFile::link("/run/isolde-original-addons/" + entry, addonsOverlay + '/' + entry))
-        {
-            fail("Cannot prepare Kodi's bundled add-ons.");
-            return;
-        }
-    }
-    const auto destination = addonsOverlay + '/' + runtimeId;
-    if (!QDir().mkpath(destination))
-    {
-        fail("Cannot create Kodi startup files.");
-        return;
-    }
-    for (const auto& name :
-         QStringList{"addon.xml", "service.py", "bridge.py", "playback.py", "artwork.py", "playlists.py", "sources.py"})
-    {
-        QFile source(addon + '/' + name), target(destination + '/' + name);
-        if (!source.open(QIODevice::ReadOnly) || !target.open(QIODevice::WriteOnly))
-        {
-            fail("The Isolde Kodi bridge is missing. Reinstall Isolde.");
-            return;
-        }
-        auto data = source.readAll();
-        if (name == "addon.xml")
-            data.replace("id=\"service.isolde.bridge\"", "id=\"service.isolde.bridge.runtime\"");
-        if (target.write(data) != data.size())
-        {
-            fail("Could not prepare the Kodi bridge.");
-            return;
-        }
-    }
-    manifest.replace("</addons>", "  <addon>service.isolde.bridge.runtime</addon>\n</addons>");
-    QFile overlayManifest(m_overlay->path() + "/addon-manifest.xml");
-    if (!overlayManifest.open(QIODevice::WriteOnly) || overlayManifest.write(manifest) != manifest.size())
-    {
-        fail("Could not prepare Kodi's runtime manifest.");
-        return;
-    }
-    overlayManifest.close();
     const int separator = plan.arguments.indexOf("--");
     if (separator < 0)
     {
@@ -714,19 +631,159 @@ KodiService::start()
     }
     const auto originalKeys = plan.homeDirectory + "/.kodi/userdata/keymaps";
     const auto runtimeKeys = m_overlay->path() + "/keymaps";
-    if (!QDir().mkpath(originalKeys) || !QDir().mkpath(runtimeKeys))
+    if (!setupKeymaps(originalKeys, runtimeKeys))
     {
-        fail("Cannot prepare managed playback keys.");
+        fail("Cannot preserve Kodi keymaps for managed playback.");
         return;
     }
+    const auto extra = buildSandboxExtras(addonsOverlay, m_overlay->path(), libraryFolders());
+    for (int i = 0; i < extra.size(); ++i)
+        plan.arguments.insert(separator + i, extra[i]);
+    m_process.setProcessEnvironment(plan.environment);
+    m_process.start(plan.program, plan.arguments);
+    m_checks = 0;
+    m_ready = false;
+    m_status = "Starting local Kodi…";
+    m_probe.start();
+    emit changed();
+}
+
+bool
+KodiService::resolveKodiExecutable(QString& executable)
+{
+    executable = managedKodiExecutable();
+    if (executable.isEmpty())
+        executable = QStandardPaths::findExecutable("kodi");
+    return !executable.isEmpty();
+}
+
+bool
+KodiService::setupSandboxEnvironment(QProcessEnvironment& environment)
+{
+    environment = QProcessEnvironment::systemEnvironment();
+    const QDir runtime(environment.value("XDG_RUNTIME_DIR"));
+    const auto auth = runtime.entryList({".mutter-Xwaylandauth.*"}, QDir::Files | QDir::Hidden, QDir::Time);
+    if (!auth.isEmpty())
+        environment.insert("XAUTHORITY", runtime.filePath(auth.first()));
+    return true;
+}
+
+bool
+KodiService::prepareKodiEnvironment(QString& executable, QProcessEnvironment& environment, NativeSandboxPlan& plan)
+{
+    executable = managedKodiExecutable();
+    if (executable.isEmpty())
+        executable = QStandardPaths::findExecutable("kodi");
+    if (executable.isEmpty())
+        return false;
+    environment = QProcessEnvironment::systemEnvironment();
+    const QDir runtime(environment.value("XDG_RUNTIME_DIR"));
+    const auto auth = runtime.entryList({".mutter-Xwaylandauth.*"}, QDir::Files | QDir::Hidden, QDir::Time);
+    if (!auth.isEmpty())
+        environment.insert("XAUTHORITY", runtime.filePath(auth.first()));
+    plan = NativeSandbox::prepare(m_profile, "kodi", executable, environment);
+    return plan.error.isEmpty();
+}
+
+bool
+KodiService::resolveBridgeAddon(QString& addon)
+{
+    const auto applicationDir = QCoreApplication::applicationDirPath();
+    addon = applicationDir + "/../share/isolde/kodi/service.isolde.bridge";
+    if (!QFileInfo::exists(addon + "/addon.xml"))
+        addon = applicationDir + "/share/isolde/kodi/service.isolde.bridge";
+    return QFileInfo::exists(addon + "/addon.xml");
+}
+
+bool
+KodiService::validateKodiManifest(QByteArray& manifest)
+{
+    QFile original("/usr/share/kodi/system/addon-manifest.xml");
+    if (!original.open(QIODevice::ReadOnly))
+        return false;
+    manifest = original.readAll();
+    return manifest.contains("</addons>");
+}
+
+bool
+KodiService::initializeKodiBridge(QByteArray& manifest, QString& runtimeId, QString& addonsOverlay)
+{
+    QString addon;
+    if (!resolveBridgeAddon(addon))
+        return false;
+    if (!validateKodiManifest(manifest))
+        return false;
+    m_overlay = std::make_unique<QTemporaryDir>(QDir::tempPath() + "/isolde-kodi-XXXXXX");
+    if (!m_overlay->isValid())
+        return false;
+    runtimeId = "service.isolde.bridge.runtime";
+    addonsOverlay = m_overlay->path() + "/addons";
+    if (!linkDistroAddons(addonsOverlay, runtimeId))
+        return false;
+    const auto destination = addonsOverlay + '/' + runtimeId;
+    if (!QDir().mkpath(destination))
+        return false;
+    if (!copyBridgeFiles(addon, destination))
+        return false;
+    if (!updateRuntimeManifest(manifest))
+        return false;
+    return true;
+}
+
+bool
+KodiService::linkDistroAddons(const QString& addonsOverlay, const QString& runtimeId)
+{
+    if (!QDir().mkpath(addonsOverlay))
+        return false;
+    for (const auto& entry : QDir("/usr/share/kodi/addons").entryList(QDir::AllEntries | QDir::NoDotAndDotDot))
+    {
+        if (entry == runtimeId)
+            return false;
+        if (!QFile::link("/run/isolde-original-addons/" + entry, addonsOverlay + '/' + entry))
+            return false;
+    }
+    return true;
+}
+
+bool
+KodiService::copyBridgeFiles(const QString& addon, const QString& destination)
+{
+    for (const auto& name :
+         QStringList{"addon.xml", "service.py", "bridge.py", "playback.py", "artwork.py", "playlists.py", "sources.py"})
+    {
+        QFile source(addon + '/' + name), target(destination + '/' + name);
+        if (!source.open(QIODevice::ReadOnly) || !target.open(QIODevice::WriteOnly))
+            return false;
+        auto data = source.readAll();
+        if (name == "addon.xml")
+            data.replace("id=\"service.isolde.bridge\"", "id=\"service.isolde.bridge.runtime\"");
+        if (target.write(data) != data.size())
+            return false;
+    }
+    return true;
+}
+
+bool
+KodiService::updateRuntimeManifest(QByteArray& manifest)
+{
+    manifest.replace("</addons>", "  <addon>service.isolde.bridge.runtime</addon>\n</addons>");
+    QFile overlayManifest(m_overlay->path() + "/addon-manifest.xml");
+    if (!overlayManifest.open(QIODevice::WriteOnly) || overlayManifest.write(manifest) != manifest.size())
+        return false;
+    overlayManifest.close();
+    return true;
+}
+
+bool
+KodiService::setupKeymaps(const QString& originalKeys, const QString& runtimeKeys)
+{
+    if (!QDir().mkpath(originalKeys) || !QDir().mkpath(runtimeKeys))
+        return false;
     const QString keyName = "zzzz-isolde-managed.xml";
     for (const auto& entry : QDir(originalKeys).entryList(QDir::AllEntries | QDir::NoDotAndDotDot | QDir::Hidden))
     {
         if (entry == keyName || !QFile::link("/run/isolde-original-keymaps/" + entry, runtimeKeys + '/' + entry))
-        {
-            fail("Cannot preserve Kodi keymaps for managed playback.");
-            return;
-        }
+            return false;
     }
     QFile keys(runtimeKeys + '/' + keyName);
     const QByteArray keyData =
@@ -750,11 +807,15 @@ KodiService::start()
         "<menu>NotifyAll(Isolde,options)</menu><m>NotifyAll(Isolde,options)</m>"
         "</keyboard></Visualisation></keymap>";
     if (!keys.open(QIODevice::WriteOnly) || keys.write(keyData) != keyData.size())
-    {
-        fail("Cannot prepare managed playback keys.");
-        return;
-    }
+        return false;
     keys.close();
+    return true;
+}
+
+QStringList
+KodiService::buildSandboxExtras(const QString& addonsOverlay, const QString& overlayPath,
+                                const QStringList& libraryFolders)
+{
     const QStringList extra{
         "--ro-bind",
         "/usr/share/kodi/addons",
@@ -763,27 +824,17 @@ KodiService::start()
         addonsOverlay,
         "/usr/share/kodi/addons",
         "--ro-bind",
-        overlayManifest.fileName(),
+        overlayPath + "/addon-manifest.xml",
         "/usr/share/kodi/system/addon-manifest.xml",
         "--ro-bind",
-        originalKeys,
-        "/run/isolde-original-keymaps",
-        "--ro-bind",
-        runtimeKeys,
+        overlayPath + "/keymaps",
         QDir::homePath() + "/.kodi/userdata/keymaps",
         "--setenv",
         "ISOLDE_MANAGED_KODI",
         "1",
         "--setenv",
         "ISOLDE_LIBRARY_ROOTS",
-        QString::fromUtf8(QJsonDocument::fromVariant(libraryFolders()).toJson(QJsonDocument::Compact))};
-    for (int i = 0; i < extra.size(); ++i)
-        plan.arguments.insert(separator + i, extra[i]);
-    m_process.setProcessEnvironment(plan.environment);
-    m_process.start(plan.program, plan.arguments);
-    m_checks = 0;
-    m_ready = false;
-    m_status = "Starting local Kodiâ€¦";
-    m_probe.start();
-    emit changed();
+        QString::fromUtf8(QJsonDocument::fromVariant(libraryFolders).toJson(QJsonDocument::Compact))};
+    return extra;
 }
+

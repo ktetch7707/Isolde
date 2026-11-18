@@ -671,112 +671,180 @@ StudioSession::previewImport(const QString& value,
                              const QVariantMap& appRemap)
 {
     cancelPreview();
-    if (!editingPermitted())
+    if (!validatePreviewImportPreconditions())
         return {};
-    if (!currentProfile())
-    {
-        setError(tr("Reopen Studio before importing."));
-        return {};
-    }
-    const auto path = localPath(value);
-    QFile input(path);
-    if (!actualParent(path) || !QFileInfo(path).isFile() || !input.open(QIODevice::ReadOnly) ||
-        input.size() > PackageLimit)
-    {
-        setError(tr("Choose a regular local design file of at most 64 MiB."));
-        return {};
-    }
-    QJsonParseError parseError;
-    const auto json = QJsonDocument::fromJson(input.readAll(), &parseError);
-    const auto package = json.object();
-    if (parseError.error != QJsonParseError::NoError || package.size() != 4 ||
-        package["schemaVersion"].toDouble(-1) != 1 ||
-        !QStringList{"page", "interface"}.contains(package["kind"].toString()) || !package["layout"].isObject() ||
-        !package["assets"].isObject() || (scope == "interface" && package["kind"] != "interface"))
-    {
-        setError(tr("Unknown portable design version, fields or scope."));
-        return {};
-    }
+    QJsonObject package;
     QString error;
-    auto document = package["layout"].toObject();
+    if (!loadPreviewImportPackage(value, scope, package, error))
+    {
+        setError(error);
+        return {};
+    }
+    const auto assets = package["assets"].toObject();
+    if (!validatePreviewImportAssets(assets, error))
+    {
+        setError(error);
+        return {};
+    }
+    const auto document = package["layout"].toObject();
     if (package["kind"] == "page" &&
         (document.contains("pages") || document.contains("homePageId") || document.contains("rootPage")))
     {
         setError(tr("A portable page cannot contain an interface collection."));
         return {};
     }
-    const auto assets = package["assets"].toObject();
-    if (assets.size() > 128)
-    {
-        setError(tr("A portable design supports at most 128 managed images."));
-        return {};
-    }
-    for (auto it = assets.begin(); it != assets.end(); ++it)
-        if (!HomeDesignData::safeArtwork(it.key()) || !it.value().isString())
-        {
-            setError(tr("Unknown or unsafe managed image entry."));
-            return {};
-        }
-    if (!portableLayout(document, error))
+    if (!validatePreviewImportAppRemap(appRemap, error))
     {
         setError(error);
         return {};
     }
+    auto remapped = remapApps(document, appRemap).toObject();
+    auto result = proposeDesign(remapped, assets, scope, pageId);
+    if (result.isEmpty())
+        return result;
+    QStringList missing;
+    collectMissingApps(QJsonDocument::fromJson(m_proposed).object(), missing);
+    result["missingApps"] = missing;
+    return result;
+}
+
+bool
+StudioSession::validatePreviewImportPreconditions()
+{
+    if (!editingPermitted())
+        return false;
+    if (!currentProfile())
+    {
+        setError(tr("Reopen Studio before importing."));
+        return false;
+    }
+    return true;
+}
+
+bool
+StudioSession::loadPreviewImportPackage(const QString& value, const QString& scope, QJsonObject& package,
+                                        QString& error)
+{
+    const auto path = localPath(value);
+    QFile input(path);
+    if (!actualParent(path) || !QFileInfo(path).isFile() || !input.open(QIODevice::ReadOnly) ||
+        input.size() > PackageLimit)
+    {
+        error = tr("Choose a regular local design file of at most 64 MiB.");
+        return false;
+    }
+    QJsonParseError parseError;
+    const auto json = QJsonDocument::fromJson(input.readAll(), &parseError);
+    package = json.object();
+    if (parseError.error != QJsonParseError::NoError || package.size() != 4 ||
+        package["schemaVersion"].toDouble(-1) != 1 ||
+        !QStringList{"page", "interface"}.contains(package["kind"].toString()) ||
+        !package["layout"].isObject() || !package["assets"].isObject() ||
+        (scope == "interface" && package["kind"] != "interface"))
+    {
+        error = tr("Unknown portable design version, fields or scope.");
+        return false;
+    }
+    return true;
+}
+
+bool
+StudioSession::validatePreviewImportAssets(const QJsonObject& assets, QString& error)
+{
+    if (assets.size() > 128)
+    {
+        error = tr("A portable design supports at most 128 managed images.");
+        return false;
+    }
+    for (auto it = assets.begin(); it != assets.end(); ++it)
+        if (!HomeDesignData::safeArtwork(it.key()) || !it.value().isString())
+        {
+            error = tr("Unknown or unsafe managed image entry.");
+            return false;
+        }
+    return true;
+}
+
+bool
+StudioSession::validatePreviewImportAppRemap(const QVariantMap& appRemap, QString& error)
+{
     if (appRemap.size() > 128)
     {
-        setError(tr("Remap at most 128 app identities."));
-        return {};
+        error = tr("Remap at most 128 app identities.");
+        return false;
     }
     for (auto it = appRemap.begin(); it != appRemap.end(); ++it)
     {
         if (!ComponentSchema::safeId(it.key()) || it.value().metaType().id() != QMetaType::QString ||
             !m_live->registry()->find(it.value().toString()))
         {
-            setError(tr("Remap apps to a registered app in this profile."));
-            return {};
+            error = tr("Remap apps to a registered app in this profile.");
+            return false;
         }
     }
-    document = remapApps(document, appRemap).toObject();
-    auto result = proposeDesign(document, package["assets"].toObject(), scope, pageId);
-    if (result.isEmpty())
-        return result;
-    QStringList missing;
-    std::function<void(const QJsonValue&)> inspect = [&](const QJsonValue& value)
-    {
-        if (value.isArray())
-        {
-            for (const auto& entry : value.toArray())
-                inspect(entry);
-        }
-        else if (value.isObject())
-        {
-            const auto object = value.toObject();
-            QStringList ids;
-            if (object["appId"].isString())
-                ids.append(object["appId"].toString());
-            if (object.contains("mode"))
-                for (const auto& id : object["ids"].toArray())
-                    ids.append(id.toString());
-            for (const auto& appId : ids)
-                if (!appId.isEmpty() && !m_live->registry()->find(appId) && !missing.contains(appId))
-                    missing.append(appId);
-            for (auto it = object.begin(); it != object.end(); ++it)
-                inspect(it.value());
-        }
-    };
-    inspect(QJsonDocument::fromJson(m_proposed).object());
-    result["missingApps"] = missing;
-    return result;
+    return true;
 }
+
+void
+StudioSession::collectMissingApps(const QJsonValue& value, QStringList& missing)
+{
+    if (value.isArray())
+    {
+        for (const auto& entry : value.toArray())
+            collectMissingApps(entry, missing);
+    }
+    else if (value.isObject())
+    {
+        const auto object = value.toObject();
+        QStringList ids;
+        if (object["appId"].isString())
+            ids.append(object["appId"].toString());
+        if (object.contains("mode"))
+            for (const auto& id : object["ids"].toArray())
+                ids.append(id.toString());
+        for (const auto& appId : ids)
+            if (!appId.isEmpty() && !m_live->registry()->find(appId) && !missing.contains(appId))
+                missing.append(appId);
+        for (auto it = object.begin(); it != object.end(); ++it)
+            collectMissingApps(it.value(), missing);
+    }
+}
+
 bool
 StudioSession::exportDesign(const QString& value, const QString& scope, const QString& pageId)
+{
+    if (!validateExportPreconditions(scope))
+        return false;
+    auto document = QJsonDocument::fromJson(m_draft).object();
+    document = prepareExportDocument(document, scope, pageId);
+    QJsonObject assets;
+    qint64 assetBytes = 0;
+    QString error;
+    if (!collectExportAssets(document, assets, assetBytes, error))
+    {
+        setError(error);
+        return false;
+    }
+    const auto data = buildExportData(scope, document, assets);
+    if (!validateExportPath(value, data))
+        return false;
+    return writeExportFile(value, data);
+}
+
+bool
+StudioSession::validateExportPreconditions(const QString& scope)
 {
     if (!currentProfile() || (scope != "page" && scope != "interface") || (scope == "interface" && m_live->isPage()))
     {
         setError(tr("Choose Current page or Whole interface in an active profile."));
         return false;
     }
-    auto document = QJsonDocument::fromJson(m_draft).object();
+    return true;
+}
+
+QJsonObject
+StudioSession::prepareExportDocument(QJsonObject document, const QString& scope, const QString& pageId)
+{
     document.remove("studioAppearance");
     if (scope == "page")
     {
@@ -789,15 +857,14 @@ StudioSession::exportDesign(const QString& value, const QString& scope, const QS
             document["composition"] = composition;
         }
     }
-    QString error;
-    if (document.isEmpty() || !portableLayout(document, error))
-    {
-        setError(error.isEmpty() ? tr("Choose an existing page.") : error);
-        return false;
-    }
-    QJsonObject assets;
+    return document;
+}
+
+bool
+StudioSession::collectExportAssets(const QJsonObject& document, QJsonObject& assets, qint64& assetBytes,
+                                   QString& error)
+{
     bool valid = true;
-    qint64 assetBytes = 0;
     HomeDesignData::artwork(
         document,
         [&](const QString& relative)
@@ -833,12 +900,22 @@ StudioSession::exportDesign(const QString& value, const QString& scope, const QS
         });
     if (!valid)
     {
-        setError(tr("A managed image is unavailable. Choose it again before exporting."));
+        error = tr("A managed image is unavailable. Choose it again before exporting.");
         return false;
     }
-    const auto data =
-        QJsonDocument(QJsonObject{{"schemaVersion", 1}, {"kind", scope}, {"layout", document}, {"assets", assets}})
-            .toJson();
+    return true;
+}
+
+QByteArray
+StudioSession::buildExportData(const QString& scope, const QJsonObject& document, const QJsonObject& assets)
+{
+    return QJsonDocument(QJsonObject{{"schemaVersion", 1}, {"kind", scope}, {"layout", document}, {"assets", assets}})
+        .toJson();
+}
+
+bool
+StudioSession::validateExportPath(const QString& value, const QByteArray& data)
+{
     const auto path = localPath(value);
     if (data.size() > PackageLimit || !actualParent(path) || QFileInfo(path).suffix().toLower() != "json" ||
         QFileInfo::exists(path))
@@ -848,6 +925,12 @@ StudioSession::exportDesign(const QString& value, const QString& scope, const QS
                "and are limited to 64 MiB."));
         return false;
     }
+    return true;
+}
+
+bool
+StudioSession::writeExportFile(const QString& path, const QByteArray& data)
+{
     QSaveFile output(path);
     if (!output.open(QIODevice::WriteOnly) || output.write(data) != data.size() || !output.commit())
     {

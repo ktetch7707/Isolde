@@ -24,6 +24,52 @@ inline const QMap<QString, QString> operators{{"is", "is"},
                                               {"starts-with", "startswith"}};
 inline const QMap<QString, QString> kinds{
     {"movie", "movies"}, {"episode", "episodes"}, {"musicvideo", "musicvideos"}, {"song", "songs"}};
+
+
+inline bool
+validatePlaylistRoot(QXmlStreamReader& reader, QString& kind)
+{
+    if (reader.name() != u"smartplaylist" || reader.attributes().size() != 1)
+        return false;
+    kind = kinds.key(reader.attributes().value("type").toString());
+    return !kind.isEmpty();
+}
+
+inline bool
+parsePlaylistElement(QXmlStreamReader& reader, QString& name, QString& match, QVariantList& rules)
+{
+    if (reader.name() == u"name")
+        return parsePlaylistName(reader, name);
+    if (reader.name() == u"match")
+        return parsePlaylistMatch(reader, match);
+    if (reader.name() == u"rule")
+    {
+        const auto field = fields.key(reader.attributes().value("field").toString()),
+                   op = operators.key(reader.attributes().value("operator").toString());
+        if (reader.attributes().size() != 2 || field.isEmpty() || op.isEmpty() || !reader.readNextStartElement() ||
+            reader.name() != u"value")
+            return false;
+        const auto text = reader.readElementText();
+        if (reader.readNextStartElement())
+            return false;
+        QVariant value = text;
+        if (QStringList{"year", "rating", "playcount", "season", "episode"}.contains(field))
+        {
+            bool ok = false;
+            const auto number = text.toDouble(&ok);
+            if (!ok)
+                return false;
+            value = number;
+        }
+        QVariantMap rule{{"field", field}, {"op", op}, {"value", value}};
+        if (ComponentSchema::guideRule(rule).isEmpty() || rules.size() >= 32)
+            return false;
+        rules.append(rule);
+        return true;
+    }
+    return false; // order/limit/nested rules are meaningful: never discard them.
+}
+
 inline QByteArray
 encode(const QVariantMap& definition, QString* error)
 {
@@ -76,6 +122,37 @@ encode(const QVariantMap& definition, QString* error)
         error->clear();
     return output;
 }
+
+inline bool
+validatePlaylistSize(const QByteArray& bytes)
+{
+    return !bytes.isEmpty() && bytes.size() <= 256 * 1024;
+}
+
+inline bool
+validatePlaylistCompletion(QXmlStreamReader& reader, bool root, const QString& name, const QString& match)
+{
+    return !reader.hasError() && root && !name.trimmed().isEmpty() && name.size() <= 160 && !match.isEmpty();
+}
+
+inline bool
+parsePlaylistName(QXmlStreamReader& reader, QString& name)
+{
+    if (!name.isEmpty())
+        return false;
+    name = reader.readElementText();
+    return true;
+}
+
+inline bool
+parsePlaylistMatch(QXmlStreamReader& reader, QString& match)
+{
+    if (!match.isEmpty())
+        return false;
+    match = reader.readElementText();
+    return match == "all" || match == "one" || match == "any";
+}
+
 inline QVariantMap
 decode(const QByteArray& bytes, const QVariantMap& fresh, QString* error)
 {
@@ -87,7 +164,7 @@ decode(const QByteArray& bytes, const QVariantMap& fresh, QString* error)
                 "fields and operators can be imported without losing meaning.";
         return QVariantMap();
     };
-    if (bytes.isEmpty() || bytes.size() > 256 * 1024)
+    if (!validatePlaylistSize(bytes))
         return fail();
     QXmlStreamReader reader(bytes);
     QVariantList rules;
@@ -102,56 +179,15 @@ decode(const QByteArray& bytes, const QVariantMap& fresh, QString* error)
             continue;
         if (!root)
         {
-            if (reader.name() != u"smartplaylist" || reader.attributes().size() != 1)
-                return fail();
-            kind = kinds.key(reader.attributes().value("type").toString());
-            if (kind.isEmpty())
+            if (!validatePlaylistRoot(reader, kind))
                 return fail();
             root = true;
             continue;
         }
-        if (reader.name() == u"name")
-        {
-            if (!name.isEmpty())
-                return fail();
-            name = reader.readElementText();
-        }
-        else if (reader.name() == u"match")
-        {
-            if (!match.isEmpty())
-                return fail();
-            match = reader.readElementText();
-            if (match != "all" && match != "one" && match != "any")
-                return fail();
-        }
-        else if (reader.name() == u"rule")
-        {
-            const auto field = fields.key(reader.attributes().value("field").toString()),
-                       op = operators.key(reader.attributes().value("operator").toString());
-            if (reader.attributes().size() != 2 || field.isEmpty() || op.isEmpty() || !reader.readNextStartElement() ||
-                reader.name() != u"value")
-                return fail();
-            const auto text = reader.readElementText();
-            if (reader.readNextStartElement())
-                return fail();
-            QVariant value = text;
-            if (QStringList{"year", "rating", "playcount", "season", "episode"}.contains(field))
-            {
-                bool ok = false;
-                const auto number = text.toDouble(&ok);
-                if (!ok)
-                    return fail();
-                value = number;
-            }
-            QVariantMap rule{{"field", field}, {"op", op}, {"value", value}};
-            if (ComponentSchema::guideRule(rule).isEmpty() || rules.size() >= 32)
-                return fail();
-            rules.append(rule);
-        }
-        else
-            return fail(); // order/limit/nested rules are meaningful: never discard them.
+        if (!parsePlaylistElement(reader, name, match, rules))
+            return fail();
     }
-    if (reader.hasError() || !root || name.trimmed().isEmpty() || name.size() > 160 || match.isEmpty())
+    if (!validatePlaylistCompletion(reader, root, name, match))
         return fail();
     auto result = fresh;
     result["name"] = name;
@@ -161,4 +197,6 @@ decode(const QByteArray& bytes, const QVariantMap& fresh, QString* error)
                                          : QVariantMap{{"op", match == "all" ? "all" : "any"}, {"rules", rules}};
     return ComponentSchema::guideChannel(result, error);
 }
+
+
 } // namespace GuidePlaylists

@@ -415,6 +415,47 @@ class StudioSession final : public QObject
                               int pageIndex, const QJsonObject& page);
     void
     setError(const QString& message);
+    bool
+    validatePreviewImportPreconditions();
+    bool
+    loadPreviewImportPackage(const QString& value, QJsonObject& package, QString& error);
+    bool
+    validatePreviewImportAssets(const QJsonObject& assets, QString& error);
+    bool
+    validatePreviewImportAppRemap(const QVariantMap& appRemap, QString& error);
+    void
+    collectMissingApps(const QJsonValue& value, QStringList& missing);
+    bool
+    validateExportPreconditions(const QString& scope);
+    QJsonObject
+    prepareExportDocument(QJsonObject document, const QString& scope, const QString& pageId);
+    bool
+    collectExportAssets(const QJsonObject& document, QJsonObject& assets, qint64& assetBytes, QString& error);
+    bool
+    processExportAsset(const QString& relative, const QJsonObject& document, QJsonObject& assets,
+                       qint64& assetBytes, bool& valid, QString& error);
+    bool
+    validateExportAssetFile(const QString& relative, const QFileInfo& info);
+    bool
+    validateExportAssetSize(qint64 assetBytes, const QJsonObject& document);
+    bool
+    validateExportAssetImage(const QString& relative, const QByteArray& bytes);
+    QByteArray
+    buildExportData(const QString& scope, const QJsonObject& document, const QJsonObject& assets);
+    bool
+    validateExportPath(const QString& value, const QByteArray& data);
+    bool
+    writeExportFile(const QString& path, const QByteArray& data);
+    bool
+    validatePreviewImportPreconditions();
+    bool
+    loadPreviewImportPackage(const QString& value, const QString& scope, QJsonObject& package, QString& error);
+    bool
+    validatePreviewImportAssets(const QJsonObject& assets, QString& error);
+    bool
+    validatePreviewImportAppRemap(const QVariantMap& appRemap, QString& error);
+    void
+    collectMissingApps(const QJsonValue& value, QStringList& missing);
 
     // Operation dispatch for execute() — each helper handles one edit command.
     bool
