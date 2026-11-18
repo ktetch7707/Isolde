@@ -691,7 +691,15 @@ GuideRules::validateKodiPvrOwner(const QVariantMap& v, QString* error)
 }
 
 bool
-GuideRules::validateLocalChannel(const QVariantMap& v, QString* error)
+validateLocalChannel(const QVariantMap& v, QString* error)
+{
+    if (!validateLocalChannelCore(v, error))
+        return false;
+    return validateLocalChannelOptions(v, error);
+}
+
+bool
+GuideRules::validateLocalChannelCore(const QVariantMap& v, QString* error)
 {
     if ((v.contains("horizonDays") && !integer(v.value("horizonDays"), 1, 31)) ||
         (v.contains("retentionDays") && !integer(v.value("retentionDays"), 0, 7)))
@@ -700,6 +708,12 @@ GuideRules::validateLocalChannel(const QVariantMap& v, QString* error)
         (!integer(v.value("clockOffsetSeconds"), -31 * 86400, 31 * 86400) ||
          (v.value("clock") != "real-time" && v.value("clockOffsetSeconds").toLongLong() != 0)))
         return reject(error, "Only real-time local channels support a broadcast offset, bounded to 31 days.");
+    return true;
+}
+
+bool
+GuideRules::validateLocalChannelOptions(const QVariantMap& v, QString* error)
+{
     if (!keys(v,
               {"schemaVersion",
                "id",
@@ -730,8 +744,6 @@ GuideRules::validateLocalChannel(const QVariantMap& v, QString* error)
         return reject(error,
                       "Invalid local channel definition. Check its version, name, number, clock, sequencing, timezone "
                       "and rules.");
-    if (!validateLocalChannelMediaKinds(v, error))
-        return v;
     return true;
 }
 
