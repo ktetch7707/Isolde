@@ -1,5 +1,6 @@
 #pragma once
 #include <QString>
+#include <QSet>
 #include <QVariantList>
 #include <QVariantMap>
 
@@ -13,6 +14,22 @@ QVariantMap
 definition(const QString& id);
 QVariantMap
 coverage();
+bool
+validateEmulatorDocument(const QVariantMap& doc);
+bool
+validateEmulatorTarget(const QVariantMap& target);
+bool
+validateEmulatorGenerations(const QVariantMap& generations);
+bool
+validateEmulatorRuntimes(const QVariantList& runtimes, QSet<QString>& actualPlatforms);
+bool
+validateEmulatorRuntimeItem(const QVariantMap& item, QSet<QString>& ids, QSet<QString>& actualPlatforms);
+bool
+validateEmulatorRuntimeSetup(const QVariantMap& item);
+bool
+validateEmulatorRuntimePackages(const QString& engine, const QVariantMap& item, const QStringList& packages);
+bool
+validateEmulatorCoverage(const QVariantMap& coverage, const QSet<QString>& integratedSet);
 QString
 home(const QString& profile, const QString& id);
 QVariantMap

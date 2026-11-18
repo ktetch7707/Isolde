@@ -45,18 +45,33 @@ class NativeSandbox
     static bool
     validateProfileAndApp(const QString& profileId, const QString& appId);
     static bool
-    validateSandboxDeps(NativeSandboxPlan& plan);
+    validateSandboxDeps(NativeSandboxPlan& plan, QString& dbus, QString& supervisor,
+                        QString& busConfig);
     static bool
     validateBinaryAndOptical(NativeSandboxPlan& plan, const QString& executable,
-                             const QString& managedGameRoot, const QString& gameSourceRoot,
-                             const QString& profileId, const QString& opticalMediaId,
-                             const QString& opticalObservationId, bool& nativeGame);
+                             const QString& target, const QString& managedGameRoot,
+                             const QString& gameSourceRoot, const QString& profileId,
+                             const QString& opticalMediaId, const QString& opticalObservationId,
+                             QString& binary, bool& nativeGame, bool& opticalExecutable);
     static bool
     prepareStorageDirectories(NativeSandboxPlan& plan, const QString& storageRoot,
                               const QString& profileId, const QString& appId);
+    static bool
+    opticalDirectPlayMount(const QString& gameSourceRoot, const QString& opticalMediaId,
+                           const QString& opticalObservationId);
+    static bool
+    isActionTargetDenied(const QString& canonical, const QString& requested,
+                         bool privateHomePath, bool systemPath, bool managedTarget,
+                         bool opticalTarget, const QString& base, const QString& config,
+                         const QString& data);
     static void
     buildSandboxArguments(NativeSandboxPlan& plan, const QProcessEnvironment& host,
+                          const QString& appId, const QString& profileId, const QString& base,
+                          const QString& binary, const QString& executable, const QString& target,
                           const QString& emulatorRuntime, const QString& steamGameId,
                           const QString& gameSourceRoot, const QString& managedGameRoot,
-                          const QString& opticalMediaId, bool nativeGame, bool gameSession);
+                          const QString& opticalMediaId, const QString& opticalObservationId,
+                          bool nativeGame, bool gameSession,
+                          bool opticalExecutable, const QString& dbus, const QString& supervisor,
+                          const QString& busConfig);
 };

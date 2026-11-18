@@ -1133,23 +1133,11 @@ HomeLayout::load(const QString& defaultPath, const QString& userPath)
 bool
 HomeLayout::loadDocument(const QByteArray& data, bool userDocument)
 {
-    if (data.size() > 4 * 1024 * 1024)
-    {
-        setError(tr("Home layout exceeds the supported size."));
+    int version = 0;
+    QJsonArray entries;
+    if (!validateDocumentStructure(data, userDocument, version, entries))
         return false;
-    }
-    QJsonParseError error;
-    const auto document = QJsonDocument::fromJson(data, &error);
-    const int version = document.object().value("schemaVersion").toInt();
-    const auto entries = document.object().value(version == 1 ? "items" : "components");
-    if (error.error != QJsonParseError::NoError || !document.isObject() || (version != 1 && version != 2) ||
-        !entries.isArray() || data.size() > 4 * 1024 * 1024 || entries.toArray().size() > 1024)
-    {
-        setError(userDocument ? tr("User Home layout is invalid; defaults were restored.")
-                              : tr("Default Home layout is invalid."));
-        return false;
-    }
-    const auto object = document.object();
+    QJsonObject object = QJsonDocument::fromJson(data).object();
     QString designError;
     if (!m_owner && !DesignSystem::validDocument(object, &designError))
     {
@@ -1157,104 +1145,44 @@ HomeLayout::loadDocument(const QByteArray& data, bool userDocument)
         return false;
     }
     QJsonArray pages;
-    if (object.contains("pages") && (!object["pages"].isArray() || object["pages"].toArray().size() > 64 || m_owner))
-    {
-        setError(tr("Invalid page collection."));
-        return false;
-    }
     QSet<QString> pageIds;
-    for (const auto& entry : object["pages"].toArray())
-    {
-        const auto page = entry.toObject();
-        const auto id = page["id"].toString();
-        HomeLayout validator(m_registry);
-        validator.m_owner = this;
-        if (!ComponentSchema::safeId(id) || pageIds.contains(id) || page["name"].toString().trimmed().isEmpty() ||
-            page["name"].toString().size() > 80 || !page["layout"].isObject() ||
-            !validator.loadDocument(QJsonDocument(page["layout"].toObject()).toJson(), false))
-        {
-            setError(tr("Page %1 has an invalid identity, name or layout: %2")
-                         .arg(page["name"].toString(), validator.errorString()));
-            return false;
-        }
-        pageIds.insert(id);
-        pages.append(page);
-    }
+    if (!loadAndValidatePages(object, pageIds, pages))
+        return false;
     const auto homePage = object.value("homePageId");
-    const auto rootPage = object.value("rootPage").toObject();
-    const auto editorAppearance = object.value("studioAppearance").toObject().toVariantMap();
+    QVariantMap editorAppearance;
+    const QJsonObject rootPage = object.value("rootPage").toObject();
     if (object.contains("studioAppearance"))
-    {
-        auto effective = appearanceDefaults();
-        const auto packaged = studioOptions().value("appearance").toMap();
-        for (auto it = packaged.cbegin(); it != packaged.cend(); ++it)
-            effective[it.key()] = it.value();
-        for (auto it = editorAppearance.cbegin(); it != editorAppearance.cend(); ++it)
-            effective[it.key()] = it.value();
-        if (m_owner || !object["studioAppearance"].isObject() || !readableStudioAppearance(effective))
-        {
-            setError(tr("Studio colors must keep text and focus readable on normal and selected surfaces."));
-            return false;
-        }
-    }
+        editorAppearance = object.value("studioAppearance").toObject().toVariantMap();
+    if (!validateStudioAppearance(object, editorAppearance))
+        return false;
     if (object.contains("rootPage"))
     {
-        bool valid = !m_owner && object["rootPage"].isObject();
-        for (auto it = rootPage.begin(); it != rootPage.end(); ++it)
-            if (!QStringList{"name", "visible", "position"}.contains(it.key()))
-                valid = false;
-        const auto position = rootPage.value("position");
-        if (!rootPage.value("name").isString() || rootPage.value("name").toString().trimmed().isEmpty() ||
-            rootPage.value("name").toString().size() > 80 || rootPage.value("name").toString().contains(QChar::Null) ||
-            !rootPage.value("visible").isBool() || !position.isDouble() || position.toDouble() != position.toInt() ||
-            position.toInt() < 0 || position.toInt() > pages.size() ||
-            (!rootPage.value("visible").toBool() && homePage.toString().isEmpty()) ||
-            pages.size() + (rootPage.value("visible").toBool() ? 1 : 0) > 64)
-            valid = false;
-        if (!valid)
-        {
-            setError(tr("Root page metadata is invalid. Nothing changed."));
+        if (!validateRootPage(object, rootPage, pages, pageIds, homePage))
             return false;
-        }
     }
     else if (!m_owner && pages.size() >= 64)
     {
         setError(tr("The interface exceeds the 64-page limit including Home."));
         return false;
     }
-    if (object.contains("homePageId") &&
-        (m_owner || !homePage.isString() || (!homePage.toString().isEmpty() && !pageIds.contains(homePage.toString()))))
-    {
-        setError(tr("The designated Home page does not exist."));
+    if (!validateHomePage(object, homePage, pageIds))
         return false;
-    }
-    const auto theme = object.value("theme").toObject();
-    auto composition = object.value("composition").toObject().toVariantMap();
-    if (composition.contains("appGallery") && !ComponentSchema::validComposition(composition))
-    {
-        auto fallbackComposition = composition;
-        fallbackComposition.remove("appGallery");
-        if (ComponentSchema::validComposition(fallbackComposition))
-            composition = fallbackComposition;
-    }
-    if ((object.contains("composition") && !object["composition"].isObject()) ||
-        !ComponentSchema::validComposition(composition))
-    {
-        setError(tr("Home composition is invalid."));
+    QVariantMap composition = object.value("composition").toObject().toVariantMap();
+    if (!validateComposition(object, composition))
         return false;
-    }
-    const QColor start(theme.contains("backgroundStart")
-                           ? theme.value("backgroundStart").toString()
-                           : m_defaultTheme.value("backgroundStart", m_initialBackgroundStart).toString());
-    const QColor end(theme.contains("backgroundEnd")
-                         ? theme.value("backgroundEnd").toString()
-                         : m_defaultTheme.value("backgroundEnd", m_initialBackgroundEnd).toString());
+    const QJsonObject theme = object.value("theme").toObject();
+    QColor start(theme.contains("backgroundStart")
+                     ? theme.value("backgroundStart").toString()
+                     : m_defaultTheme.value("backgroundStart", m_initialBackgroundStart).toString());
+    QColor end(theme.contains("backgroundEnd")
+                   ? theme.value("backgroundEnd").toString()
+                   : m_defaultTheme.value("backgroundEnd", m_initialBackgroundEnd).toString());
     if (!start.isValid() || !end.isValid())
     {
         setError(tr("Home theme contains invalid colors."));
         return false;
     }
-    auto presentation = appearanceDefaults();
+    QVariantMap presentation = appearanceDefaults();
     for (auto it = presentation.begin(); it != presentation.end(); ++it)
         if (m_defaultTheme.contains(it.key()))
             it.value() = m_defaultTheme.value(it.key());
@@ -1301,7 +1229,7 @@ HomeLayout::loadDocument(const QByteArray& data, bool userDocument)
                     else
                         home[it.key()] = it.value();
                 }
-            }
+        }
         const auto readable = [&](const QVariantMap& theme)
         {
             auto origin = home;
@@ -1321,9 +1249,162 @@ HomeLayout::loadDocument(const QByteArray& data, bool userDocument)
                 return false;
             }
     }
-    QSet<QString> ids;
     QSet<QString> categoryIds;
     const auto categoryArray = object.value("categories").toArray();
+    if (!validateCategories(categoryArray, categoryIds))
+        return false;
+    QJsonArray components;
+    QSet<QString> ids;
+    if (!validateComponents(entries, version, categoryIds, ids, components))
+        return false;
+    QString hierarchyError;
+    if (!ComponentSchema::hierarchyFits(components, composition, categoryArray, &hierarchyError))
+    {
+        setError(hierarchyError);
+        return false;
+    }
+    m_items = components;
+    m_pages = pages;
+    m_homePageId = homePage.toString();
+    m_rootPage = rootPage;
+    m_studioAppearance = editorAppearance;
+    m_composition = composition;
+    m_appearance = presentation;
+    m_themeKeys.clear();
+    for (const auto& key : theme.keys())
+        m_themeKeys.insert(key);
+    if (userDocument && version == 1)
+        m_legacyDocument = data;
+    m_categories = categoryArray;
+    m_brandVisible = theme.value("brandVisible").toBool(false);
+    m_backgroundStart = start.name();
+    m_backgroundEnd = end.name();
+    m_tileRoundness = qBound(0.0, theme.value("tileRoundness").toDouble(0.18), 1.0);
+    setError({});
+    return true;
+}
+
+bool
+HomeLayout::validateDocumentStructure(const QByteArray& data, bool userDocument, int& version, QJsonArray& entries)
+{
+    if (data.size() > 4 * 1024 * 1024)
+    {
+        setError(tr("Home layout exceeds the supported size."));
+        return false;
+    }
+    QJsonParseError error;
+    const auto document = QJsonDocument::fromJson(data, &error);
+    version = document.object().value("schemaVersion").toInt();
+    entries = document.object().value(version == 1 ? "items" : "components").toArray();
+    if (error.error != QJsonParseError::NoError || !document.isObject() || (version != 1 && version != 2) ||
+        !entries.isArray() || data.size() > 4 * 1024 * 1024 || entries.size() > 1024)
+    {
+        setError(userDocument ? tr("User Home layout is invalid; defaults were restored.")
+                              : tr("Default Home layout is invalid."));
+        return false;
+    }
+    return true;
+}
+
+bool
+HomeLayout::loadAndValidatePages(const QJsonObject& object, QSet<QString>& pageIds, QJsonArray& pages)
+{
+    if (object.contains("pages") && (!object["pages"].isArray() || object["pages"].toArray().size() > 64 || m_owner))
+    {
+        setError(tr("Invalid page collection."));
+        return false;
+    }
+    for (const auto& entry : object["pages"].toArray())
+    {
+        const auto page = entry.toObject();
+        const auto id = page["id"].toString();
+        HomeLayout validator(m_registry);
+        validator.m_owner = this;
+        if (!ComponentSchema::safeId(id) || pageIds.contains(id) || page["name"].toString().trimmed().isEmpty() ||
+            page["name"].toString().size() > 80 || !page["layout"].isObject() ||
+            !validator.loadDocument(QJsonDocument(page["layout"].toObject()).toJson(), false))
+        {
+            setError(tr("Page %1 has an invalid identity, name or layout: %2")
+                         .arg(page["name"].toString(), validator.errorString()));
+            return false;
+        }
+        pageIds.insert(id);
+        pages.append(page);
+    }
+    return true;
+}
+
+bool
+HomeLayout::validateStudioAppearance(const QJsonObject& object, QVariantMap& editorAppearance)
+{
+    if (object.contains("studioAppearance"))
+    {
+        auto effective = appearanceDefaults();
+        const auto packaged = studioOptions().value("appearance").toMap();
+        for (auto it = packaged.cbegin(); it != packaged.cend(); ++it)
+            effective[it.key()] = it.value();
+        for (auto it = editorAppearance.cbegin(); it != editorAppearance.cend(); ++it)
+            effective[it.key()] = it.value();
+        if (m_owner || !object["studioAppearance"].isObject() || !readableStudioAppearance(effective))
+        {
+            setError(tr("Studio colors must keep text and focus readable on normal and selected surfaces."));
+            return false;
+        }
+    }
+    return true;
+}
+
+bool
+HomeLayout::validateRootPage(const QJsonObject& object, const QJsonObject& rootPage, const QJsonArray& pages,
+                             const QSet<QString>& pageIds, const QJsonValue& homePage)
+{
+    bool valid = !m_owner && rootPage.isObject();
+    for (auto it = rootPage.begin(); it != rootPage.end(); ++it)
+        if (!QStringList{"name", "visible", "position"}.contains(it.key()))
+            valid = false;
+    const auto position = rootPage.value("position");
+    if (!rootPage.value("name").isString() || rootPage.value("name").toString().trimmed().isEmpty() ||
+        rootPage.value("name").toString().size() > 80 || rootPage.value("name").toString().contains(QChar::Null) ||
+        !rootPage.value("visible").isBool() || !position.isDouble() || position.toDouble() != position.toInt() ||
+        position.toInt() < 0 || position.toInt() > pages.size() ||
+        (!rootPage.value("visible").toBool() && homePage.toString().isEmpty()) ||
+        pages.size() + (rootPage.value("visible").toBool() ? 1 : 0) > 64)
+        valid = false;
+    if (!valid)
+    {
+        setError(tr("Root page metadata is invalid. Nothing changed."));
+        return false;
+    }
+    return true;
+}
+
+bool
+HomeLayout::validateHomePage(const QJsonObject& object, const QJsonValue& homePage, const QSet<QString>& pageIds)
+{
+    if (object.contains("homePageId") &&
+        (m_owner || !homePage.isString() || (!homePage.toString().isEmpty() && !pageIds.contains(homePage.toString()))))
+    {
+        setError(tr("The designated Home page does not exist."));
+        return false;
+    }
+    return true;
+}
+
+bool
+HomeLayout::validateComposition(const QJsonObject& object, QVariantMap& composition)
+{
+    if ((object.contains("composition") && !object["composition"].isObject()) ||
+        !ComponentSchema::validComposition(composition))
+    {
+        setError(tr("Home composition is invalid."));
+        return false;
+    }
+    return true;
+}
+
+bool
+HomeLayout::validateCategories(const QJsonArray& categoryArray, QSet<QString>& categoryIds)
+{
     if (categoryArray.size() > HomeLayout::MaxLayoutCategories)
     {
         setError(tr("Too many Home categories."));
@@ -1343,7 +1424,13 @@ HomeLayout::loadDocument(const QByteArray& data, bool userDocument)
         }
         categoryIds.insert(id);
     }
-    QJsonArray components;
+    return true;
+}
+
+bool
+HomeLayout::validateComponents(const QJsonArray& entries, int version, const QSet<QString>& categoryIds,
+                               QSet<QString>& ids, QJsonArray& components)
+{
     for (const auto& value : entries.toArray())
     {
         QString componentError;
@@ -1375,32 +1462,9 @@ HomeLayout::loadDocument(const QByteArray& data, bool userDocument)
         ids.insert(id);
         components.append(item);
     }
-    QString hierarchyError;
-    if (!ComponentSchema::hierarchyFits(components, composition, categoryArray, &hierarchyError))
-    {
-        setError(hierarchyError);
-        return false;
-    }
-    m_items = components;
-    m_pages = pages;
-    m_homePageId = homePage.toString();
-    m_rootPage = rootPage;
-    m_studioAppearance = editorAppearance;
-    m_composition = composition;
-    m_appearance = presentation;
-    m_themeKeys.clear();
-    for (const auto& key : theme.keys())
-        m_themeKeys.insert(key);
-    if (userDocument && version == 1)
-        m_legacyDocument = data;
-    m_categories = categoryArray;
-    m_brandVisible = theme.value("brandVisible").toBool(false);
-    m_backgroundStart = start.name();
-    m_backgroundEnd = end.name();
-    m_tileRoundness = qBound(0.0, theme.value("tileRoundness").toDouble(0.18), 1.0);
-    setError({});
     return true;
 }
+
 bool
 HomeLayout::addAppTile(const QString& appId)
 {

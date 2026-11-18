@@ -291,57 +291,78 @@ InputManager::eventFilter(QObject* object, QEvent* event)
     if (event->type() == QEvent::ShortcutOverride)
     {
         const auto key = static_cast<QKeyEvent*>(event);
-        const auto shortcutModifiers = Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier;
-        const bool customBinding = !(key->modifiers() & shortcutModifiers) && m_bindings.values().contains(key->key());
-        bool textInput = false;
-        if (!bindingActive() && m_acceptTextKeys)
-        {
-            for (auto it = m_textInputTargets.rbegin(); it != m_textInputTargets.rend(); ++it)
-            {
-                const QPointer<QObject> target = *it;
-                if (!target || !target->property("visible").toBool() || !target->property("enabled").toBool())
-                    continue;
-                const bool chord =
-                    (key->modifiers() & shortcutModifiers) && !(key->modifiers() & Qt::GroupSwitchModifier);
-                bool printable = !key->text().isEmpty();
-                for (const QChar ch : key->text())
-                    if (ch.unicode() < 0x20 || (ch.unicode() >= 0x7f && ch.unicode() <= 0x9f))
-                        printable = false;
-                textInput = chord || printable;
-                break;
-            }
-        }
-        if (m_ambientInputActive || key->key() == m_ambientWakeKey || listening() || customBinding || textInput)
-        {
-            event->accept();
+        if (handleShortcutOverride(key, event))
             return true;
-        }
     }
     if (event->type() == QEvent::KeyRelease)
     {
         const auto key = static_cast<QKeyEvent*>(event);
-        if (key->key() == m_ambientWakeKey)
-        {
-            if (!key->isAutoRepeat())
-                m_ambientWakeKey = -1;
+        if (handleKeyRelease(key))
             return true;
-        }
-        if (m_textReleaseKeys.contains(key->key()))
-        {
-            if (!key->isAutoRepeat())
-                m_textReleaseKeys.remove(key->key());
-            return true;
-        }
-        if (key->key() == m_releaseKey)
-        {
-            if (!key->isAutoRepeat())
-                m_releaseKey = 0;
-            return true;
-        }
     }
     if (event->type() != QEvent::KeyPress)
         return false;
-    const auto key = static_cast<QKeyEvent*>(event);
+    return handleKeyPress(static_cast<QKeyEvent*>(event));
+}
+
+bool
+InputManager::handleShortcutOverride(QKeyEvent* key, QEvent* event)
+{
+    const auto shortcutModifiers = Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier;
+    const bool customBinding = !(key->modifiers() & shortcutModifiers) && m_bindings.values().contains(key->key());
+    bool textInput = false;
+    if (!bindingActive() && m_acceptTextKeys)
+    {
+        for (auto it = m_textInputTargets.rbegin(); it != m_textInputTargets.rend(); ++it)
+        {
+            const QPointer<QObject> target = *it;
+            if (!target || !target->property("visible").toBool() || !target->property("enabled").toBool())
+                continue;
+            const bool chord =
+                (key->modifiers() & shortcutModifiers) && !(key->modifiers() & Qt::GroupSwitchModifier);
+            bool printable = !key->text().isEmpty();
+            for (const QChar ch : key->text())
+                if (ch.unicode() < 0x20 || (ch.unicode() >= 0x7f && ch.unicode() <= 0x9f))
+                    printable = false;
+            textInput = chord || printable;
+            break;
+        }
+    }
+    if (m_ambientInputActive || key->key() == m_ambientWakeKey || listening() || customBinding || textInput)
+    {
+        event->accept();
+        return true;
+    }
+    return false;
+}
+
+bool
+InputManager::handleKeyRelease(QKeyEvent* key)
+{
+    if (key->key() == m_ambientWakeKey)
+    {
+        if (!key->isAutoRepeat())
+            m_ambientWakeKey = -1;
+        return true;
+    }
+    if (m_textReleaseKeys.contains(key->key()))
+    {
+        if (!key->isAutoRepeat())
+            m_textReleaseKeys.remove(key->key());
+        return true;
+    }
+    if (key->key() == m_releaseKey)
+    {
+        if (!key->isAutoRepeat())
+            m_releaseKey = 0;
+        return true;
+    }
+    return false;
+}
+
+bool
+InputManager::handleKeyPress(QKeyEvent* key)
+{
     if (m_ambientInputActive)
     {
         m_ambientWakeKey = key->key();
@@ -378,7 +399,7 @@ InputManager::eventFilter(QObject* object, QEvent* event)
                 m_textReleaseKeys.insert(key->key());
                 return true;
             }
-            break; // only the frontmost visible keyboard receives text
+            break;
         }
     }
     if (m_textReleaseKeys.contains(key->key()) && key->isAutoRepeat())

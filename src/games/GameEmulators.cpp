@@ -313,6 +313,31 @@ GameEmulators::definitions()
     if (!file.open(QIODevice::ReadOnly) || file.size() > 65536)
         return {};
     const auto doc = QJsonDocument::fromJson(file.readAll()).toVariant().toMap();
+    if (!validateEmulatorDocument(doc))
+        return {};
+    const auto target = doc.value("target").toMap();
+    if (!validateEmulatorTarget(target))
+        return {};
+    const auto generations = doc.value("generations").toMap();
+    if (!validateEmulatorGenerations(generations))
+        return {};
+    const auto runtimes = doc.value("runtimes").toList();
+    const auto coverage = doc.value("generationCoverage").toMap();
+    QSet<QString> actualPlatforms;
+    if (!validateEmulatorRuntimes(runtimes, actualPlatforms))
+        return {};
+    const auto integrated = coverage.value("integratedPlatforms").toStringList();
+    QSet<QString> integratedSet(integrated.begin(), integrated.end());
+    if (!validateEmulatorCoverage(coverage, integratedSet))
+        return {};
+    if (actualPlatforms != integratedSet)
+        return {};
+    return runtimes;
+}
+
+bool
+GameEmulators::validateEmulatorDocument(const QVariantMap& doc)
+{
     const auto documentKeys = doc.keys();
     const QSet<QString> expectedKeys{"schemaVersion", "target", "generationCoverage", "generations", "runtimes"};
     const auto schemaType = doc.value("schemaVersion").metaType().id();
@@ -325,15 +350,24 @@ GameEmulators::definitions()
                      }) ||
         (schemaType != QMetaType::Int && schemaType != QMetaType::LongLong && schemaType != QMetaType::Double) ||
         doc.value("schemaVersion").toDouble() != 2)
-        return {};
-    const auto target = doc.value("target").toMap();
-    if (target.value("os").toString() != "ubuntu" || target.value("version").toString() != "26.04" ||
-        target.value("architectures").toStringList() != QStringList{"amd64"} ||
-        target.value("supportBoundary").toString().isEmpty())
-        return {};
-    const auto generations = doc.value("generations").toMap();
+        return false;
+    return true;
+}
+
+bool
+GameEmulators::validateEmulatorTarget(const QVariantMap& target)
+{
+    return target.value("os").toString() == "ubuntu" &&
+           target.value("version").toString() == "26.04" &&
+           target.value("architectures").toStringList() == QStringList{"amd64"} &&
+           !target.value("supportBoundary").toString().isEmpty();
+}
+
+bool
+GameEmulators::validateEmulatorGenerations(const QVariantMap& generations)
+{
     if (generations.isEmpty())
-        return {};
+        return false;
     static const QSet<QString> generationKeys{"architecture",
                                               "installer",
                                               "account",
@@ -355,140 +389,154 @@ GameEmulators::definitions()
                              {
                                  return generationKeys.contains(k);
                              }))
-                return {};
+                return false;
             const auto budget = value.value("budget").toMap();
             if (!budget.isEmpty() && (!QJsonValue::fromVariant(budget.value("diskMiB")).isDouble() ||
                                       !QJsonValue::fromVariant(budget.value("ramMiB")).isDouble()))
-                return {};
+                return false;
         }
     }
-    const auto runtimes = doc.value("runtimes").toList();
-    const auto coverage = doc.value("generationCoverage").toMap();
-    const auto integrated = coverage.value("integratedPlatforms").toStringList();
-    const auto notIntegrated = coverage.value("notIntegrated").toStringList();
-    QSet<QString> actualPlatforms, ids;
+    return true;
+}
+
+bool
+GameEmulators::validateEmulatorRuntimes(const QVariantList& runtimes, QSet<QString>& actualPlatforms)
+{
+    static const QSet<QString> engines{
+        "ppsspp", "dolphin", "pcsx2", "retroarch", "rpcs3", "shadps4", "vita3k", "xemu", "xenia", "cemu"};
+    static const QMap<QString, QString> expandedKinds{{"rpcs3", "ps3-pup"},
+                                                      {"shadps4", "none"},
+                                                      {"vita3k", "vita-pup"},
+                                                      {"xemu", "xbox-bootset"},
+                                                      {"xenia", "none"},
+                                                      {"cemu", "none"}};
+    QSet<QString> ids;
     for (const auto& entry : runtimes)
     {
-        const auto item = entry.toMap();
-        const auto itemKeys = item.keys();
-        const QSet<QString> allowedFields{
-            "id", "name", "engine", "platforms", "formats", "binary", "core", "packages", "firmwareRequired", "setup"};
-        for (const auto& key : itemKeys)
-            if (!allowedFields.contains(key))
-                return {};
-        const auto id = item.value("id").toString(), engine = item.value("engine").toString();
-        const auto packages = item.value("packages").toStringList();
-        const auto formats = item.value("formats").toStringList();
-        const auto platforms = item.value("platforms").toStringList();
-        static const QSet<QString> engines{
-            "ppsspp", "dolphin", "pcsx2", "retroarch", "rpcs3", "shadps4", "vita3k", "xemu", "xenia", "cemu"};
-        const QMap<QString, QString> expandedKinds{{"rpcs3", "ps3-pup"},
-                                                   {"shadps4", "none"},
-                                                   {"vita3k", "vita-pup"},
-                                                   {"xemu", "xbox-bootset"},
-                                                   {"xenia", "none"},
-                                                   {"cemu", "none"}};
-        if (expandedKinds.contains(engine) &&
-            (id != engine || !item.contains("setup") ||
-             item.value("setup").toMap().value("firmwareKind").toString() != expandedKinds.value(engine)))
-            return {};
-        if (item.contains("setup"))
-        {
-            const auto setup = item.value("setup").toMap();
-            const auto setupKeys = setup.keys();
-            if (QSet<QString>(setupKeys.cbegin(), setupKeys.cend()) !=
-                QSet<QString>{
-                    "videoModes", "firmwareKind", "firmwareLabel", "firmwareHelp", "gameHelp", "controllerHelp"})
-                return {};
-            const auto modes = setup.value("videoModes").toStringList();
-            if (modes.isEmpty() || QSet<QString>(modes.cbegin(), modes.cend()).size() != modes.size())
-                return {};
-            for (const auto& mode : modes)
-                if (mode != "automatic" && mode != "software")
-                    return {};
-            const auto kind = setup.value("firmwareKind").toString();
-            if (!QStringList{"none", "ps3-pup", "vita-pup", "xbox-bootset"}.contains(kind) ||
-                (kind != "none") != item.value("firmwareRequired").toBool())
-                return {};
-            for (const auto& key : QStringList{"firmwareLabel", "firmwareHelp", "gameHelp", "controllerHelp"})
-                if (setup.value(key).metaType().id() != QMetaType::QString ||
-                    setup.value(key).toString().size() > 2048 || setup.value(key).toString().contains(QChar::Null))
-                    return {};
-        }
-        if (item.isEmpty() || !QRegularExpression("^[a-z0-9-]{1,48}$").match(id).hasMatch() || ids.contains(id) ||
-            !engines.contains(engine) || item.value("binary").toString().isEmpty() ||
-            !QDir::isAbsolutePath(item.value("binary").toString()) || packages.isEmpty() || platforms.isEmpty() ||
-            formats.isEmpty() || item.value("firmwareRequired").metaType().id() != QMetaType::Bool ||
-            (item.contains("core") && !QDir::isAbsolutePath(item.value("core").toString())))
-            return {};
-        const QSet<QString> packageSet(packages.cbegin(), packages.cend());
-        if (engine == "retroarch")
-        {
-            int corePackages = 0;
-            for (const auto& package : packages)
-                if (package.startsWith("libretro-"))
-                    ++corePackages;
-            if (!item.contains("core") || !packageSet.contains("retroarch") || corePackages != 1)
-                return {};
-        }
-        else if (engine == "rpcs3")
-        {
-            if (item.contains("core") || packageSet != QSet<QString>{"isolde-rpcs3"})
-                return {};
-        }
-        else if (engine == "shadps4")
-        {
-            if (item.contains("core") || packageSet != QSet<QString>{"isolde-shadps4"})
-                return {};
-        }
-        else if (engine == "vita3k")
-        {
-            if (item.contains("core") || packageSet != QSet<QString>{"isolde-vita3k"})
-                return {};
-        }
-        else if (engine == "xemu")
-        {
-            if (item.contains("core") || packageSet != QSet<QString>{"isolde-xemu"})
-                return {};
-        }
-        else if (engine == "xenia")
-        {
-            if (item.contains("core") || packageSet != QSet<QString>{"isolde-xenia"})
-                return {};
-        }
-        else if (engine == "cemu")
-        {
-            if (item.contains("core") || packageSet != QSet<QString>{"isolde-cemu"})
-                return {};
-        }
-        else
-        {
-            const QSet<QString> expectedPackage = engine == "ppsspp"    ? QSet<QString>{"isolde-ppsspp"}
-                                                  : engine == "dolphin" ? QSet<QString>{"dolphin-emu"}
-                                                                        : QSet<QString>{"pcsx2"};
-            if (item.contains("core") || packageSet != expectedPackage)
-                return {};
-        }
-        ids.insert(id);
-        for (const auto& package : packages)
-            if (!QRegularExpression("^[a-z0-9][a-z0-9+.-]{0,80}$").match(package).hasMatch())
-                return {};
-        for (const auto& format : formats)
-            if (!QRegularExpression("^[a-z0-9]{1,8}$").match(format).hasMatch())
-                return {};
-        for (const auto& platform : platforms)
-            actualPlatforms.insert(platform);
+        if (!validateEmulatorRuntimeItem(item, ids, actualPlatforms))
+            return false;
     }
-    const QSet<QString> integratedSet(integrated.begin(), integrated.end());
+    return !runtimes.isEmpty();
+}
+
+bool
+GameEmulators::validateEmulatorRuntimeItem(const QVariantMap& item, QSet<QString>& ids, QSet<QString>& actualPlatforms)
+{
+    const auto itemKeys = item.keys();
+    const QSet<QString> allowedFields{
+        "id", "name", "engine", "platforms", "formats", "binary", "core", "packages", "firmwareRequired", "setup"};
+    for (const auto& key : itemKeys)
+        if (!allowedFields.contains(key))
+            return false;
+    const auto id = item.value("id").toString(), engine = item.value("engine").toString();
+    const auto packages = item.value("packages").toStringList();
+    const auto formats = item.value("formats").toStringList();
+    const auto platforms = item.value("platforms").toStringList();
+    static const QSet<QString> engines{
+        "ppsspp", "dolphin", "pcsx2", "retroarch", "rpcs3", "shadps4", "vita3k", "xemu", "xenia", "cemu"};
+    static const QMap<QString, QString> expandedKinds{{"rpcs3", "ps3-pup"},
+                                                      {"shadps4", "none"},
+                                                      {"vita3k", "vita-pup"},
+                                                      {"xemu", "xbox-bootset"},
+                                                      {"xenia", "none"},
+                                                      {"cemu", "none"}};
+    if (expandedKinds.contains(engine) &&
+        (id != engine || !item.contains("setup") ||
+         item.value("setup").toMap().value("firmwareKind").toString() != expandedKinds.value(engine)))
+        return false;
+    if (!validateEmulatorRuntimeSetup(item))
+        return false;
+    if (item.isEmpty() || !QRegularExpression("^[a-z0-9-]{1,48}$").match(id).hasMatch() || ids.contains(id) ||
+        !engines.contains(engine) || item.value("binary").toString().isEmpty() ||
+        !QDir::isAbsolutePath(item.value("binary").toString()) || packages.isEmpty() || platforms.isEmpty() ||
+        formats.isEmpty() || item.value("firmwareRequired").metaType().id() != QMetaType::Bool ||
+        (item.contains("core") && !QDir::isAbsolutePath(item.value("core").toString())))
+        return false;
+    if (!validateEmulatorRuntimePackages(engine, item, packages))
+        return false;
+    ids.insert(id);
+    for (const auto& package : packages)
+        if (!QRegularExpression("^[a-z0-9][a-z0-9+.-]{0,80}$").match(package).hasMatch())
+            return false;
+    for (const auto& format : formats)
+        if (!QRegularExpression("^[a-z0-9]{1,8}$").match(format).hasMatch())
+            return false;
+    for (const auto& platform : platforms)
+        actualPlatforms.insert(platform);
+    return true;
+}
+
+bool
+GameEmulators::validateEmulatorRuntimePackages(const QString& engine, const QVariantMap& item, const QStringList& packages)
+{
+    const QSet<QString> packageSet(packages.cbegin(), packages.cend());
+    if (engine == "retroarch")
+    {
+        int corePackages = 0;
+        for (const auto& package : packages)
+            if (package.startsWith("libretro-"))
+                ++corePackages;
+        if (!item.contains("core") || !packageSet.contains("retroarch") || corePackages != 1)
+            return false;
+    }
+    else if (engine == "rpcs3")
+    {
+        if (item.contains("core") || packageSet != QSet<QString>{"isolde-rpcs3"})
+            return false;
+    }
+    else if (engine == "shadps4")
+    {
+        if (item.contains("core") || packageSet != QSet<QString>{"isolde-shadps4"})
+            return false;
+    }
+    else if (engine == "vita3k")
+    {
+        if (item.contains("core") || packageSet != QSet<QString>{"isolde-vita3k"})
+            return false;
+    }
+    else if (engine == "xemu")
+    {
+        if (item.contains("core") || packageSet != QSet<QString>{"isolde-xemu"})
+            return false;
+    }
+    else if (engine == "xenia")
+    {
+        if (item.contains("core") || packageSet != QSet<QString>{"isolde-xenia"})
+            return false;
+    }
+    else if (engine == "cemu")
+    {
+        if (item.contains("core") || packageSet != QSet<QString>{"isolde-cemu"})
+            return false;
+    }
+    else
+    {
+        const QSet<QString> expectedPackage = engine == "ppsspp"    ? QSet<QString>{"isolde-ppsspp"}
+                                              : engine == "dolphin" ? QSet<QString>{"dolphin-emu"}
+                                                                      : QSet<QString>{"pcsx2"};
+        if (item.contains("core") || packageSet != expectedPackage)
+            return false;
+    }
+    return true;
+}
+
+
+bool
+GameEmulators::validateEmulatorCoverage(const QVariantMap& coverage, const QSet<QString>& integratedSet)
+{
+    const auto notIntegrated = coverage.value("notIntegrated").toStringList();
     const QSet<QString> notIntegratedSet(notIntegrated.begin(), notIntegrated.end());
-    if (runtimes.isEmpty() || integratedSet.size() != integrated.size() ||
-        notIntegratedSet.size() != notIntegrated.size() || actualPlatforms != integratedSet)
-        return {};
+    if (integratedSet.size() != coverage.value("integratedPlatforms").toStringList().size() ||
+        notIntegratedSet.size() != notIntegrated.size())
+        return false;
     for (const auto& platform : integratedSet)
         if (notIntegratedSet.contains(platform))
-            return {};
-    return runtimes;
+            return false;
+    return true;
 }
+
+QVariantMap
+
 QVariantMap
 GameEmulators::definition(const QString& id)
 {

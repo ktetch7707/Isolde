@@ -337,6 +337,26 @@ class HomeLayout final : public QObject
     bool
     loadDocument(const QByteArray& data, bool userDocument);
     bool
+    validateDocumentStructure(const QByteArray& data, bool userDocument, int& version, QJsonArray& entries);
+    bool
+    loadAndValidatePages(const QJsonObject& object, QSet<QString>& pageIds, QJsonArray& pages);
+    bool
+    validateStudioAppearance(const QJsonObject& object, QVariantMap& editorAppearance);
+    bool
+    validateRootPage(const QJsonObject& object, const QJsonObject& rootPage, const QJsonArray& pages,
+                     const QSet<QString>& pageIds, const QJsonValue& homePage);
+    bool
+    validateHomePage(const QJsonObject& object, const QJsonValue& homePage, const QSet<QString>& pageIds);
+    bool
+    validateComposition(const QJsonObject& object, QVariantMap& composition);
+    bool
+    buildAppearance(const QJsonObject& theme, QVariantMap& presentation);
+    bool
+    validateCategories(const QJsonArray& categoryArray, QSet<QString>& categoryIds);
+    bool
+    validateComponents(const QJsonArray& entries, int version, const QSet<QString>& categoryIds,
+                       QSet<QString>& ids, QJsonArray& components);
+    bool
     save();
     QByteArray
     documentData() const;
@@ -457,6 +477,24 @@ class HomeLayout final : public QObject
     bool
     validateStudioOverlayKeys(const QVariantArray& overlayKeys, const QVariantMap& guide);
     validateStudioCatalog(const QVariantArray& catalog, const QVariantMap& presets);
+    bool
+    validateStudioComponentVariants(const QJsonObject& object, const QJsonObject& presets) const;
+    bool
+    validateStudioPresets(const QJsonObject& presets) const;
+    bool
+    validateStudioShapeChoices(const QJsonObject& object, const QJsonObject& presets) const;
+    bool
+    validateStudioReplacementChoices(const QJsonObject& object) const;
+    bool
+    validateStudioCatalogIds(const QJsonObject& object, const QJsonObject& presets) const;
+    bool
+    validateStudioCatalogIds(const QJsonObject& object, const QJsonObject& presets) const;
+    bool
+    validateStudioActionCategoryTypes(const QJsonArray& categories) const;
+    bool
+    validateStudioGridModeIds(const QJsonArray& modes) const;
+    bool
+    applyStudioDefaults(QVariantMap& result, const QVariantMap& guide) const;
     bool
     validateStudioActions(const QVariantArray& actions, const QVariantMap& listings);
     bool

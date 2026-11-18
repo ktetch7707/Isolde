@@ -366,9 +366,35 @@ class StudioSession final : public QObject
     QVariantMap
     proposeDesign(QJsonObject document, const QJsonObject& assets, const QString& scope, const QString& pageId);
     bool
+    validateProposeInputs(const QString& scope, const QString& pageId) const;
+    bool
+    normalizeDesignDocument(QJsonObject& document) const;
+    bool
+    applyScopeToDocument(QJsonObject& document, const QString& scope);
+    bool
+    validateNonEmptyDocument(const QJsonObject& document);
+    bool
+    resolveDesignDestination(QJsonObject& document, QJsonObject& candidate, const QString& scope,
+                             const QString& pageId);
+    QVariantMap
+    buildDesignChanges(const QJsonObject& baseline, const QJsonObject& candidate);
+    bool
+    validatePageLinks(const QJsonObject& candidate);
+    bool
     validNewAction(const QVariantMap& value);
     bool
     validDraft(const QByteArray& data);
+    bool
+    selectComponentNodes(const QString& type, const QVariantMap& options, QJsonArray& nodes);
+    bool
+    applyVariantConfiguration(const QVariantMap& configuration, const QVariantMap& options,
+                              const QString& type, QJsonObject& configured);
+    bool
+    applyComponentConfiguration(const QVariantMap& configuration, QJsonObject& configured);
+    bool
+    allocateNodeIdentities(QJsonArray& nodes, const QString& type, QHash<QString, QString>& remap);
+    bool
+    remapNodeParentIds(QJsonArray& nodes, const QHash<QString, QString>& remap);
     void
     setError(const QString& message);
 

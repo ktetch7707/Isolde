@@ -226,4 +226,10 @@ class InputManager final : public QObject
     int m_ambientWakeKey = -1;
     QList<QPointer<QObject>> m_textInputTargets;
     QSet<int> m_textReleaseKeys;
+    bool
+    handleShortcutOverride(QKeyEvent* key, QEvent* event);
+    bool
+    handleKeyRelease(QKeyEvent* key);
+    bool
+    handleKeyPress(QKeyEvent* key);
 };

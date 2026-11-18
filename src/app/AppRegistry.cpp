@@ -207,6 +207,15 @@ appIcon(const AppDefinition& app, int role = 0)
     auto profile = QCoreApplication::instance()->property("isoldeProfile").toString();
     if (profile.isEmpty())
         profile = "default";
+    const auto path = cacheAppIcon(bytes, profile, desktopName);
+    if (path.isEmpty())
+        return {};
+    return QUrl::fromLocalFile(path).toString();
+}
+
+static QString
+cacheAppIcon(const QByteArray& bytes, const QString& profile, const QRegularExpression& desktopName)
+{
     if (!desktopName.match(profile).hasMatch())
         return {};
     const auto directory =
@@ -225,7 +234,7 @@ appIcon(const AppDefinition& app, int role = 0)
         if (!file.open(QIODevice::WriteOnly) || file.write(bytes) != bytes.size() || !file.commit())
             return {};
     }
-    return QUrl::fromLocalFile(path).toString();
+    return path;
 }
 
 static QStringList

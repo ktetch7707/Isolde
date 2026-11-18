@@ -150,37 +150,8 @@ StudioSession::componentPrototype(const QString& type, const QVariantMap& config
     }
     const auto options = m_live->studioOptions();
     QJsonArray nodes;
-    if (options.value("componentPresets").toMap().contains(type))
-        nodes.append(QJsonObject::fromVariantMap(options.value("componentPresets").toMap().value(type).toMap()));
-    else if (type == "container")
-        nodes.append(QJsonObject::fromVariantMap(options.value("groupPreset").toMap()));
-    else if (type == "input-panel")
-    {
-        const auto preset = options.value("inputPanelPreset").toMap();
-        nodes.append(QJsonObject::fromVariantMap(preset.value("root").toMap()));
-        for (const auto& entry : preset.value("children").toList())
-            nodes.append(QJsonObject::fromVariantMap(entry.toMap()));
-    }
-    else if (type == "clock" || type == "text")
-    {
-        HomeLayout factory(m_live->registry());
-        configureWorker(factory);
-        if (!factory.addWidget(type))
-        {
-            setError(factory.errorString());
-            return {};
-        }
-        auto item = factory.m_items.last().toObject();
-        const auto span = options.value("widgetSpans").toMap().value(type).toMap();
-        item["placement"] = QJsonObject::fromVariantMap(
-            {{"x", 0}, {"y", 0}, {"width", span.value("width")}, {"height", span.value("height")}});
-        nodes.append(item);
-    }
-    else
-    {
-        setError(tr("Choose a registered component type."));
+    if (!selectComponentNodes(type, options, nodes))
         return {};
-    }
     if (nodes.isEmpty() || nodes.size() > 129)
     {
         setError(tr("The packaged component preset is invalid."));
@@ -198,21 +169,8 @@ StudioSession::componentPrototype(const QString& type, const QVariantMap& config
         for (const auto& entry : options.value("componentVariants").toMap().value(type).toList())
             if (entry.toMap().value("id") == configuration["variant"])
                 selected = entry.toMap();
-        if (selected.isEmpty())
-        {
-            setError(tr("This starting style is not available for that component."));
+        if (!applyVariantConfiguration(configuration, options, type, configured))
             return {};
-        }
-        auto style = configured["presentation"].toObject();
-        const auto changes = selected["presentation"].toMap();
-        for (auto it = changes.cbegin(); it != changes.cend(); ++it)
-            style[it.key()] = QJsonValue::fromVariant(it.value());
-        configured["presentation"] = style;
-        auto placement = configured["placement"].toObject();
-        const auto span = selected["span"].toMap();
-        placement["width"] = QJsonValue::fromVariant(span["width"]);
-        placement["height"] = QJsonValue::fromVariant(span["height"]);
-        configured["placement"] = placement;
     }
     for (auto it = configuration.cbegin(); it != configuration.cend(); ++it)
     {
@@ -224,24 +182,9 @@ StudioSession::componentPrototype(const QString& type, const QVariantMap& config
         }
         if (it.key() == "apps" || it.key() == "buttons" || it.key() == "variant")
             continue;
-        if (it.key() == "presentation")
-        {
-            if (it.value().metaType().id() != QMetaType::QVariantMap)
-            {
-                setError(tr("Choose valid presentation values."));
-                return {};
-            }
-            auto style = configured["presentation"].toObject();
-            const auto changes = it.value().toMap();
-            for (auto change = changes.cbegin(); change != changes.cend(); ++change)
-                style[change.key()] = QJsonValue::fromVariant(change.value());
-            configured["presentation"] = style;
-        }
-        else if (it.key() == "action" && it.value().toMap().isEmpty())
-            configured.remove("action");
-        else
-            configured[it.key()] = QJsonValue::fromVariant(it.value());
     }
+    if (!applyComponentConfiguration(configuration, configured))
+        return {};
     nodes[0] = configured;
     if (configuration.contains("buttons"))
     {
@@ -311,57 +254,10 @@ StudioSession::componentPrototype(const QString& type, const QVariantMap& config
         nodes[0] = configured;
     }
     QHash<QString, QString> remap;
-    QSet<QString> allocated;
-    for (int i = 0; i < nodes.size(); ++i)
-    {
-        if (!validNewAction(nodes[i].toObject()["action"].toObject().toVariantMap()))
-            return {};
-        QString error;
-        const auto canonical = ComponentSchema::component(nodes[i].toObject().toVariantMap(), true, &error);
-        if (canonical.isEmpty())
-        {
-            setError(error);
-            return {};
-        }
-        auto item = QJsonObject::fromVariantMap(canonical);
-        const auto oldId = item["id"].toString();
-        if (remap.contains(oldId))
-        {
-            setError(tr("The preset contains duplicate identities."));
-            return {};
-        }
-        auto identity = allocateId((type == "clock" || type == "text") ? type : oldId);
-        if (identity.isEmpty())
-            return {};
-        const auto base = identity;
-        int suffix = 2;
-        while (allocated.contains(identity))
-            identity = base + QString::number(suffix++);
-        if (!ComponentSchema::safeId(identity))
-        {
-            setError(tr("The component identity exceeds its limit."));
-            return {};
-        }
-        allocated.insert(identity);
-        remap[oldId] = identity;
-        item["id"] = identity;
-        nodes[i] = item;
-    }
-    for (int i = 0; i < nodes.size(); ++i)
-    {
-        auto item = nodes[i].toObject();
-        const auto parent = item.value("parentId").toString();
-        if (!parent.isEmpty())
-        {
-            if (!remap.contains(parent))
-            {
-                setError(tr("The preset refers to an external parent."));
-                return {};
-            }
-            item["parentId"] = remap[parent];
-            nodes[i] = item;
-        }
-    }
+    if (!allocateNodeIdentities(nodes, type, remap))
+        return {};
+    if (!remapNodeParentIds(nodes, remap))
+        return {};
     const auto root = nodes.first().toObject();
     if (!root.value("parentId").toString().isEmpty())
     {
@@ -376,6 +272,168 @@ StudioSession::componentPrototype(const QString& type, const QVariantMap& config
             {"root", root.toVariantMap()},
             {"components", nodes.toVariantList()},
             {"viewItems", view.items()}};
+}
+
+bool
+StudioSession::selectComponentNodes(const QString& type, const QVariantMap& options, QJsonArray& nodes)
+{
+    if (options.value("componentPresets").toMap().contains(type))
+        nodes.append(QJsonObject::fromVariantMap(options.value("componentPresets").toMap().value(type).toMap()));
+    else if (type == "container")
+        nodes.append(QJsonObject::fromVariantMap(options.value("groupPreset").toMap()));
+    else if (type == "input-panel")
+    {
+        const auto preset = options.value("inputPanelPreset").toMap();
+        nodes.append(QJsonObject::fromVariantMap(preset.value("root").toMap()));
+        for (const auto& entry : preset.value("children").toList())
+            nodes.append(QJsonObject::fromVariantMap(entry.toMap()));
+    }
+    else if (type == "clock" || type == "text")
+    {
+        HomeLayout factory(m_live->registry());
+        configureWorker(factory);
+        if (!factory.addWidget(type))
+        {
+            setError(factory.errorString());
+            return false;
+        }
+        auto item = factory.m_items.last().toObject();
+        const auto span = options.value("widgetSpans").toMap().value(type).toMap();
+        item["placement"] = QJsonObject::fromVariantMap(
+            {{"x", 0}, {"y", 0}, {"width", span.value("width")}, {"height", span.value("height")}});
+        nodes.append(item);
+    }
+    else
+    {
+        setError(tr("Choose a registered component type."));
+        return false;
+    }
+    return true;
+}
+
+bool
+StudioSession::applyVariantConfiguration(const QVariantMap& configuration, const QVariantMap& options,
+                                         const QString& type, QJsonObject& configured)
+{
+    if (configuration.contains("variant"))
+    {
+        if (configuration["variant"].metaType().id() != QMetaType::QString)
+        {
+            setError(tr("Choose a registered starting style."));
+            return false;
+        }
+        QVariantMap selected;
+        for (const auto& entry : options.value("componentVariants").toMap().value(type).toList())
+            if (entry.toMap().value("id") == configuration["variant"])
+                selected = entry.toMap();
+        if (selected.isEmpty())
+        {
+            setError(tr("This starting style is not available for that component."));
+            return false;
+        }
+        auto style = configured["presentation"].toObject();
+        const auto changes = selected["presentation"].toMap();
+        for (auto it = changes.cbegin(); it != changes.cend(); ++it)
+            style[it.key()] = QJsonValue::fromVariant(it.value());
+        configured["presentation"] = style;
+        auto placement = configured["placement"].toObject();
+        const auto span = selected["span"].toMap();
+        placement["width"] = QJsonValue::fromVariant(span["width"]);
+        placement["height"] = QJsonValue::fromVariant(span["height"]);
+        configured["placement"] = placement;
+    }
+    return true;
+}
+
+bool
+StudioSession::applyComponentConfiguration(const QVariantMap& configuration, QJsonObject& configured)
+{
+    for (auto it = configuration.cbegin(); it != configuration.cend(); ++it)
+    {
+        if (it.key() == "apps" || it.key() == "buttons" || it.key() == "variant")
+            continue;
+        if (it.key() == "presentation")
+        {
+            if (it.value().metaType().id() != QMetaType::QVariantMap)
+            {
+                setError(tr("Choose valid presentation values."));
+                return false;
+            }
+            auto style = configured["presentation"].toObject();
+            const auto changes = it.value().toMap();
+            for (auto change = changes.cbegin(); change != changes.cend(); ++change)
+                style[change.key()] = QJsonValue::fromVariant(change.value());
+            configured["presentation"] = style;
+        }
+        else if (it.key() == "action" && it.value().toMap().isEmpty())
+            configured.remove("action");
+        else
+            configured[it.key()] = QJsonValue::fromVariant(it.value());
+    }
+    return true;
+}
+
+bool
+StudioSession::allocateNodeIdentities(QJsonArray& nodes, const QString& type, QHash<QString, QString>& remap)
+{
+    QSet<QString> allocated;
+    for (int i = 0; i < nodes.size(); ++i)
+    {
+        if (!validNewAction(nodes[i].toObject()["action"].toObject().toVariantMap()))
+            return false;
+        QString error;
+        const auto canonical = ComponentSchema::component(nodes[i].toObject().toVariantMap(), true, &error);
+        if (canonical.isEmpty())
+        {
+            setError(error);
+            return false;
+        }
+        auto item = QJsonObject::fromVariantMap(canonical);
+        const auto oldId = item["id"].toString();
+        if (remap.contains(oldId))
+        {
+            setError(tr("The preset contains duplicate identities."));
+            return false;
+        }
+        auto identity = allocateId((type == "clock" || type == "text") ? type : oldId);
+        if (identity.isEmpty())
+            return false;
+        const auto base = identity;
+        int suffix = 2;
+        while (allocated.contains(identity))
+            identity = base + QString::number(suffix++);
+        if (!ComponentSchema::safeId(identity))
+        {
+            setError(tr("The component identity exceeds its limit."));
+            return false;
+        }
+        allocated.insert(identity);
+        remap[oldId] = identity;
+        item["id"] = identity;
+        nodes[i] = item;
+    }
+    return true;
+}
+
+bool
+StudioSession::remapNodeParentIds(QJsonArray& nodes, const QHash<QString, QString>& remap)
+{
+    for (int i = 0; i < nodes.size(); ++i)
+    {
+        auto item = nodes[i].toObject();
+        const auto parent = item.value("parentId").toString();
+        if (!parent.isEmpty())
+        {
+            if (!remap.contains(parent))
+            {
+                setError(tr("The preset refers to an external parent."));
+                return false;
+            }
+            item["parentId"] = remap[parent];
+            nodes[i] = item;
+        }
+    }
+    return true;
 }
 
 QVariantMap

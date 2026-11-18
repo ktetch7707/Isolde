@@ -90,113 +90,16 @@ HomeLayout::studioOptions() const
             {}))
         return {};
     const auto presets = object["componentPresets"].toObject();
-    if (object.contains("componentVariants"))
-    {
-        if (!object["componentVariants"].isObject() || object["componentVariants"].toObject().size() > 3)
-            return {};
-        const auto families = object["componentVariants"].toObject();
-        for (auto family = families.begin(); family != families.end(); ++family)
-        {
-            if (!QStringList{"button", "image", "text"}.contains(family.key()) || !family.value().isArray() ||
-                family.value().toArray().isEmpty() || family.value().toArray().size() > 8)
-                return {};
-            QSet<QString> variants;
-            for (const auto& value : family.value().toArray())
-            {
-                const auto variant = value.toObject();
-                const auto id = variant["id"].toString();
-                if (variant.size() != 5 || !variant["id"].isString() || !ComponentSchema::safeId(id) ||
-                    variants.contains(id) || !variant["name"].isString() ||
-                    variant["name"].toString().trimmed().isEmpty() || variant["name"].toString().size() > 80 ||
-                    !variant["description"].isString() || variant["description"].toString().size() > 160 ||
-                    !variant["presentation"].isObject() || !variant["span"].isObject() ||
-                    variant["span"].toObject().size() != 2)
-                    return {};
-                auto candidate = presets[family.key()].toObject(), style = candidate["presentation"].toObject();
-                const auto changes = variant["presentation"].toObject();
-                for (auto it = changes.begin(); it != changes.end(); ++it)
-                    style[it.key()] = it.value();
-                candidate["presentation"] = style;
-                const auto span = variant["span"].toObject();
-                QJsonObject placement{{"x", 0}, {"y", 0}, {"width", span["width"]}, {"height", span["height"]}};
-                candidate["placement"] = placement;
-                if (ComponentSchema::component(candidate.toVariantMap(), true).isEmpty())
-                    return {};
-                variants.insert(id);
-            }
-        }
-    }
-    for (auto it = presets.constBegin(); it != presets.constEnd(); ++it)
-        if (!QStringList{"button",
-                         "image",
-                         "shape",
-                         "text",
-                         "library",
-                         "recently-viewed",
-                         "music-library",
-                         "tv-guide",
-                         "carousel",
-                         "app-bar",
-                         "page-menu",
-                         "detected-sources",
-                         "source-notice"}
-                 .contains(it.key()) ||
-             ComponentSchema::component(it.value().toObject().toVariantMap(), true).isEmpty())
-            return {};
-    if (object.contains("shapeChoices"))
-    {
-        if (!object["shapeChoices"].isArray() || object["shapeChoices"].toArray().isEmpty() ||
-            object["shapeChoices"].toArray().size() > 8)
-            return {};
-        for (const auto& value : object["shapeChoices"].toArray())
-        {
-            const auto choice = value.toObject();
-            const auto type = choice["type"].toString();
-            if (choice.size() != 3 || !choice["name"].isString() || choice["name"].toString().trimmed().isEmpty() ||
-                choice["name"].toString().size() > 80 || !QStringList{"shape", "container"}.contains(type) ||
-                !choice["presentation"].isObject())
-                return {};
-            auto candidate = type == "shape" ? presets["shape"].toObject() : object["groupPreset"].toObject();
-            auto style = candidate["presentation"].toObject();
-            const auto changes = choice["presentation"].toObject();
-            for (auto it = changes.begin(); it != changes.end(); ++it)
-                style[it.key()] = it.value();
-            candidate["presentation"] = style;
-            if (ComponentSchema::component(candidate.toVariantMap(), true).isEmpty())
-                return {};
-        }
-    }
-    if (object.contains("replacementChoices"))
-    {
-        const auto choices = object["replacementChoices"].toArray();
-        if (!object["replacementChoices"].isArray() || choices.isEmpty() || choices.size() > 5)
-            return {};
-        QSet<QString> types;
-        for (const auto& value : choices)
-        {
-            const auto choice = value.toObject();
-            const auto type = choice["type"].toString();
-            if (choice.size() != 2 || !choice["name"].isString() || choice["name"].toString().trimmed().isEmpty() ||
-                choice["name"].toString().size() > 80 ||
-                !QStringList{"button", "image", "text", "shape", "container"}.contains(type) || types.contains(type))
-                return {};
-            types.insert(type);
-        }
-    }
-    const auto catalog = object["catalog"].toArray();
-    QSet<QString> catalogIds;
-    if (presets.isEmpty() || presets.size() > 16 || catalog.isEmpty() || catalog.size() > 16 ||
-        object["inspector"].toObject()["fields"].toArray().size() > 160)
+    if (object.contains("componentVariants") && !validateStudioComponentVariants(object, presets))
         return {};
-    for (const auto& entry : catalog)
-    {
-        const auto item = entry.toObject();
-        const auto id = item["id"].toString(), name = item["name"].toString();
-        if ((id != "widgets" && !presets.contains(id)) || catalogIds.contains(id) || name.trimmed().isEmpty() ||
-            name.size() > 80 || item["description"].toString().size() > 160)
-            return {};
-        catalogIds.insert(id);
-    }
+    if (!validateStudioPresets(presets))
+        return {};
+    if (!validateStudioShapeChoices(object, presets))
+        return {};
+    if (!validateStudioReplacementChoices(object))
+        return {};
+    if (!validateStudioCatalogIds(object, presets))
+        return {};
     for (const auto& entry : object["actions"].toArray())
     {
         const auto choice = entry.toObject();
@@ -218,53 +121,9 @@ HomeLayout::studioOptions() const
     const auto actionCategories = object["actionCategories"].toArray();
     if (!object["actionCategories"].isArray() || actionCategories.isEmpty() || actionCategories.size() > 12)
         return {};
-    const QStringList pickerTypes{"none",
-                                  "media-picker",
-                                  "root-page",
-                                  "open-page",
-                                  "launch-app",
-                                  "open-apps",
-                                  "open-search",
-                                  "app-drawer",
-                                  "open-collection",
-                                  "open-guide",
-                                  "play-movie",
-                                  "open-show",
-                                  "switch-input",
-                                  "settings",
-                                  "desktop-mode",
-                                  "open-file",
-                                  "open-folder",
-                                  "open-url",
-                                  "open-disc"};
-    for (const auto& value : actionCategories)
-    {
-        const auto category = value.toObject();
-        if (category.size() != 2 || !category["name"].isString() || category["name"].toString().trimmed().isEmpty() ||
-            category["name"].toString().size() > 80 || !category["types"].isArray() ||
-            category["types"].toArray().size() > pickerTypes.size())
-            return {};
-        QSet<QString> types;
-        for (const auto& type : category["types"].toArray())
-        {
-            if (!type.isString() || !pickerTypes.contains(type.toString()) || types.contains(type.toString()))
-                return {};
-            types.insert(type.toString());
-        }
-    }
-    if (!actionCategories.first().toObject()["types"].toArray().isEmpty())
+    if (!validateStudioActionCategoryTypes(actionCategories))
         return {};
-    QSet<QString> ids;
-    for (const auto& entry : object["gridModes"].toArray())
-    {
-        const auto mode = entry.toObject();
-        const auto id = mode["id"].toString(), name = mode["name"].toString();
-        if (!QStringList{"screen", "sections"}.contains(id) || ids.contains(id) || name.trimmed().isEmpty() ||
-            name.size() > 80)
-            return {};
-        ids.insert(id);
-    }
-    if (ids.size() != 2 || !ids.contains(object["defaultGrid"].toObject()["mode"].toString()))
+    if (!validateStudioGridModeIds(object["gridModes"].toArray()))
         return {};
     const QStringList overlayKeys{"surface", "overlayWidth", "overlayHeight", "overlayRows", "overlayPosition"};
     if (guide.isEmpty() || std::any_of(overlayKeys.cbegin(),
@@ -286,29 +145,224 @@ HomeLayout::studioOptions() const
                 guide[it.key()] = it.value();
     }
     auto result = object.toVariantMap();
+    if (!applyStudioDefaults(result, guide))
+        return {};
+    result["guide"] = guide;
+    result["maxScrollableRows"] = ComponentSchema::MaxScrollableRows;
+    m_optionsCache = result;
+    return m_optionsCache;
+}
+
+bool
+HomeLayout::validateStudioComponentVariants(const QJsonObject& object, const QJsonObject& presets) const
+{
+    const auto variants = object["componentVariants"].toObject();
+    if (!variants.isObject() || variants.size() > 3)
+        return false;
+    const auto families = variants.toObject();
+    for (auto family = families.begin(); family != families.end(); ++family)
+    {
+        if (!QStringList{"button", "image", "text"}.contains(family.key()) || !family.value().isArray() ||
+            family.value().toArray().isEmpty() || family.value().toArray().size() > 8)
+            return false;
+        QSet<QString> variantsSeen;
+        for (const auto& value : family.value().toArray())
+        {
+            const auto variant = value.toObject();
+            const auto id = variant["id"].toString();
+            if (variant.size() != 5 || !variant["id"].isString() || !ComponentSchema::safeId(id) ||
+                variantsSeen.contains(id) || !variant["name"].isString() ||
+                variant["name"].toString().trimmed().isEmpty() || variant["name"].toString().size() > 80 ||
+                !variant["description"].isString() || variant["description"].toString().size() > 160 ||
+                !variant["presentation"].isObject() || !variant["span"].isObject() ||
+                variant["span"].toObject().size() != 2)
+                return false;
+            auto candidate = presets[family.key()].toObject(), style = candidate["presentation"].toObject();
+            const auto changes = variant["presentation"].toObject();
+            for (auto it = changes.begin(); it != changes.end(); ++it)
+                style[it.key()] = it.value();
+            candidate["presentation"] = style;
+            const auto span = variant["span"].toObject();
+            QJsonObject placement{{"x", 0}, {"y", 0}, {"width", span["width"]}, {"height", span["height"]}};
+            candidate["placement"] = placement;
+            if (ComponentSchema::component(candidate.toVariantMap(), true).isEmpty())
+                return false;
+            variantsSeen.insert(id);
+        }
+    }
+    return true;
+}
+
+bool
+HomeLayout::validateStudioPresets(const QJsonObject& presets) const
+{
+    for (auto it = presets.constBegin(); it != presets.constEnd(); ++it)
+        if (!QStringList{"button",
+                         "image",
+                         "shape",
+                         "text",
+                         "library",
+                         "recently-viewed",
+                         "music-library",
+                         "tv-guide",
+                         "carousel",
+                         "app-bar",
+                         "page-menu",
+                         "detected-sources",
+                         "source-notice"}
+                 .contains(it.key()) ||
+             ComponentSchema::component(it.value().toObject().toVariantMap(), true).isEmpty())
+            return false;
+    return true;
+}
+
+bool
+HomeLayout::validateStudioShapeChoices(const QJsonObject& object, const QJsonObject& presets) const
+{
+    const auto shapeChoices = object["shapeChoices"].toArray();
+    if (!object["shapeChoices"].isArray() || shapeChoices.isEmpty() || shapeChoices.size() > 8)
+        return false;
+    for (const auto& value : shapeChoices)
+    {
+        const auto choice = value.toObject();
+        const auto type = choice["type"].toString();
+        if (choice.size() != 3 || !choice["name"].isString() || choice["name"].toString().trimmed().isEmpty() ||
+            choice["name"].toString().size() > 80 || !QStringList{"shape", "container"}.contains(type) ||
+            !choice["presentation"].isObject())
+            return false;
+        auto candidate = type == "shape" ? presets["shape"].toObject() : object["groupPreset"].toObject();
+        auto style = candidate["presentation"].toObject();
+        const auto changes = choice["presentation"].toObject();
+        for (auto it = changes.begin(); it != changes.end(); ++it)
+            style[it.key()] = it.value();
+        candidate["presentation"] = style;
+        if (ComponentSchema::component(candidate.toVariantMap(), true).isEmpty())
+            return false;
+    }
+    return true;
+}
+
+bool
+HomeLayout::validateStudioReplacementChoices(const QJsonObject& object) const
+{
+    const auto choices = object["replacementChoices"].toArray();
+    if (!object["replacementChoices"].isArray() || choices.isEmpty() || choices.size() > 5)
+        return false;
+    QSet<QString> types;
+    for (const auto& value : choices)
+    {
+        const auto choice = value.toObject();
+        const auto type = choice["type"].toString();
+        if (choice.size() != 2 || !choice["name"].isString() || choice["name"].toString().trimmed().isEmpty() ||
+            choice["name"].toString().size() > 80 ||
+            !QStringList{"button", "image", "text", "shape", "container"}.contains(type) || types.contains(type))
+            return false;
+        types.insert(type);
+    }
+    return true;
+}
+
+bool
+HomeLayout::validateStudioCatalogIds(const QJsonObject& object, const QJsonObject& presets) const
+{
+    const auto catalog = object["catalog"].toArray();
+    QSet<QString> catalogIds;
+    if (presets.isEmpty() || presets.size() > 16 || catalog.isEmpty() || catalog.size() > 16 ||
+        object["inspector"].toObject()["fields"].toArray().size() > 160)
+        return false;
+    for (const auto& entry : catalog)
+    {
+        const auto item = entry.toObject();
+        const auto id = item["id"].toString(), name = item["name"].toString();
+        if ((id != "widgets" && !presets.contains(id)) || catalogIds.contains(id) || name.trimmed().isEmpty() ||
+            name.size() > 80 || item["description"].toString().size() > 160)
+            return false;
+        catalogIds.insert(id);
+    }
+    return true;
+}
+
+bool
+HomeLayout::validateStudioActionCategoryTypes(const QJsonArray& categories) const
+{
+    const QStringList pickerTypes{"none",
+                                  "media-picker",
+                                  "root-page",
+                                  "open-page",
+                                  "launch-app",
+                                  "open-apps",
+                                  "open-search",
+                                  "app-drawer",
+                                  "open-collection",
+                                  "open-guide",
+                                  "play-movie",
+                                  "open-show",
+                                  "switch-input",
+                                  "settings",
+                                  "desktop-mode",
+                                  "open-file",
+                                  "open-folder",
+                                  "open-url",
+                                  "open-disc"};
+    for (const auto& value : categories)
+    {
+        const auto category = value.toObject();
+        if (category.size() != 2 || !category["name"].isString() || category["name"].toString().trimmed().isEmpty() ||
+            category["name"].toString().size() > 80 || !category["types"].isArray() ||
+            category["types"].toArray().size() > pickerTypes.size())
+            return false;
+        QSet<QString> types;
+        for (const auto& type : category["types"].toArray())
+        {
+            if (!type.isString() || !pickerTypes.contains(type.toString()) || types.contains(type.toString()))
+                return false;
+            types.insert(type.toString());
+        }
+    }
+    if (!categories.first().toObject()["types"].toArray().isEmpty())
+        return false;
+    return true;
+}
+
+bool
+HomeLayout::validateStudioGridModeIds(const QJsonArray& modes) const
+{
+    QSet<QString> ids;
+    for (const auto& entry : modes)
+    {
+        const auto mode = entry.toObject();
+        const auto id = mode["id"].toString(), name = mode["name"].toString();
+        if (!QStringList{"screen", "sections"}.contains(id) || ids.contains(id) || name.trimmed().isEmpty() ||
+            name.size() > 80)
+            return false;
+        ids.insert(id);
+    }
+    return ids.size() == 2;
+}
+
+bool
+HomeLayout::applyStudioDefaults(QVariantMap& result, const QVariantMap& guide) const
+{
     if (!ComponentSchema::validSettingsNavigation(result.value("settingsNavigation").toMap()))
     {
         QFile packaged(":/config/studio-defaults.json");
         if (!packaged.open(QIODevice::ReadOnly) || packaged.size() > 128 * 1024)
-            return {};
+            return false;
         const auto navigation =
             QJsonDocument::fromJson(packaged.readAll()).object()["settingsNavigation"].toObject().toVariantMap();
         if (!ComponentSchema::validSettingsNavigation(navigation))
-            return {};
+            return false;
         result["settingsNavigation"] = navigation;
     }
     if (!result.contains("referenceViewport"))
     {
         QFile packaged(":/config/studio-defaults.json");
         if (!packaged.open(QIODevice::ReadOnly) || packaged.size() > 128 * 1024)
-            return {};
+            return false;
         result["referenceViewport"] =
             QJsonDocument::fromJson(packaged.readAll()).object()["referenceViewport"].toVariant();
     }
-    result["guide"] = guide;
-    result["maxScrollableRows"] = ComponentSchema::MaxScrollableRows;
-    m_optionsCache = result;
-    return m_optionsCache;
+    return true;
 }
 
 QVariantMap

@@ -142,6 +142,13 @@ GuideRules::validateChannelScheduleBlocks(const QVariantList& blocks, QString* e
     }
     return true;
 }
+    return validateRuleLeaf(v, op);
+}
+
+
+bool
+validateRuleLeaf(const QVariantMap& v, const QString& op)
+{
     if (!keys(v, {"field", "op", "value"}) || !text(v.value("field"), 32) || !text(v.value("op"), 32))
         return false;
     const auto field = v.value("field").toString();
@@ -169,8 +176,13 @@ GuideRules::validateChannelScheduleBlocks(const QVariantList& blocks, QString* e
         return !v.contains("value");
     if (!v.contains("value"))
         return false;
-    const auto value = v.value("value");
-    const bool numeric = numericField(field);
+    if (!validateRuleLeafValue(v.value("value"), numericField(field), op))
+        return false;
+}
+
+bool
+validateRuleLeafValue(const QVariant& value, bool numeric, const QString& op)
+{
     const auto scalar = [numeric](const QVariant& item)
     {
         if (!numeric)
