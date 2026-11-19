@@ -2832,6 +2832,18 @@ ComponentSchema::component(const QVariantMap& input, bool legacy, QString* error
         return {};
     if (!legacy && input.value("source").toMap() != source)
         return reject(error, "Source binding does not match its action.");
+    // Reject unknown component keys; only documented fields may appear.
+    static const QSet<QString> validComponentKeys{"schemaVersion", "id", "kind",
+                                                  "componentType", "size", "source",
+                                                  "actions", "action", "name", "presentation",
+                                                  "placement", "accent", "symbol", "linkedDesign",
+                                                  "customLogo", "widgetType", "family",
+                                                  "appCollection", "appId", "opacity",
+                                                  "categoryId", "parentId", "children",
+                                                  "animateArtwork"};
+    for (auto it = input.constBegin(); it != input.constEnd(); ++it)
+        if (!validComponentKeys.contains(it.key()))
+            return reject(error, "Component contains unknown fields.");
     result["source"] = source;
     return result;
 }
