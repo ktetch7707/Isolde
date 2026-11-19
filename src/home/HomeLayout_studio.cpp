@@ -823,7 +823,8 @@ HomeLayout::validateStudioSettings(const QJsonObject& object)
         return false;
     if (!validateStudioArtworkCleanup(object.value("artworkCleanup").toObject()))
         return false;
-    if (!validateStudioReferenceViewport(object.value("referenceViewport").toObject()))
+    if (object.contains("referenceViewport") &&
+        !validateStudioReferenceViewport(object.value("referenceViewport").toObject()))
         return false;
     if (object.contains("responsiveDefaults") &&
         !DesignSystem::validResponsive(object["responsiveDefaults"].toObject().toVariantMap()))
