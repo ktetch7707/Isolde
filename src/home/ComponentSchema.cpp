@@ -2837,6 +2837,7 @@ ComponentSchema::component(const QVariantMap& input, bool legacy, QString* error
                                                   "componentType", "size", "source",
                                                   "actions", "action", "name", "presentation",
                                                   "placement", "accent", "symbol", "linkedDesign",
+                                                  "designNode", "accessibility", "requiredCapability",
                                                   "customLogo", "widgetType", "family",
                                                   "appCollection", "appId", "opacity",
                                                   "categoryId", "parentId", "children",
