@@ -8,8 +8,6 @@
 #include "GuideRules.h"
 #include "home/ComponentSchema.h"
 
-namespace GuideRules {
-
 bool reject(QString* error, const QString& message);
 
 namespace
@@ -100,11 +98,11 @@ validateScheduleBlock(const QVariantMap& b, QString* error);
 bool
 scheduleBlocksOverlap(const QVariantMap& bi, const QVariantMap& bj, const QSet<int>& daysSetI,
                       const QSet<int>& daysSetJ, QString* error);
-bool GuideRules::validateScheduleBlockFields(const QVariantMap& b, QString* error);
-bool GuideRules::validateScheduleBlockDays(const QVariantMap& b, QString* error);
-bool GuideRules::validateScheduleBlockDates(const QVariantMap& b, QString* error);
+bool validateScheduleBlockFields(const QVariantMap& b, QString* error);
+bool validateScheduleBlockDays(const QVariantMap& b, QString* error);
+bool validateScheduleBlockDates(const QVariantMap& b, QString* error);
 
-bool validateChannelScheduleBlocks(const QVariantList& blocks, QString* error)
+bool GuideRules::validateChannelScheduleBlocks(const QVariantList& blocks, QString* error)
 {
     if (blocks.size() > 32)
         return reject(error, "Choose at most 32 calendar blocks.");
@@ -245,8 +243,8 @@ validateRuleLeaf(const QVariantMap& v, const QString& op)
 validateRuleLeafValue(const QVariant& value, bool numeric, const QString& op)
 {
     if (op == "one-of" || op == "in-range")
-        return validateRuleList(value, numeric, op);
-    const auto scalar = validateScalar(value, numeric);
+        return GuideRules::validateRuleList(value, numeric, op);
+    const auto scalar = GuideRules::validateScalar(value, numeric);
     if (!scalar)
         return false;
     return validateRuleLeafComparison(value, numeric, op);
@@ -264,7 +262,7 @@ validateRuleLeafComparison(const QVariant& value, bool numeric, const QString& o
 }
 
 [[maybe_unused]] bool
-validateRuleList(const QVariant& value, bool numeric, const QString& op)
+GuideRules::validateRuleList(const QVariant& value, bool numeric, const QString& op)
 {
     if (value.metaType().id() != QMetaType::QVariantList)
         return false;
@@ -278,7 +276,7 @@ validateRuleList(const QVariant& value, bool numeric, const QString& op)
 }
 
 [[maybe_unused]] bool
-validateScalar(const QVariant& item, bool numeric)
+GuideRules::validateScalar(const QVariant& item, bool numeric)
 {
     if (!numeric)
         return text(item, 256);
@@ -745,7 +743,7 @@ bool GuideRules::validateLocalChannel(const QVariantMap& v, QString* error)
 }
 
 bool
-GuideRules::validateLocalChannelCore(const QVariantMap& v, QString* error)
+validateLocalChannelCore(const QVariantMap& v, QString* error)
 {
     if ((v.contains("horizonDays") && !integer(v.value("horizonDays"), 1, 31)) ||
         (v.contains("retentionDays") && !integer(v.value("retentionDays"), 0, 7)))
@@ -757,7 +755,6 @@ GuideRules::validateLocalChannelCore(const QVariantMap& v, QString* error)
     return true;
 }
 
-namespace GuideRules {
 bool
 validateLocalChannelOptions(const QVariantMap& v, QString* error)
 {
@@ -795,7 +792,7 @@ validateLocalChannelOptions(const QVariantMap& v, QString* error)
 }
 
 bool
-validateLocalChannelMediaKinds(const QVariantMap& v, QString* error)
+GuideRules::validateLocalChannelMediaKinds(const QVariantMap& v, QString* error)
 {
     if (!v.contains("mediaKinds"))
         return true;
@@ -813,7 +810,7 @@ validateLocalChannelMediaKinds(const QVariantMap& v, QString* error)
 
 
 bool
-validateChannelBasics(const QVariantMap& v, QString* error)
+GuideRules::validateChannelBasics(const QVariantMap& v, QString* error)
 {
     if (v.contains("logo") &&
         (v.value("logo").metaType().id() != QMetaType::QString ||
@@ -830,7 +827,7 @@ validateChannelBasics(const QVariantMap& v, QString* error)
 }
 
 bool
-validateChannelOwner(const QVariantMap& v, QString* error)
+GuideRules::validateChannelOwner(const QVariantMap& v, QString* error)
 {
     if (v.value("owner") == "guide-feed" && !validateGuideFeedOwner(v, error))
         return false;
@@ -840,7 +837,7 @@ validateChannelOwner(const QVariantMap& v, QString* error)
 }
 
 bool
-validateChannelTiming(const QVariantMap& v, QString* error)
+GuideRules::validateChannelTiming(const QVariantMap& v, QString* error)
 {
     if ((v.contains("horizonDays") && !integer(v.value("horizonDays"), 1, 31)) ||
         (v.contains("retentionDays") && !integer(v.value("retentionDays"), 0, 7)))
@@ -851,4 +848,3 @@ validateChannelTiming(const QVariantMap& v, QString* error)
         return reject(error, "Only real-time local channels support a broadcast offset, bounded to 31 days.");
     return true;
 }
-} // namespace GuideRules
