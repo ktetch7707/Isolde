@@ -1327,6 +1327,15 @@ HomeLayout::loadDocument(const QByteArray& data, bool userDocument)
     if (!validateDocumentStructure(data, userDocument, version, entries))
         return false;
     QJsonObject object = QJsonDocument::fromJson(data).object();
+    static const QSet<QString> baseKeys{"schemaVersion", "composition", "rootPage", "theme",
+                                        "categories", "pages", "homePageId", "studioAppearance"};
+    const auto entriesKey = version == 1 ? QStringLiteral("items") : QStringLiteral("components");
+    for (auto it = object.cbegin(); it != object.cend(); ++it)
+        if (!baseKeys.contains(it.key()) && it.key() != entriesKey)
+        {
+            setError(tr("Home layout contains unknown top-level keys."));
+            return false;
+        }
     QString designError;
     if (!m_owner && !DesignSystem::validDocument(object, &designError))
     {
