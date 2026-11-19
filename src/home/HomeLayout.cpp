@@ -1330,7 +1330,7 @@ HomeLayout::loadDocument(const QByteArray& data, bool userDocument)
     static const QSet<QString> baseKeys{"schemaVersion", "composition", "rootPage", "theme",
                                         "categories", "pages", "homePageId", "studioAppearance"};
     const auto entriesKey = version == 1 ? QStringLiteral("items") : QStringLiteral("components");
-    for (auto it = object.cbegin(); it != object.cend(); ++it)
+    for (auto it = object.constBegin(); it != object.constEnd(); ++it)
         if (!baseKeys.contains(it.key()) && it.key() != entriesKey)
         {
             setError(tr("Home layout contains unknown top-level keys."));
