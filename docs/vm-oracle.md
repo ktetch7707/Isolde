@@ -245,3 +245,72 @@ C++/build changes are still refused. `Configure -ConfigureTarget audio-test-reco
 is guest-only recovery for a diagnosed PipeWire timeout: it holds the VM lock,
 stops the shell, restarts the three guest audio user services, verifies them and
 restores the previous shell-active state. No audio settings or host changes.
+
+## Host-side screenshot capture (agent limitation)
+
+The agent is CLI-only through `tools/vm-test.ps1` over SSH and has no in-guest
+screenshot, VNC, RDP, or desktop automation tooling. `scrot`/`import` are not
+installed on the guest and `$DISPLAY` is empty over SSH.
+
+Screenshots of the VM guest screen can be taken from the Windows host using
+`VBoxManage`:
+
+```
+"C:/Program Files/Oracle/VirtualBox/VBoxManage.exe" controlvm Isolde-Test screenshotpng C:\path\to\screenshot.png
+```
+
+This works whether or not Isolde's main UI is running; it captures whatever the
+guest framebuffer shows (idle slideshow, login, app window, error dialog, etc.).
+Use it before and after any manual page navigation or service change to document
+state. Do not assume a captured frame proves the app is alive — check process and
+session evidence (`loginctl show-session`, `systemctl --user isolde.service`,
+guest process list via `Status`) as well.
+
+## Page navigation / GUI interaction
+
+The agent cannot open windows, navigate to specific pages, send remote keys
+(D-pad/Confirm/Back/Menu/Search), or click on-screen elements directly. There is
+no guest automation tooling for this beyond what `vm-test.ps1` Visual cases
+provide (which upload verified helpers and run bounded journeys through the
+tested executable). If you need a specific page shown, run a `Visual` case for
+that screen, or describe what you want verified and I will read the capture
+logs and screenshots from `build/vm-oracle/<runId>/visual/<case>/attempt-*/`.
+
+## Stale test-indexer lease (blocker diagnosis)
+
+A previous aborted `Test` run can leave
+`/home/isolde-dev/isolde-oracle/test-indexer-lease.json` on the guest. While it
+exists, `pause_test_indexer()` in `tools/vm-oracle.py` refuses to start a new
+test with:
+
+```
+FAIL Invalid test indexer restoration lease
+```
+
+To clear it:
+
+```
+ssh -i "C:/Users/kketc/VirtualBox VMs/Isolde-Test/automation/id_ed25519_automation" isolde-dev@127.0.0.1 -p 2222 "cat ~/isolde-oracle/test-indexer-lease.json"
+ssh -i "C:/Users/kketc/VirtualBox VMs/Isolde-Test/automation/id_ed25519_automation" isolde-dev@127.0.0.1 -p 2222 "rm ~/isolde-oracle/test-indexer-lease.json"
+```
+
+Confirm `ls` reports "No such file or directory" after removal, then re-run
+`./tools/vm-test.ps1 Test`. Do not blindly retry `Test` against this error —
+read the lease, confirm it is stale (different runId than the one you intend to
+run), remove it, then run once.
+
+## Step-by-step VM test workflow
+
+1. `./tools/vm-test.ps1 Check` — verify VM connectivity, free space (>= 2 GiB),
+   and service state before any build/test.
+2. Make and commit your source/test edits on `agent-backlog-progress` branch.
+3. `./tools/vm-test.ps1 Test` — builds the guest project, runs CTest, stages the
+   payload, and fetches evidence to `build/vm-oracle/<runId>/report/`.
+4. If `Test` fails with "Invalid test indexer restoration lease", clear the
+   stale lease (above) and re-run once.
+5. Read `build/vm-oracle/<runId>/report/ctest.log` for failures; batch fixes,
+   commit, push, and re-run `Test` only after the edit batch is complete.
+6. For graphical acceptance on a passing full run: `./tools/vm-test.ps1 Visual
+   -RunId <id> -Cases <case>`.
+7. Do not reset the VM, delete locks, or launch a second build while one is in
+   flight. Use `Status -RunId <id>` to inspect an active/failed run.
