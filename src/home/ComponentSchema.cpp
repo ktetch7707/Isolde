@@ -2822,7 +2822,11 @@ ComponentSchema::component(const QVariantMap& input, bool legacy, QString* error
     }
     if (source.isEmpty())
         return {};
-    if (!legacy && input.value("source").toMap() != source)
+    QVariantMap inputSource = input.value("source").toMap();
+    QVariantMap canonicalSource = source;
+    inputSource.remove("schemaVersion");
+    canonicalSource.remove("schemaVersion");
+    if (!legacy && inputSource != canonicalSource)
         return reject(error, "Source binding does not match its action.");
     result["source"] = source;
     return result;
