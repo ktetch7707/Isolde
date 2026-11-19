@@ -75,8 +75,3 @@ class ProfileManager final : public QObject
     QString m_root, m_active = "default", m_error;
     QVariantList m_profiles;
 };
-
-bool
-isValidPolicyEntry(const QString& key, const QVariant& value);
-bool
-isValidRestrictedDestinations(const QVariant& value);

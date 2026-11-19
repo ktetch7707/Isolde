@@ -166,6 +166,12 @@ class KodiService final : public QObject
                        const QStringList& libraryFolders);
     void
     startKodiProcess(const NativeSandboxPlan& plan, const QStringList& extra);
+    void
+    onModeDeadlineTimeout();
+    void
+    onModeClientQuitReply(bool accepted);
+    void
+    onProbeTimeout();
     bool m_enabled = true, m_stopping = false, m_suspended = false, m_ready = false;
     bool m_alAlwaysPlayLocally = true;
     bool m_folderEditing = false, m_resumeAfterFolders = false, m_cancelFolderPreparing = false;
@@ -174,7 +180,7 @@ class KodiService final : public QObject
     int m_checks = 0;
     std::unique_ptr<QTemporaryDir> m_overlay;
     std::unique_ptr<QLockFile> m_lock;
-    QString m_frontend = "isolde", m_pendingFrontend;
+    QString m_profile, m_frontend = "isolde", m_pendingFrontend;
     QString m_status;
     KodiMedia m_modeClient;
     QTimer m_modeDeadline;

@@ -83,11 +83,12 @@ GuideStore::GuideStore(const QString& path, QObject* parent)
 {
     if (!validatePath(path))
         return;
+    // SQLite creates the file when opened, so record whether it existed before opening it.
+    const bool exists = QFileInfo::exists(path);
     if (!openDatabase(path))
         return;
     int version = -1, owner = -1;
     readIdentity(version, owner);
-    const bool exists = QFileInfo::exists(path);
     if (exists && !validateIdentity(version, owner))
         return;
     if (exists && !validateExistingChannels())
@@ -1599,7 +1600,9 @@ GuideStore::importPvrProcessEntry(const QString& instance,
                                   int& additions,
                                   QSqlQuery& q)
 {
-    if (entry.size() != 2 || !entry.contains("definition") || !entry.contains("programs"))
+    if (entry.size() != 2 || !entry.contains("definition") ||
+        entry.value("programs").metaType().id() != QMetaType::QVariantList ||
+        entry.value("programs").toList().size() > MaxSlotsPerChannel)
     {
         m_db.rollback();
         fail(tr("Invalid source mapping."));
@@ -1668,7 +1671,7 @@ GuideStore::importPvrProcessEntry(const QString& instance,
         fail(tr("Cannot replace the cached source generation."));
         return false;
     }
-    return true;
+    return importPvrPrograms(id, kodiId, entry.value("programs").toList(), refreshed, q);
 }
 
 bool

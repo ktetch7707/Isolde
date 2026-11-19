@@ -6,6 +6,7 @@
 
 namespace
 {
+constexpr float DefaultTileRoundness = 8.0F;
 double
 luminance(const QColor& color)
 {
@@ -191,7 +192,7 @@ ComponentSchema::surfacePalette(const QVariantMap& appearance)
     fallback("inputColor", result["selectedColor"]);
     // Resolve translucent panels against their declared opaque background.
     // Consumers receive an opaque, contrast-tested color, never child opacity.
-    const double panelOpacity = result.value("panelOpacity", 1.0).toDouble();
+    const float panelOpacity = float(result.value("panelOpacity", 1.0).toDouble());
     const QColor backdrop(result["backgroundEnd"].toString());
     for (const auto& role : QStringList{"surfaceColor", "selectedColor", "elevatedColor", "inputColor"})
     {

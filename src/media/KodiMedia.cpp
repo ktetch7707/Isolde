@@ -17,7 +17,7 @@
 #include <unistd.h>
 #endif
 
-static QVariantList
+QVariantList
 sortedHistory(QVariantList items, int limit)
 {
     std::sort(items.begin(),
@@ -299,7 +299,7 @@ KodiMedia::failRestoreHistory()
     if (!m_retired && m_mediaKind == "history")
     {
         m_movies = sortedHistory(m_appOpenings, m_historyLimit);
-        m_totalMovies = m_pageCount = m_movies.size();
+        m_totalMovies = m_pageCount = static_cast<int>(m_movies.size());
         restoreHistorySelection();
         m_selectedIndex = qBound(-1, m_selectedIndex, qMax(-1, int(m_movies.size()) - 1));
     }
@@ -623,27 +623,22 @@ KodiMedia::openLibrary(const QString& kind)
     m_pendingMovie = 0;
     restoreBrowse({kind, "all", {}, {}, -1, -1, 0, 0});
 }
-/** Handles a playlist operation failure during Kodi media import.
- * @brief Handles a failed playlist operation during Kodi media bridge import.
- * @details Updates the playlist status message to indicate the operation could not be confirmed.
- * @why Prevents stale playlist state from persisting after a failed playlist operation.
- * @param message Human-readable failure message describing why the playlist operation failed.
- * @return none
- */
-void
-KodiMedia::failPlaylist(const QString& message)
-{
-    if (name.isEmpty() || name.size() > 128 || name.contains(QRegularExpression("[/\\\\:%\\x00-\\x1f]")))
-        return false;
-    return name.endsWith(".xsp", Qt::CaseInsensitive) || name.endsWith(".m3u", Qt::CaseInsensitive) ||
-           name.endsWith(".m3u8", Qt::CaseInsensitive);
-}
 /** Opens playlists media kind.
  * @brief Opens playlists media kind.
  * @details If navigation is allowed, clears history and pending state, then restores browse to playlists view.
  * @why Opens the playlists media kind for browsing available playlists.
  * @return none
  */
+// Restrict playlist identities to bounded filenames handled by Kodi.
+bool
+KodiMedia::validPlaylistName(const QString& name)
+{
+    if (name.isEmpty() || name.size() > 128 || name.contains(QRegularExpression("[/\\\\:%\\x00-\\x1f]")))
+        return false;
+    return name.endsWith(".xsp", Qt::CaseInsensitive) || name.endsWith(".m3u", Qt::CaseInsensitive) ||
+           name.endsWith(".m3u8", Qt::CaseInsensitive);
+}
+
 void
 KodiMedia::openPlaylists()
 {
@@ -684,7 +679,7 @@ KodiMedia::openHistory(int count)
  * @return true if count is valid, false otherwise.
  */
 bool
-validateHistoryCount(int count)
+KodiMedia::validateHistoryCount(int count) const
 {
     return count >= 1 && count <= 50;
 }
@@ -1412,7 +1407,7 @@ KodiMedia::loadManualPage(int start)
     m_requestedStart = start;
     m_pageStart = start;
     m_pageCount = static_cast<int>(qMin<qsizetype>(50, m_manualMembers.size() - start));
-    m_totalMovies = m_manualMembers.size();
+    m_totalMovies = static_cast<int>(m_manualMembers.size());
     m_manualNextIndex = start;
     m_manualMissingCount = 0;
     m_manualResults.clear();

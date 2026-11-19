@@ -10,6 +10,142 @@ class AppRegistry;
  */
 namespace ComponentSchema {
 
+bool validRecentStudioColors(const QVariant& value);
+
+inline constexpr int MaxComponentNestingDepth = 4;
+inline constexpr double MinOpacity = 0.0;
+inline constexpr double MaxOpacity = 1.0;
+inline constexpr double MinHdmiInput = 1.0;
+inline constexpr double MaxHdmiInput = 8.0;
+inline constexpr int MaxRecentStudioColors = 8;
+inline constexpr int MaxPageDataClientKeySize = 330;
+inline constexpr int MaxPageDataClientIdLength = 160;
+inline constexpr int MaxPageDataClients = 128;
+inline constexpr int MaxPageDataArtwork = 512;
+
+bool validPresentationNumericHeight(double number, bool section);
+bool validPresentationNumericProgress(double number, bool section);
+bool validPresentationNumericOpacity(double number);
+bool validPresentationNumericSize(double number);
+bool validPresentationNumericContentWidth(double number, bool section);
+bool validPresentationImageCrop(const QVariantMap& presentation);
+bool validPresentationNumericField(const QVariantMap& presentation, const QString& key, bool section);
+bool validPresentationNumericColumns(double number, bool section);
+bool validPresentationNumericSpan(double number, bool section);
+bool validCompositionHeaderKeys(const QVariantMap& header);
+inline constexpr double MinSectionHeight = 60.0;
+inline constexpr double MaxSectionHeight = 800.0;
+
+bool validCompositionHeaderGeometry(const QVariantMap& header, const QVariantMap& value);
+bool validCompositionHeaderColor(const QVariant& entry);
+bool validCompositionHeaderCustomLogo(const QVariant& entry);
+bool validCompositionHeaderControlDisplay(const QVariant& entry);
+bool validCompositionHeaderTitleAlignment(const QVariant& entry);
+bool validCompositionHeaderTimeFormat(const QVariant& entry);
+bool validCompositionHeaderDateFormat(const QVariant& entry);
+bool validCompositionHeaderOrder(const QVariant& entry);
+bool validCompositionHeaderNumber(const QVariant& entry, const QPair<double, double>& bounds);
+bool validCompositionHeaderPosition(const QVariant& entry);
+bool validCompositionHeaderBool(const QVariant& entry);
+bool validCompositionAppGalleryBool(const QVariant& val);
+bool validCompositionAppGalleryTitle(const QVariant& val);
+bool validCompositionAppGalleryFavoriteIds(const QVariant& val);
+bool validCompositionHeaderField(const QString& key, const QVariant& entry);
+bool validCompositionAppGalleryLayout(const QVariant& val);
+bool validCompositionAppGalleryColumns(const QVariant& val);
+bool validCompositionAppGalleryDensity(const QVariant& val);
+bool validCompositionAppGallerySort(const QVariant& val);
+bool validCompositionAppGalleryField(const QString& key, const QVariant& val);
+
+QVariantMap normalizeConfiguration(const QVariant& value, QString* error);
+
+bool validSurfaceThemes(const QVariant& value);
+bool readableSurfaceThemes(const QVariantMap& home, const QVariantMap& origin);
+QVariantMap surfacePalette(const QVariantMap& appearance);
+
+QVariantMap editorActionCaptureSwitchInput(const QVariantMap& input, QString* error);
+QVariantMap editorActionCapturePreviewDraft(const QVariantMap& input, QString* error);
+QVariantMap editorActionCaptureControl(const QVariantMap& input, const QString& type, QString* error);
+QVariantMap editorActionAudioOutputSelect(const QVariantMap& input, QString* error);
+QVariantMap editorActionCaptureArtworkApply(const QVariantMap& input, QString* error);
+QVariantMap editorActionCaptureApply(const QVariantMap& input, QString* error);
+QVariantMap actionSettings(const QVariantMap& input, QString* error);
+QVariantMap actionSwitchInput(const QVariantMap& input, QString* error);
+QVariantMap actionDesktopMode(const QVariantMap& input, QString* error);
+QVariantMap actionWait(const QVariantMap& input, QString* error);
+QVariantMap actionOpenTarget(const QVariantMap& input, const QString& type, QString* error);
+QVariantList actions(const QVariantList& input, QString* error = nullptr);
+QVariantMap action(const QVariantMap& input, QString* error = nullptr);
+bool validPresentationGuideTiming(const QVariantMap& presentation);
+bool validPresentationGuideBool(const QVariantMap& presentation);
+bool validPresentationLibraryChrome(const QVariantMap& value, bool section);
+bool validPresentationHeadingFlags(const QVariantMap& value, bool section, bool container);
+bool validPresentationTrailingAction(const QVariantMap& value, bool section);
+bool validPresentationGuideFilter(const QVariant& value);
+bool validPresentationGuideGroup(const QVariant& value);
+bool validPresentationGuideChannels(const QVariant& value);
+bool validPresentationGuideSurface(const QVariant& value);
+bool validPresentationStyleId(const QVariantMap& presentation);
+bool validPresentationResponsive(const QVariantMap& value, bool section);
+bool validPresentationGuideOverlay(const QVariantMap& presentation);
+bool validPresentationGuideField(const QString& key, const QVariant& value);
+bool validPresentationGuideArtSource(const QVariant& value);
+bool validPresentationGuideVariant(const QVariant& value);
+bool validPresentationLibraryLayout(const QVariant& value);
+bool validPresentationLibraryCardStyle(const QVariant& value);
+bool validPresentationLibraryValue(const QVariant& value);
+bool validPresentationLibraryColumns(const QVariant& value);
+bool validPresentationShortString(const QVariantMap& presentation);
+bool validPresentationSurfaceColor(const QVariantMap& presentation);
+bool validPresentationGuideFields(const QVariantMap& presentation);
+bool validPresentationLibraryField(const QString& key, const QVariant& value);
+bool validPresentationLibraryKind(const QVariant& value);
+bool validPresentationLibraryView(const QVariant& value);
+bool validPresentationArtFocal(const QVariantMap& presentation);
+bool validPresentationArtFocalType(const QVariant& value);
+bool validPresentationArtFocalBounds(const QString& key, double minimum, double& maximum, double& maxValue);
+bool validPresentationArtFocalInteger(const QString& key, double number);
+bool validPresentationBorderColor(const QVariantMap& presentation);
+bool validPresentationLibraryFields(const QVariantMap& presentation, bool section);
+bool validPresentationBodyColor(const QVariantMap& presentation);
+bool validPresentationBodyMetrics(const QVariantMap& presentation);
+bool validPresentationBoolToggle(const QVariantMap& value, bool section, bool container);
+bool validPresentationSourceVariant(const QVariantMap& presentation);
+bool validPresentationBoolFlag(const QVariantMap& presentation, const QString& key);
+bool validPresentationStringField(const QVariantMap& presentation, const QString& key);
+bool validPresentationIconStyle(const QVariantMap& presentation);
+bool validPresentationIconGlow(const QVariantMap& presentation);
+bool validPresentationArtFit(const QVariantMap& presentation);
+bool validPresentationBodyAlign(const QVariantMap& presentation);
+bool validPresentationVariant(const QVariantMap& presentation);
+bool validPresentationFill(const QVariantMap& presentation);
+bool validPresentationShape(const QVariantMap& presentation);
+bool validPresentationSourceMaximum(const QVariantMap& presentation);
+bool validPresentationHistoryApps(const QVariantMap& presentation, bool section);
+bool validPresentationHistorySourceBadges(const QVariantMap& presentation, bool section);
+bool validPresentationStates(const QVariantMap& states);
+bool validPresentationLayout(const QVariantMap& layout, bool container);
+bool validPresentationGrid(const QVariantMap& grid, bool section);
+QVariantMap editorAction(const QVariantMap& input, QString* error = nullptr);
+QVariantMap actionLaunchGame(const QVariantMap& input, QString* error);
+QVariantMap actionGuide(const QVariantMap& input, const QString& type, QString* error);
+QVariantMap actionLaunchApp(const QVariantMap& input, QString* error);
+QVariantMap actionCollection(const QVariantMap& input, const QString& type, QString* error);
+QVariantMap actionOpenPage(const QVariantMap& input, QString* error);
+QVariantMap actionShellRoute(const QVariantMap& input, const QString& type, QString* error);
+
+QString effectiveCategory(const QJsonArray& items, const QString& id);
+
+bool positionLocked(const QJsonArray& items, const QString& id);
+bool positionLockedWalk(const QJsonArray& items, QString current, QSet<QString> visited, int depth);
+bool positionLockedShouldStop(const QString& current, int depth);
+bool positionLockedStopResult(const QString& current, int depth);
+bool positionLockedContinue(const QJsonArray& items, const QJsonObject& item,
+                            QSet<QString> visited, int depth);
+bool positionLockedCycleCheck(const QSet<QString>& visited, const QString& current);
+bool positionLockedFindItem(const QJsonArray& items, const QString& current, QJsonObject& item);
+bool positionLockedIsLocked(const QJsonObject& item);
+
 /** Validates a safe component identity: starts with alphanumeric, bounded length, rejects "." and "..".
  * @brief Validates a component identity string.
  * @details Checks that the id starts with an alphanumeric character, is within MaxComponentIdLength, and is not "." or "..".
@@ -920,7 +1056,7 @@ QVariantMap component(const QVariantMap& input, bool legacy, QString* error = nu
  * @param legacy Whether legacy mode is enabled.
  * @return The resolved component type.
  */
-QVariantMap componentResolveLegacyType(const QVariantMap& input, bool legacy);
+QString componentResolveLegacyType(const QVariantMap& input, bool legacy);
 
 /** Validates component type and shape fields.
  * @brief Validates component type and shape fields.
@@ -1167,6 +1303,7 @@ bool componentValidateStructure(const QVariantMap& input, const QString& type, Q
  * @return true if capability validations pass, false otherwise.
  */
 bool componentValidateCapabilities(const QVariantMap& input, const QString& type, QString* error);
+bool componentValidatePresentationSettings(const QVariantMap& input, const QString& type, QString* error);
 
 /** Groups all component validations into a single gate.
  * @brief Groups all component validations into a single gate.
@@ -1264,6 +1401,8 @@ QVariantMap componentBuildShellSource(const QVariantMap& input, const QString& t
  */
 QVariantMap componentBuildLauncherSource(const QVariantMap& input, const QVariantList& normalizedList,
                                          const QString& actionType, QString* error);
+QVariantMap componentBuildLauncherSource(const QVariantMap& input, const QVariantList& normalizedList,
+                                         const QString& actionType);
 
 /** Human-readable unavailability reason for an action, or empty when available. Missing apps, collections and incompatible open-with handlers are reported; shell routes never require an Open With app.
  * @brief Human-readable unavailability reason for an action, or empty when available.

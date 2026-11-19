@@ -27,6 +27,8 @@ key(const QString& profile)
 }
 } // namespace
 
+bool isValidOpticalIdentity(const QString& profile, const QString& mediaId);
+
 QStringList
 OpticalDiscGrants::mediaIds(const QString& profile)
 {

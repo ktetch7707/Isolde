@@ -1,5 +1,25 @@
-#include <functional>
+#include "home/ComponentSchema.h"
+#include "home/DesignSystem.h"
+#include "home/HomeLayout.h"
+#include "home/ManagedGif.h"
 #include "home/StudioSession.h"
+#include "home/ThemeColors.h"
+#include "settings/ProfileManager.h"
+
+#include <QBuffer>
+#include <QColor>
+#include <QCoreApplication>
+#include <QCryptographicHash>
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QImageReader>
+#include <QSaveFile>
+#include <QStandardPaths>
+#include <QTemporaryDir>
+#include <QUrl>
+#include <algorithm>
+#include <functional>
 
 bool
 StudioSession::previewCommand(const QString& operation, const QVariantMap& arguments, const QString& pageId)
@@ -141,6 +161,7 @@ StudioSession::validateApplyPreconditions()
 bool
 StudioSession::stageArtworkFiles(QStringList& created, const QString& artDirectory, bool /*hadArtDirectory*/)
 {
+    Q_UNUSED(artDirectory);
     const auto cleanup = [&]
     {
         for (const auto& path : created)
@@ -257,6 +278,7 @@ StudioSession::finalizeApply(const QString& focusId, QStringList& created, const
 bool
 StudioSession::execute(const QString& operation, const QVariantMap& a, const QString& pageId)
 {
+    setError({});
     if (!editingPermitted())
         return false;
     if (!currentProfile())
@@ -265,45 +287,45 @@ StudioSession::execute(const QString& operation, const QVariantMap& a, const QSt
         return false;
     }
     using TopOp = std::function<bool(const QVariantMap&, const QString&)>;
-    static const QHash<QString, TopOp> topLevelOps{
-        {"replaceComponent", [this](const QVariantMap& a, const QString& pageId) {
-            return executeReplaceComponent(a, pageId);
+    const QHash<QString, TopOp> topLevelOps{
+        {"replaceComponent", [this](const QVariantMap& args, const QString& page) {
+            return executeReplaceComponent(args, page);
         }},
-        {"restorePageDefaults", [this](const QVariantMap& a, const QString& pageId) {
-            return executeRestorePageDefaults(a, pageId);
+        {"restorePageDefaults", [this](const QVariantMap& args, const QString& page) {
+            return executeRestorePageDefaults(args, page);
         }},
-        {"studioAppearance", [this](const QVariantMap& a, const QString&) {
-            return executeStudioAppearance(a);
+        {"studioAppearance", [this](const QVariantMap& args, const QString& page) {
+            return executeStudioAppearance(args, page);
         }},
-        {"setHomePage", [this](const QVariantMap& a, const QString&) {
-            return executeSetHomePage(a);
+        {"setHomePage", [this](const QVariantMap& args, const QString& page) {
+            return executeSetHomePage(args, page);
         }},
-        {"renamePage", [this](const QVariantMap& a, const QString& pageId) {
+        {"renamePage", [this](const QVariantMap& args, const QString& page) {
             auto document = QJsonDocument::fromJson(m_draft).object();
-            return executeRenameDuplicatePage("renamePage", a, pageId, document, document["pages"].toArray(),
+            return executeRenameDuplicatePage("renamePage", args, page, document, document["pages"].toArray(),
                                               document["rootPage"].toObject());
         }},
-        {"duplicatePage", [this](const QVariantMap& a, const QString& pageId) {
+        {"duplicatePage", [this](const QVariantMap& args, const QString& page) {
             auto document = QJsonDocument::fromJson(m_draft).object();
-            return executeRenameDuplicatePage("duplicatePage", a, pageId, document, document["pages"].toArray(),
+            return executeRenameDuplicatePage("duplicatePage", args, page, document, document["pages"].toArray(),
                                               document["rootPage"].toObject());
         }},
-        {"reorderPage", [this](const QVariantMap& a, const QString& pageId) {
+        {"reorderPage", [this](const QVariantMap& args, const QString&) {
             auto document = QJsonDocument::fromJson(m_draft).object();
-            return executeReorderPage(a, document, document["pages"].toArray());
+            return executeReorderPage(args, document, document["pages"].toArray());
         }},
-        {"removePage", [this](const QVariantMap& a, const QString& pageId) {
+        {"removePage", [this](const QVariantMap& args, const QString&) {
             auto document = QJsonDocument::fromJson(m_draft).object();
-            return executeRemovePage(a, document, document["pages"].toArray(), document["rootPage"].toObject());
+            return executeRemovePage(args, document, document["pages"].toArray(), document["rootPage"].toObject());
         }},
-        {"addResolved", [this](const QVariantMap& a, const QString& pageId) {
-            return executeAddResolvedPlaced("addResolved", a, pageId);
+        {"addResolved", [this](const QVariantMap& args, const QString& page) {
+            return executeAddResolvedPlaced("addResolved", args, page);
         }},
-        {"addPlaced", [this](const QVariantMap& a, const QString& pageId) {
-            return executeAddResolvedPlaced("addPlaced", a, pageId);
+        {"addPlaced", [this](const QVariantMap& args, const QString& page) {
+            return executeAddResolvedPlaced("addPlaced", args, page);
         }},
-        {"batch", [this](const QVariantMap& a, const QString& pageId) {
-            return executeBatch(a, pageId);
+        {"batch", [this](const QVariantMap& args, const QString& page) {
+            return executeBatch(args, page);
         }},
     };
     auto topIt = topLevelOps.constFind(operation);
@@ -371,9 +393,7 @@ StudioSession::execute(const QString& operation, const QVariantMap& a, const QSt
         {"action", &StudioSession::executePageActionItem},
         {"addWidget", &StudioSession::executePageAddWidget},
         {"addPlaced", &StudioSession::executePageAddPlacedItem},
-        {"addButton", [](StudioSession* self, const QVariantMap& a, QJsonObject& document, HomeLayout& worker) {
-            return self->executePageAddButton(document, worker);
-        }},
+        {"addButton", &StudioSession::executePageAddButton},
         {"newPage", &StudioSession::executePageNewPage},
         {"renamePage", &StudioSession::executePageRenamePageTop},
         {"removePage", &StudioSession::executePageRemovePageTop},
@@ -384,12 +404,13 @@ StudioSession::execute(const QString& operation, const QVariantMap& a, const QSt
         setError(QStringLiteral("Unknown or unavailable edit command."));
         return false;
     }
-    const auto id = a.value("id").toString();
-    bool ok = (this->*pageIt)(a, document, worker);
+    bool ok = (this->*pageIt.value())(a, document, worker);
     if (!ok)
     {
-        setError(worker.errorString().isEmpty() ? QStringLiteral("The edit was refused; nothing changed.")
-                                                : worker.errorString());
+        if (!worker.errorString().isEmpty())
+            setError(worker.errorString());
+        else if (m_error.isEmpty())
+            setError(QStringLiteral("The edit was refused; nothing changed."));
         return false;
     }
     auto result = QJsonDocument::fromJson(worker.documentData()).object();
@@ -506,6 +527,8 @@ bool
 StudioSession::executeRenameDuplicatePage(const QString& operation, const QVariantMap& a, const QString& pageId,
                                           QJsonObject document, QJsonArray pages, QJsonObject rootMeta)
 {
+    Q_UNUSED(pageId);
+    Q_UNUSED(rootMeta);
     QJsonObject rootMetaLocal;
     QString id;
     int index = -1;
@@ -589,7 +612,7 @@ StudioSession::renamePageEntry(QJsonArray& pages, int index, const QString& name
     return true;
 }
 
-QString
+QStringList
 StudioSession::collectPageOrder(const QVariantMap& /*a*/)
 {
     QStringList order;
@@ -599,7 +622,7 @@ StudioSession::collectPageOrder(const QVariantMap& /*a*/)
 }
 
 bool
-StudioSession::duplicatePage(const QVariantMap& a, QJsonObject document, QJsonArray pages, QJsonObject rootMeta,
+StudioSession::duplicatePage(const QVariantMap& a, QJsonObject document, QJsonArray& pages, QJsonObject rootMeta,
                              QStringList& order, int index, const QString& id)
 {
     Q_UNUSED(rootMeta);
@@ -733,8 +756,7 @@ StudioSession::executeReorderPage(const QVariantMap& a, QJsonObject document, QJ
     if (rootMeta.isEmpty())
         rootMeta = {{"name", m_model->rootPageName()}, {"visible", true}, {"position", 0}};
     const QString id = a.value("id").toString();
-    const int index = findPageIndex(pages, id);
-    if (index < 0)
+    if (!id.isEmpty() && findPageIndex(pages, id) < 0)
     {
         setError(tr("This page no longer exists."));
         return false;
@@ -742,8 +764,10 @@ StudioSession::executeReorderPage(const QVariantMap& a, QJsonObject document, QJ
     QStringList order;
     for (const auto& entry : m_model->studioPages())
         order.append(entry.toMap()["id"].toString());
-    const int from = order.indexOf(id), offset = a.value("offset").toInt(), to = from + offset;
-    if ((offset != 1 && offset != -1) || to < 0 || to >= order.size())
+    const auto from = order.indexOf(id);
+    const int offset = a.value("offset").toInt();
+    const auto to = from + offset;
+    if (from < 0 || (offset != 1 && offset != -1) || to < 0 || to >= order.size())
     {
         setError(tr("This page is already at the edge of the page list."));
         return false;
@@ -752,25 +776,6 @@ StudioSession::executeReorderPage(const QVariantMap& a, QJsonObject document, QJ
     storePageOrder(order, pages, rootMeta);
     document["pages"] = pages;
     document["rootPage"] = rootMeta;
-    const auto normalizeComponents = [](QJsonObject layout)
-    {
-        const auto key =
-            layout.value("schemaVersion").toInt() == 1 ? QStringLiteral("items") : QStringLiteral("components");
-        auto components = layout.value(key).toArray();
-        for (int i = 0; i < components.size(); ++i)
-            components[i] = QJsonObject::fromVariantMap(
-                ComponentSchema::component(components[i].toObject().toVariantMap(), true));
-        layout[key] = components;
-        return layout;
-    };
-    document = normalizeComponents(document);
-    for (int i = 0; i < pages.size(); ++i)
-    {
-        auto entry = pages[i].toObject();
-        entry["layout"] = normalizeComponents(entry["layout"].toObject());
-        pages[i] = entry;
-    }
-    document["pages"] = pages;
     return pushEdit(QJsonDocument(document).toJson());
 }
 
@@ -799,13 +804,22 @@ StudioSession::storePageOrder(QStringList& order, QJsonArray& pages, QJsonObject
 bool
 StudioSession::executeRemovePage(const QVariantMap& a, QJsonObject document, QJsonArray pages, QJsonObject rootMeta)
 {
+    Q_UNUSED(rootMeta);
+    Q_UNUSED(rootMeta);
     QJsonObject rootMetaLocal;
     QString id, replacement;
     int index = -1;
     bool remap = false;
     if (!validateRemovePagePreconditions(a, document, pages, id, index, remap, replacement, rootMetaLocal))
         return false;
-    pages.removeAt(index);
+    if (id.isEmpty())
+    {
+        rootMetaLocal["visible"] = false;
+        const auto key = document.value("schemaVersion").toInt() == 1 ? "items" : "components";
+        document[key] = QJsonArray{};
+    }
+    else
+        pages.removeAt(index);
     document["pages"] = pages;
     int links = 0;
     bool invalidOverride = false;
@@ -818,6 +832,7 @@ StudioSession::executeRemovePage(const QVariantMap& a, QJsonObject document, QJs
     pages = document["pages"].toArray();
     orderRemovePage(id, pages);
     normalizePageLayouts(document, pages);
+    document["pages"] = pages;
     document["rootPage"] = rootMetaLocal;
     return pushEdit(QJsonDocument(document).toJson());
 }
@@ -832,7 +847,7 @@ StudioSession::validateRemovePagePreconditions(const QVariantMap& a, const QJson
         rootMetaLocal = {{"name", m_model->rootPageName()}, {"visible", true}, {"position", 0}};
     id = a.value("id").toString();
     index = findPageIndex(pages, id);
-    if (index < 0)
+    if ((!id.isEmpty() && index < 0) || (id.isEmpty() && !rootMetaLocal.value("visible").toBool()))
     {
         setError(tr("This page no longer exists."));
         return false;
@@ -883,7 +898,8 @@ QJsonObject
 StudioSession::repairPageObject(QJsonObject object, const QString& id, bool remap, const QString& replacement,
                                 int& links, bool& invalidOverride)
 {
-    if (!id.isEmpty() && object.value("type") == "open-page" && object.value("pageId") == id)
+    if ((!id.isEmpty() && object.value("type") == "open-page" && object.value("pageId") == id) ||
+        (id.isEmpty() && object.value("type") == "root-page"))
     {
         ++links;
         if (remap)
@@ -966,13 +982,27 @@ StudioSession::executeAddResolvedPlaced(const QString& operation, const QVariant
         setError(tr("Choose whether this page scrolls."));
         return false;
     }
+    auto configuration = a.value("configuration").toMap();
+    if (operation == "addPlaced" && a.contains("presentation"))
+    {
+        if (a.value("presentation").metaType().id() != QMetaType::QVariantMap)
+        {
+            setError(tr("Choose valid presentation values."));
+            return false;
+        }
+        auto presentation = configuration.value("presentation").toMap();
+        const auto changes = a.value("presentation").toMap();
+        for (auto it = changes.cbegin(); it != changes.cend(); ++it)
+            presentation[it.key()] = it.value();
+        configuration["presentation"] = presentation;
+    }
     const auto proposal = additionProposal(a.value("type").toString(),
                                            a.value("placement").toMap(),
                                            a.value("strategy", "cancel").toString(),
                                            pageId,
                                            a.value("categoryId").toString(),
                                            a.value("parentId").toString(),
-                                           a.value("configuration").toMap(),
+                                           configuration,
                                            a.value("enableScrolling", false).toBool());
     if (!proposal.value("valid").toBool())
     {
@@ -1350,6 +1380,8 @@ StudioSession::executePagePatchComponent(const QVariantMap& a, QJsonObject& docu
         return false;
     if (values.contains("action") && !validNewAction(values.value("action").toMap()))
         return false;
+    if (values.contains("actions") && !validNewActions(values.value("actions")))
+        return false;
     auto entries = document["components"].toArray();
     int found = 0;
     for (int i = 0; i < entries.size(); ++i)
@@ -1364,7 +1396,7 @@ StudioSession::executePagePatchComponent(const QVariantMap& a, QJsonObject& docu
             setError(error);
             return false;
         }
-        if (values.contains("action") &&
+        if ((values.contains("action") || values.contains("actions")) &&
             (item["componentType"] == "launcher" || item["componentType"] == "media-shelf"))
         {
             item["kind"] = "widget";
@@ -1433,6 +1465,7 @@ StudioSession::validatePatchValues(const QVariantMap& values)
                          "symbol",
                          "accent",
                          "action",
+                         "actions",
                          "customLogo",
                          "presentation",
                          "accessibility",
@@ -1471,7 +1504,9 @@ StudioSession::applyPatchToComponent(QJsonObject& item, const QVariantMap& value
         }
         else if (it.value().isNull() ||
                  (key == "action" && it.value().metaType().id() == QMetaType::QVariantMap &&
-                  it.value().toMap().isEmpty()))
+                  it.value().toMap().isEmpty()) ||
+                 (key == "actions" && it.value().metaType().id() == QMetaType::QVariantList &&
+                  it.value().toList().isEmpty()))
             item.remove(key);
         else
             item[key] = QJsonValue::fromVariant(it.value());
@@ -1526,7 +1561,8 @@ StudioSession::executePageArrange(const QVariantMap& a, QJsonObject& document, H
     int low = 16, high = 0, total = 0;
     if (!findArrangeTargets(entries, ids, indices, parent, category, low, high, total, axis, span))
         return false;
-    applyArrangePositions(entries, indices, mode, axis, span, low, high, total);
+    if (!applyArrangePositions(entries, indices, mode, axis, span, low, high, total))
+        return false;
     document["components"] = entries;
     return worker.loadDocument(QJsonDocument(document).toJson(), false);
 }
@@ -1602,8 +1638,8 @@ StudioSession::findArrangeTargets(const QJsonArray& entries, const QSet<QString>
     return true;
 }
 
-void
-StudioSession::applyArrangePositions(QJsonArray& entries, const QList<int>& indices, const QString& mode,
+bool
+StudioSession::applyArrangePositions(QJsonArray& entries, QList<int> indices, const QString& mode,
                                      const QString& axis, const QString& span, int low, int high, int total)
 {
     const bool distribute = mode.startsWith("distribute");
@@ -1611,12 +1647,13 @@ StudioSession::applyArrangePositions(QJsonArray& entries, const QList<int>& indi
     if (distribute)
     {
         const int space = high - low - total;
-        if (space < 0 || space % (indices.size() - 1))
+        const int intervals = static_cast<int>(indices.size()) - 1;
+        if (space < 0 || space % intervals)
         {
             setError(tr("Equal spacing requires whole cells. Adjust the outer positions first."));
-            return;
+            return false;
         }
-        gap = space / (indices.size() - 1);
+        gap = space / intervals;
         std::stable_sort(indices.begin(),
                          indices.end(),
                          [&](int x, int y)
@@ -1643,7 +1680,7 @@ StudioSession::applyArrangePositions(QJsonArray& entries, const QList<int>& indi
             {
                 setError(
                     tr("Center alignment falls between grid cells. Adjust the sizes or outer positions first."));
-                return;
+                return false;
             }
             position = (low + high - size) / 2;
         }
@@ -1653,6 +1690,7 @@ StudioSession::applyArrangePositions(QJsonArray& entries, const QList<int>& indi
         item["placement"] = p;
         entries[index] = item;
     }
+    return true;
 }
 
 bool
@@ -1796,6 +1834,8 @@ QJsonArray
 StudioSession::buildGroupedResult(const QJsonArray& entries, const QSet<QString>& ids, const QJsonObject& group,
                                   const QVariantMap& bounds, const QString& parent, const QString& category)
 {
+    Q_UNUSED(parent);
+    Q_UNUSED(category);
     QJsonArray result;
     bool inserted = false;
     for (const auto& value : entries)
@@ -1968,13 +2008,8 @@ StudioSession::executePagePlace(const QVariantMap& a, QJsonObject& document, Hom
     {
         const auto change = value.toMap();
         const auto target = change.value("id").toString();
-        if (!validatePlacementChange(change))
+        if (!validatePlacementChange(change, touched))
         {
-            return false;
-        }
-        if (touched.contains(target))
-        {
-            setError(QStringLiteral("Duplicate placement identity."));
             return false;
         }
         bool found = false;
@@ -1983,7 +2018,9 @@ StudioSession::executePagePlace(const QVariantMap& a, QJsonObject& document, Hom
             auto entry = entries[i].toObject();
             if (entry["id"] != target)
                 continue;
-            entries[i] = applyPlacementChange(entry, change, worker);
+            if (!applyPlacementChange(entry, change, worker))
+                return false;
+            entries[i] = entry;
             found = true;
             break;
         }
@@ -2003,7 +2040,10 @@ StudioSession::validatePlacementChange(const QVariantMap& change, const QSet<QSt
 {
     const auto target = change.value("id").toString();
     if (target.isEmpty() || touched.contains(target))
+    {
+        setError(tr("Choose a unique component for each placement."));
         return false;
+    }
     if (change.contains("parentId") && change.value("parentId").metaType().id() != QMetaType::QString)
     {
         setError(tr("Choose a named destination group."));
@@ -2017,20 +2057,21 @@ StudioSession::validatePlacementChange(const QVariantMap& change, const QSet<QSt
     return true;
 }
 
-QJsonObject
-StudioSession::applyPlacementChange(QJsonObject entry, const QVariantMap& change, const HomeLayout& worker)
+bool
+StudioSession::applyPlacementChange(QJsonObject& entry, const QVariantMap& change, const HomeLayout& worker)
 {
-    const auto target = entry["id"].toString();
     const auto parent = change.value("parentId", entry.value("parentId").toString()).toString();
     if (!parent.isEmpty() && ComponentSchema::positionLocked(worker.m_items, parent))
     {
         setError(tr("Choose an unlocked destination group."));
-        return entry;
+        return false;
     }
-    if (change.contains("categoryId") && !checkCategoryEligible(change, entry, worker))
-        return entry;
     if (!checkPlacementLocked(entry, change, worker))
-        return entry;
+        return false;
+    if (change.contains("categoryId") &&
+        entry.value("categoryId").toString() != change.value("categoryId").toString() &&
+        !checkCategoryEligible(change, entry, worker))
+        return false;
     entry["placement"] = QJsonObject::fromVariantMap(change.value("placement").toMap());
     if (change.contains("categoryId"))
     {
@@ -2044,7 +2085,7 @@ StudioSession::applyPlacementChange(QJsonObject entry, const QVariantMap& change
         entry.remove("parentId");
     else
         entry["parentId"] = parent;
-    return entry;
+    return true;
 }
 
 bool
@@ -2413,8 +2454,6 @@ StudioSession::executePageDuplicateItem(const QVariantMap& a, QJsonObject& docum
             setError(tr("Unlock the containing group before adding a duplicate."));
             return false;
         }
-        const auto grid = ComponentSchema::componentGrid(entries, worker.m_composition, worker.m_categories, parent,
-                                                         category);
         if (!findFreePlacement(shape, entries, worker.m_composition, worker.m_categories, parent, category, sections))
         {
             setError(tr("There is no free region for the duplicate. Nothing changed."));
@@ -2455,7 +2494,7 @@ StudioSession::findComponentToDuplicate(const QJsonArray& entries, const QString
 }
 
 bool
-StudioSession::findFreePlacement(QVariantMap& shape, const QJsonArray& entries, const QJsonObject& composition,
+StudioSession::findFreePlacement(QVariantMap& shape, const QJsonArray& entries, const QVariantMap& composition,
                                  const QJsonArray& categories, const QString& parent, const QString& category,
                                  bool sections)
 {
@@ -2580,7 +2619,7 @@ StudioSession::executePageAddPlacedItem(const QVariantMap& a, QJsonObject& /*doc
 }
 
 bool
-StudioSession::executePageAddButton(QJsonObject& /*document*/, HomeLayout& worker)
+StudioSession::executePageAddButton(const QVariantMap& /*a*/, QJsonObject& /*document*/, HomeLayout& worker)
 {
     return worker.addButton();
 }
@@ -2610,6 +2649,7 @@ StudioSession::finalizePageOperation(QJsonObject& root, QJsonObject& document, Q
                                      const QString& operation, const QVariantMap& a, QJsonObject& result,
                                      const QString& /*pageId*/)
 {
+    Q_UNUSED(document);
     if (operation == "section" && a.value("kind") == "add")
     {
         auto sections = result["categories"].toArray();

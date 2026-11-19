@@ -11,6 +11,7 @@
 
 namespace
 {
+bool isSymlink(const QString& path);
 bool
 ordinaryPath(QString path)
 {

@@ -50,7 +50,7 @@ path(const QString& profile, const QString& relative)
         return {};
     return target;
 }
-bool
+inline bool
 canWriteArtwork(const QString& profile, const QString& relative, const QByteArray& bytes);
 inline bool
 write(const QString& profile, const QString& relative, const QByteArray& bytes)
@@ -65,7 +65,8 @@ write(const QString& profile, const QString& relative, const QByteArray& bytes)
     return file.open(QIODevice::WriteOnly) && file.write(bytes) == bytes.size() && file.commit();
 }
 
-bool
+// Verify the content-addressed target before creating its profile-owned directory.
+inline bool
 canWriteArtwork(const QString& profile, const QString& relative, const QByteArray& bytes)
 {
     return name(bytes) == relative && !path(profile, relative).isEmpty() &&

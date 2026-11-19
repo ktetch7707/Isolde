@@ -210,6 +210,8 @@ class InputManager final : public QObject
     eventFilter(QObject* object, QEvent* event) override;
 
   private:
+    static bool
+    isValidCommand(int command);
     static Command
     defaultCommandForKey(int key);
     bool

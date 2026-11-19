@@ -7,7 +7,7 @@
 #include <functional>
 
 class HomeLayout;
-class ComponentRegistry;
+class AppRegistry;
 
 /**
  * @brief Page-scoped Home composition.
@@ -153,20 +153,20 @@ class PageModel final : public QObject
     [[nodiscard]] QVariantList
     resolveItems(const QJsonArray& components) const;
     [[nodiscard]] QVariantMap
-    resolveItemAppFields(const QVariantMap& item, const ComponentRegistry* registry) const;
+    resolveItemAppFields(const QVariantMap& item, const AppRegistry* registry) const;
     [[nodiscard]] QVariantMap
     resolveItemActionFields(const QVariantMap& item) const;
     [[nodiscard]] QVariantMap
-    resolveItemDisplayFields(const QVariantMap& item, const ComponentRegistry* registry) const;
+    resolveItemDisplayFields(const QVariantMap& item, const AppRegistry* registry) const;
     [[nodiscard]] QString
     resolveItemUnavailableReason(const QVariantMap& item, const QVariantList& actionList,
-                                 const ComponentRegistry* registry) const;
+                                 const AppRegistry* registry) const;
     [[nodiscard]] QVariantMap
     themeDefaults() const;
     bool
     setItemField(const QString& id, std::function<void(QJsonObject&)> mutate);
     bool
-    validateAppearanceKey(const QString& key, const QVariant& value, const QVariantMap& defaults);
+    validateAppearanceKey(const QString& key, QVariant& value, const QVariantMap& defaults);
     bool
     isColorAppearanceKey(const QString& key);
     bool

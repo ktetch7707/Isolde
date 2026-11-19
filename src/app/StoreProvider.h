@@ -112,4 +112,9 @@ class StoreProvider : public StoreIdentityProvider,
     using StoreSearchProvider::StoreSearchProvider;
     using StoreUpdateProvider::StoreUpdateProvider;
     ~StoreProvider() override = default;
+
+  signals:
+    void providerError(const QString& message);
+    void resultsChanged();
+    void updatesChanged();
 };

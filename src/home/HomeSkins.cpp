@@ -176,9 +176,8 @@ HomeLayout::applySkinDocument(QJsonObject document, const QJsonObject& assets, b
     QJsonArray mergedPages = m_pages;
     if (addMissingPages && !applySkinAddMissingPages(document, mergedPages))
         return false;
-    document = applySkinWrapSinglePage(document, mergedPages, previous);
     // Validate the entire document before importing artwork or replacing the current layout.
-    if (!loadDocument(QJsonDocument(document).toJson(), false))
+    if (!loadDocument(QJsonDocument(applySkinWrapSinglePage(document, mergedPages, previous)).toJson(), false))
         return false;
     loadDocument(previous, false);
     m_legacyDocument = legacy;
@@ -187,6 +186,7 @@ HomeLayout::applySkinDocument(QJsonObject document, const QJsonObject& assets, b
         setError(tr("This skin has missing or invalid artwork. Your Home has not changed."));
         return false;
     }
+    document = applySkinWrapSinglePage(document, mergedPages, previous);
     if (!loadDocument(QJsonDocument(document).toJson(), false) || !save())
     {
         const auto error = m_errorString;
@@ -199,19 +199,20 @@ HomeLayout::applySkinDocument(QJsonObject document, const QJsonObject& assets, b
     return true;
 }
 
-QJsonArray
-HomeLayout::applySkinAddMissingPages(QJsonObject document, QJsonArray& mergedPages) const
+// Merge only missing pages and retain existing user pages before applying a skin.
+bool
+HomeLayout::applySkinAddMissingPages(QJsonObject& document, QJsonArray& mergedPages)
 {
     if (m_owner)
     {
         setError(tr("Apply this page-set skin from Home to add its library pages."));
-        return {};
+        return false;
     }
     HomeLayout validator(m_registry);
     if (!validator.loadDocument(QJsonDocument(document).toJson(), false))
     {
         setError(validator.errorString());
-        return {};
+        return false;
     }
     for (const auto& entry : document["pages"].toArray())
     {
@@ -223,12 +224,12 @@ HomeLayout::applySkinAddMissingPages(QJsonObject document, QJsonArray& mergedPag
             mergedPages.append(entry);
     }
     document.remove("pages");
-    return mergedPages;
+    return true;
 }
 
 QJsonObject
 HomeLayout::applySkinWrapSinglePage(QJsonObject document, const QJsonArray& mergedPages,
-                                    const QJsonObject& previous)
+                                    const QByteArray& previous)
 {
     const bool singlePage = !m_owner && !document.contains("pages");
     if (!singlePage)
@@ -253,7 +254,7 @@ HomeLayout::applySkinWrapSinglePage(QJsonObject document, const QJsonArray& merg
     if (!converted.loadDocument(QJsonDocument(page).toJson(), false))
         return QJsonObject{};
     page = QJsonDocument::fromJson(converted.documentData()).object();
-    auto root = previous;
+    auto root = QJsonDocument::fromJson(previous).object();
     auto pages = mergedPages;
     for (int i = 0; i < pages.size(); ++i)
         if (pages[i].toObject()["id"] == m_homePageId)
@@ -267,7 +268,7 @@ HomeLayout::applySkinWrapSinglePage(QJsonObject document, const QJsonArray& merg
 }
 
 bool
-HomeLayout::applySkinValidateArtwork(QJsonObject document, const QJsonObject& assets) const
+HomeLayout::applySkinValidateArtwork(QJsonObject& document, const QJsonObject& assets) const
 {
     bool valid = true;
     document =
@@ -342,7 +343,10 @@ HomeLayout::applySkin(const QString& id)
 {
     const auto skin = skinSnapshot(id);
     if (!isValidSkin(skin))
+    {
+        setError(tr("This skin is missing, invalid, or has an unsupported page policy."));
         return false;
+    }
     return applySkinDocument(skin["layout"].toObject(), skin["assets"].toObject(), skin["pagePolicy"] == "add-missing");
 }
 
@@ -370,7 +374,7 @@ HomeLayout::skinPageUpdates(const QString& id) const
         for (const auto& entry : document["pages"].toArray())
             if (entry.toObject()["id"] == m_homePageId)
                 home = entry.toObject()["layout"].toObject();
-    return buildSkinPageUpdateResults(skin, recipes, home["components"].toArray(), m_homePageId);
+    return buildSkinPageUpdateResults(skin, recipes, home["components"].toArray());
 }
 
 bool
@@ -406,8 +410,7 @@ HomeLayout::validateSkinPageArtwork(const QJsonObject& target) const
 
 QVariantList
 HomeLayout::buildSkinPageUpdateResults(const QJsonObject& skin, const QJsonArray& recipes,
-                                       const QVariantList& homeComponents,
-                                       const QString& homePageId) const
+                                       const QJsonArray& homeComponents) const
 {
     QVariantList result;
     for (const auto& value : recipes)
@@ -426,7 +429,7 @@ HomeLayout::buildSkinPageUpdateResults(const QJsonObject& skin, const QJsonArray
         const auto fromAction = ComponentSchema::action(recipe["fromAction"].toObject().toVariantMap(), &actionError);
         if (!actionError.isEmpty() || fromAction.isEmpty())
             return {};
-        for (const auto& entry : homeComponents.toList())
+        for (const auto& entry : homeComponents)
         {
             const auto component = entry.toObject();
             if (component["id"] != componentId)

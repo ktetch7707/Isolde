@@ -147,12 +147,6 @@ class AppCatalog final : public QObject
     load(const QString& catalogPath = {}, const QString& statePath = {}, const QString& installRoot = {});
     Q_INVOKABLE bool
     install(const QString& id);
-    bool
-    isInstallableEntry(const AppCatalogEntry* entry, const QString& id);
-    bool
-    stagePackageDirectory(const AppCatalogEntry* entry, const QString& id, bool& createdPackage);
-    bool
-    registerAndSaveInstall(const AppCatalogEntry* entry, const QString& id, bool createdPackage);
     Q_INVOKABLE bool
     uninstall(const QString& id);
     Q_INVOKABLE bool
@@ -235,6 +229,15 @@ class AppCatalog final : public QObject
         EntryMetadata meta;
         EntrySetup setup;
     };
+    bool
+    isInstallableEntry(const Entry* entry, const QString& id);
+    // Keep online searches on the provider path shared by browse and search.
+    void
+    beginOnlineSearch(const QString& query);
+    bool
+    stagePackageDirectory(const Entry* entry, const QString& id, bool& createdPackage);
+    bool
+    registerAndSaveInstall(const Entry* entry, const QString& id, bool createdPackage);
     [[nodiscard]] QString
     resolveCatalogPath(const QString& catalogPath) const;
     [[nodiscard]] bool
@@ -267,6 +270,14 @@ class AppCatalog final : public QObject
     loadStateCustomPackages(const QJsonObject& stateObject);
     [[nodiscard]] bool
     loadStateInstalledApps(const QJsonObject& stateObject);
+    bool
+    loadStateStoreTransaction(const QJsonObject& stateObject);
+    bool
+    loadStateUpdatePreferences(const QJsonObject& stateObject);
+    bool
+    loadStateAndroidContainment(const QJsonObject& stateObject);
+    bool
+    isValidAndroidContainment(const QVariant& presentation);
     [[nodiscard]] bool
     parseFdroidEntry(const QJsonObject& data, Entry* entry);
     [[nodiscard]] bool
@@ -317,12 +328,26 @@ class AppCatalog final : public QObject
     findEntry(const QString& id) const;
     bool
     saveState();
+    void
+    abortDownloadOrProcess();
+    void
+    cleanStagingDirectories();
     QString
     resolveFailureReason(const QString& reason);
     void
     setError(const QString& message);
     bool
     androidOperation(const Entry& entry, const QString& operation);
+    void
+    configureAndroidProcess(const Entry& entry, const QString& helper, const QString& profile);
+    void
+    connectAndroidProcessSignals();
+    QString
+    findAndroidHelper() const;
+    QString
+    resolveAndroidProfile() const;
+    void
+    initializeAndroidOperationState(const Entry& entry, const QString& operation, const QString& profile);
     QVariantList
     mergedEntries() const;
     bool
@@ -373,7 +398,7 @@ class AppCatalog final : public QObject
     QString m_operation;
     bool m_committing = false;
     QByteArray m_operationEvents;
-    StoreProvider* m_provider;
+    QPointer<StoreProvider> m_provider;
     bool m_onlineStoreSearch = false;
     QString m_storeQuery;
     QVariantList m_providerResults;

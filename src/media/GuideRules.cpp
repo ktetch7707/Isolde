@@ -9,6 +9,7 @@
 #include "home/ComponentSchema.h"
 
 bool reject(QString* error, const QString& message);
+bool validateRuleLeaf(const QVariantMap& value, const QString& op);
 
 namespace
 {
@@ -75,7 +76,7 @@ validRule(const QVariantMap& v, int depth, int& count)
     const auto op = v.value("op").toString();
     if (op == "all" || op == "any" || op == "not")
         return validateCompoundRule(v, depth, count);
-    return true;
+    return validateRuleLeaf(v, op);
 }
 
 [[maybe_unused]] bool
@@ -502,7 +503,8 @@ GuideRules::validateChannelContent(const QVariantMap& v, QString* error)
         return false;
     if (!validateChannelTiming(v, error))
         return false;
-    if (!validateLocalChannel(v, error))
+    if (v.value("owner") != "guide-feed" && v.value("owner") != "kodi-pvr" &&
+        !validateLocalChannel(v, error))
         return false;
     return true;
 }
@@ -764,7 +766,7 @@ bool GuideRules::validateLocalChannel(const QVariantMap& v, QString* error)
 {
     if (!validateLocalChannelCore(v, error))
         return false;
-    return validateLocalChannelOptions(v, error);
+    return validateLocalChannelOptions(v, error) && validateLocalChannelMediaKinds(v, error);
 }
 
 bool
@@ -822,13 +824,16 @@ GuideRules::validateLocalChannelMediaKinds(const QVariantMap& v, QString* error)
     if (!v.contains("mediaKinds"))
         return true;
     const auto kinds = v.value("mediaKinds").toList();
-    if (kinds.isEmpty() || kinds.size() > 4)
+    if (v.value("mediaKinds").metaType().id() != QMetaType::QVariantList || kinds.isEmpty() || kinds.size() > 4)
         return reject(error, "Choose one to four local media types.");
+    QSet<QString> seen;
     for (const auto& kind : kinds)
     {
         if (kind.metaType().id() != QMetaType::QString ||
-            !QStringList{"movie", "episode", "musicvideo", "song"}.contains(kind.toString()))
+            !QStringList{"movie", "episode", "musicvideo", "song"}.contains(kind.toString()) ||
+            seen.contains(kind.toString()))
             return reject(error, "Invalid or duplicate local media type.");
+        seen.insert(kind.toString());
     }
     return true;
 }

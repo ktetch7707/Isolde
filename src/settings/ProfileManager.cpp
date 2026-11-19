@@ -12,6 +12,9 @@
 
 namespace
 {
+bool isValidPolicyEntry(const QString& key, const QVariant& value);
+bool isValidRestrictedDestinations(const QVariant& value);
+
 bool
 validPolicy(const QVariant& value)
 {
@@ -26,7 +29,7 @@ validPolicy(const QVariant& value)
     return true;
 }
 
-static bool
+bool
 isValidPolicyEntry(const QString& key, const QVariant& value)
 {
     if (key == "editingAllowed" || key == "installsAllowed")
@@ -36,7 +39,7 @@ isValidPolicyEntry(const QString& key, const QVariant& value)
     return true;
 }
 
-static bool
+bool
 isValidRestrictedDestinations(const QVariant& value)
 {
     if (value.metaType().id() != QMetaType::QVariantList &&

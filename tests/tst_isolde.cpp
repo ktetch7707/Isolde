@@ -237,7 +237,7 @@ class IsoldeTests final : public QObject
                              {"provenance", "Verified test repository"}};
         AppCatalog::Entry entry;
         QVERIFY(catalog.customEntry(manifest, &entry));
-        QCOMPARE(entry.app.launchConfiguration.value("storeVersion").toString(), QString("1234567890"));
+        QCOMPARE(entry.core.app.launchConfiguration.value("storeVersion").toString(), QString("1234567890"));
         for (const auto& key : QStringList{"id", "packageName", "version", "sha256"})
         {
             auto invalid = manifest;
@@ -310,7 +310,7 @@ class IsoldeTests final : public QObject
         restored.m_statePath = blocked;
         QSignalSpy registryChanges(&restoredRegistry, &AppRegistry::appsChanged);
         QVERIFY(!restored.commitUpdate(update));
-        QCOMPARE(restored.findEntry(id)->version, QString("1234567890"));
+        QCOMPARE(restored.findEntry(id)->core.version, QString("1234567890"));
         QCOMPARE(restoredRegistry.find(id)->launchConfiguration.value("storeVersion").toString(),
                  QString("1234567890"));
         QCOMPARE(restoredRegistry.apps().size(), 1);

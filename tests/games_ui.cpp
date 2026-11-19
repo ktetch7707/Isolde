@@ -26,8 +26,10 @@
 #include "games/GameEmulators.h"
 #include "games/GameLibrary.h"
 #include "games/ManagedGamePaths.h"
-#include "games/OpticalDiscAdapter.h"
+#include "games/OpticalDiscIdentity.h"
 #include "games/OpticalDiscGrants.h"
+#include "games/OpticalDiscMount.h"
+#include "games/OpticalDiscSession.h"
 #include "input/InputManager.h"
 #include "media/MediaGrants.h"
 
@@ -147,7 +149,7 @@ GamesUiTests::opticalMountInstanceChangesObservation()
 {
     const auto observe = [](const QString& instance)
     {
-        return OpticalDiscAdapter::mountObservationId(
+        return OpticalDiscHash::mountObservationId(
             "/dev/sr0", "udf", "Disc", "/media/disc", "7", "ready", QString(64, 'a'), instance);
     };
     const auto first = observe("unique:100");
@@ -156,11 +158,11 @@ GamesUiTests::opticalMountInstanceChangesObservation()
     QVERIFY(first != observe("unique:101"));
     QVERIFY(first != observe("mount:100"));
     QVERIFY(first != observe({}));
-    QVERIFY(OpticalDiscAdapter::mountObservationId("a\nb", "c", "", "", "1", "ready", "", "mount:1") !=
-            OpticalDiscAdapter::mountObservationId("a", "b\nc", "", "", "1", "ready", "", "mount:1"));
+    QVERIFY(OpticalDiscHash::mountObservationId("a\nb", "c", "", "", "1", "ready", "", "mount:1") !=
+            OpticalDiscHash::mountObservationId("a", "b\nc", "", "", "1", "ready", "", "mount:1"));
     const auto unmounted = [](const QString& sequence, const QString& sectors)
     {
-        return OpticalDiscAdapter::mountObservationId(
+        return OpticalDiscHash::mountObservationId(
             "/dev/sr0", "unknown", {}, {}, sequence, "unmounted", sectors, {});
     };
     QVERIFY(unmounted("10", "4096") != unmounted("11", "4096"));
@@ -176,39 +178,39 @@ GamesUiTests::opticalSessionContractNeverClaimsHotSwap()
                            {"mountRoot", "/media/first"},
                            {"state", "mounted"},
                            {"observationId", QString(64, 'e')}};
-    const auto reference = OpticalDiscAdapter::rootReference(disc);
-    const auto pinned = OpticalDiscAdapter::classifySession(reference, "/media/first", true, {disc});
+    const auto reference = OpticalDiscIdentify::rootReference(disc);
+    const auto pinned = OpticalDiscClassify::classifySession(reference, "/media/first", true, {disc});
     QCOMPARE(pinned.value("state").toString(), QString("pinned"));
     QVERIFY(!pinned.value("hotSwapSupported").toBool());
     auto reinserted = disc;
     reinserted["observationId"] = QString(64, 'f');
-    QCOMPARE(OpticalDiscAdapter::classifySession(reference, "/media/first", true, {reinserted}, QString(64, 'e'))
+    QCOMPARE(OpticalDiscClassify::classifySession(reference, "/media/first", true, {reinserted}, QString(64, 'e'))
                  .value("state")
                  .toString(),
              QString("interrupted"));
     auto other = disc;
     other["mediaId"] = QString(64, 'c');
     other["discNumber"] = 2;
-    QCOMPARE(OpticalDiscAdapter::classifySession(reference, "/media/first", true, {other}).value("state").toString(),
+    QCOMPARE(OpticalDiscClassify::classifySession(reference, "/media/first", true, {other}).value("state").toString(),
              QString("wrong-disc"));
     auto relocated = disc;
     relocated["mountRoot"] = "/media/second";
     QCOMPARE(
-        OpticalDiscAdapter::classifySession(reference, "/media/first", true, {relocated}).value("state").toString(),
+        OpticalDiscClassify::classifySession(reference, "/media/first", true, {relocated}).value("state").toString(),
         QString("relocated"));
-    QCOMPARE(OpticalDiscAdapter::classifySession(reference, "/media/first", true, {}).value("state").toString(),
+    QCOMPARE(OpticalDiscClassify::classifySession(reference, "/media/first", true, {}).value("state").toString(),
              QString("missing"));
     other["mediaSetId"] = QString(64, 'd');
-    QCOMPARE(OpticalDiscAdapter::classifySession(reference, "/media/first", true, {other}).value("state").toString(),
+    QCOMPARE(OpticalDiscClassify::classifySession(reference, "/media/first", true, {other}).value("state").toString(),
              QString("replaced"));
-    QCOMPARE(OpticalDiscAdapter::classifySession(reference, "/media/first", false, {disc}).value("state").toString(),
+    QCOMPARE(OpticalDiscClassify::classifySession(reference, "/media/first", false, {disc}).value("state").toString(),
              QString("revoked"));
-    const auto missing = OpticalDiscAdapter::classifySession(reference, "/media/first", true, {});
+    const auto missing = OpticalDiscClassify::classifySession(reference, "/media/first", true, {});
     QVERIFY(!missing.value("recovery").toString().isEmpty());
-    const auto interrupted = OpticalDiscAdapter::latchSession(missing, pinned);
+    const auto interrupted = OpticalDiscSession::latchSession(missing, pinned);
     QCOMPARE(interrupted.value("state").toString(), QString("interrupted"));
-    QCOMPARE(OpticalDiscAdapter::latchSession(interrupted, pinned).value("state").toString(), QString("interrupted"));
-    QCOMPARE(OpticalDiscAdapter::latchSession({}, pinned).value("state").toString(), QString("pinned"));
+    QCOMPARE(OpticalDiscSession::latchSession(interrupted, pinned).value("state").toString(), QString("interrupted"));
+    QCOMPARE(OpticalDiscSession::latchSession({}, pinned).value("state").toString(), QString("pinned"));
 }
 void
 GamesUiTests::compatibilityCandidatesNeverClaimInstallerSupport()
@@ -271,26 +273,26 @@ GamesUiTests::fullOpticalContentIdentityRejectsTruncationAndChanges()
     QByteArray bytes(3 * 1024 * 1024, 'x');
     QBuffer source(&bytes);
     QVERIFY(source.open(QIODevice::ReadOnly));
-    const auto digest = OpticalDiscAdapter::hashContent(&source, bytes.size());
+    const auto digest = OpticalDiscHash::hashContent(&source, bytes.size());
     QCOMPARE(digest, QCryptographicHash::hash(bytes, QCryptographicHash::Sha256));
     bytes[bytes.size() - 1] = 'y';
     QVERIFY(source.seek(0));
-    const auto changed = OpticalDiscAdapter::hashContent(&source, bytes.size());
+    const auto changed = OpticalDiscHash::hashContent(&source, bytes.size());
     QVERIFY(changed != digest);
     QVERIFY(source.seek(0));
-    QVERIFY(OpticalDiscAdapter::hashContent(&source, bytes.size() + 1).isEmpty());
+    QVERIFY(OpticalDiscHash::hashContent(&source, bytes.size() + 1).isEmpty());
     QVERIFY(source.seek(0));
-    QVERIFY(OpticalDiscAdapter::hashContent(&source, 0).isEmpty());
-    QVERIFY(OpticalDiscAdapter::hashContent(&source, 16ULL * 1024 * 1024 * 1024 + 1).isEmpty());
+    QVERIFY(OpticalDiscHash::hashContent(&source, 0).isEmpty());
+    QVERIFY(OpticalDiscHash::hashContent(&source, 16ULL * 1024 * 1024 * 1024 + 1).isEmpty());
     const auto id = QString::fromLatin1(digest.toHex());
-    const auto udf = OpticalDiscAdapter::identityForContent({}, id);
+    const auto udf = OpticalDiscIdentify::identityForContent({}, id);
     QCOMPARE(udf.value("discNumber").toInt(), 1);
     QCOMPARE(udf.value("discCount").toInt(), 1);
     QCOMPARE(udf.value("mediaSetId").toString(), id);
-    QVERIFY(OpticalDiscAdapter::isRootReference(OpticalDiscAdapter::rootReference(udf)));
-    QVERIFY(OpticalDiscAdapter::identityForContent({}, "bad").isEmpty());
+    QVERIFY(OpticalDiscIdentify::isRootReference(OpticalDiscIdentify::rootReference(udf)));
+    QVERIFY(OpticalDiscIdentify::identityForContent({}, "bad").isEmpty());
     const QVariantMap set{{"mediaSetId", QString(64, 'a')}, {"discNumber", 2}, {"discCount", 2}};
-    const auto iso = OpticalDiscAdapter::identityForContent(set, id);
+    const auto iso = OpticalDiscIdentify::identityForContent(set, id);
     QCOMPARE(iso.value("mediaId").toString(), id);
     QCOMPARE(iso.value("mediaSetId").toString(), QString(64, 'a'));
     QCOMPARE(iso.value("discNumber").toInt(), 2);
@@ -362,20 +364,20 @@ GamesUiTests::opticalRevalidationClassifiesReadyReplacementAndRemoval()
                                   {"device", "/dev/sr0"},
                                   {"mountRoot", "/media/disc-b"},
                                   {"state", "mounted"}};
-    QCOMPARE(OpticalDiscAdapter::classifyRevalidation(old.value("observationId").toString(), "/dev/sr0", {old})
+    QCOMPARE(OpticalDiscProbe::classifyRevalidation(old.value("observationId").toString(), "/dev/sr0", {old})
                  .value("state")
                  .toString(),
              QString("ready"));
-    QCOMPARE(OpticalDiscAdapter::classifyRevalidation(old.value("observationId").toString(), "/dev/sr1", {old})
+    QCOMPARE(OpticalDiscProbe::classifyRevalidation(old.value("observationId").toString(), "/dev/sr1", {old})
                  .value("state")
                  .toString(),
              QString("missing"));
     const auto changed =
-        OpticalDiscAdapter::classifyRevalidation(old.value("observationId").toString(), "/dev/sr0", {replacement});
+        OpticalDiscProbe::classifyRevalidation(old.value("observationId").toString(), "/dev/sr0", {replacement});
     QCOMPARE(changed.value("state").toString(), QString("replaced"));
     QCOMPARE(changed.value("disc").toMap().value("observationId").toString(),
              replacement.value("observationId").toString());
-    QCOMPARE(OpticalDiscAdapter::classifyRevalidation(old.value("observationId").toString(), "/dev/sr0", {})
+    QCOMPARE(OpticalDiscProbe::classifyRevalidation(old.value("observationId").toString(), "/dev/sr0", {})
                  .value("state")
                  .toString(),
              QString("missing"));
@@ -394,51 +396,51 @@ GamesUiTests::opticalIdentityAndMultiDiscReferencesAreDurable()
     descriptor[128] = 0;
     descriptor[129] = 8;
     descriptor.replace(190, 8, "SET-1234");
-    const auto first = OpticalDiscAdapter::parseIsoVolumeDescriptor(descriptor);
+    const auto first = OpticalDiscParse::parseIsoVolumeDescriptor(descriptor);
     QVERIFY(!first.isEmpty());
     QCOMPARE(first.value("discNumber").toInt(), 1);
     QCOMPARE(first.value("discCount").toInt(), 2);
-    const auto root = OpticalDiscAdapter::rootReference(first);
-    QVERIFY(OpticalDiscAdapter::isRootReference(root));
-    QCOMPARE(OpticalDiscAdapter::mediaIdFromRoot(root), first.value("mediaId").toString());
+    const auto root = OpticalDiscIdentify::rootReference(first);
+    QVERIFY(OpticalDiscIdentify::isRootReference(root));
+    QCOMPARE(OpticalDiscIdentify::mediaIdFromRoot(root), first.value("mediaId").toString());
     auto secondDescriptor = descriptor;
     secondDescriptor[124] = 2;
-    const auto second = OpticalDiscAdapter::parseIsoVolumeDescriptor(secondDescriptor);
+    const auto second = OpticalDiscParse::parseIsoVolumeDescriptor(secondDescriptor);
     QCOMPARE(first.value("mediaSetId").toString(), second.value("mediaSetId").toString());
     QVERIFY(first.value("mediaId").toString() != second.value("mediaId").toString());
-    const auto secondRoot = OpticalDiscAdapter::rootReference(second);
+    const auto secondRoot = OpticalDiscIdentify::rootReference(second);
     auto ready = first;
     ready["state"] = "mounted";
     ready["mountRoot"] = "/media/test-disc-1";
-    QCOMPARE(OpticalDiscAdapter::classifyRootReference(root, {ready}).value("state").toString(), QString("ready"));
-    QCOMPARE(OpticalDiscAdapter::classifyRootReference(root, {}).value("state").toString(), QString("missing"));
+    QCOMPARE(OpticalDiscClassify::classifyRootReference(root, {ready}).value("state").toString(), QString("ready"));
+    QCOMPARE(OpticalDiscClassify::classifyRootReference(root, {}).value("state").toString(), QString("missing"));
     const QVariantMap wrong{{"mediaId", second.value("mediaId")},
                             {"mediaSetId", second.value("mediaSetId")},
                             {"discNumber", 2},
                             {"discCount", 2},
                             {"mountRoot", "/media/test-disc-2"},
                             {"state", "mounted"}};
-    const auto state = OpticalDiscAdapter::classifyRootReference(root, {wrong});
+    const auto state = OpticalDiscClassify::classifyRootReference(root, {wrong});
     QCOMPARE(state.value("state").toString(), QString("wrong-disc"));
     QCOMPARE(state.value("expectedDisc").toInt(), 1);
-    QCOMPARE(OpticalDiscAdapter::classifyRootReference(root, {wrong, ready}).value("state").toString(),
+    QCOMPARE(OpticalDiscClassify::classifyRootReference(root, {wrong, ready}).value("state").toString(),
              QString("ready"));
     auto inconsistent = ready;
     inconsistent["discNumber"] = 2;
-    QCOMPARE(OpticalDiscAdapter::classifyRootReference(root, {inconsistent}).value("state").toString(),
+    QCOMPARE(OpticalDiscClassify::classifyRootReference(root, {inconsistent}).value("state").toString(),
              QString("wrong-disc"));
     auto unmounted = wrong;
     unmounted["device"] = "/dev/sr0";
     unmounted["observationId"] = QString(64, 'c');
     unmounted["state"] = "unmounted";
     unmounted["mountRoot"] = "";
-    QCOMPARE(OpticalDiscAdapter::classifyRootReference(root, {unmounted}).value("state").toString(),
+    QCOMPARE(OpticalDiscClassify::classifyRootReference(root, {unmounted}).value("state").toString(),
              QString("missing"));
     QCOMPARE(
-        OpticalDiscAdapter::classifyRevalidation(QString(64, 'a'), "/dev/sr0", {unmounted}).value("state").toString(),
+        OpticalDiscProbe::classifyRevalidation(QString(64, 'a'), "/dev/sr0", {unmounted}).value("state").toString(),
         QString("replaced"));
     const auto selectedUnmounted =
-        OpticalDiscAdapter::classifyRevalidation(unmounted.value("observationId").toString(), "/dev/sr0", {unmounted});
+        OpticalDiscProbe::classifyRevalidation(unmounted.value("observationId").toString(), "/dev/sr0", {unmounted});
     QCOMPARE(selectedUnmounted.value("state").toString(), QString("unmounted"));
     auto noSet = descriptor;
     noSet.fill('\0');
@@ -451,9 +453,9 @@ GamesUiTests::opticalIdentityAndMultiDiscReferencesAreDurable()
     noSet[124] = 1;
     noSet[128] = 0;
     noSet[129] = 8;
-    QVERIFY(OpticalDiscAdapter::parseIsoVolumeDescriptor(noSet).isEmpty());
-    QVERIFY(!OpticalDiscAdapter::parseIsoVolumeDescriptor(QByteArray(2048, 'x')).size());
-    QVERIFY(!OpticalDiscAdapter::isRootReference(secondRoot + "/../bad"));
+    QVERIFY(OpticalDiscParse::parseIsoVolumeDescriptor(noSet).isEmpty());
+    QVERIFY(!OpticalDiscParse::parseIsoVolumeDescriptor(QByteArray(2048, 'x')).size());
+    QVERIFY(!OpticalDiscIdentify::isRootReference(secondRoot + "/../bad"));
 }
 void
 GamesUiTests::udfVolumeSetIdentityGroupsDiscNumbers()
@@ -521,19 +523,19 @@ GamesUiTests::udfVolumeSetIdentityGroupsDiscNumbers()
         return qMakePair(finishTag(anchor), sequence);
     };
     const auto first = fixture(1, "ISOLDE-SET"), second = fixture(2, "ISOLDE-SET");
-    const auto firstDescriptor = OpticalDiscAdapter::parseUdfVolumeDescriptors(first.first, first.second, 300);
-    const auto secondDescriptor = OpticalDiscAdapter::parseUdfVolumeDescriptors(second.first, second.second, 300);
+    const auto firstDescriptor = OpticalDiscParse::parseUdfVolumeDescriptors(first.first, first.second, 300);
+    const auto secondDescriptor = OpticalDiscParse::parseUdfVolumeDescriptors(second.first, second.second, 300);
     QVERIFY(!firstDescriptor.isEmpty());
     QVERIFY(!secondDescriptor.isEmpty());
     QCOMPARE(firstDescriptor.value("mediaSetId"), secondDescriptor.value("mediaSetId"));
     QCOMPARE(firstDescriptor.value("discNumber").toInt(), 1);
     QCOMPARE(secondDescriptor.value("discNumber").toInt(), 2);
     QCOMPARE(firstDescriptor.value("discCount").toInt(), 2);
-    const auto firstMedia = OpticalDiscAdapter::identityForContent(firstDescriptor, QString(64, 'a'));
-    const auto secondMedia = OpticalDiscAdapter::identityForContent(secondDescriptor, QString(64, 'b'));
+    const auto firstMedia = OpticalDiscIdentify::identityForContent(firstDescriptor, QString(64, 'a'));
+    const auto secondMedia = OpticalDiscIdentify::identityForContent(secondDescriptor, QString(64, 'b'));
     QVERIFY(firstMedia.value("mediaId") != secondMedia.value("mediaId"));
     QCOMPARE(firstMedia.value("mediaSetId"), secondMedia.value("mediaSetId"));
-    QCOMPARE(OpticalDiscAdapter::classifyRootReference(OpticalDiscAdapter::rootReference(firstMedia),
+    QCOMPARE(OpticalDiscClassify::classifyRootReference(OpticalDiscIdentify::rootReference(firstMedia),
                                                        {QVariantMap{{"mediaId", secondMedia.value("mediaId")},
                                                                     {"mediaSetId", secondMedia.value("mediaSetId")},
                                                                     {"discNumber", 2},
@@ -543,47 +545,47 @@ GamesUiTests::udfVolumeSetIdentityGroupsDiscNumbers()
                  .toString(),
              QString("wrong-disc"));
     const auto unrelated = fixture(1, "OTHER-SET");
-    QVERIFY(OpticalDiscAdapter::parseUdfVolumeDescriptors(unrelated.first, unrelated.second, 300).value("mediaSetId") !=
+    QVERIFY(OpticalDiscParse::parseUdfVolumeDescriptors(unrelated.first, unrelated.second, 300).value("mediaSetId") !=
             firstDescriptor.value("mediaSetId"));
     auto corrupt = first.first;
     corrupt[100] = char(1);
-    QVERIFY(OpticalDiscAdapter::parseUdfVolumeDescriptors(corrupt, first.second, 300).isEmpty());
-    QVERIFY(OpticalDiscAdapter::parseUdfVolumeDescriptors(first.first, first.second.left(2048), 300).isEmpty());
+    QVERIFY(OpticalDiscParse::parseUdfVolumeDescriptors(corrupt, first.second, 300).isEmpty());
+    QVERIFY(OpticalDiscParse::parseUdfVolumeDescriptors(first.first, first.second.left(2048), 300).isEmpty());
     auto invalidCount = fixture(1, "ISOLDE-SET");
     put16(invalidCount.second, 58, 100);
     invalidCount.second.replace(0, 2048, finishTag(invalidCount.second.left(2048)));
-    QVERIFY(OpticalDiscAdapter::parseUdfVolumeDescriptors(invalidCount.first, invalidCount.second, 300).isEmpty());
+    QVERIFY(OpticalDiscParse::parseUdfVolumeDescriptors(invalidCount.first, invalidCount.second, 300).isEmpty());
     auto wrongLocation = first.second;
     put32(wrongLocation, 12, 299);
     wrongLocation.replace(0, 2048, finishTag(wrongLocation.left(2048)));
-    QVERIFY(OpticalDiscAdapter::parseUdfVolumeDescriptors(first.first, wrongLocation, 300).isEmpty());
+    QVERIFY(OpticalDiscParse::parseUdfVolumeDescriptors(first.first, wrongLocation, 300).isEmpty());
     auto shortCrc = first.second;
     put16(shortCrc, 10, 0);
     shortCrc.replace(0, 2048, finishTag(shortCrc.left(2048)));
-    QVERIFY(OpticalDiscAdapter::parseUdfVolumeDescriptors(first.first, shortCrc, 300).isEmpty());
+    QVERIFY(OpticalDiscParse::parseUdfVolumeDescriptors(first.first, shortCrc, 300).isEmpty());
     auto invalidDstring = first.second;
     invalidDstring[72] = char(16);
     invalidDstring.replace(0, 2048, finishTag(invalidDstring.left(2048)));
-    QVERIFY(OpticalDiscAdapter::parseUdfVolumeDescriptors(first.first, invalidDstring, 300).isEmpty());
+    QVERIFY(OpticalDiscParse::parseUdfVolumeDescriptors(first.first, invalidDstring, 300).isEmpty());
     auto shortAnchorCrc = first.first;
     put16(shortAnchorCrc, 10, 0);
-    QVERIFY(OpticalDiscAdapter::parseUdfVolumeDescriptors(finishTag(shortAnchorCrc), first.second, 300).isEmpty());
+    QVERIFY(OpticalDiscParse::parseUdfVolumeDescriptors(finishTag(shortAnchorCrc), first.second, 300).isEmpty());
     auto wrongAnchorLocation = first.first;
     put32(wrongAnchorLocation, 12, 255);
-    QVERIFY(OpticalDiscAdapter::parseUdfVolumeDescriptors(finishTag(wrongAnchorLocation), first.second, 300).isEmpty());
-    QVERIFY(OpticalDiscAdapter::parseUdfVolumeDescriptors(first.first, first.second, 301).isEmpty());
+    QVERIFY(OpticalDiscParse::parseUdfVolumeDescriptors(finishTag(wrongAnchorLocation), first.second, 300).isEmpty());
+    QVERIFY(OpticalDiscParse::parseUdfVolumeDescriptors(first.first, first.second, 301).isEmpty());
     auto blankSet = first.second;
     blankSet[72] = 8;
     blankSet[73] = ' ';
     blankSet[199] = 2;
     blankSet.replace(0, 2048, finishTag(blankSet.left(2048)));
-    QVERIFY(OpticalDiscAdapter::parseUdfVolumeDescriptors(first.first, blankSet, 300).isEmpty());
+    QVERIFY(OpticalDiscParse::parseUdfVolumeDescriptors(first.first, blankSet, 300).isEmpty());
     QVariantMap iso{{"mediaSetId", QString("iso-set")}, {"discNumber", 1}};
-    const auto selectedIso = OpticalDiscAdapter::descriptorForFilesystem("iso9660", iso, firstDescriptor);
-    const auto selectedUdf = OpticalDiscAdapter::descriptorForFilesystem("udf", iso, firstDescriptor);
+    const auto selectedIso = OpticalDiscParse::descriptorForFilesystem("iso9660", iso, firstDescriptor);
+    const auto selectedUdf = OpticalDiscParse::descriptorForFilesystem("udf", iso, firstDescriptor);
     QCOMPARE(selectedIso.value("mediaSetId").toString(), QString("iso-set"));
     QCOMPARE(selectedUdf.value("mediaSetId"), firstDescriptor.value("mediaSetId"));
-    QVERIFY(OpticalDiscAdapter::descriptorForFilesystem("udf", iso, {}).isEmpty());
+    QVERIFY(OpticalDiscParse::descriptorForFilesystem("udf", iso, {}).isEmpty());
 }
 void
 GamesUiTests::opticalApprovalsAreProfileScopedAndRevocable()
@@ -626,7 +628,7 @@ void
 GamesUiTests::safeEjectRefusesBusyUnmountAndNeverForces()
 {
     QStringList calls;
-    const OpticalDiscAdapter::DbusCall busy = [&calls](const QString& service,
+    const OpticalDiscMount::DbusCall busy = [&calls](const QString& service,
                                                        const QString& path,
                                                        const QString& interface,
                                                        const QString& method,
@@ -637,11 +639,11 @@ GamesUiTests::safeEjectRefusesBusyUnmountAndNeverForces()
             .createErrorReply("org.freedesktop.DBus.Error.Busy", "busy");
     };
     QString error;
-    QVERIFY(!OpticalDiscAdapter::ejectUsing("/dev/sr0", true, busy, &error));
+    QVERIFY(!OpticalDiscMount::ejectUsing("/dev/sr0", true, busy, &error));
     QCOMPARE(calls, QStringList{"Unmount"});
     QVERIFY(error.contains("in use"));
     calls.clear();
-    const OpticalDiscAdapter::DbusCall success = [&calls](const QString& service,
+    const OpticalDiscMount::DbusCall success = [&calls](const QString& service,
                                                           const QString& path,
                                                           const QString& interface,
                                                           const QString& method,
@@ -654,10 +656,10 @@ GamesUiTests::safeEjectRefusesBusyUnmountAndNeverForces()
                 QDBusVariant(QVariant::fromValue(QDBusObjectPath("/org/freedesktop/UDisks2/drives/drive0"))))});
         return request.createReply();
     };
-    QVERIFY(OpticalDiscAdapter::ejectUsing("/dev/sr0", true, success, &error));
+    QVERIFY(OpticalDiscMount::ejectUsing("/dev/sr0", true, success, &error));
     QCOMPARE(calls, QStringList({"Unmount", "Get", "Eject"}));
     QVERIFY(!calls.contains("ForceEject"));
-    QVERIFY(!OpticalDiscAdapter::ejectUsing("/dev/sr9999", false, success, &error));
+    QVERIFY(!OpticalDiscMount::ejectUsing("/dev/sr9999", false, success, &error));
     QCOMPARE(error, QString("Invalid optical device."));
 }
 void
@@ -666,7 +668,7 @@ GamesUiTests::readOnlyOpticalMountIsBoundedAndVerifiedByCaller()
     int calls = 0;
     QString error, mountPoint, serviceSeen, pathSeen, interfaceSeen, methodSeen;
     QVariantList argumentsSeen;
-    const OpticalDiscAdapter::DbusCall mount = [&](const QString& service,
+    const OpticalDiscMount::DbusCall mount = [&](const QString& service,
                                                    const QString& path,
                                                    const QString& interface,
                                                    const QString& method,
@@ -681,7 +683,7 @@ GamesUiTests::readOnlyOpticalMountIsBoundedAndVerifiedByCaller()
         return QDBusMessage::createMethodCall(service, path, interface, method)
             .createReply(QVariantList{QString("/media/disc")});
     };
-    QVERIFY(OpticalDiscAdapter::mountUsing("/dev/sr0", true, mount, &mountPoint, &error));
+    QVERIFY(OpticalDiscMount::mountUsing("/dev/sr0", true, mount, &mountPoint, &error));
     QCOMPARE(calls, 1);
     QCOMPARE(mountPoint, QString("/media/disc"));
     QVERIFY(error.isEmpty());
@@ -691,13 +693,13 @@ GamesUiTests::readOnlyOpticalMountIsBoundedAndVerifiedByCaller()
     QCOMPARE(methodSeen, QString("Mount"));
     QCOMPARE(argumentsSeen.size(), 1);
     QCOMPARE(argumentsSeen.first().toMap().value("options").toString(), QString("ro"));
-    QVERIFY(!OpticalDiscAdapter::mountUsing("/dev/sr0", false, mount, &mountPoint, &error));
+    QVERIFY(!OpticalDiscMount::mountUsing("/dev/sr0", false, mount, &mountPoint, &error));
     QCOMPARE(calls, 1);
     QVERIFY(error.contains("No unmounted optical media"));
-    QVERIFY(!OpticalDiscAdapter::mountUsing("/dev/sr9999", true, mount, &mountPoint, &error));
+    QVERIFY(!OpticalDiscMount::mountUsing("/dev/sr9999", true, mount, &mountPoint, &error));
     QCOMPARE(calls, 1);
     QCOMPARE(error, QString("Invalid optical device."));
-    const OpticalDiscAdapter::DbusCall failed = [](const QString& service,
+    const OpticalDiscMount::DbusCall failed = [](const QString& service,
                                                    const QString& path,
                                                    const QString& interface,
                                                    const QString& method,
@@ -706,9 +708,9 @@ GamesUiTests::readOnlyOpticalMountIsBoundedAndVerifiedByCaller()
         return QDBusMessage::createMethodCall(service, path, interface, method)
             .createErrorReply("org.freedesktop.DBus.Error.Failed", "unreadable");
     };
-    QVERIFY(!OpticalDiscAdapter::mountUsing("/dev/sr0", true, failed, &mountPoint, &error));
+    QVERIFY(!OpticalDiscMount::mountUsing("/dev/sr0", true, failed, &mountPoint, &error));
     QVERIFY(error.contains("could not be mounted read-only"));
-    const OpticalDiscAdapter::DbusCall invalidPoint = [](const QString& service,
+    const OpticalDiscMount::DbusCall invalidPoint = [](const QString& service,
                                                          const QString& path,
                                                          const QString& interface,
                                                          const QString& method,
@@ -717,7 +719,7 @@ GamesUiTests::readOnlyOpticalMountIsBoundedAndVerifiedByCaller()
         return QDBusMessage::createMethodCall(service, path, interface, method)
             .createReply(QVariantList{QString("relative")});
     };
-    QVERIFY(!OpticalDiscAdapter::mountUsing("/dev/sr0", true, invalidPoint, &mountPoint, &error));
+    QVERIFY(!OpticalDiscMount::mountUsing("/dev/sr0", true, invalidPoint, &mountPoint, &error));
     QVERIFY(error.contains("invalid mountpoint"));
 }
 static void

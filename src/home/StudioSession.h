@@ -11,6 +11,8 @@
 #include <QVariantMap>
 
 class HomeLayout;
+class QFileInfo;
+class QImageReader;
 class QTemporaryDir;
 
 /**
@@ -51,6 +53,11 @@ class StudioSession final : public QObject
     Q_PROPERTY(QVariantList healthFindings READ healthFindings NOTIFY changed)
     Q_PROPERTY(bool editorLocked READ editorLocked NOTIFY changed)
   public:
+    // Keep transaction setup and history checks shared across editing commands.
+    void applyCommittedDocument(const QByteArray& committedDocument);
+    bool canUndoRedo(bool isEmpty, const char* message);
+    bool canonicalizeCommitted(const QByteArray& committed, const QByteArray& currentApplied,
+                               QByteArray& mine, QByteArray& theirs) const;
     static constexpr int kMaxUndoSteps = 100;
     static constexpr qsizetype kMaxHistoryBytes = 32 * 1024 * 1024;
     static constexpr qsizetype kMaxDocumentBytes = 4 * 1024 * 1024;
@@ -178,7 +185,7 @@ class StudioSession final : public QObject
     applyCarouselButtons(const QVariantMap& configuration, const QVariantMap& options, const QString& type,
                          QJsonObject& configured, QJsonArray& nodes);
     bool
-    applyAppCollection(const QVariantMap& configuration, QJsonObject& configured, QJsonArray& nodes);
+    applyAppCollection(const QString& type, const QVariantMap& configuration, QJsonObject& configured, QJsonArray& nodes);
     bool
     validatePrototypePrerequisites(const QString& type, const QVariantMap& options, QJsonArray& nodes);
     QVariantMap
@@ -194,15 +201,17 @@ class StudioSession final : public QObject
     Q_INVOKABLE QString
     stageArtwork(const QString& source);
     bool
-    validateArtworkSource(const QString& source, QString& path) const;
+    validateArtworkSource(const QString& source, QString& path);
     bool
-    validateArtworkFile(const QFileInfo& info, QByteArray& data) const;
+    validateArtworkFile(const QFileInfo& info, QByteArray& data);
     bool
-    validateArtworkFormat(const QByteArray& data, QImageReader& reader, bool& gif) const;
+    validateArtworkFormat(const QByteArray& data, QImageReader& reader, bool& gif);
     bool
     validateCleanIconInput(int strength, const QString& background) const;
     bool
-    checkArtworkBudget(const QByteArray& data, const QString& relative) const;
+    checkArtworkBudget(const QByteArray& data);
+    // Scale large icons before cleanup so its bounded pixel analysis stays safe.
+    bool validateArtworkSize(const QSize& size) const;
     Q_INVOKABLE QVariantMap
     cleanIconArtwork(const QString& source, int strength = 1, const QString& background = {});
     Q_INVOKABLE QVariantList
@@ -241,15 +250,10 @@ class StudioSession final : public QObject
     bool
     handlePlacementCancelStrategy(const QList<int>& colliders);
     bool
-    handlePlacementSwapStrategy(const QJsonArray& entries, QJsonArray& entriesOut, const QString& id,
+    handlePlacementSwapStrategy(const QJsonArray& entries, QJsonArray& entriesOut,
                                 const QList<int>& colliders, const QVariantMap& origin,
                                 const QString& sourceCategory, const QString& sourceParent,
-                                QString& category, QString& parent);
-    bool
-    handlePlacementShiftStrategy(const QJsonArray& entries, QJsonArray& entriesOut, const QString& id,
-                                 const QList<int>& colliders, const QVariantMap& placement,
-                                 const QVariantMap& origin, const QString& parent, const QString& category,
-                                 int cols, int rows, int& attempts, bool& affectedLimit, bool sections);
+                                const QString& category);
     bool
     handlePlacementShiftStrategy(const QJsonArray& entries, QJsonArray& entriesOut, const QString& id,
                                  const QList<int>& colliders, const QVariantMap& placement,
@@ -269,10 +273,12 @@ class StudioSession final : public QObject
                  bool sections, int cols, int rows, QSet<int>& fixed, QList<int>& pending,
                  std::function<bool(QList<int>)>& solve, int& localAttempts, bool& affectedLimit);
     bool
-    tryPlacementCell(QJsonArray& workingEntries, int index, const QVariantMap& target,
-                     const QJsonArray& originalEntries, QSet<int>& fixed, QList<int>& pending,
-                     int cols, int rows, int& localAttempts, std::function<bool(QList<int>)>& solve,
-                     bool& affectedLimit);
+    executePlacementStrategy(const QJsonArray& entries, QJsonArray& entriesOut, const QString& id,
+                             const QString& strategy, const QList<int>& colliders,
+                             const QVariantMap& placement, const QVariantMap& origin,
+                             const QString& parent, const QString& category,
+                             const QString& sourceParent, const QString& sourceCategory,
+                             int cols, int rows, int& attempts, bool& affectedLimit, bool sections);
     int
     selectedIndex(const QJsonArray& entries, const QString& id);
     QVariantList
@@ -286,9 +292,6 @@ class StudioSession final : public QObject
                      const QString& parentId = {},
                      const QVariantMap& configuration = {},
                      bool enableScrolling = false);
-    bool
-    validateAdditionProposalPreconditions(HomeLayout& temporary, QJsonObject& root, QJsonArray& pages,
-                                          QJsonObject& document, int& pageIndex);
     bool
     applyAdditionProposalOptions(QJsonObject& document, const QString& type, const QString& pageId,
                                  bool enableScrolling, const QString& parentId,
@@ -312,18 +315,6 @@ class StudioSession final : public QObject
     bool
     validateAdditionProposalPreconditions(const QString& type, HomeLayout& temporary, QJsonObject& root,
                                           QJsonArray& pages, QJsonObject& document, int& pageIndex);
-    bool
-    applyAdditionProposalOptions(QJsonObject& document, const QString& type, const QString& pageId,
-                                 bool enableScrolling);
-    QJsonObject
-    insertPrototypeComponents(const QJsonObject& document, const QJsonArray& entries,
-                              const QVariantMap& prototype, const QString& type, const QString& identity,
-                              const QString& parentId, const QString& categoryId);
-    QJsonObject
-    storeAdditionProposalDocument(const QJsonObject& document, const QJsonArray& pages,
-                                  int pageIndex, const QJsonObject& root, const QVariantMap& placements,
-                                  const QVariantMap& entries, const QString& identity);
-
     /** Capture the live committed document. Clears undo/redo history. */
     Q_INVOKABLE bool
     open(const QByteArray& committedDocument);
@@ -365,7 +356,7 @@ class StudioSession final : public QObject
     [[nodiscard]] int
     changeCount() const
     {
-        return m_undo.size();
+        return static_cast<int>(m_undo.size());
     }
     [[nodiscard]] QByteArray
     draft() const
@@ -423,6 +414,15 @@ class StudioSession final : public QObject
     diskRevisionUnchanged() const;
     bool
     editingPermitted();
+    bool
+    profileActive();
+    bool
+    editorAccessPermitted();
+    void
+    appendPageChange(QVariantList& result, const QString& id, const QString& name, const QString& change) const;
+    void
+    addHealthFinding(QVariantList& findings, const QString& pageId, const QString& componentId,
+                     const QString& property, const QString& message) const;
     QByteArray
     readAppliedDocument();
     bool
@@ -438,6 +438,8 @@ class StudioSession final : public QObject
     bool
     readVersionArchive(QJsonObject& object, QString& error);
     bool
+    validateVersionArchive(const QJsonObject& object, QString& error);
+    bool
     validateStoredAssets(const QJsonObject& storedAssets, QString& error);
     bool
     validateVersionEntries(const QJsonArray& entries, QSet<QString>& ids, QString& error);
@@ -446,9 +448,9 @@ class StudioSession final : public QObject
     QVariantMap
     proposeDesign(QJsonObject document, const QJsonObject& assets, const QString& scope, const QString& pageId);
     bool
-    validateProposeInputs(const QString& scope, const QString& pageId) const;
+    validateProposeInputs(const QString& scope, const QString& pageId);
     bool
-    normalizeDesignDocument(QJsonObject& document) const;
+    normalizeDesignDocument(QJsonObject& document);
     bool
     applyScopeToDocument(QJsonObject& document, const QString& scope);
     bool
@@ -456,12 +458,14 @@ class StudioSession final : public QObject
     bool
     resolveDesignDestination(QJsonObject& document, QJsonObject& candidate, const QString& scope,
                              const QString& pageId);
-    QVariantMap
+    QVariantList
     buildDesignChanges(const QJsonObject& baseline, const QJsonObject& candidate);
     bool
     validatePageLinks(const QJsonObject& candidate);
     bool
     validNewAction(const QVariantMap& value);
+    bool
+    validNewActions(const QVariant& value);
     bool
     validDraft(const QByteArray& data);
     bool
@@ -491,7 +495,7 @@ class StudioSession final : public QObject
     bool
     validateReplacementResult(const QJsonObject& replacement);
     bool
-    updateReplacementDocument(QJsonObject& document, const QJsonArray& entries, const QJsonArray& pages,
+    updateReplacementDocument(QJsonObject& document, const QJsonArray& entries, QJsonArray pages,
                               int pageIndex, const QJsonObject& page);
     void
     setError(const QString& message);
@@ -527,15 +531,7 @@ class StudioSession final : public QObject
     bool
     writeExportFile(const QString& path, const QByteArray& data);
     bool
-    validatePreviewImportPreconditions();
-    bool
     loadPreviewImportPackage(const QString& value, const QString& scope, QJsonObject& package, QString& error);
-    bool
-    validatePreviewImportAssets(const QJsonObject& assets, QString& error);
-    bool
-    validatePreviewImportAppRemap(const QVariantMap& appRemap, QString& error);
-    void
-    collectMissingApps(const QJsonValue& value, QStringList& missing);
 
     // Operation dispatch for execute() — each helper handles one edit command.
     bool
@@ -543,7 +539,7 @@ class StudioSession final : public QObject
     bool
     executeRestorePageDefaults(const QVariantMap& a, const QString& pageId);
     bool
-    executeStudioAppearance(const QVariantMap& a);
+    executeStudioAppearance(const QVariantMap& a, const QString& pageId);
     bool
     executeRenameDuplicatePage(const QString& operation, const QVariantMap& a, const QString& pageId,
                                QJsonObject document, QJsonArray pages, QJsonObject rootMeta);
@@ -553,34 +549,33 @@ class StudioSession final : public QObject
 
     // Reuse operation dispatch for previewReuse() — each helper handles one reuse command.
     bool
-    handleReuseResponsive(const QVariantMap& a, QJsonObject document, QJsonObject layout,
+    handleReuseResponsive(const QVariantMap& a, QJsonObject& document, QJsonObject layout,
                           const QJsonArray& selected, QVariantList& impact, const QString& pageId);
     bool
-    handleReuseSave(const QVariantMap& a, QJsonObject document, QJsonObject layout,
+    handleReuseSave(const QVariantMap& a, QJsonObject& document, QJsonObject layout,
                     const QJsonArray& selected, QVariantList& impact, const QString& pageId);
     bool
-    handleReuseEditStyle(const QVariantMap& a, QJsonObject document, QJsonObject layout,
+    handleReuseEditStyle(const QVariantMap& a, QJsonObject& document, QJsonObject layout,
                          const QJsonArray& selected, QVariantList& impact, const QString& pageId);
     bool
-    handleReuseInsert(const QVariantMap& a, QJsonObject document, QJsonObject layout,
+    handleReuseInsert(const QVariantMap& a, QJsonObject& document, QJsonObject layout,
                       const QJsonArray& selected, QVariantList& impact, const QString& pageId);
     bool
-    handleReuseEditAll(const QVariantMap& a, QJsonObject document, QJsonObject layout,
+    handleReuseEditAll(const QVariantMap& a, QJsonObject& document, QJsonObject layout,
                        const QJsonArray& selected, QVariantList& impact, const QString& pageId);
     bool
-    handleReuseAppearanceEdit(const QVariantMap& a, QJsonObject document, QJsonObject layout,
+    handleReuseAppearanceEdit(const QVariantMap& a, QJsonObject& document, QJsonObject layout,
                               const QJsonArray& selected, QVariantList& impact, const QString& pageId);
-                       int& index, QJsonObject& rootMetaLocal);
     bool
     validatePageName(const QVariantMap& a, QString& name);
     bool
     renamePageRoot(QJsonObject& rootMetaLocal, const QString& name);
     bool
     renamePageEntry(QJsonArray& pages, int index, const QString& name);
-    QString
+    QStringList
     collectPageOrder(const QVariantMap& a);
     bool
-    duplicatePage(const QVariantMap& a, QJsonObject document, QJsonArray pages, QJsonObject rootMeta,
+    duplicatePage(const QVariantMap& a, QJsonObject document, QJsonArray& pages, QJsonObject rootMeta,
                   QStringList& order, int index, const QString& id);
     QString
     remapDuplicateIdentity(const QString& old, QHash<QString, QString>& copiedIds, QSet<QString>& allocated);
@@ -594,9 +589,11 @@ class StudioSession final : public QObject
     allocateCopyPageId(QSet<QString>& allocated);
     bool
     executeRemovePage(const QVariantMap& a, QJsonObject document, QJsonArray pages, QJsonObject rootMeta);
+    bool executeReorderPage(const QVariantMap& a, QJsonObject document, QJsonArray pages);
+    void orderRemovePage(const QString& id, QJsonArray& pages);
     bool
     validateRemovePagePreconditions(const QVariantMap& a, const QJsonObject& document, const QJsonArray& pages,
-                                    const QString& id, int& index, bool& remap, QString& replacement,
+                                    QString& id, int& index, bool& remap, QString& replacement,
                                     QJsonObject& rootMetaLocal);
     QJsonObject
     repairPageReferences(const QJsonObject& document, const QString& id, bool remap,
@@ -614,7 +611,7 @@ class StudioSession final : public QObject
     void
     storePageOrder(QStringList& order, QJsonArray& pages, QJsonObject& rootMeta);
     bool
-    executeSetHomePage(const QVariantMap& a);
+    executeSetHomePage(const QVariantMap& a, const QString& pageId);
     bool
     executeAddResolvedPlaced(const QString& operation, const QVariantMap& a, const QString& pageId);
     bool
@@ -682,8 +679,8 @@ class StudioSession final : public QObject
     findArrangeTargets(const QJsonArray& entries, const QSet<QString>& ids, QList<int>& indices,
                        QString& parent, QString& category, int& low, int& high, int& total,
                        const QString& axis, const QString& span);
-    void
-    applyArrangePositions(QJsonArray& entries, const QList<int>& indices, const QString& mode,
+    bool
+    applyArrangePositions(QJsonArray& entries, QList<int> indices, const QString& mode,
                           const QString& axis, const QString& span, int low, int high, int total);
     bool
     executePageGroup(const QVariantMap& a, QJsonObject& document, HomeLayout& worker);
@@ -712,8 +709,8 @@ class StudioSession final : public QObject
     executePagePlace(const QVariantMap& a, QJsonObject& document, HomeLayout& worker);
     bool
     validatePlacementChange(const QVariantMap& change, const QSet<QString>& touched);
-    QJsonObject
-    applyPlacementChange(QJsonObject entry, const QVariantMap& change, const HomeLayout& worker);
+    bool
+    applyPlacementChange(QJsonObject& entry, const QVariantMap& change, const HomeLayout& worker);
     bool
     checkCategoryEligible(const QVariantMap& change, QJsonObject& entry, const HomeLayout& worker);
     bool
@@ -741,7 +738,7 @@ class StudioSession final : public QObject
     QJsonObject
     findComponentToDuplicate(const QJsonArray& entries, const QString& id);
     bool
-    findFreePlacement(QVariantMap& shape, const QJsonArray& entries, const QJsonObject& composition,
+    findFreePlacement(QVariantMap& shape, const QJsonArray& entries, const QVariantMap& composition,
                       const QJsonArray& categories, const QString& parent, const QString& category, bool sections);
     QHash<QString, QString>
     remapDuplicateIds(const QJsonArray& entries, const QHash<QString, QString>& remap, QSet<QString>& allocated,
@@ -763,7 +760,7 @@ class StudioSession final : public QObject
     bool
     executePageAddPlacedItem(const QVariantMap& a, QJsonObject& document, HomeLayout& worker);
     bool
-    executePageAddButton(QJsonObject& document, HomeLayout& worker);
+    executePageAddButton(const QVariantMap& a, QJsonObject& document, HomeLayout& worker);
     bool
     executePageNewPage(const QVariantMap& a, QJsonObject& document, HomeLayout& worker);
     bool
@@ -774,27 +771,8 @@ class StudioSession final : public QObject
     // Post-processing shared by all page-scoped operations.
     bool
     finalizePageOperation(QJsonObject& root, QJsonObject& document, QJsonArray& pages, int pageIndex,
-                          const QString& operation, const QVariantMap& a, QJsonObject& result);
+                          const QString& operation, const QVariantMap& a, QJsonObject& result, const QString& pageId);
 
-    // Reuse operation dispatch for previewReuse() — each helper handles one reuse command.
-    bool
-    handleReuseResponsive(const QVariantMap& a, QJsonObject document, QJsonObject layout,
-                          const QJsonArray& selected, QVariantList& impact, const QString& pageId);
-    bool
-    handleReuseSave(const QVariantMap& a, QJsonObject document, QJsonObject layout,
-                    const QJsonArray& selected, QVariantList& impact, const QString& pageId);
-    bool
-    handleReuseEditStyle(const QVariantMap& a, QJsonObject document, QJsonObject layout,
-                         const QJsonArray& selected, QVariantList& impact, const QString& pageId);
-    bool
-    handleReuseInsert(const QVariantMap& a, QJsonObject document, QJsonObject layout,
-                      const QJsonArray& selected, QVariantList& impact, const QString& pageId);
-    bool
-    handleReuseEditAll(const QVariantMap& a, QJsonObject document, QJsonObject layout,
-                       const QJsonArray& selected, QVariantList& impact, const QString& pageId);
-    bool
-    handleReuseAppearanceEdit(const QVariantMap& a, QJsonObject document, QJsonObject layout,
-                              const QJsonArray& selected, QVariantList& impact, const QString& pageId);
     bool
     findFreePlacement(QJsonObject& destination, QJsonObject layout, const QJsonArray& allNodes,
                       const QJsonObject& definition);
@@ -803,8 +781,10 @@ class StudioSession final : public QObject
     QJsonObject
     findComponentDefinition(const QJsonObject& library, const QString& libraryId);
     bool
-    updateLinkedInstances(QJsonObject document, QJsonObject library, QJsonArray allNodes,
-                          const QString& link, const QJsonObject& definition, QVariantList& impact);
+    updateLinkedInstances(QJsonObject& document, QJsonArray allNodes,
+                          const QString& link, const QJsonArray& definition, QVariantList& impact);
+    bool
+    placeComponentAt(const QJsonObject& destination, const QJsonObject& layout, const QVariantMap& proposed) const;
     bool
     applyAppearanceEditToNode(QJsonObject& node, const QVariantMap& a, const QJsonObject& library,
                               const QJsonObject& styleDefinition, const QJsonArray& source);

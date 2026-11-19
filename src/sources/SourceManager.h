@@ -19,7 +19,7 @@ class SourceManager final : public QObject
     Q_PROPERTY(QVariantList items READ items NOTIFY sourcesChanged)
     Q_PROPERTY(QVariantList sections READ sections NOTIFY sourcesChanged)
     Q_PROPERTY(QVariantList sources READ sources NOTIFY sourcesChanged)
-    Q_PROPERTY(int visibleSourceCount READ visibleSourceCount NOTIFY sourcesChanged)
+    Q_PROPERTY(qint64 visibleSourceCount READ visibleSourceCount NOTIFY sourcesChanged)
     Q_PROPERTY(QVariantMap policy READ policy NOTIFY sourcesChanged)
     Q_PROPERTY(QVariantList hiddenSources READ hiddenSources NOTIFY sourcesChanged)
     Q_PROPERTY(QString errorString READ errorString NOTIFY sourcesChanged)
@@ -74,7 +74,7 @@ class SourceManager final : public QObject
     sections() const;
     [[nodiscard]] QVariantList
     sources() const;
-    [[nodiscard]] int
+    [[nodiscard]] qint64
     visibleSourceCount() const;
 
     Q_INVOKABLE void

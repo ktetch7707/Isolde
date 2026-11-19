@@ -1,6 +1,10 @@
 #include "OpticalDiscIdentity.h"
 
+bool contentIdValid(const QString& contentId);
+void ensureMediaSetDefaults(QVariantMap& descriptor, const QString& contentId);
+
 #include <QCryptographicHash>
+#include <QByteArrayView>
 #include <QFile>
 #include <QFileInfo>
 #include <QMap>
@@ -84,9 +88,9 @@ validUdfTag(const QByteArray& descriptor,
     quint16 crc = 0;
     for (int i = 0; i < length; ++i)
     {
-        crc ^= quint16(quint8(descriptor.at(16 + i))) << 8;
+        crc ^= quint16((int(quint8(descriptor.at(16 + i))) << 8) & 0xffff);
         for (int bit = 0; bit < 8; ++bit)
-            crc = crc & 0x8000 ? quint16((crc << 1) ^ 0x1021) : quint16(crc << 1);
+            crc = crc & 0x8000 ? quint16((int(crc) << 1) ^ 0x1021) : quint16(int(crc) << 1);
     }
     return crc == le16(descriptor, 8);
 }
@@ -165,7 +169,7 @@ mountInstance(const QString& root)
 #endif
 
 QVariantMap
-contentIdentity(const QString& device)
+readContentIdentity(const QString& device)
 {
 #ifndef Q_OS_LINUX
     Q_UNUSED(device);
@@ -209,11 +213,11 @@ contentIdentity(const QString& device)
                     ::ioctl(input.handle(), BLKGETSIZE64, &afterSize) != 0 || after != sequence || afterSize != size)
                     digest.clear();
             }
-            auto* cache = hashCache();
-            QMutexLocker guard(&cache->mutex);
-            --cache->running;
-            auto entry = cache->hashes.find(device);
-            if (entry != cache->hashes.end() && entry->sequence == sequence && entry->size == size)
+            auto* cacheState = hashCache();
+            QMutexLocker guard(&cacheState->mutex);
+            --cacheState->running;
+            auto entry = cacheState->hashes.find(device);
+            if (entry != cacheState->hashes.end() && entry->sequence == sequence && entry->size == size)
             {
                 entry->digest = digest;
                 entry->iso9660Descriptor = digest.isEmpty() ? QVariantMap{} : iso9660Descriptor;
@@ -527,7 +531,7 @@ OpticalDiscHash::mountedDiscs()
         if (root == "/" || !mount.isDir() || mount.canonicalFilePath() != root)
             continue;
         mountedDevices.insert(device);
-        const auto content = contentIdentity(device);
+        const auto content = readContentIdentity(device);
         const auto contentId = content.value("contentId").toString();
         const auto descriptor = OpticalDiscParse::descriptorForFilesystem(
             filesystem, content.value("iso9660Descriptor").toMap(), content.value("udfDescriptor").toMap());
@@ -547,28 +551,28 @@ OpticalDiscHash::mountedDiscs()
                                                                        content.value("hashState").toString(),
                                                                        identity.value("mediaId").toString(),
                                                                        instance);
-        result.append(QVariantMap{
-            {"schemaVersion", 1},
-            {"sourceType", "pc-optical-disc"},
-            {"observationId", observationId},
-            {"mountTracking",
-             instance.isEmpty()               ? "unavailable"
-             : instance.startsWith("unique:") ? "unique"
-                                              : "available"},
-            {"device", device},
-            {"mountRoot", root},
-            {"filesystem", filesystem},
-            {"volumeLabel", storage.name()},
-            {"mediaId", identity.value("mediaId")},
-            {"mediaSetId", identity.value("mediaSetId")},
-            {"discNumber", identity.value("discNumber")},
-            {"discCount", identity.value("discCount")},
-            {"volumeIdentifier", identity.value("volumeIdentifier")},
-            {"hashState", content.value("hashState")},
-            {"directPlaySupported",
-             !instance.isEmpty() && !contentId.isEmpty() && !OpticalDiscIdentify::rootReference(identity).isEmpty()},
-            {"readOnly", true},
-            {"state", "mounted"}});
+        QVariantMap disc;
+        disc["schemaVersion"] = 1;
+        disc["sourceType"] = "pc-optical-disc";
+        disc["observationId"] = observationId;
+        disc["mountTracking"] = instance.isEmpty() ? "unavailable"
+                               : instance.startsWith("unique:") ? "unique"
+                                                               : "available";
+        disc["device"] = device;
+        disc["mountRoot"] = root;
+        disc["filesystem"] = filesystem;
+        disc["volumeLabel"] = storage.name();
+        disc["mediaId"] = identity.value("mediaId");
+        disc["mediaSetId"] = identity.value("mediaSetId");
+        disc["discNumber"] = identity.value("discNumber");
+        disc["discCount"] = identity.value("discCount");
+        disc["volumeIdentifier"] = identity.value("volumeIdentifier");
+        disc["hashState"] = content.value("hashState");
+        disc["directPlaySupported"] =
+            !instance.isEmpty() && !contentId.isEmpty() && !OpticalDiscIdentify::rootReference(identity).isEmpty();
+        disc["readOnly"] = true;
+        disc["state"] = "mounted";
+        result.append(disc);
         if (result.size() >= 4)
             break;
     }
@@ -653,9 +657,9 @@ OpticalDiscHash::mountObservationId(const QString& device,
     for (const auto& field : fields)
     {
         const auto bytes = field.toUtf8();
-        hash.addData(QByteArray::number(bytes.size()));
-        hash.addData(":", 1);
-        hash.addData(bytes);
+        hash.addData(QByteArrayView(QByteArray::number(bytes.size())));
+        hash.addData(QByteArrayView(":"));
+        hash.addData(QByteArrayView(bytes));
     }
     return QString::fromLatin1(hash.result().toHex());
 }
@@ -738,7 +742,7 @@ OpticalDiscProbe::deviceDiagnostics(const QString& device)
         result["filesystem"] = filesystem;
         result["volumeLabel"] = volumeLabel;
         result["readOnly"] = true;
-        const auto content = contentIdentity(device);
+        const auto content = readContentIdentity(device);
         result["hashState"] = content.value("hashState");
         result["diskSequence"] = content.value("diskSequence");
         result["contentId"] = content.value("contentId");

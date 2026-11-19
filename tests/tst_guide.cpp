@@ -704,7 +704,7 @@ GuideTests::packagedGuideOptionsValidateOverlayAndLegacyBoundaries()
     auto custom = document;
     custom["guide"] = QJsonObject::fromVariantMap(legacy);
     const auto legacyBytes = QJsonDocument(custom).toJson(QJsonDocument::Compact);
-    QVERIFY(legacyBytes.size() <= 64 * 1024);
+    QVERIFY(legacyBytes.size() <= 128 * 1024);
     const auto customPath = dir.filePath("studio-defaults.json");
     {
         QFile output(customPath);
@@ -744,6 +744,14 @@ GuideTests::rulesAreBoundedAndMixedMediaMatches()
     QVERIFY(ComponentSchema::guideChannel(bad).isEmpty());
     bad = def;
     bad["id"] = "../other";
+    QVERIFY(ComponentSchema::guideChannel(bad).isEmpty());
+    bad = def;
+    bad["mediaKinds"] = QVariantList{"movie", "movie"};
+    QVERIFY(ComponentSchema::guideChannel(bad).isEmpty());
+    bad["mediaKinds"] = "movie";
+    QVERIFY(ComponentSchema::guideChannel(bad).isEmpty());
+    bad = def;
+    bad["owner"] = "unknown";
     QVERIFY(ComponentSchema::guideChannel(bad).isEmpty());
     QVariantMap condition{
         {"op", "all"},

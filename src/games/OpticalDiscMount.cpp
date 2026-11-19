@@ -6,6 +6,7 @@
 #include <QDBusInterface>
 #include <QDBusMessage>
 #include <QDir>
+#include <QRegularExpression>
 #include <QStorageInfo>
 
 static bool

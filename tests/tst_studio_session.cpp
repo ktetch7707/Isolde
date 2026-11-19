@@ -1,7 +1,15 @@
+#include "../src/app/AppCatalog.h"
 #include "../src/home/HomeLayout.h"
+#include "../src/home/ComponentSchema.h"
+#include "../src/home/ManagedGif.h"
+#include "../src/home/PageModel.h"
 #include "../src/home/StudioSession.h"
 #include "../src/home/ThemeColors.h"
 #include "tst_component_common.h"
+
+#ifdef Q_OS_UNIX
+#include <sys/stat.h>
+#endif
 
 class StudioSessionTests : public QObject
 {
@@ -388,7 +396,7 @@ StudioSessionTests::studioCollisionProposalsAndParity()
     auto swap = session->placementProposal("clock", p, "swap");
     QVERIFY2(swap["valid"].toBool(), qPrintable(swap["reason"].toString()));
     QCOMPARE(swap["placements"].toList().size(), 2);
-    QVERIFY(session->execute("place", {{"placements", swap["placements"]}}));
+    QVERIFY2(session->execute("place", {{"placements", swap["placements"]}}), qPrintable(session->errorString()));
     const auto swapped = session->draft();
     QVERIFY(session->undo());
     QCOMPARE(session->draft(), start);
@@ -553,7 +561,7 @@ StudioSessionTests::studioPageLifecycleRepairsLinksAndPreservesRoot()
     const auto id = page["id"].toString();
     QVERIFY(page["layout"].toObject()["components"].toArray().first().toObject()["id"] !=
             document["components"].toArray().first().toObject()["id"]);
-    QVERIFY(session->execute("reorderPage", {{"id", ""}, {"offset", 1}}));
+    QVERIFY2(session->execute("reorderPage", {{"id", ""}, {"offset", 1}}), qPrintable(session->errorString()));
     auto* draft = qobject_cast<HomeLayout*>(session->model());
     QVERIFY(draft);
     QCOMPARE(draft->studioPages().last().toMap()["name"].toString(), QString("Landing"));
@@ -800,7 +808,8 @@ StudioSessionTests::studioScrollingPagesAreBoundedAndAtomic()
     const auto enabled = session->draft();
     const auto proposal = session->placementProposal("clock", below, "shift");
     QVERIFY2(proposal["valid"].toBool(), qPrintable(proposal["reason"].toString()));
-    QVERIFY(session->execute("place", {{"placements", proposal["placements"]}}));
+    QVERIFY2(session->execute("place", {{"placements", proposal["placements"]}}),
+             qPrintable(session->errorString()));
     const auto longPage = session->draft();
     QVERIFY(!session->previewCommand("scrolling", {{"enabled", false}}));
     QCOMPARE(session->draft(), longPage);
@@ -975,7 +984,8 @@ StudioSessionTests::studioSectionTransfersDuplicationAndOrdering()
     QVERIFY(session->undo());
     QCOMPARE(session->draft(), start);
     QVERIFY(!session->placementProposal("clock", target, "shift", {}, {{"categoryId", "missing"}})["valid"].toBool());
-    QVERIFY(!session->execute("place",{{"placements",QVariantList{QVariantMap{{"id","clock"},{"placement",target},{"categoryId","missing"}}}}));
+    QVERIFY(!session->execute(
+        "place", {{"placements", QVariantList{QVariantMap{{"id", "clock"}, {"placement", target}, {"categoryId", "missing"}}}}}));
         QCOMPARE(session->draft(), start);
         QVERIFY(session->execute("orderRelative", {{"id", "movies"}, {"relativeId", "shows"}, {"before", false}}));
         const auto ordered = QJsonDocument::fromJson(session->draft()).object()["components"].toArray();
@@ -1075,7 +1085,10 @@ void StudioSessionTests::studioNestedGroupsValidateAndReparentAtomically() {
         const auto locked = session->draft();
         QVERIFY(!session->placementProposal(child, {{"x", 0}, {"y", 0}, {"width", 1}, {"height", 1}}, "shift")["valid"]
                      .toBool());
-    QVERIFY(!session->execute("place",{{"placements",QVariantList{QVariantMap{{"id",child},{"placement",QVariantMap{{"x",5},{"y",0},{"width",1},{"height",1}}},{"parentId",""}}}}));
+    QVERIFY(!session->execute(
+        "place", {{"placements", QVariantList{QVariantMap{{"id", child},
+                                                            {"placement", QVariantMap{{"x", 5}, {"y", 0}, {"width", 1}, {"height", 1}}},
+                                                            {"parentId", ""}}}}}));
             QCOMPARE(session->draft(), locked);
             QVERIFY(session->undo());
             QVERIFY(session->undo());
@@ -1334,7 +1347,7 @@ void StudioSessionTests::studioCatalogLinksInspectorAndStagedArtwork() {
             QCOMPARE(session->draft(), linked);
             QVERIFY(session->execute(
                 "patch",
-                {{"id","button"},{"value",QVariantMap{{"actions",QVariantList{}}}}));
+                {{"id", "button"}, {"value", QVariantMap{{"actions", QVariantList{}}}}}));
                     QVERIFY(!QJsonDocument::fromJson(session->draft())
                                  .object()["components"]
                                  .toArray()
@@ -1674,8 +1687,9 @@ void StudioSessionTests::studioCatalogLinksInspectorAndStagedArtwork() {
                                               {"title", "Installed Apps"}};
                     const QVariantMap pageComposition{
                         {"headerMode", "identity"}, {"header", style}, {"appGallery", gallery}};
-                    QVERIFY(
-                        session->previewCommand("pagePatch", {{"scope", "composition"}, {"value", pageComposition}}));
+                    QVERIFY2(
+                        session->previewCommand("pagePatch", {{"scope", "composition"}, {"value", pageComposition}}),
+                        qPrintable(session->errorString()));
                     QCOMPARE(session->draft(), before);
                     QCOMPARE(session->changeCount(), 0);
                     QVERIFY(!QFile::exists(path));
@@ -1795,18 +1809,13 @@ void StudioSessionTests::studioCatalogLinksInspectorAndStagedArtwork() {
                                     {"enabled", true},
                                     {"grid", QJsonObject{{"columns", 8}, {"rows", 5}, {"mode", "screen"}}}};
                     QVERIFY(session->pushEdit(QJsonDocument(document).toJson()));
-    QVERIFY(session->execute("addPlaced",{
-                    {"type", "button"}, {"placement", QVariantMap{{"x", 2}, {"y", 1}, {"width", 3}, {"height", 2}}},
-                    {
-                        "configuration",
-                            QVariantMap{{"name", "Library shortcut"},
-                                        {"actions", QVariantList{QVariantMap{{"type", "settings"}, {"section", 1}}}}},
-                        {
-                            "presentation", QVariantMap
-                            {{"visibleLabel","My library"}}
-                        }
-                    }}
-                }));
+    QVERIFY(session->execute(
+        "addPlaced",
+        {{"type", "button"},
+         {"placement", QVariantMap{{"x", 2}, {"y", 1}, {"width", 3}, {"height", 2}}},
+         {"configuration", QVariantMap{{"name", "Library shortcut"},
+                                        {"actions", QVariantList{QVariantMap{{"type", "settings"}, {"section", 1}}}}}},
+         {"presentation", QVariantMap{{"visibleLabel", "My library"}}}}));
             const auto before = session->draft();
             const auto count = session->changeCount();
             const auto original = session->document()["components"].toList().first().toMap();

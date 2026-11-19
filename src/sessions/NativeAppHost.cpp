@@ -223,11 +223,12 @@ setupGamepadMonitoring(QCoreApplication& app, QTimer& gamepadTimer, bool gameSes
                        QSet<QString>& boundAtLaunch, QVariantMap& lastStatus,
                        QMap<QString, quint64>& createdNodes);
 
+// Keep the session mode in the callback so deferred shutdown uses a live value.
 auto
 makeStopHandler(QProcess& child, QCoreApplication& app, qint64& childGroup,
                  bool& stopping, bool steamSession)
 {
-    return [&]
+    return [&, steamSession]
     {
         if (stopping)
             return;
@@ -252,11 +253,12 @@ makeStopHandler(QProcess& child, QCoreApplication& app, qint64& childGroup,
     };
 }
 
+// Preserve the child result and session mode until delayed process-group cleanup finishes.
 auto
 makeChildFinishedHandler(QProcess& child, QCoreApplication& app, qint64& childGroup,
                          bool& stopping, bool& remoteFailed, bool steamSession)
 {
-    return [&](int code, QProcess::ExitStatus status)
+    return [&, steamSession](int code, QProcess::ExitStatus status)
     {
         if (!stopping)
         {
@@ -269,7 +271,7 @@ makeChildFinishedHandler(QProcess& child, QCoreApplication& app, qint64& childGr
         QTimer::singleShot(
             1500,
             &app,
-            [&, code, status]
+            [&, code, status, steamSession]
             {
 #ifdef Q_OS_UNIX
                 ::kill(-pid_t(childGroup), SIGKILL);

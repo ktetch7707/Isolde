@@ -203,6 +203,8 @@ class CaptureController final : public QObject
     bool
     validateCaptureTypes(const QVariantMap& configuration);
     bool
+    validateCaptureTypes(const QVariantMap& configuration, bool integerTypesValid);
+    bool
     validateCaptureDevices(const QVariantMap& configuration, bool& captureFound, bool& formatFound,
                            bool& audioFound, bool& portFound);
     bool
@@ -243,6 +245,10 @@ class CaptureController final : public QObject
     commandForInput(const QString& commandTemplate, int input, QString* error = nullptr);
     static bool
     isValidInputLabel(const QString& label);
+    bool
+    isValidInput(int input) const;
+    bool
+    isValidCommand(const QString& command) const;
 
   signals:
     void

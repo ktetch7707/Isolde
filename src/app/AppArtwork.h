@@ -15,6 +15,23 @@ struct Cleanup
     bool accepted = false;
     QString reason;
 };
+
+inline int countTransparentPixels(const QImage& image);
+inline QRgb findDominantBackdropColor(const QImage& image, int w, int h, const QColor& chosen,
+                                      QVector<QRgb>& samples, bool& found);
+inline int countSupportPixels(const QVector<QRgb>& samples, QRgb backdrop, int tolerance,
+                              const std::function<int(QRgb, QRgb)>& distance);
+inline QVector<int> floodFillBackdrop(const QImage& image, QRgb backdrop, int soft,
+                                     const std::function<bool(int, int)>& boundary,
+                                     const std::function<int(QRgb, QRgb)>& distance,
+                                     QVector<bool>& visited, int w, int h);
+inline int countOpaquePixels(const QImage& image, int w, int h);
+inline bool validatePendingSize(const QVector<int>& pending, int opaque, Cleanup& result);
+inline void applyAlphaRecovery(QImage& image, const QVector<int>& pending, QRgb backdrop, int tolerance, int soft,
+                               int w, const std::function<int(QRgb, QRgb)>& distance);
+inline void reconstructMatteTransition(QImage& image, const QImage& source, QRgb backdrop,
+                                      const QVector<bool>& visited, int w, int h,
+                                      const std::function<int(QRgb, QRgb)>& distance);
 // Classification uses quantized colours; final RGB is reconstructed from the
 // original samples. Work is bounded to a 512-square icon, never a media image.
 inline Cleanup
@@ -38,28 +55,32 @@ cleanBackground(const QImage& source, int strength = 1, const QColor& chosen = {
     };
     QVector<QRgb> samples;
     bool found;
-    const auto backdrop = findDominantBackdropColor(image, w, h, chosen, distance, samples, found);
+    const auto backdrop = findDominantBackdropColor(image, w, h, chosen, samples, found);
     if (!found)
         return result;
     const int tolerance = QList<int>{16, 28, 42}[strength], soft = tolerance + 24;
     int support = countSupportPixels(samples, backdrop, tolerance, distance);
-    if (!chosen.isValid() && support < samples.size() * .7)
+    if (!chosen.isValid() && support * 10 < samples.size() * 7)
         return result;
     QVector<int> pending;
     QVector<bool> visited(count, false);
+    const int band = std::max(1, std::min(w, h) / 32);
+    const auto boundary = [&](int x, int y)
+    {
+        return x < band || y < band || x >= w - band || y >= h - band || qAlpha(image.pixel(x - 1, y)) < 16 ||
+               qAlpha(image.pixel(x + 1, y)) < 16 || qAlpha(image.pixel(x, y - 1)) < 16 ||
+               qAlpha(image.pixel(x, y + 1)) < 16;
+    };
     pending = floodFillBackdrop(image, backdrop, soft, boundary, distance, visited, w, h);
     int opaque = countOpaquePixels(image, w, h);
     if (!validatePendingSize(pending, opaque, result))
         return result;
-}
-applyAlphaRecovery(image, pending, backdrop, tolerance, soft, w, h, distance);
-// Reconstruct the adjacent matte transition without deleting internal
-// white lettering or small disconnected marks elsewhere in the artwork.
-reconstructMatteTransition(image, source, backdrop, visited, w, h, distance);
-result.image = image;
-result.accepted = true;
-result.reason = QStringLiteral("Clean background preview. Original colours and source are retained.");
-return result;
+    applyAlphaRecovery(image, pending, backdrop, tolerance, soft, w, distance);
+    reconstructMatteTransition(image, source, backdrop, visited, w, h, distance);
+    result.image = image;
+    result.accepted = true;
+    result.reason = QStringLiteral("Clean background preview. Original colours and source are retained.");
+    return result;
 }
 // A reviewed mask may turn declared internal colours into negative space.
 // Colour foregrounds and sources are never modified by this conversion.
@@ -127,8 +148,8 @@ reconstructMatteTransition(QImage& image,
                 image.setPixel(x,
                                y,
                                qRgba(recover(p.red(), qRed(backdrop)),
-                                     recover(qGreen(p), qGreen(backdrop)),
-                                     recover(qBlue(p), qBlue(backdrop)),
+                                     recover(p.green(), qGreen(backdrop)),
+                                     recover(p.blue(), qBlue(backdrop)),
                                      qRound(alpha * 255)));
             }
         }
@@ -141,7 +162,6 @@ applyAlphaRecovery(QImage& image,
                    int tolerance,
                    int soft,
                    int w,
-                   int h,
                    const std::function<int(QRgb, QRgb)>& distance)
 {
     const auto linear = [](double v)
@@ -168,19 +188,8 @@ applyAlphaRecovery(QImage& image,
         {
             return srgb((linear(c) - (1 - alpha) * linear(bg)) / alpha);
         };
-        image.setPixel(
-            x,
+        image.setPixel(x,
             y,
-
-            inline int countTransparentPixels(const QImage& image) {
-                int transparent = 0;
-                const int w = image.width(), h = image.height();
-                for (int y = 0; y < h; ++y)
-                    for (int x = 0; x < w; ++x)
-                        transparent += qAlpha(image.pixel(x, y)) < 16;
-                return transparent;
-            }
-
             qRgba(recover(qRed(p), qRed(backdrop)),
                   recover(qGreen(p), qGreen(backdrop)),
                   recover(qBlue(p), qBlue(backdrop)),
@@ -188,14 +197,22 @@ applyAlphaRecovery(QImage& image,
     }
 }
 
-// A reviewed mask may turn declared internal colours into negative space.
+// Detect existing transparency so automatic cleanup does not damage cutouts.
+inline int
+countTransparentPixels(const QImage& image)
+{
+    int transparent = 0;
+    for (int y = 0; y < image.height(); ++y)
+        for (int x = 0; x < image.width(); ++x)
+            transparent += qAlpha(image.pixel(x, y)) < 16;
+    return transparent;
+}
 
 inline QRgb
 findDominantBackdropColor(const QImage& image,
                           int w,
                           int h,
                           const QColor& chosen,
-                          const std::function<int(QRgb, QRgb)>& distance,
                           QVector<QRgb>& samples,
                           bool& found)
 {
@@ -239,7 +256,7 @@ findDominantBackdropColor(const QImage& image,
                 ++n;
             }
         if (n)
-            backdrop = qRgb(r / n, g / n, b / n);
+            backdrop = qRgb(static_cast<int>(r / n), static_cast<int>(g / n), static_cast<int>(b / n));
     }
     return backdrop;
 }
@@ -256,14 +273,16 @@ inkMask(const QImage& source, const QColor& ink, const QList<QColor>& exclude)
             double coverage = 1;
             for (const auto& background : exclude)
             {
-                const double dr = ink.redF() - background.redF(), dg = ink.greenF() - background.greenF(),
-                             db = ink.blueF() - background.blueF();
+                const double dr = static_cast<double>(ink.redF()) - static_cast<double>(background.redF()),
+                             dg = static_cast<double>(ink.greenF()) - static_cast<double>(background.greenF()),
+                             db = static_cast<double>(ink.blueF()) - static_cast<double>(background.blueF());
                 const double length = dr * dr + dg * dg + db * db;
                 if (length > .01)
                     coverage = std::min(
                         coverage,
-                        std::clamp(((p.redF() - background.redF()) * dr + (p.greenF() - background.greenF()) * dg +
-                                    (p.blueF() - background.blueF()) * db) /
+                        std::clamp(((static_cast<double>(p.redF()) - static_cast<double>(background.redF())) * dr +
+                                    (static_cast<double>(p.greenF()) - static_cast<double>(background.greenF())) * dg +
+                                    (static_cast<double>(p.blueF()) - static_cast<double>(background.blueF())) * db) /
                                        length,
                                    0.,
                                    1.));
@@ -343,14 +362,12 @@ cutout(const QImage& source)
     if (!isUniformBackdrop(image, matches))
         return source;
     const auto pending = floodFillConnected(image, matches);
-    if (pending.size() > w * h * .95)
+    if (pending.size() * 100 > w * h * 95)
         return source;
     for (const int i : pending)
         image.setPixel(i % w, i / w, qRgba(0, 0, 0, 0));
     return image;
 }
-} // namespace AppArtwork
-
 inline QVector<int>
 floodFillBackdrop(const QImage& image,
                   QRgb backdrop,
@@ -418,10 +435,11 @@ countOpaquePixels(const QImage& image, int w, int h)
 inline bool
 validatePendingSize(const QVector<int>& pending, int opaque, Cleanup& result)
 {
-    if (pending.size() < opaque * .03 || pending.size() > opaque * .94)
+    if (pending.size() * 100 < opaque * 3 || pending.size() * 100 > opaque * 94)
     {
         result.reason = QStringLiteral("Keep Original: cleanup would remove too little or too much artwork.");
         return false;
     }
     return true;
 }
+} // namespace AppArtwork

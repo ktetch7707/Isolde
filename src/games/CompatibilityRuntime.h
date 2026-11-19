@@ -7,5 +7,7 @@ class CompatibilityRuntime
     static QVariantMap
     discover();
     static QVariantMap
+    discoverLinux();
+    static QVariantMap
     classify(bool present, bool trusted);
 };

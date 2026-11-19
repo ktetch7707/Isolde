@@ -138,6 +138,7 @@ class SessionManager final : public QObject
 
   private:
     friend class ComponentTests;
+    friend class GameLibraryTests;
     void
     handleSteamProviderState(const QVariantMap& state);
     bool

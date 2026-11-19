@@ -38,8 +38,6 @@
 #include "home/ComponentSchema.h"
 #include "media/MediaGrants.h"
 
-namespace
-{
 QString
 sqlText(const QVariant& value);
 bool
@@ -356,7 +354,6 @@ sourceProvenance(const QString& runtime,
             {"sourceFingerprint",
              QString::fromLatin1(QCryptographicHash::hash(identity.toUtf8(), QCryptographicHash::Sha256).toHex())}};
 }
-} // namespace
 
 GameLibrary::GameLibrary(const QString& path, AppRegistry* apps, QObject* parent)
     : QObject(parent), m_connection("games-" + QUuid::createUuid().toString(QUuid::WithoutBraces)), m_apps(apps), m_path(path)
@@ -433,6 +430,11 @@ GameLibrary::GameLibrary(const QString& path, AppRegistry* apps, QObject* parent
     if (!checkPendingRecoveries(query))
         return;
     query.finish();
+    m_ready = true;
+    for (const auto& disc : OpticalDiscHash::mountedDiscs())
+        m_lastOpticalObservationIds.append(disc.toMap().value("observationId").toString());
+    m_lastOpticalObservationIds.sort();
+    m_opticalRefreshTimer.start();
     }
 
     void GameLibrary::onSteamScanFinished(int code, QProcess::ExitStatus status)
@@ -467,6 +469,7 @@ GameLibrary::GameLibrary(const QString& path, AppRegistry* apps, QObject* parent
                 cancelImport();
                 return;
             }
+            seen.insert(game.value("target").toString());
         }
         m_preview = games;
         m_importReady = true;
@@ -1028,7 +1031,7 @@ GameLibrary::GameLibrary(const QString& path, AppRegistry* apps, QObject* parent
 
     bool GameLibrary::initializeCatalogSchema(QSqlQuery & query)
     {
-        if (!m_catalogExisted)
+        if (m_catalogExisted)
             return true;
         if (!m_db.transaction())
         {
@@ -1255,7 +1258,7 @@ GameLibrary::GameLibrary(const QString& path, AppRegistry* apps, QObject* parent
         return MaxGames;
     }
 
-    bool GameLibrary::fail(const QString& error)
+    bool GameLibrary::fail(const QString& error) const
     {
         m_error = error;
         emit errorChanged();
@@ -2424,7 +2427,7 @@ GameLibrary::GameLibrary(const QString& path, AppRegistry* apps, QObject* parent
         return action;
     }
 
-    bool GameLibrary::installationExists(const QString& runtime, const QString& root, const QString& target)
+    bool GameLibrary::installationExists(const QString& runtime, const QString& root, const QString& target) const
     {
         QSqlQuery query(m_db);
         query.prepare("SELECT id FROM games WHERE runtime=? AND root=? AND target=?" +
@@ -2445,7 +2448,7 @@ GameLibrary::GameLibrary(const QString& path, AppRegistry* apps, QObject* parent
         return query.next();
     }
 
-    QVariantList GameLibrary::editions(const QString& id)
+    QVariantList GameLibrary::editions(const QString& id) const
     {
         const auto base = registration(id);
         if (base.isEmpty())
@@ -2506,6 +2509,5 @@ GameLibrary::GameLibrary(const QString& path, AppRegistry* apps, QObject* parent
 
 QString GameLibrary::addEdition(const QString& id, const QVariantMap& input)
 {
-    Q_UNUSED(input);
-    return id;
+    return addEditionWithOrigin(id, input, QStringLiteral("manual-registration"));
 }

@@ -1,4 +1,4 @@
-#!/ usr / bin / env python3
+#!/usr/bin/env python3
 """Read this Isolde profile's installed Steam titles; supervise direct launches.
 
 No Web API, credential reads, provider writes, custom launch options or shell.
@@ -65,23 +65,38 @@ def open_recovery_directory(home):
         raise ValueError("Steam recovery storage is redirected or unavailable") from error
     for part in (".local", "state", "isolde"):
         try:
-            os
-        .mkdir(part, mode = 0o700, dir_fd = descriptor) except FileExistsError : pass try : child
-            = os.open(part, flags, dir_fd = descriptor) except OSError as error
-                : os.close(descriptor) raise ValueError("Steam recovery storage is redirected or unavailable")
-                      from error os.close(descriptor) descriptor = child return descriptor
+            os.mkdir(part, mode=0o700, dir_fd=descriptor)
+        except FileExistsError:
+            pass
+        except OSError:
+            os.close(descriptor)
+            raise
+        try:
+            child = os.open(part, flags, dir_fd=descriptor)
+        except OSError as error:
+            os.close(descriptor)
+            raise ValueError("Steam recovery storage is redirected or unavailable") from error
+        os.close(descriptor)
+        descriptor = child
+    return descriptor
 
-                def
-                recovery_directory(home)
-                : descriptor = open_recovery_directory(home) os.close(descriptor) return Path(home).absolute() /
-                               ".local/state/isolde"
 
-                               def load_recovery_journal(home)
-                : directory_fd =
-                                   open_recovery_directory(home) try :
-                try : descriptor
-                    = os.open("steam-recovery.json", os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd = directory_fd)
-                          except FileNotFoundError : return {}
+def recovery_directory(home):
+    """Resolve the private recovery location through checked directory descriptors."""
+    descriptor = open_recovery_directory(home)
+    os.close(descriptor)
+    return Path(home).absolute() / ".local/state/isolde"
+
+
+def load_recovery_journal(home):
+    """Read bounded, validated recovery records without following redirected files."""
+    directory_fd = open_recovery_directory(home)
+    try:
+        try:
+            descriptor = os.open("steam-recovery.json", os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK,
+                                 dir_fd=directory_fd)
+        except FileNotFoundError:
+            return {}
         except OSError as error:
             raise ValueError("Steam recovery record is redirected or unavailable") from error
         with os.fdopen(descriptor, "rb") as stream:
@@ -137,35 +152,46 @@ def write_recovery_status(home, identity, facts, phase="failed"):
     directory_fd = open_recovery_directory(home)
     temporary = ".steam-recovery-" + uuid.uuid4().hex
     try:
-        descriptor
-                = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd = directory_fd)
-                      with os.fdopen(descriptor, "wb") as stream : if stream.write(payload) != len(payload)
-                    : raise OSError("Short Steam recovery record write") stream.flush() os.fsync(stream.fileno())
-                          os.replace(
-                                temporary, "steam-recovery.json", src_dir_fd = directory_fd, dst_dir_fd = directory_fd)
-                              os.fsync(directory_fd) finally : try
-                    : os
-                    .unlink(temporary, dir_fd = directory_fd) except FileNotFoundError
-                        : pass os.close(directory_fd)
+        descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                             0o600, dir_fd=directory_fd)
+        with os.fdopen(descriptor, "wb") as stream:
+            if stream.write(payload) != len(payload):
+                raise OSError("Short Steam recovery record write")
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, "steam-recovery.json", src_dir_fd=directory_fd, dst_dir_fd=directory_fd)
+        os.fsync(directory_fd)
+    finally:
+        try:
+            os.unlink(temporary, dir_fd=directory_fd)
+        except FileNotFoundError:
+            pass
+        os.close(directory_fd)
 
-                              def clear_recovery_status(home, identity)
-                        : app_id(identity) games = load_recovery_journal(home) if identity not in games
-                        : return False del games[identity] directory_fd = open_recovery_directory(home) temporary =
-                              ".steam-recovery-" + uuid.uuid4().hex payload =
-                                  json.dumps(
-                                          {"version" : 1, "games" : games}, separators = (",", ":"), sort_keys = True)
-                                      .encode() try
-                        : descriptor
-                        = os.open(temporary,
-                                  os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
-                                  0o600,
-                                  dir_fd = directory_fd) with os.fdopen(descriptor, "wb") as stream
-                            : stream.write(payload) stream.flush() os.fsync(stream.fileno())
-                                  os.replace(temporary,
-                                             "steam-recovery.json",
-                                             src_dir_fd = directory_fd,
-                                             dst_dir_fd = directory_fd) os.fsync(directory_fd) finally : try
-                            : os.unlink(temporary, dir_fd=directory_fd)
+
+def clear_recovery_status(home, identity):
+    """Atomically clear one reviewed warning while preserving all other records."""
+    app_id(identity)
+    games = load_recovery_journal(home)
+    if identity not in games:
+        return False
+    del games[identity]
+    directory_fd = open_recovery_directory(home)
+    temporary = ".steam-recovery-" + uuid.uuid4().hex
+    payload = json.dumps({"version": 1, "games": games}, separators=(",", ":"), sort_keys=True).encode()
+    try:
+        descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                             0o600, dir_fd=directory_fd)
+        with os.fdopen(descriptor, "wb") as stream:
+            if stream.write(payload) != len(payload):
+                raise OSError("Short Steam recovery record write")
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, "steam-recovery.json", src_dir_fd=directory_fd, dst_dir_fd=directory_fd)
+        os.fsync(directory_fd)
+    finally:
+        try:
+            os.unlink(temporary, dir_fd=directory_fd)
         except FileNotFoundError:
             pass
         os.close(directory_fd)
@@ -196,11 +222,17 @@ def vdf(text):
             raise ValueError("Steam metadata nesting is too deep")
         result = {}
         while position < len(tokens):
-            token = tokens[position];
-        position +=
-            1 if token == "}" : if not nested : raise ValueError("Unexpected Steam metadata brace") return result key =
-                string(token) if key in result or position >= len(tokens)
-            : raise ValueError("Duplicate or incomplete Steam metadata") value = tokens[position]; position += 1
+            token = tokens[position]
+            position += 1
+            if token == "}":
+                if not nested:
+                    raise ValueError("Unexpected Steam metadata brace")
+                return result
+            key = string(token)
+            if key in result or position >= len(tokens):
+                raise ValueError("Duplicate or incomplete Steam metadata")
+            value = tokens[position]
+            position += 1
             result[key] = obj(depth+1, True) if value == "{" else string(value)
         if nested: raise ValueError("Unclosed Steam metadata object")
         return result
@@ -230,9 +262,10 @@ def read_vdf(path, home, limit, external=()):
     if len(path.parts)>128: raise ValueError("Steam metadata path is too deep")
     directory=os.open("/",os.O_RDONLY|os.O_DIRECTORY)
     try:
-        for
-            part in path.parts [1:-1] : child =
-                os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd = directory) os.close(directory);directory=child
+        for part in path.parts[1:-1]:
+            child = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=directory)
+            os.close(directory)
+            directory = child
         descriptor=os.open(path.name,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK,dir_fd=directory)
         with os.fdopen(descriptor,"rb") as stream:
             if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):raise ValueError("Steam metadata is not a regular file")
@@ -286,9 +319,11 @@ def libraries(home, external=()):
             library=Path(name)
             candidate = library/"steamapps"
             if not candidate.exists(): continue
-            try: candidate
-            = private_path(candidate, home, True, approved) except ValueError
-                : warnings.append("External Steam libraries are not approved for this Isolde profile."); continue
+            try:
+                candidate = private_path(candidate, home, True, approved)
+            except ValueError:
+                warnings.append("External Steam libraries are not approved for this Isolde profile.")
+                continue
             if candidate not in roots: roots.append(candidate)
             if len(roots) > 32: raise ValueError("Too many Steam libraries")
     for library in approved:
@@ -356,12 +391,10 @@ def private_bus_processes():
         path=unquote(fields.get("path",""))
         if not path.startswith(("/tmp/",f"/run/user/{os.getuid()}/")) or len(path.encode())>104 or "\0" in path:return set()
         with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as client:
-            client.settimeout(.25);
-        client.connect(path) pid, uid,
-            _ = struct.unpack("3i", client.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12)) return {
-            pid
-        }
-        if pid>0 and uid==os.getuid() else set()
+            client.settimeout(.25)
+            client.connect(path)
+            pid, uid, _ = struct.unpack("3i", client.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12))
+        return {pid} if pid > 0 and uid == os.getuid() else set()
     except (OSError,ValueError,struct.error):return set()
 
 
@@ -376,51 +409,52 @@ def matching_processes(variable, value, proc=Path("/proc"), token=None, exclude_
         if ancestor<=0 or ancestor in ancestors: break
         ancestors.add(ancestor)
         try:
-            directory
-                = proc / str(ancestor) if directory.stat().st_uid != os.getuid()
-                    : break ancestor = int((directory / "stat").read_text().rsplit(") ", 1)[1].split()[1])
-                      except(OSError, ValueError, IndexError)
-                    : break excluded = ancestors | private_bus_processes() try :
-        for
-            entry in proc.iterdir()
-                : if not entry.name.isdigit() or
-                int(entry.name) in excluded : continue entries +=
-                1 if entries > 4096 : raise ProcessObservationError("Steam session process limit exceeded") try :
-                if entry
-                    .stat().st_uid != os.getuid()
-                        : continue if (entry / "stat")
-                              .read_text()
-                              .rsplit(") ", 1)[1]
-                              .split()[0] in("Z", "X", "x")
-                        : continue with(entry / "environ")
-                              .open("rb") as stream : environment =
-                        stream.read(65537) if len (environment) > 65536
-                        : raise ProcessObservationError("Steam session process metadata is oversized") fields =
-                            environment.split(b "\0") if token is not None and ("ISOLDE_STEAM_SESSION=" + token)
-                                                                                   .encode() not in fields
-                        : continue if exclude_client : executable =
-                                os.path.basename(os.readlink(entry / "exe"))
-                                    .lower() if executable in("steam",
-                                                              "steam.sh",
-                                                              "steamwebhelper",
-                                                              "steamservice",
-                                                              "steam-runtime-launcher-service")
-                        : continue if (variable + "=" + value)
-                                    .encode() in fields : if (entry / "stat")
-                                    .read_text()
-                                    .rsplit(") ", 1)[1]
-                                    .split()[0] not in("Z", "X", "x")
-                        : result.append(int(entry.name)) except(FileNotFoundError, ProcessLookupError)
-                        :
-#Processes can exit between / proc enumeration and inspection.
-                          continue except OSError as error : try:
-                        if (entry / "stat")
-                            .read_text().rsplit(") ", 1)[1].split()[0] in("Z", "X", "x")
-                                : continue except(FileNotFoundError, ProcessLookupError)
-                                : continue except(OSError, ValueError, IndexError)
-                                : pass raise ProcessObservationError(
-                                      "Steam session process state is not fully observable") from error
-                                  except(ValueError, IndexError) as error:
+            directory = proc / str(ancestor)
+            if directory.stat().st_uid != os.getuid():
+                break
+            ancestor = int((directory / "stat").read_text().rsplit(") ", 1)[1].split()[1])
+        except (OSError, ValueError, IndexError):
+            break
+    excluded = ancestors | private_bus_processes()
+    try:
+        for entry in proc.iterdir():
+            if not entry.name.isdigit() or int(entry.name) in excluded:
+                continue
+            entries += 1
+            if entries > 4096:
+                raise ProcessObservationError("Steam session process limit exceeded")
+            try:
+                if entry.stat().st_uid != os.getuid():
+                    continue
+                if (entry / "stat").read_text().rsplit(") ", 1)[1].split()[0] in ("Z", "X", "x"):
+                    continue
+                with (entry / "environ").open("rb") as stream:
+                    environment = stream.read(65537)
+                if len(environment) > 65536:
+                    raise ProcessObservationError("Steam session process metadata is oversized")
+                fields = environment.split(b"\0")
+                if token is not None and ("ISOLDE_STEAM_SESSION=" + token).encode() not in fields:
+                    continue
+                if exclude_client:
+                    executable = os.path.basename(os.readlink(entry / "exe")).lower()
+                    if executable in STEAM_CLIENT_EXECUTABLES:
+                        continue
+                if (variable + "=" + value).encode() in fields:
+                    if (entry / "stat").read_text().rsplit(") ", 1)[1].split()[0] not in ("Z", "X", "x"):
+                        result.append(int(entry.name))
+            except (FileNotFoundError, ProcessLookupError):
+                # Processes can exit between enumeration and inspection.
+                continue
+            except OSError as error:
+                try:
+                    if (entry / "stat").read_text().rsplit(") ", 1)[1].split()[0] in ("Z", "X", "x"):
+                        continue
+                except (FileNotFoundError, ProcessLookupError):
+                    continue
+                except (OSError, ValueError, IndexError):
+                    pass
+                raise ProcessObservationError("Steam session process state is not fully observable") from error
+            except (ValueError, IndexError) as error:
                 raise ProcessObservationError("Steam session process state is malformed") from error
     except ProcessObservationError:
         raise
@@ -614,41 +648,54 @@ def launch(identity, external=()):
             write_recovery_status(home,identity,journal_facts,phase)
         publish_provider_state(identity, phase, facts)
     try:
-        initial_recovery
-                        = dict(preflight, session_end = "incomplete") write_recovery_status(
-                            home, identity, initial_recovery, "starting") marker_written = True launcher =
-                            subprocess.Popen([ str(binary), "-silent", "-applaunch", identity ],
-                                             stdout = subprocess.DEVNULL,
-                                             stderr = subprocess.DEVNULL,
-                                             env = dict(os.environ, ISOLDE_STEAM_SESSION = token))
-                                supervise_provider(SteamProcessProvider(identity, token, launcher, preflight), publish)
-                                    except SessionCanceled : canceled =
-                                True except(OSError, ValueError, RuntimeError)
-                            : failed = True raise finally : signal.signal(signal.SIGTERM, signal.SIG_IGN)
-                                                                signal.signal(signal.SIGINT, signal.SIG_IGN) try
-                            : game_was_running
-                            = started if canceled or failed : try : owned_games
-                                = processes(identity) game_was_running =
-                                    game_was_running or
-                                    bool(owned_games) signal_owned_processes(owned_games, token, identity)
-                                        clean_game_exit = wait_until_gone(lambda : processes(identity), 5)
-                                        except ProcessObservationError as error
-                                    : print("Steam session observation: " + str(error), file = sys.stderr, flush = True)
-                                          clean_game_exit = False cleanup_complete = False last_facts["process"] =
-                                              "unknown" last_facts["error"] = "process_observation_failed" stopped =
-                                                  clean_game_exit else : stopped = started
-#Give Steam a bounded opportunity to process game exit and sync before
-#ending its private client.This is not a cloud - sync confirmation.
-                                                                                       if stopped and
-                                                                                       game_was_running
-                                    : time.sleep(3) if canceled or failed : if started and clean_game_exit
-                                    : last_facts["process"] = "gone" if not clean_game_exit or not cleanup_complete
-                                    : last_facts["session_end"] = "incomplete" elif canceled and game_was_running
-                                    : last_facts["session_end"] = "incomplete" elif canceled
-                                    : last_facts["session_end"] =
-                                          "canceled" publish("failed" if failed or not clean_game_exit else "canceled",
-                                                             last_facts) if marker_written : try:
-                                    if last_facts["session_end"] in ("incomplete","recovery_required"):
+        initial_recovery = dict(preflight, session_end="incomplete")
+        write_recovery_status(home, identity, initial_recovery, "starting")
+        marker_written = True
+        launcher = subprocess.Popen([str(binary), "-silent", "-applaunch", identity],
+                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                    env=dict(os.environ, ISOLDE_STEAM_SESSION=token))
+        supervise_provider(SteamProcessProvider(identity, token, launcher, preflight), publish)
+    except SessionCanceled:
+        canceled = True
+    except (OSError, ValueError, RuntimeError):
+        failed = True
+        raise
+    finally:
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
+        try:
+            game_was_running = started
+            if canceled or failed:
+                try:
+                    owned_games = processes(identity)
+                    game_was_running = game_was_running or bool(owned_games)
+                    signal_owned_processes(owned_games, token, identity)
+                    clean_game_exit = wait_until_gone(lambda: processes(identity), 5)
+                except ProcessObservationError as error:
+                    print("Steam session observation: " + str(error), file=sys.stderr, flush=True)
+                    clean_game_exit = False
+                    cleanup_complete = False
+                    last_facts["process"] = "unknown"
+                    last_facts["error"] = "process_observation_failed"
+                stopped = clean_game_exit
+            else:
+                stopped = started
+            # Allow Steam a bounded sync opportunity; this does not prove cloud sync.
+            if stopped and game_was_running:
+                time.sleep(3)
+            if canceled or failed:
+                if started and clean_game_exit:
+                    last_facts["process"] = "gone"
+                if not clean_game_exit or not cleanup_complete:
+                    last_facts["session_end"] = "incomplete"
+                elif canceled and game_was_running:
+                    last_facts["session_end"] = "incomplete"
+                elif canceled:
+                    last_facts["session_end"] = "canceled"
+                publish("failed" if failed or not clean_game_exit else "canceled", last_facts)
+            if marker_written:
+                try:
+                    if last_facts["session_end"] in ("incomplete","recovery_required"):
                         write_recovery_status(home,identity,last_facts,"failed" if failed else "canceled")
                     elif previous_recovery is not None:
                         previous_facts={key:previous_recovery[key] for key in FACT_VALUES}

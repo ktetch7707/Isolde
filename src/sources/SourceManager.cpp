@@ -28,6 +28,13 @@ isVisibleSource(const QVariantMap& source, const QVariantMap& decision)
 namespace
 {
 
+// Refuse redirected or relative state files before checking their ancestors.
+bool
+isAbsoluteRegularPath(const QFileInfo& file)
+{
+    return file.isAbsolute() && !file.isSymLink();
+}
+
 bool
 unredirectedStatePath(const QString& path)
 {
@@ -41,12 +48,6 @@ unredirectedStatePath(const QString& path)
             return false;
     } while (directory.cdUp());
     return true;
-}
-
-bool
-isAbsoluteRegularPath(const QFileInfo& file)
-{
-    return file.isAbsolute() && !file.isSymLink();
 }
 
 QString
@@ -313,7 +314,8 @@ SourceManager::sections() const
 {
     return {};
 }
-int
+// Expose the complete visible count without narrowing the container size.
+qint64
 SourceManager::visibleSourceCount() const
 {
     return items().size();

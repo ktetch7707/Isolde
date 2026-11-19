@@ -66,20 +66,14 @@ VpnSettings::VpnSettings(QString profile, QObject* parent) : QObject(parent), m_
                     emit refreshed();
             });
 }
-VpnSettings::~VpnSettings()
-{
-    m_timer.stop();
-    m_process.disconnect(this);
-    stopProcess(m_process);
-}
-
-void
+// Allow the helper to finish cleanup before forcing termination.
+static void
 stopProcess(QProcess& process)
 {
     if (process.state() != QProcess::NotRunning)
     {
         process.terminate();
-        if (!waitForProcessFinished(process, 45000))
+        if (!process.waitForFinished(45000))
         {
             process.kill();
             process.waitForFinished(1000);
@@ -87,10 +81,11 @@ stopProcess(QProcess& process)
     }
 }
 
-bool
-waitForProcessFinished(QProcess& process, int msecs)
+VpnSettings::~VpnSettings()
 {
-    return process.waitForFinished(msecs);
+    m_timer.stop();
+    m_process.disconnect(this);
+    stopProcess(m_process);
 }
 void
 VpnSettings::perform(const QString& action, const QString& target, const QString& provider, const QString& country)

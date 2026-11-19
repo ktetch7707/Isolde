@@ -47,14 +47,11 @@ iconRole(const AppDefinition& app)
     }();
     return roles[app.launchConfiguration.value("icon", app.id).toString()].toObject();
 }
-static bool
-shouldUsePackagedIcon(const AppDefinition& app, const QString& packaged)
-{
-    return app.type != "web" && app.type != "desktop" && app.type != "android" && !QFile::exists(packaged);
-}
 static QString
-static QString
-appIcon(const AppDefinition& app, int role = 0)
+cacheAppIcon(const QByteArray& bytes, const QString& profile, const QRegularExpression& desktopName);
+
+QString
+AppRegistry::appIcon(const AppDefinition& app, int role)
 {
     if (!qobject_cast<QGuiApplication*>(QCoreApplication::instance()))
         return {};
@@ -94,15 +91,89 @@ appIcon(const AppDefinition& app, int role = 0)
 }
 
 
-                    return false;
-                excluded.append(colour);
-            }
-            foreground = AppArtwork::inkMask(foreground, ink, excluded);
+// Read the desktop file's icon without trusting or executing its launch command.
+QString
+AppRegistry::resolveAppIconName(const AppDefinition& app, const QRegularExpression& desktopName)
+{
+    auto name = app.launchConfiguration.value("icon", app.id).toString();
+    const auto desktopId = app.launchConfiguration.value("desktopId").toString();
+    QStringList candidates{desktopId};
+    if (app.id != desktopId)
+        candidates.append(app.id);
+    const auto roots = QStandardPaths::standardLocations(QStandardPaths::GenericDataLocation);
+    for (auto candidate : candidates)
+    {
+        if (!desktopName.match(candidate).hasMatch())
+            continue;
+        if (!candidate.endsWith(".desktop"))
+            candidate += ".desktop";
+        for (const auto& root : roots)
+        {
+            const auto path = QDir(root).filePath("applications/" + candidate);
+            if (!safeFile(path))
+                continue;
+            QSettings settings(path, QSettings::IniFormat);
+            const auto supplied = settings.value("Desktop Entry/Icon").toString().trimmed();
+            static const QSet<QString> generic{"application-x-executable", "application-default-icon",
+                                               "package-x-generic", "system-run"};
+            if (!supplied.isEmpty() && !generic.contains(supplied))
+                return supplied;
         }
-        icon = QIcon(QPixmap::fromImage(foreground));
     }
-    else
+    return name;
+}
+
+// Verify the reviewed foreground bytes before applying their approved ink mask.
+bool
+AppRegistry::resolvePackagedIcon(const AppDefinition& app, int role, QIcon& icon)
+{
+    const auto packaged = ":/config/app-icons/" + app.launchConfiguration.value("icon", app.id).toString() + ".svg";
+    if (!role)
+    {
         icon = QIcon(packaged);
+        return true;
+    }
+    const auto metadata = iconRole(app);
+    const auto relative = metadata["foreground"].toString();
+    if (!QRegularExpression("^foreground/[a-z0-9][a-z0-9-]{0,127}\\.svg$").match(relative).hasMatch())
+    {
+        if (role == 2)
+            return false;
+        icon = QIcon(packaged);
+        return true;
+    }
+    QFile file(":/config/app-icons/" + relative);
+    if (!file.open(QIODevice::ReadOnly))
+        return false;
+    auto svg = file.read(64 * 1024 + 1);
+    svg.replace("\r\n", "\n");
+    if (svg.size() > 64 * 1024 ||
+        QString::fromLatin1(QCryptographicHash::hash(svg, QCryptographicHash::Sha256).toHex()) !=
+            metadata["foregroundSha256"].toString())
+        return false;
+    QBuffer buffer(&svg);
+    buffer.open(QIODevice::ReadOnly);
+    QImageReader reader(&buffer, "svg");
+    reader.setScaledSize(QSize(512, 512));
+    auto foreground = reader.read();
+    if (foreground.isNull())
+        return false;
+    if (role == 2)
+    {
+        const QColor ink(metadata["inkColour"].toString());
+        QList<QColor> excluded;
+        if (!ink.isValid() || metadata["inkExclude"].toArray().size() > 4)
+            return false;
+        for (const auto& value : metadata["inkExclude"].toArray())
+        {
+            const QColor colour(value.toString());
+            if (!colour.isValid())
+                return false;
+            excluded.append(colour);
+        }
+        foreground = AppArtwork::inkMask(foreground, ink, excluded);
+    }
+    icon = QIcon(QPixmap::fromImage(foreground));
     return true;
 }
 
@@ -375,7 +446,7 @@ AppRegistry::loadFromFile(const QString& resolvedPath)
     return loadFromData(file.readAll());
 }
 
-QVector<AppDefinition>
+bool
 AppRegistry::loadFromData(const QByteArray& data)
 {
     QJsonParseError parseError;
@@ -383,7 +454,7 @@ AppRegistry::loadFromData(const QByteArray& data)
     if (parseError.error != QJsonParseError::NoError || !document.isArray())
     {
         setError(tr("Invalid app configuration: %1").arg(parseError.errorString()));
-        return {};
+        return false;
     }
 
     QVector<AppDefinition> loaded;
@@ -391,22 +462,22 @@ AppRegistry::loadFromData(const QByteArray& data)
     for (const auto& value : document.array())
     {
         if (!validateAppEntry(value, loaded, ids))
-            return {};
+            return false;
     }
     if (loaded.isEmpty())
     {
         setError(tr("App configuration contains no apps."));
-        return {};
+        return false;
     }
 
     m_apps = std::move(loaded);
     setError({});
     emit appsChanged();
-    return loaded;
+    return true;
 }
 
 bool
-AppRegistry::validateAppEntry(const QVariant& value, QVector<AppDefinition>& loaded, QSet<QString>& ids)
+AppRegistry::validateAppEntry(const QJsonValue& value, QVector<AppDefinition>& loaded, QSet<QString>& ids)
 {
     if (!value.isObject())
     {
@@ -428,11 +499,20 @@ AppRegistry::validateAppEntry(const QVariant& value, QVector<AppDefinition>& loa
     app.symbol = object.value("symbol").toString().trimmed();
     app.accent = QColor(object.value("accent").toString("#64748B"));
     app.launchConfiguration = object.toVariantMap();
+    if (ids.contains(app.id) || !validIconName(app))
+    {
+        setError(tr("App IDs must be unique and icon names must be local."));
+        return false;
+    }
     if (!validateAppEntryFields(app, object))
         return false;
     if (!validateAppEntryOrigin(app, object))
         return false;
-    loaded.append(app);
+    app.iconSource = appIcon(app);
+    app.cutoutIconSource = appIcon(app, 1);
+    app.inkIconSource = appIcon(app, 2);
+    app.iconContrastBackdrop = iconRole(app)["contrastBackdrop"].toString();
+    app.iconOpticalScale = qBound(.5, iconRole(app)["opticalScale"].toDouble(1), 1.4);
     ids.insert(app.id);
     for (const auto& alias : app.legacyIds())
     {
@@ -443,6 +523,7 @@ AppRegistry::validateAppEntry(const QVariant& value, QVector<AppDefinition>& loa
         }
         ids.insert(alias);
     }
+    loaded.append(app);
     return true;
 }
 

@@ -1,5 +1,80 @@
 #include "KodiMedia.h"
 
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QRegularExpression>
+
+QVariantList sortedHistory(QVariantList items, int limit);
+
+// Accept source edits only after validating the bounded bridge response and revision.
+bool
+KodiMedia::handleSourceResponse(const QJsonObject& result)
+{
+    const int stage = m_stage;
+    m_busy = false;
+    releaseSocket();
+    const auto revision = result.value("revision").toString();
+    bool valid = QRegularExpression("^[0-9a-f]{64}$").match(revision).hasMatch();
+    if (stage == 23)
+    {
+        valid = valid && result.value("preview").toBool() &&
+                result.value("source").toObject().toVariantMap() == m_sourceDraft;
+        if (valid)
+        {
+            m_sourceRevision = revision;
+            m_sourcePreviewReady = true;
+            m_sourceStatus = "Preview ready · source/content/scanner settings apply only after confirmation. "
+                             "Removing a source preserves media and library titles.";
+        }
+    }
+    else
+    {
+        const auto sources = result.value("sources");
+        const auto scrapers = result.value("scrapers");
+        const auto roots = result.value("roots");
+        valid = valid && sources.isArray() && sources.toArray().size() <= 128 &&
+                scrapers.isArray() && scrapers.toArray().size() <= 384 &&
+                roots.isArray() && roots.toArray().size() <= 128;
+        for (const auto& value : sources.toArray())
+        {
+            const auto row = value.toObject();
+            valid = valid && row["name"].isString() && row["name"].toString().size() <= 160 &&
+                    row["path"].isString() && row["path"].toString().size() <= 4096 && row["editable"].isBool();
+        }
+        for (const auto& value : scrapers.toArray())
+        {
+            const auto row = value.toObject();
+            valid = valid && row["id"].isString() && row["id"].toString().size() <= 160 &&
+                    row["name"].isString() && row["name"].toString().size() <= 160 &&
+                    QStringList{"movies", "tvshows", "musicvideos"}.contains(row["content"].toString());
+        }
+        for (const auto& value : roots.toArray())
+            valid = valid && value.isString() && value.toString().startsWith('/') && value.toString().size() <= 4096;
+        if (stage == 24)
+            valid = valid && result.value("applied").toBool();
+        if (valid)
+        {
+            m_librarySources = sources.toArray().toVariantList();
+            m_sourceScrapers = scrapers.toArray().toVariantList();
+            m_sourceRoots.clear();
+            for (const auto& value : roots.toArray())
+                m_sourceRoots.append(value.toString());
+            m_sourceStatus = stage == 24
+                ? "Kodi source settings saved. Scan the library when ready; files and watched/resume state were not changed."
+                : "Choose a source or add an allowed local media folder. Existing remote/multipath sources are preserved.";
+        }
+    }
+    if (!valid)
+    {
+        m_sourcePreviewReady = false;
+        m_sourceStatus = "Invalid source response. Refresh before retrying.";
+    }
+    if (valid && stage == 24)
+        emit sourceApplied();
+    emit changed();
+    return valid;
+}
+
 void
 KodiMedia::consume()
 {
@@ -66,7 +141,7 @@ KodiMedia::consume()
     auto it = stageHandlers.constFind(m_stage);
     if (it != stageHandlers.cend())
     {
-        (this->*it)(result);
+        (this->*it.value())(result);
         return;
     }
     handleLibraryListResponse(result);
@@ -391,8 +466,10 @@ KodiMedia::handlePlaylistResponse(const QJsonObject& result)
     const auto array = rows.isArray() ? rows.toArray() : QJsonArray{};
     const bool valid = validatePlaylistRows(array, stage) &&
                        (stage != 18 || !array.isEmpty()) &&
-                       (stage != 17 || result["total"].isDouble() &&
-                        result["total"].toDouble() >= array.size() && result["total"].toDouble() <= 10000000);
+                       (stage != 17 ||
+                        (result["total"].isDouble() &&
+                         result["total"].toDouble() >= double(array.size()) &&
+                         result["total"].toDouble() <= 10000000));
     applyPlaylistResult(result, stage, valid);
     emit changed();
     return true;
@@ -704,6 +781,7 @@ KodiMedia::handleAdjacentTitle(const QJsonObject& result, const QString& state)
 void
 KodiMedia::handlePlaybackEnded(const QJsonObject& result, const QString& state)
 {
+    Q_UNUSED(result);
     if (state == "ended" && !m_scheduledPlayback)
     {
         const auto generation = m_generation;
@@ -961,7 +1039,7 @@ KodiMedia::handleLibraryListResponse(const QJsonObject& result)
         return true;
     }
     m_pageStart = m_requestedStart;
-    m_pageCount = entries.size();
+    m_pageCount = static_cast<int>(entries.size());
     m_totalMovies = total;
     const auto defaultType = resolveDefaultType();
     QVariantList normalized;
@@ -1066,8 +1144,8 @@ KodiMedia::processHistoryLibraryResults(QVariantList& normalized)
     normalized = sortedHistory(m_recentResults, m_historyLimit);
     m_recentResults.clear();
     m_pageStart = 0;
-    m_pageCount = normalized.size();
-    m_totalMovies = normalized.size();
+    m_pageCount = static_cast<int>(normalized.size());
+    m_totalMovies = static_cast<int>(normalized.size());
     return false;
 }
 
