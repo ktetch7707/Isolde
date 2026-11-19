@@ -2840,7 +2840,8 @@ ComponentSchema::component(const QVariantMap& input, bool legacy, QString* error
                                                   "customLogo", "widgetType", "family",
                                                   "appCollection", "appId", "opacity",
                                                   "categoryId", "parentId", "children",
-                                                  "animateArtwork"};
+                                                  "animateArtwork", "hidden", "locked",
+                                                  "showTitle", "showType", "showLogo", "logoFill"};
     for (auto it = input.constBegin(); it != input.constEnd(); ++it)
         if (!validComponentKeys.contains(it.key()))
             return reject(error, "Component contains unknown fields.");
