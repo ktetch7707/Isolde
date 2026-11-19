@@ -18,6 +18,10 @@ bool
 integer(const QVariant& v, qint64 low, qint64 high);
 bool
 text(const QVariant& v, int limit, bool empty = false);
+bool
+isValidText(const QString& s, bool empty, int limit);
+bool
+validateCompoundRule(const QVariantMap& v, int depth, int& count);
 using ::reject;
 
 bool
@@ -101,6 +105,10 @@ scheduleBlocksOverlap(const QVariantMap& bi, const QVariantMap& bj, const QSet<i
 bool validateScheduleBlockFields(const QVariantMap& b, QString* error);
 bool validateScheduleBlockDays(const QVariantMap& b, QString* error);
 bool validateScheduleBlockDates(const QVariantMap& b, QString* error);
+bool validateRuleLeafValue(const QVariant& value, bool numeric, const QString& op);
+bool validateRuleLeafComparison(const QVariant& value, bool numeric, const QString& op);
+bool validateLocalChannelCore(const QVariantMap& v, QString* error);
+bool validateLocalChannelOptions(const QVariantMap& v, QString* error);
 
 bool GuideRules::validateChannelScheduleBlocks(const QVariantList& blocks, QString* error)
 {
@@ -120,14 +128,15 @@ bool GuideRules::validateChannelScheduleBlocks(const QVariantList& blocks, QStri
         QSet<int> daysSetI;
         for (const auto& day : daysI)
             daysSetI.insert(day.toInt());
-    for (int j = 0; j < i; ++j)
-    {
-        const auto bj = parsed[j];
-        QSet<int> daysSetJ;
-        for (const auto& day : bj.value("days").toList())
-            daysSetJ.insert(day.toInt());
-        if (scheduleBlocksOverlap(bi, bj, daysSetI, daysSetJ, error))
-            return false;
+        for (int j = 0; j < i; ++j)
+        {
+            const auto bj = parsed[j];
+            QSet<int> daysSetJ;
+            for (const auto& day : bj.value("days").toList())
+                daysSetJ.insert(day.toInt());
+            if (scheduleBlocksOverlap(bi, bj, daysSetI, daysSetJ, error))
+                return false;
+        }
     }
     return true;
 }
@@ -200,7 +209,10 @@ scheduleBlocksOverlap(const QVariantMap& bi, const QVariantMap& bj, const QSet<i
         bi.value("fromDate", "0001-01-01").toString() <=
             bj.value("toDate", "9999-12-31").toString() &&
         bj.value("fromDate", "0001-01-01").toString() <= bi.value("toDate", "9999-12-31").toString())
-        return ::reject(error, "Calendar blocks overlap. Choose different times, days or dates.");
+    {
+        reject(error, "Calendar blocks overlap. Choose different times, days or dates.");
+        return true;
+    }
     return false;
 }
 
@@ -461,6 +473,7 @@ ComponentSchema::guideRule(const QVariantMap& value, QString* error)
         reject(error, "Invalid guide rule. Use known fields/operators, at most 128 rules and eight nested levels.");
         return {};
     }
+    if (error)
         error->clear();
     return value;
 }
@@ -468,11 +481,11 @@ QVariantMap
 ComponentSchema::guideChannel(const QVariantMap& v, QString* error)
 {
     if (!GuideRules::validateChannelSize(v, error))
-        return v;
+        return {};
     if (!GuideRules::validateChannelDescription(v, error))
-        return v;
+        return {};
     if (!GuideRules::validateChannelContent(v, error))
-        return v;
+        return {};
     if (error)
         error->clear();
     return v;
@@ -638,8 +651,20 @@ GuideRules::validateScheduleRules(const QVariantMap& policy, QString* error)
 
 
 bool
+GuideRules::validateSchedulePolicy(const QVariantMap& policy, QString* error)
+{
+    if (!keys(policy, {"blocks", "cooldownSeconds", "fillerRule", "bumperRule"}) ||
+        (policy.contains("cooldownSeconds") && !integer(policy.value("cooldownSeconds"), 0, 7 * 86400)) ||
+        (policy.contains("blocks") && policy.value("blocks").typeId() != QMetaType::QVariantList))
+        return reject(error, "Invalid bounded channel scheduling policy.");
+    return true;
+}
+
+bool
 GuideRules::validateChannelSchedule(const QVariantMap& v, QString* error)
 {
+    if (v.value("schedule").typeId() != QMetaType::QVariantMap)
+        return reject(error, "Invalid bounded channel scheduling policy.");
     const auto policy = v.value("schedule").toMap();
     if (!validateSchedulePolicy(policy, error))
         return false;

@@ -466,6 +466,22 @@ GuideTests::calendarPolicySurvivesDstAndPreservesCommittedSlots()
                             {"startMinute", 60},
                             {"endMinute", 120},
                             {"rule", QVariantMap{{"field", "mediaType"}, {"op", "is"}, {"value", "movie"}}}};
+    auto later = block;
+    later["startMinute"] = 120;
+    later["endMinute"] = 180;
+    auto overlapping = block;
+    overlapping["startMinute"] = 150;
+    overlapping["endMinute"] = 210;
+    QString blockError;
+    QVERIFY(GuideRules::validateChannelScheduleBlocks({}, &blockError));
+    QVERIFY(GuideRules::validateChannelScheduleBlocks({block, later}, &blockError));
+    QVERIFY(!GuideRules::validateChannelScheduleBlocks({block, later, overlapping}, &blockError));
+    QVERIFY(!blockError.isEmpty());
+    QVERIFY(!GuideRules::validateChannelSchedule({{"schedule", "invalid"}}, &blockError));
+    QVERIFY(!GuideRules::validateChannelSchedule(
+        {{"schedule", QVariantMap{{"blocks", "invalid"}}}}, &blockError));
+    QVERIFY(!GuideRules::validateChannelSchedule(
+        {{"schedule", QVariantMap{{"cooldownSeconds", -1}}}}, &blockError));
     def["schedule"] = QVariantMap{{"blocks", QVariantList{block}}, {"cooldownSeconds", 3600}};
     QString error;
     QVERIFY2(!ComponentSchema::guideChannel(def, &error).isEmpty(), qPrintable(error));
