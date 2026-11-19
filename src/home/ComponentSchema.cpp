@@ -2793,9 +2793,17 @@ ComponentSchema::component(const QVariantMap& input, bool legacy, QString* error
     result["componentType"] = type;
     result["size"] = input.value("size", "standard");
     QVariantList normalizedActions;
-    if (input.contains("actions") && type != "clock" && type != "text" && type != "shape" && type != "container")
+    const bool canHaveActions = type != "clock" && type != "text" && type != "shape" && type != "container";
+    if (input.contains("actions") && canHaveActions)
     {
         normalizedActions = actions(input.value("actions").toList(), error);
+        if (normalizedActions.isEmpty())
+            return {};
+        result["actions"] = normalizedActions;
+    }
+    else if (input.contains("action") && canHaveActions)
+    {
+        normalizedActions = actions(QVariantList{input.value("action").toMap()}, error);
         if (normalizedActions.isEmpty())
             return {};
         result["actions"] = normalizedActions;
@@ -2822,11 +2830,7 @@ ComponentSchema::component(const QVariantMap& input, bool legacy, QString* error
     }
     if (source.isEmpty())
         return {};
-    QVariantMap inputSource = input.value("source").toMap();
-    QVariantMap canonicalSource = source;
-    inputSource.remove("schemaVersion");
-    canonicalSource.remove("schemaVersion");
-    if (!legacy && inputSource != canonicalSource)
+    if (!legacy && input.value("source").toMap() != source)
         return reject(error, "Source binding does not match its action.");
     result["source"] = source;
     return result;
