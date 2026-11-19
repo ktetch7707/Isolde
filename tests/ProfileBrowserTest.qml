@@ -1,4 +1,7 @@
-import QtQuick import QtQuick.Window import QtWebEngine import "../qml"
+import QtQuick
+import QtQuick.Window
+import QtWebEngine
+import "../qml"
 
     Window{width : 640;
 height : 480;
