@@ -318,7 +318,8 @@ isSupportedActionType(const QString& type)
                                            QStringLiteral("open-disc"),
                                            QStringLiteral("desktop-mode"),
                                            QStringLiteral("switch-input"),
-                                           QStringLiteral("wait")};
+                                           QStringLiteral("wait"),
+                                           QStringLiteral("run-script")};
     return actionTypes.contains(type);
 }
 
