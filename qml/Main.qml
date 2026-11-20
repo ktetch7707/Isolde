@@ -459,6 +459,7 @@ Window {
                 editComponentId: pageSurface.open ? pageSurface.focusedComponentId : home.focusedItemId
                 onPreviewAmbientRequested: window.ambientActive = true
                 onStoreRequested: window.openStoreFromSettings()
+                onBrowserRequested: appId => { sessionManager.exitCurrent(); Qt.callLater(() => sessionManager.launch(appId)) }
                 onPageRequested:id=>{ sessionManager.goHome(); actionDispatcher.dispatch({type:"open-page",pageId:id},"") }
             }
 

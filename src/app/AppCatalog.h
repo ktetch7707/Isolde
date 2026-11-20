@@ -14,6 +14,8 @@
 #include <QVariantList>
 #include <optional>
 
+class AppCatalogEntry;
+
 class AppCatalog final : public QObject
 {
     Q_OBJECT
@@ -38,6 +40,11 @@ class AppCatalog final : public QObject
 
   public:
     Q_PROPERTY(QString androidContainment READ androidContainment NOTIFY entriesChanged)
+    Q_PROPERTY(QVariantList browserApps READ browserApps NOTIFY entriesChanged)
+    Q_PROPERTY(QString defaultBrowser READ defaultBrowser NOTIFY entriesChanged)
+    QVariantList browserApps() const;
+    QString defaultBrowser() const;
+    Q_INVOKABLE bool setDefaultBrowser(const QString& id);
     QString
     androidContainment() const
     {
@@ -145,12 +152,6 @@ class AppCatalog final : public QObject
     load(const QString& catalogPath = {}, const QString& statePath = {}, const QString& installRoot = {});
     Q_INVOKABLE bool
     install(const QString& id);
-    bool
-    isInstallableEntry(const AppCatalogEntry* entry, const QString& id);
-    bool
-    stagePackageDirectory(const AppCatalogEntry* entry, const QString& id, bool& createdPackage);
-    bool
-    registerAndSaveInstall(const AppCatalogEntry* entry, const QString& id, bool createdPackage);
     Q_INVOKABLE bool
     uninstall(const QString& id);
     Q_INVOKABLE bool
@@ -233,6 +234,15 @@ class AppCatalog final : public QObject
         EntryMetadata meta;
         EntrySetup setup;
     };
+    bool
+    isInstallableEntry(const Entry* entry, const QString& id);
+    // Keep online searches on the provider path shared by browse and search.
+    void
+    beginOnlineSearch(const QString& query);
+    bool
+    stagePackageDirectory(const Entry* entry, const QString& id, bool& createdPackage);
+    bool
+    registerAndSaveInstall(const Entry* entry, const QString& id, bool createdPackage);
     [[nodiscard]] QString
     resolveCatalogPath(const QString& catalogPath) const;
     [[nodiscard]] bool
@@ -265,6 +275,14 @@ class AppCatalog final : public QObject
     loadStateCustomPackages(const QJsonObject& stateObject);
     [[nodiscard]] bool
     loadStateInstalledApps(const QJsonObject& stateObject);
+    bool
+    loadStateStoreTransaction(const QJsonObject& stateObject);
+    bool
+    loadStateUpdatePreferences(const QJsonObject& stateObject);
+    bool
+    loadStateAndroidContainment(const QJsonObject& stateObject);
+    bool
+    isValidAndroidContainment(const QVariant& presentation);
     [[nodiscard]] bool
     parseFdroidEntry(const QJsonObject& data, Entry* entry);
     [[nodiscard]] bool
@@ -315,12 +333,26 @@ class AppCatalog final : public QObject
     findEntry(const QString& id) const;
     bool
     saveState();
+    void
+    abortDownloadOrProcess();
+    void
+    cleanStagingDirectories();
     QString
     resolveFailureReason(const QString& reason);
     void
     setError(const QString& message);
     bool
     androidOperation(const Entry& entry, const QString& operation);
+    void
+    configureAndroidProcess(const Entry& entry, const QString& helper, const QString& profile);
+    void
+    connectAndroidProcessSignals();
+    QString
+    findAndroidHelper() const;
+    QString
+    resolveAndroidProfile() const;
+    void
+    initializeAndroidOperationState(const Entry& entry, const QString& operation, const QString& profile);
     QVariantList
     mergedEntries() const;
     bool
@@ -341,7 +373,7 @@ class AppCatalog final : public QObject
     validBeginDownloadArgs() const;
     bool
     validateArtifactUrl(const QUrl& artifactUrl) const;
-    bool
+    void
     setupDownloadState(const QVariantMap& result, const QString& storeId, bool update);
     bool
     validateDownloadResult(const QVariantMap& result);
@@ -361,6 +393,7 @@ class AppCatalog final : public QObject
     QHash<QString, QString> m_failureReasons;
     QString m_statePath;
     QString m_androidContainment;
+    QString m_defaultBrowser;
     QString m_installRoot;
     QString m_errorString;
     QString m_legacyInstallRoot;

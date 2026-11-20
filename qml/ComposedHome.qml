@@ -275,7 +275,8 @@ Item {
     function activateTab(index) {
         const tab = tabs[index]; if (!tab) return
         focusedTab = index
-        if (tab.action) host.actionActivated(tab.action, "tab-" + tab.id)
+        if (tab.actions && tab.actions.length) host.actionActivated({actions: tab.actions}, "tab-" + tab.id)
+        else if (tab.action) host.actionActivated(tab.action, "tab-" + tab.id)
         else { activeTabId = tab.id; const first = focusEntries()[0]; if (first) host.focusedIndex = host.itemIndex(first.id) }
     }
     function restoreFocus(id) {

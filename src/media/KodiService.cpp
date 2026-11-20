@@ -44,6 +44,8 @@ managedKodiExecutable()
 }
 } // namespace
 
+bool isValidCapabilityItem(const QJsonObject& row);
+
 QVariantList
 KodiService::capabilityInventory() const
 {
@@ -73,7 +75,7 @@ KodiService::capabilityInventory() const
     return items.toVariantList();
 }
 
-static bool
+[[maybe_unused]] bool
 isValidCapabilityItem(const QJsonObject& row)
 {
     const auto id = row["id"].toString();
@@ -154,7 +156,73 @@ KodiService::KodiService(const QString& profile, QObject* parent)
                     m_overlay.reset();
                     emit unavailable("Kodi closed for frontend switching.");
                     if (requested == "folders") {
+                        if (code == 0 && exitStatus == QProcess::NormalExit) {
+                            m_folderEditing = !m_cancelFolderPreparing;
+                            m_folderStatus = m_folderEditing
+                                ? "Ready · Kodi saved and paused safely. Folder access changes stay read-only."
+                                : "Folder editing cancelled. No permissions changed.";
+                            if (m_cancelFolderPreparing && m_resumeAfterFolders && m_enabled)
+                                start();
+                        } else {
+                            m_folderStatus =
+                                "Kodi did not exit cleanly. Folder permissions are unchanged; retry when ready.";
+                        }
+                        emit changed();
+                    } else if (code == 0 && exitStatus == QProcess::NormalExit) {
+                        commitFrontend(requested);
+                    } else {
+                        m_status = "Kodi did not exit normally. Mode unchanged.";
+                        emit changed();
+                    }
+                    return;
+                }
+                if (!m_stopping) {
+                    m_status = "Kodi stopped. Retry to start it again.";
+                    emit unavailable(m_status);
+                    emit changed();
+                }
+                m_lock.reset();
+            });
+}
 
+// Preserve the current mode when Kodi does not complete its clean shutdown.
+void
+KodiService::onModeDeadlineTimeout()
+{
+    if (m_pendingFrontend == "folders")
+        m_folderStatus = "Kodi has not finished saving. Folder permissions are unchanged; stop playback/scanning "
+                         "and press Menu to retry.";
+    m_pendingFrontend.clear();
+    m_status = "Kodi has not exited cleanly. Mode unchanged; no forced shutdown was used. Exit Kodi normally, then retry.";
+    emit changed();
+}
+
+// A rejected quit must leave both the selected frontend and folder grants unchanged.
+void
+KodiService::onModeClientQuitReply(bool accepted)
+{
+    if (!switching() || accepted)
+        return;
+    if (m_pendingFrontend == "folders")
+        m_folderStatus = "Stop playback and wait for scans to finish, then press Menu to retry. Folder permissions "
+                         "are unchanged.";
+    m_modeDeadline.stop();
+    m_pendingFrontend.clear();
+    m_status = "Could not switch safely. Stop playback, wait for scans, and retry. Mode unchanged.";
+    emit changed();
+}
+
+// Bound startup probing so a missing bridge is reported instead of waiting indefinitely.
+void
+KodiService::onProbeTimeout()
+{
+    if (++m_checks > 30)
+    {
+        fail("Kodi did not become ready. Retry or open Kodi directly.");
+        return;
+    }
+    emit probeRequested();
+}
 
 KodiService::~KodiService()
 {
@@ -533,7 +601,7 @@ KodiService::start()
         fail("Cannot prepare Kodi startup files.");
         return;
     }
-    const int separator = plan.arguments.indexOf("--");
+    const int separator = static_cast<int>(plan.arguments.indexOf("--"));
     if (separator < 0)
     {
         fail("Invalid sandbox configuration.");

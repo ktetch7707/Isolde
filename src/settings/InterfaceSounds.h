@@ -5,6 +5,7 @@
 #include <QSet>
 #include <QTemporaryDir>
 #include <QTimer>
+#include <QXmlStreamReader>
 #include <QUrl>
 #include <QVariantList>
 #include <QVariantMap>
@@ -152,9 +153,9 @@ class InterfaceSounds final : public QObject
     static bool
     validWave(const QByteArray& bytes);
     static bool
-    validWaveFormat(const QByteArray& bytes, qsizetype& p, quint32& rate, quint16& frame);
+    validWaveFormat(const QByteArray& bytes, qsizetype p, quint32& rate, quint16& frame);
     static bool
-    validWaveData(const QByteArray& bytes, qsizetype& p, quint32 dataSize, quint16 frame, bool& dataFound);
+    validWaveData(const QByteArray& bytes, qsizetype p, quint32 dataSize, quint16 frame, bool& dataFound);
     static bool
     validWaveFinal(bool dataFound, quint32 dataSize, quint32 rate, quint16 frame);
     static quint16
@@ -174,9 +175,9 @@ class InterfaceSounds final : public QObject
     bool
     prepare(const QString& id);
     bool
-    prepareThemeSounds(const QString& id, QMap<QString, QByteArray>& sounds) const;
+    prepareThemeSounds(const QString& id, QVariantMap& sounds);
     bool
-    prepareEventSounds(const QString& id, const QMap<QString, QByteArray>& sounds,
+    prepareEventSounds(const QString& id, const QVariantMap& sounds,
                        QMap<QString, QUrl>& sources, QMap<QString, int>& durations, QSet<QString>& cacheFiles);
     bool
     createSoundEffects(const QMap<QString, QUrl>& sources);

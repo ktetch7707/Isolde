@@ -1,5 +1,9 @@
 #include "KodiMedia.h"
 
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QSettings>
+
 void
 KodiMedia::savePlaylist(const QString& name)
 {
@@ -37,17 +41,9 @@ KodiMedia::renamePlaylist(const QString& name, const QString& newName)
 }
 
 bool
-canRenamePlaylist(const QString& name, const QString& newName)
+KodiMedia::canRenamePlaylist(const QString& name, const QString& newName) const
 {
     return !m_busy && !m_playbackActive && validPlaylistName(name) && validPlaylistName(newName) && name != newName;
-}
-++m_generation;
-m_busy = true;
-m_stage = 10;
-m_playlistStatus = "Renaming Kodi playlist…";
-emit
-changed();
-request("Isolde.RenamePlaylist", {{"name", name.trimmed()}, {"newName", newName.trimmed()}});
 }
 void
 KodiMedia::deletePlaylist(const QString& name)
@@ -67,7 +63,7 @@ KodiMedia::deletePlaylist(const QString& name)
 }
 
 bool
-canDeletePlaylist(const QString& name)
+KodiMedia::canDeletePlaylist(const QString& name) const
 {
     return !m_busy && !m_playbackActive && validPlaylistName(name);
 }
@@ -178,7 +174,7 @@ KodiMedia::loadPlaylistMembers(const QString& name)
 }
 
 bool
-canLoadPlaylistMembers(const QString& name)
+KodiMedia::canLoadPlaylistMembers(const QString& name) const
 {
     return !m_busy && !m_playbackActive && validPlaylistName(name);
 }
@@ -322,6 +318,7 @@ KodiMedia::playCollectionMovie(const QString& id, int movieId)
 bool
 KodiMedia::canPlayCollectionMovie(const QString& id, int movieId)
 {
+    Q_UNUSED(id);
     return movieId >= 1 && !m_playbackActive && !(m_busy && m_stage != 0 && m_stage != 1);
 }
 void

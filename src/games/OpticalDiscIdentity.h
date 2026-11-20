@@ -11,16 +11,16 @@ class OpticalDiscParse
   public:
     virtual ~OpticalDiscParse() = default;
 
-    virtual QVariantMap
-    parseIsoVolumeDescriptor(const QByteArray& descriptor) = 0;
-    virtual QVariantMap
+    static QVariantMap
+    parseIsoVolumeDescriptor(const QByteArray& descriptor);
+    static QVariantMap
     parseUdfVolumeDescriptors(const QByteArray& anchorDescriptor,
                               const QByteArray& volumeDescriptors,
-                              quint32 sequenceLocation) = 0;
-    virtual QVariantMap
+                              quint32 sequenceLocation);
+    static QVariantMap
     descriptorForFilesystem(const QString& filesystem,
                             const QVariantMap& iso9660Descriptor,
-                            const QVariantMap& udfDescriptor) = 0;
+                            const QVariantMap& udfDescriptor);
 };
 
 class OpticalDiscIdentify
@@ -28,16 +28,16 @@ class OpticalDiscIdentify
   public:
     virtual ~OpticalDiscIdentify() = default;
 
-    virtual QVariantMap
-    identityForDevice(const QString& device) = 0;
-    virtual QVariantMap
-    identityForContent(QVariantMap descriptor, const QString& contentId) = 0;
-    virtual QString
-    rootReference(const QVariantMap& disc) = 0;
-    virtual bool
-    isRootReference(const QString& root) = 0;
-    virtual QString
-    mediaIdFromRoot(const QString& root) = 0;
+    static QVariantMap
+    identityForDevice(const QString& device);
+    static QVariantMap
+    identityForContent(QVariantMap descriptor, const QString& contentId);
+    static QString
+    rootReference(const QVariantMap& disc);
+    static bool
+    isRootReference(const QString& root);
+    static QString
+    mediaIdFromRoot(const QString& root);
 };
 
 class OpticalDiscClassify
@@ -45,18 +45,18 @@ class OpticalDiscClassify
   public:
     virtual ~OpticalDiscClassify() = default;
 
-    virtual QVariantMap
-    currentMedia(const QString& mediaId) = 0;
-    virtual QVariantMap
-    resolveRootReference(const QString& root) = 0;
-    virtual QVariantMap
-    classifyRootReference(const QString& root, const QVariantList& currentDiscs) = 0;
-    virtual QVariantMap
+    static QVariantMap
+    currentMedia(const QString& mediaId);
+    static QVariantMap
+    resolveRootReference(const QString& root);
+    static QVariantMap
+    classifyRootReference(const QString& root, const QVariantList& currentDiscs);
+    static QVariantMap
     classifySession(const QString& reference,
                     const QString& pinnedRoot,
                     bool approved,
                     const QVariantList& currentDiscs,
-                    const QString& pinnedObservation = {}) = 0;
+                    const QString& pinnedObservation = {});
 };
 
 class OpticalDiscHash
@@ -64,13 +64,11 @@ class OpticalDiscHash
   public:
     virtual ~OpticalDiscHash() = default;
 
-    virtual QVariantList
-    mountedDiscs() = 0;
-    virtual QVariantMap
-    contentIdentity(const QString& device) = 0;
-    virtual QByteArray
-    hashContent(QIODevice* input, quint64 size) = 0;
-    virtual QString
+    static QVariantList
+    mountedDiscs();
+    static QByteArray
+    hashContent(QIODevice* input, quint64 size);
+    static QString
     mountObservationId(const QString& device,
                        const QString& filesystem,
                        const QString& label,
@@ -78,7 +76,7 @@ class OpticalDiscHash
                        const QString& sequence,
                        const QString& hashState,
                        const QString& mediaId,
-                       const QString& mountInstance) = 0;
+                       const QString& mountInstance);
 };
 
 class OpticalDiscProbe
@@ -86,12 +84,12 @@ class OpticalDiscProbe
   public:
     virtual ~OpticalDiscProbe() = default;
 
-    virtual QVariantMap
-    classifyRevalidation(const QString& observationId, const QString& device, const QVariantList& currentDiscs) = 0;
-    virtual QVariantMap
-    revalidate(const QString& observationId, const QString& device) = 0;
-    virtual void
-    retryIdentity(const QString& device) = 0;
-    virtual QVariantMap
-    deviceDiagnostics(const QString& device) = 0;
+    static QVariantMap
+    classifyRevalidation(const QString& observationId, const QString& device, const QVariantList& currentDiscs);
+    static QVariantMap
+    revalidate(const QString& observationId, const QString& device);
+    static void
+    retryIdentity(const QString& device);
+    static QVariantMap
+    deviceDiagnostics(const QString& device);
 };

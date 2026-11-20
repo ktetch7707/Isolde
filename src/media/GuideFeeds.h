@@ -187,7 +187,7 @@ parseM3UPlaylist(const QString& playlist, const QString& instance, qint64 refres
         if (station.size() > 160 || ids.contains(station))
             return false;
         ids.insert(station);
-        int number = entries.size() + 1;
+        int number = static_cast<int>(entries.size()) + 1;
         if (pending.contains("tvg-shift"))
             return false;
         if (pending.contains("tvg-chno"))

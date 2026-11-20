@@ -2,6 +2,10 @@
 #include <QFileInfo>
 #include "CompatibilityRuntime.h"
 
+bool isWineAvailable(const QFileInfo& candidate);
+bool isWineBinaryValid(const QFileInfo& candidate);
+bool isPathSecure(const QFileInfo& path);
+
 QVariantMap
 CompatibilityRuntime::classify(bool present, bool trusted)
 {
@@ -46,8 +50,6 @@ isWineAvailable(const QFileInfo& candidate)
     return candidate.exists() || candidate.isSymLink();
 }
 
-namespace
-{
 bool
 isWineBinaryValid(const QFileInfo& candidate)
 {
@@ -66,4 +68,3 @@ isPathSecure(const QFileInfo& path)
     }
     return true;
 }
-} // namespace

@@ -525,7 +525,7 @@ class KodiMedia final : public QObject
     handlePlaybackPlayingState(const QJsonObject& result, const QString& state);
     bool
     handlePlaybackStoppedState(const QJsonObject& result, const QString& state);
-    void
+    bool
     handleAdjacentTitle(const QJsonObject& result, const QString& state);
     void
     handlePlaybackEnded(const QJsonObject& result, const QString& state);
@@ -570,10 +570,22 @@ class KodiMedia final : public QObject
     failSubtitle(const QString& message, bool forceDisconnect);
     void
     failPlaylist(const QString& message);
+    bool
+    canPlayCollectionMovie(const QString& id, int movieId);
     void
     failScan(const QString& message);
     void
     failRestoreHistory();
+    bool
+    canDeletePlaylist(const QString& name) const;
+    bool
+    canLoadPlaylistMembers(const QString& name) const;
+    bool
+    canRenamePlaylist(const QString& name, const QString& newName) const;
+    bool
+    canPreviewSource() const;
+    bool
+    validateHistoryCount(int count) const;
     void
     releaseSocket();
     void

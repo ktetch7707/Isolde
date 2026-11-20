@@ -147,7 +147,7 @@ QtVideoCaptureAdapter::stop()
 }
 
 QObject*
-QtVideoCaptureAdapter::audioContext() override
+QtVideoCaptureAdapter::audioContext()
 {
     return &m_session;
 }

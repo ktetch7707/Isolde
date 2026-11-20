@@ -56,8 +56,8 @@ Before VM actions, read `docs/vm-oracle.md`. Use `tools/vm-test.ps1` for Test/Vi
     - No new dependencies, frameworks, or side services without task scope. Reuse `HomeLayout/ComponentSchema/HomePages/HomeSkins/PageData/ActionDispatcher`, `KodiMedia/KodiShelves/KodiService`, `InputManager`, `SessionManager`.
 12. Committing:
     - One logical change per commit, prefixed with the task ID: `T05: description`.
-    - Branch: always commit to `agent-backlog-progress` (not `main`).
-    - After committing, push to `origin agent-backlog-progress` and verify: `git log -1 --oneline && git status`.
+    - Branch: commit on the current or user-requested branch, except `main`.
+    - After committing, push that branch to `origin` and verify with `git log -1 --oneline` and `git status`.
     - Do not commit to `main`; it is the archived baseline.
     - Never include build artifacts, IDE files, or binary artwork in commits.
     - Keep commit messages short but descriptive; reference docs/task if relevant.
@@ -67,3 +67,7 @@ Before VM actions, read `docs/vm-oracle.md`. Use `tools/vm-test.ps1` for Test/Vi
 68:     - EVERY function MUST have a comment explaining what it does and why it exists.
 69:     - Comments must explain intent and rationale, not just restate the code.
 70:     - Document the "why" behind each function, not just the "what."
+
+14. Restore consent (user revision 2026-11-18):
+    - NEVER restore a previous version of any file (git checkout/restore/revert) without explicit human consent for that specific file.
+    - Keep the refactoring done; fix problems properly rather than undoing changes.

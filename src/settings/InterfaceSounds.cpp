@@ -141,9 +141,11 @@ InterfaceSounds::validOptions(const QVariantMap& options)
         return false;
     if (!validateTones(options.value("tones").toMap()))
         return false;
-    if (!validateEvents(options.value("events").toList(), options.value("tones").toMap()))
+    if (options.value("events").metaType().id() != QMetaType::QVariantList ||
+        !validateEvents(options.value("events").toList(), options.value("tones").toMap()))
         return false;
-    return validateFields(options.value("fields").toList());
+    return options.value("fields").metaType().id() == QMetaType::QVariantList &&
+           validateFields(options.value("fields").toList());
 }
 
 bool
@@ -174,7 +176,7 @@ InterfaceSounds::validateTones(const QVariantMap& tones)
 bool
 InterfaceSounds::validateEvents(const QVariantList& events, const QVariantMap& tones)
 {
-    if (events.metaType().id() != QMetaType::QVariantList || events.size() != Events.size())
+    if (events.size() != Events.size())
         return false;
     QSet<QString> ids;
     for (const auto& value : events)
@@ -218,7 +220,7 @@ InterfaceSounds::validateFields(const QVariantList& fields)
 {
     const QSet<QString> fieldSet{"enabled", "theme", "volume", "duringPlayback", "preview", "refresh"};
     QSet<QString> seen;
-    if (fields.metaType().id() != QMetaType::QVariantList || fields.size() != fieldSet.size())
+    if (fields.size() != fieldSet.size())
         return false;
     for (const auto& value : fields)
     {
@@ -241,7 +243,7 @@ InterfaceSounds::validWave(const QByteArray& bytes)
         return false;
     quint32 rate = 0, dataSize = 0;
     quint16 frame = 0;
-    bool dataFound = false;
+    bool dataFound = false, formatFound = false;
     qsizetype p = 12;
     while (p + 8 <= bytes.size())
     {
@@ -251,8 +253,9 @@ InterfaceSounds::validWave(const QByteArray& bytes)
             return false;
         if (bytes.mid(p, 4) == "fmt ")
         {
-            if (!validWaveFormat(bytes, start, rate, frame))
+            if (formatFound || !validWaveFormat(bytes, start, rate, frame))
                 return false;
+            formatFound = true;
         }
         else if (bytes.mid(p, 4) == "data")
         {
@@ -265,7 +268,7 @@ InterfaceSounds::validWave(const QByteArray& bytes)
         if (p > bytes.size())
             return false;
         if (p == bytes.size())
-            return validWaveFinal(dataFound, dataSize, rate, frame);
+            return formatFound && validWaveFinal(dataFound, dataSize, rate, frame);
     }
     return false;
 }
@@ -291,7 +294,7 @@ InterfaceSounds::validWaveData(const QByteArray& bytes, qsizetype start, quint32
     Q_UNUSED(bytes);
     Q_UNUSED(start);
     Q_UNUSED(frame);
-    if (size == 0)
+    if (dataFound || size == 0)
         return false;
     dataFound = true;
     return true;
@@ -388,6 +391,9 @@ InterfaceSounds::findSoundResourceExtension(const QByteArray& addon, QString* er
         return false;
     };
     QXmlStreamReader manifest(addon);
+    // Step into the manifest root before inspecting its extension children.
+    if (!manifest.readNextStartElement() || manifest.name() != QLatin1String("addon"))
+        return fail("Expected a Kodi sound resource add-on.");
     bool soundResource = false;
     while (manifest.readNextStartElement())
     {
@@ -810,12 +816,12 @@ InterfaceSounds::prepare(const QString& id)
         else
             ++it;
     }
-    QMap<QString, QByteArray> sounds;
+    QVariantMap sounds;
     if (id != Soft && !prepareThemeSounds(id, sounds))
         return false;
     QMap<QString, QUrl> sources;
     QMap<QString, int> durations;
-    QSet<QString> cacheFiles;
+    QSet<QString> cacheFiles = m_cacheFiles;
     if (!prepareEventSounds(id, sounds, sources, durations, cacheFiles))
         return false;
     m_cacheFiles = cacheFiles;
@@ -831,7 +837,7 @@ InterfaceSounds::prepare(const QString& id)
 }
 
 bool
-InterfaceSounds::prepareThemeSounds(const QString& id, QMap<QString, QByteArray>& sounds) const
+InterfaceSounds::prepareThemeSounds(const QString& id, QVariantMap& sounds)
 {
     if (!m_themePaths.contains(id))
     {
@@ -850,7 +856,7 @@ InterfaceSounds::prepareThemeSounds(const QString& id, QMap<QString, QByteArray>
 }
 
 bool
-InterfaceSounds::prepareEventSounds(const QString& id, const QMap<QString, QByteArray>& sounds,
+InterfaceSounds::prepareEventSounds(const QString& id, const QVariantMap& sounds,
                                     QMap<QString, QUrl>& sources, QMap<QString, int>& durations,
                                     QSet<QString>& cacheFiles)
 {
@@ -887,6 +893,7 @@ InterfaceSounds::prepareEventSounds(const QString& id, const QMap<QString, QByte
                 return false;
             }
             m_cacheFiles.insert(path);
+            cacheFiles.insert(path);
         }
         sources[key] = QUrl::fromLocalFile(path);
     }
@@ -923,7 +930,7 @@ InterfaceSounds::createSoundEffects(const QMap<QString, QUrl>& sources)
                         if (!quiet() && m_lastCue.isValid() && m_lastCue.elapsed() <= 150)
                         {
                             m_playing = effect;
-                            effect->setVolume(m_volume / 100.0);
+                            effect->setVolume(static_cast<float>(m_volume) / 100.0f);
                             effect->play();
                         }
                     }
@@ -972,7 +979,7 @@ InterfaceSounds::request(const QString& event, bool preview)
     if (effect->status() == QSoundEffect::Ready)
     {
         m_playing = effect;
-        effect->setVolume(m_volume / 100.0);
+        effect->setVolume(static_cast<float>(m_volume) / 100.0f);
         effect->play();
     }
     else if (effect->status() == QSoundEffect::Loading)

@@ -46,12 +46,23 @@ class AppRegistry final : public QObject
     resolveConfigPath(const QString& path, const QString& defaultName, const QString& resourceName);
     bool
     loadFromFile(const QString& resolvedPath);
+    // Resolve only local icon metadata so app discovery never executes desktop entries.
+    QString
+    appIcon(const AppDefinition& app, int role = 0);
+    QString
+    resolveAppIconName(const AppDefinition& app, const QRegularExpression& desktopName);
     bool
     resolvePackagedIcon(const AppDefinition& app, int role, QIcon& icon);
     bool
     resolveAbsolutePathIcon(const QString& name, QIcon& icon);
     bool
     resolveThemeIcon(const QString& name, const QStringList& roots, QIcon& icon);
+    bool
+    validateAppEntryOrigin(AppDefinition& app, const QJsonObject& object);
+    bool
+    validateAppEntryFields(AppDefinition& app, const QJsonObject& object);
+    bool
+    validateAppEntry(const QJsonValue& value, QVector<AppDefinition>& loaded, QSet<QString>& ids);
     bool
     finalizeIconImage(const QIcon& icon, const QString& packaged, int role, QByteArray& bytes);
     static bool

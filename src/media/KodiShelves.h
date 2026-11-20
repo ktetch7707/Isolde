@@ -29,6 +29,7 @@ class KodiShelves final : public QObject
     changed();
 
   private:
+    struct Shelf;
     void
     rebuild();
     void

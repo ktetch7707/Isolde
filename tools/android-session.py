@@ -1,4 +1,4 @@
-#!/ usr / bin / env python3
+#!/usr/bin/env python3
 """Exclusive profile-owned Android app session; no root or global stop command."""
 import argparse
 import fcntl
@@ -59,102 +59,98 @@ def presentation_mode(activation):
 def start_compositor(env, runtime, root, runner=subprocess.Popen):
     executable=Path('/usr/bin/weston')
     for path in (executable,*executable.parents):
-        try:info
-    = path.stat() except FileNotFoundError
-        : raise RuntimeError(
-              'Android fullscreen support is missing. Use Store actions > Set up / repair Android.') if path
-              .is_symlink() or
-      info.st_uid != 0 or
-      info.st_mode & 0o022 : raise ValueError('Android fullscreen support must be root-owned and protected') name =
-          'isolde-android-' + uuid.uuid4().hex socket_path = runtime / name log =
-                                                                 tempfile.TemporaryFile() child =
-                                                                     runner(
-                                                                         [
-                                                                             str(executable),
-                                                                             '--backend=wayland',
-                                                                             '--shell=kiosk-shell.so',
-                                                                             '--fullscreen',
-                                                                             '--no-config',
-                                                                             '--idle-time=0',
-                                                                             '--socket=' +
-                                                                             name
-                                                                         ],
-                                                                         env = env,
-                                                                         stdout = log,
-                                                                         stderr = log) try
-        : deadline
-        = time.monotonic() + 20 while time.monotonic() < deadline : check_stop() if child
-                                                                        .poll() is not None
-            : raise RuntimeError('Android fullscreen display could not start. Return Home and retry.') if log.tell() >
-          1024 * *2
-            : raise RuntimeError('Android fullscreen display exceeded its diagnostic limit') if socket_path.exists()
-            : info = socket_path.lstat() if not stat.S_ISSOCK(info.st_mode) or info.st_uid != os.getuid()
-            : raise ValueError('Android fullscreen display socket is unsafe')
-                  emit('containment', mode = 'fullscreen', backend = 'owned-wayland-kiosk', owned = True) return child,
-              log,
-              name time.sleep(.1) raise RuntimeError(
-                  'Android fullscreen display did not become ready. Return Home and retry.') except BaseException : try
-            : log
-            .seek(0) fd, diagnostic = tempfile.mkstemp(prefix = 'compositor-error-',
-                                                       dir = root) with os.fdopen(fd, 'wb') as stream
-                : stream.write(log.read(65536));
-stream.flush();
-os.fsync(stream.fileno()) os
-    .replace(diagnostic, root / 'containment-error.log') finally : stop_compositor(child, log) raise
+        try:info=path.stat()
+        except FileNotFoundError:raise RuntimeError('Android fullscreen support is missing. Use Store actions > Set up / repair Android.')
+        if path.is_symlink() or info.st_uid!=0 or info.st_mode & 0o022:raise ValueError('Android fullscreen support must be root-owned and protected')
+    name='isolde-android-'+uuid.uuid4().hex
+    socket_path=runtime/name
+    log=tempfile.TemporaryFile()
+    child=runner([str(executable),'--backend=wayland','--shell=kiosk-shell.so','--fullscreen','--no-config','--idle-time=0','--socket='+name],env=env,stdout=log,stderr=log)
+    try:
+        deadline=time.monotonic()+20
+        while time.monotonic()<deadline:
+            check_stop()
+            if child.poll() is not None:raise RuntimeError('Android fullscreen display could not start. Return Home and retry.')
+            if log.tell()>1024**2:raise RuntimeError('Android fullscreen display exceeded its diagnostic limit')
+            if socket_path.exists():
+                info=socket_path.lstat()
+                if not stat.S_ISSOCK(info.st_mode) or info.st_uid!=os.getuid():raise ValueError('Android fullscreen display socket is unsafe')
+                emit('containment',mode='fullscreen',backend='owned-wayland-kiosk',owned=True)
+                return child,log,name
+            time.sleep(.1)
+        raise RuntimeError('Android fullscreen display did not become ready. Return Home and retry.')
+    except BaseException:
+        try:
+            log.seek(0)
+            fd,diagnostic=tempfile.mkstemp(prefix='compositor-error-',dir=root)
+            with os.fdopen(fd,'wb') as stream:stream.write(log.read(65536));stream.flush();os.fsync(stream.fileno())
+            os.replace(diagnostic,root/'containment-error.log')
+        finally:stop_compositor(child,log)
+        raise
 
-                                                                   def stop_compositor(child, log)
-    : if child.poll() is None : child.terminate() try : child
-    .wait(timeout = 5) except subprocess.TimeoutExpired : child.kill();
-child.wait(timeout = 3) log.close()
 
-            def profile_root(profile, config, data)
-    : if profile
-        != "default" and
-    not re.fullmatch(r "[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}", profile)
-    : raise ValueError("Invalid Android profile identity.") selection =
-    config / "Isolde/profiles.json" if selection.is_symlink() or (selection.exists() and
-                                                                  selection.stat().st_size > 1024 * 1024)
-    : raise ValueError("Invalid profile selection document.") if selection
-          .exists() and json.loads(selection.read_text()).get("active", "default") != profile
-    : raise ValueError("The selected Isolde profile changed. Return Home and try again.") parent =
-        data / "Isolde/android-profiles" private_directory(parent) root =
-            parent / profile private_directory(root) return root
+def stop_compositor(child,log):
+    if child.poll() is None:
+        child.terminate()
+        try:child.wait(timeout=5)
+        except subprocess.TimeoutExpired:child.kill();child.wait(timeout=3)
+    log.close()
 
-            def owned(session, pid, data)
-    : return (str(session.get("pid")) == str(pid) and str(session.get("user_id")) == str(os.getuid()) and
-              str(session.get("waydroid_data")) == str(data))
 
-          def save_packages(path, packages)
-    : fd,
-                                                            temporary = tempfile.mkstemp(prefix = ".packages-",
-                                                                                         dir = path.parent) try
-    : with os
-    .fdopen(fd, "w") as stream : json.dump(packages, stream);
-stream.flush();
-os.fsync(stream.fileno()) os.replace(temporary, path) directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY) try
-    : os
-    .fsync(directory) finally : os.close(directory) finally : Path(temporary)
-                                                                  .unlink(missing_ok = True)
+def profile_root(profile, config, data):
+    if profile != "default" and not re.fullmatch(r"[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}", profile):
+        raise ValueError("Invalid Android profile identity.")
+    selection = config/"Isolde/profiles.json"
+    if selection.is_symlink() or (selection.exists() and selection.stat().st_size > 1024*1024):
+        raise ValueError("Invalid profile selection document.")
+    if selection.exists() and json.loads(selection.read_text()).get("active", "default") != profile:
+        raise ValueError("The selected Isolde profile changed. Return Home and try again.")
+    parent = data/"Isolde/android-profiles"
+    private_directory(parent)
+    root = parent/profile
+    private_directory(root)
+    return root
 
-                                                                      def command(env, *args, timeout = 60)
-        : check_stop() with tempfile.TemporaryFile() as output
-        : child = subprocess.Popen([ "/usr/bin/waydroid", "--details-to-stdout", *args ],
-                                   env = env,
-                                   stdout = output,
-                                   stderr = subprocess.STDOUT) deadline = time.monotonic() + timeout try:
-        while
-            child.poll() is None : check_stop() if time.monotonic() > deadline
-                : raise
-                  RuntimeError("Android did not respond in time. Return Home and retry.") if output.tell() > 1024 * 1024
-                : raise RuntimeError("Android returned too much diagnostic data.") time.sleep(.1) if child
-                      .returncode
-                : raise RuntimeError(
-                          "Android could not complete the requested operation. Return Home and retry.") output.seek(0);
-raw = output.read(1024 * 1024 + 1) if len (raw) > 1024 * 1024
-    : raise RuntimeError("Android returned too much diagnostic data.") return raw
-          .decode(errors = "replace") finally : if child.poll() is None : child.terminate() try
-    : child
-    .wait(timeout = 3) except subprocess.TimeoutExpired : child.kill(); child.wait(timeout=3)
+
+def owned(session, pid, data):
+    return (str(session.get("pid")) == str(pid) and str(session.get("user_id")) == str(os.getuid())
+            and str(session.get("waydroid_data")) == str(data))
+
+
+def save_packages(path, packages):
+    fd, temporary = tempfile.mkstemp(prefix=".packages-", dir=path.parent)
+    try:
+        with os.fdopen(fd, "w") as stream:
+            json.dump(packages, stream); stream.flush(); os.fsync(stream.fileno())
+        os.replace(temporary, path)
+        directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+        try: os.fsync(directory)
+        finally: os.close(directory)
+    finally:
+        Path(temporary).unlink(missing_ok=True)
+
+
+def command(env, *args, timeout=60):
+    check_stop()
+    with tempfile.TemporaryFile() as output:
+        child = subprocess.Popen(["/usr/bin/waydroid", "--details-to-stdout", *args], env=env,
+                                 stdout=output, stderr=subprocess.STDOUT)
+        deadline = time.monotonic()+timeout
+        try:
+            while child.poll() is None:
+                check_stop()
+                if time.monotonic() > deadline: raise RuntimeError("Android did not respond in time. Return Home and retry.")
+                if output.tell() > 1024*1024: raise RuntimeError("Android returned too much diagnostic data.")
+                time.sleep(.1)
+            if child.returncode: raise RuntimeError("Android could not complete the requested operation. Return Home and retry.")
+            output.seek(0); raw = output.read(1024*1024+1)
+            if len(raw) > 1024*1024: raise RuntimeError("Android returned too much diagnostic data.")
+            return raw.decode(errors="replace")
+        finally:
+            if child.poll() is None:
+                child.terminate()
+                try: child.wait(timeout=3)
+                except subprocess.TimeoutExpired: child.kill(); child.wait(timeout=3)
 
 
 def store_package(app_id, version, profile, data_home):
@@ -183,19 +179,25 @@ def store_package(app_id, version, profile, data_home):
 def package_tool(arguments):
     with tempfile.TemporaryFile() as output:
         try:
-            child
-    = subprocess.Popen(arguments, stdout = output, stderr = subprocess.STDOUT) except OSError as error
-        : raise RuntimeError("Android verification tools are missing. Use Store actions > Set up / repair Android.")
-              from error deadline = time.monotonic() + 30 try:
-        while
-            child.poll() is None : check_stop() if time.monotonic() > deadline or output.tell() > 1024 * *2
-                : raise RuntimeError("Android signature/metadata verification exceeded its time or output limit") time
-                      .sleep(.1) output.seek(0);
-data = output.read(1024 * *2 + 1) if child.returncode or len(data) > 1024 * *2
-    : raise RuntimeError("Android package signature or metadata verification failed") return data finally
-    : if child.poll() is None : child.terminate() try
-    : child
-    .wait(timeout = 3) except subprocess.TimeoutExpired : child.kill(); child.wait(timeout=3)
+            child=subprocess.Popen(arguments,stdout=output,stderr=subprocess.STDOUT)
+        except OSError as error:
+            raise RuntimeError("Android verification tools are missing. Use Store actions > Set up / repair Android.") from error
+        deadline=time.monotonic()+30
+        try:
+            while child.poll() is None:
+                check_stop()
+                if time.monotonic()>deadline or output.tell()>1024**2:
+                    raise RuntimeError("Android signature/metadata verification exceeded its time or output limit")
+                time.sleep(.1)
+            output.seek(0);data=output.read(1024**2+1)
+            if child.returncode or len(data)>1024**2:
+                raise RuntimeError("Android package signature or metadata verification failed")
+            return data
+        finally:
+            if child.poll() is None:
+                child.terminate()
+                try: child.wait(timeout=3)
+                except subprocess.TimeoutExpired: child.kill(); child.wait(timeout=3)
 
 
 def validate_store_apk(apk, app, version):
@@ -223,7 +225,7 @@ def installed_artifact(data, expected, package=None):
             if not child.is_symlink() and child.is_dir() and (package is None or child.name.startswith(package+"-")): candidates.append(child/"base.apk")
     for path in candidates:
         try:
-    if path.is_symlink() or not path.is_file() or not 0<path.stat().st_size<=128*1024**2: continue
+            if path.is_symlink() or not path.is_file() or not 0<path.stat().st_size<=128*1024**2: continue
             digest=hashlib.sha256()
             with path.open("rb") as stream:
                 for block in iter(lambda:stream.read(65536),b""): digest.update(block)
@@ -312,34 +314,27 @@ def main():
     fd = os.open(runtime/"isolde-android.lock", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
     if os.fstat(fd).st_uid != os.getuid(): raise RuntimeError("Invalid Android session lock.")
     lock = os.fdopen(fd, "w")
-    try: fcntl
-        .flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB) except BlockingIOError
-            : raise RuntimeError("Another Android app is active. Return Home before switching.") import dbus manager =
-            dbus.Interface(dbus.SystemBus().get_object("id.waydro.Container", "/ContainerManager"),
-                           "id.waydro.ContainerManager") def session()
-            : return dict(manager.GetSession(timeout = 5)) if session () or
-            dbus.SessionBus().name_has_owner("id.waydro.Session")
-            : raise RuntimeError(
-                  "Another Android session is running. Close it before launching this profile's app.") config_home =
-                Path(os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config"))) data_home =
-                    Path(os.environ.get("XDG_DATA_HOME", str(Path.home() / ".local/share"))) root =
-                        profile_root(args.profile, config_home, data_home) activation =
-                            config_home / "Isolde/profiles" / args.profile / "installed-apps.json" transaction_spec =
-                                importlib.util.spec_from_file_location(
-                                    "android_transaction",
-                                    Path(__file__).with_name("android-store-transaction.py")) transaction =
-                                    importlib.util.module_from_spec(transaction_spec);
-transaction_spec.loader.exec_module(transaction) transaction
-    .recover(root, activation) #Recover compatibility snapshots from earlier releases.if (root / ".store-recovery")
-    .exists()
-    : administrator_transaction("recover", root, activation, args.profile) token =
-    administrator_transaction("prepare", root, activation, args.profile)
-        .get("token") if args.transaction else None package_receipt =
-        root / "packages.json" if package_receipt.is_symlink() or
-        (package_receipt.exists() and package_receipt.stat().st_size > 65536)
-    : raise RuntimeError("Invalid Android profile package receipt.") packages =
-            json.loads(package_receipt.read_text()) if package_receipt.exists() else {}
-if not isinstance (packages, dict): raise RuntimeError("Invalid Android profile package receipt.")
+    try: fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError: raise RuntimeError("Another Android app is active. Return Home before switching.")
+    import dbus
+    manager = dbus.Interface(dbus.SystemBus().get_object("id.waydro.Container", "/ContainerManager"), "id.waydro.ContainerManager")
+    def session(): return dict(manager.GetSession(timeout=5))
+    if session() or dbus.SessionBus().name_has_owner("id.waydro.Session"):
+        raise RuntimeError("Another Android session is running. Close it before launching this profile's app.")
+    config_home = Path(os.environ.get("XDG_CONFIG_HOME", str(Path.home()/".config")))
+    data_home = Path(os.environ.get("XDG_DATA_HOME", str(Path.home()/".local/share")))
+    root = profile_root(args.profile, config_home, data_home)
+    activation = config_home/"Isolde/profiles"/args.profile/"installed-apps.json"
+    transaction_spec = importlib.util.spec_from_file_location("android_transaction", Path(__file__).with_name("android-store-transaction.py"))
+    transaction = importlib.util.module_from_spec(transaction_spec); transaction_spec.loader.exec_module(transaction)
+    transaction.recover(root, activation)  # Recover compatibility snapshots from earlier releases.
+    if (root/".store-recovery").exists(): administrator_transaction("recover",root,activation,args.profile)
+    token = administrator_transaction("prepare",root,activation,args.profile).get("token") if args.transaction else None
+    package_receipt = root/"packages.json"
+    if package_receipt.is_symlink() or (package_receipt.exists() and package_receipt.stat().st_size > 65536):
+        raise RuntimeError("Invalid Android profile package receipt.")
+    packages = json.loads(package_receipt.read_text()) if package_receipt.exists() else {}
+    if not isinstance(packages, dict): raise RuntimeError("Invalid Android profile package receipt.")
     env = dict(os.environ)
     for key, name in (("HOME", "home"), ("XDG_DATA_HOME", "data"), ("XDG_CONFIG_HOME", "config"), ("XDG_CACHE_HOME", "cache")):
         private_directory(root/name); env[key] = str(root/name)
@@ -349,81 +344,102 @@ if not isinstance (packages, dict): raise RuntimeError("Invalid Android profile 
         if len(sockets) != 1: raise RuntimeError("Android needs an active Wayland desktop. Sign into the Wayland session and retry.")
         env["WAYLAND_DISPLAY"] = sockets[0].name
     data = Path(env["XDG_DATA_HOME"])/"waydroid/data"
-    compositor=None;
-compositor_log = None if args.operation == 'launch' and presentation_mode(activation) == 'fullscreen' : compositor,
-    compositor_log,
-    display = start_compositor(env, runtime, root) env['WAYLAND_DISPLAY'] = display child = None def verify()
-    : check_stop() if compositor and (compositor.poll() is not None or compositor_log.tell() > 1024 * *2)
-    : raise RuntimeError('Android fullscreen display closed. Return Home and retry.')
-          profile_root(args.profile, config_home, data_home) if child.poll()
-              is not None or not owned(session(), child.pid, data)
-    : raise RuntimeError("Android session ownership changed. Return Home and retry.") try : emit("starting") child
-    = subprocess.Popen([ "/usr/bin/waydroid", "--details-to-stdout", "session", "start" ],
-                       env = env,
-                       stdout = subprocess.DEVNULL,
-                       stderr = subprocess.DEVNULL) deadline = time.monotonic() + 120 while True : check_stop();
-state = session() if state and not owned(state, child.pid, data)
-    : raise RuntimeError("Android refused this profile's private session.") if state.get("state") == "RUNNING"
-    : break if child.poll() is not None or
-        time.monotonic() > deadline
-    : raise RuntimeError("Android could not start. Return Home and retry.") time.sleep(.2)
-          verify() apps = command(env, "app", "list", timeout = 90) if args.operation ==
-                          "uninstall" : if "packageName: " + package in apps.splitlines() : emit("removing");
-verify();
-command(env, "app", "remove", package) deadline = time.monotonic() +
-                                                      60 while True
-    : verify() if "packageName: " +
-      package not in command(env, "app", "list", timeout = 15)
-          .splitlines()
-    : break if time.monotonic() > deadline
-    : raise RuntimeError("Android did not finish removing the app. Retry removal.") time.sleep(1) packages.pop(args.app,
-                                                                                                               None);
-save_packages(package_receipt, packages)
-            emit("verified", operation = "uninstall", packageAbsent = True) return if "packageName: " +
-        package not in apps.splitlines() or
-    packages.get(args.app) != app["sha256"] : emit("installing") verify() if args.store_version
-    : store_package(args.app, args.store_version, args.profile, data_home)
-          command(env, "app", "install", str(apk), timeout = 120) deadline = time.monotonic() + 60 while True
-    : verify() if ("packageName: " + package in command(env, "app", "list", timeout = 15).splitlines() and
-                   (not args.store_version or installed_artifact(data, app["sha256"], package)))
-    : break if time.monotonic() > deadline
-    : raise RuntimeError("Android did not finish installing the app. Return Home and retry.") time.sleep(
-          1) packages[args.app] = app["sha256"] save_packages(package_receipt, packages) if args.operation == "install"
-    : emit("verified", operation = "install", packagePresent = True) return verify();
-command(env, "app", "launch", package) emit("ready") while True : verify();
-time.sleep(.5) except Stopped : emit("cancelled", operation = args.operation) finally : try:
-    if child
-        is not None and child.poll() is None
-            : child.send_signal(signal.SIGTERM if owned (session(), child.pid, data) else signal.SIGUSR1) try
-            : child
-            .wait(timeout = 10) except subprocess.TimeoutExpired : child.kill();
-child.wait(timeout = 3) if child is not None and
-    owned(session(), child.pid, data)
-    : raise RuntimeError("Android did not release this profile's session. Retry after closing Android.") if token
-    : if not stopping
-      and
-      sys.exc_info()[0] is None : emit("prepared",
-                                       operation = args.operation,
-                                       token = token,
-                                       packagePresent = args.operation == "install",
-                                       packageAbsent = args.operation == "uninstall") deadline =
-    time.monotonic() + 30 while not stopping and time.monotonic() < deadline
-    : if select.select([sys.stdin], [], [], .1)[0]
-    : sys.stdin.readline() #Activation token on disk decides commit vs rollback.break committed =
-        administrator_transaction("recover", root, activation, args.profile)
-            .get("committed", False) if not committed
-    : emit("cancelled", operation = args.operation, rolledBack = True) else : committed =
-            True if committed and not stopping and
-            sys.exc_info()[0] is None : emit("completed",
-                                             operation = args.operation,
-                                             packagePresent = args.operation == "install",
-                                             packageAbsent = args.operation == "uninstall") finally : if compositor
-    : stop_compositor(compositor, compositor_log)
+    compositor=None;compositor_log=None
+    if args.operation=='launch' and presentation_mode(activation)=='fullscreen':
+        compositor,compositor_log,display=start_compositor(env,runtime,root)
+        env['WAYLAND_DISPLAY']=display
+    child = None
+    def verify():
+        check_stop()
+        if compositor and (compositor.poll() is not None or compositor_log.tell()>1024**2):raise RuntimeError('Android fullscreen display closed. Return Home and retry.')
+        profile_root(args.profile, config_home, data_home)
+        if child.poll() is not None or not owned(session(), child.pid, data):
+            raise RuntimeError("Android session ownership changed. Return Home and retry.")
+    try:
+        emit("starting")
+        child = subprocess.Popen(["/usr/bin/waydroid", "--details-to-stdout", "session", "start"], env=env,
+                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        deadline = time.monotonic()+120
+        while True:
+            check_stop(); state = session()
+            if state and not owned(state, child.pid, data): raise RuntimeError("Android refused this profile's private session.")
+            if state.get("state") == "RUNNING": break
+            if child.poll() is not None or time.monotonic() > deadline: raise RuntimeError("Android could not start. Return Home and retry.")
+            time.sleep(.2)
+        verify()
+        apps = command(env, "app", "list", timeout=90)
+        if args.operation == "uninstall":
+            if "packageName: "+package in apps.splitlines():
+                emit("removing"); verify(); command(env, "app", "remove", package)
+                deadline = time.monotonic()+60
+                while True:
+                    verify()
+                    if "packageName: "+package not in command(env, "app", "list", timeout=15).splitlines(): break
+                    if time.monotonic()>deadline: raise RuntimeError("Android did not finish removing the app. Retry removal.")
+                    time.sleep(1)
+            packages.pop(args.app, None); save_packages(package_receipt, packages)
+            emit("verified", operation="uninstall", packageAbsent=True)
+            return
+        if "packageName: "+package not in apps.splitlines() or packages.get(args.app) != app["sha256"]:
+            emit("installing")
+            verify()
+            if args.store_version: store_package(args.app, args.store_version, args.profile, data_home)
+            command(env, "app", "install", str(apk), timeout=120)
+            deadline = time.monotonic()+60
+            while True:
+                verify()
+                if ("packageName: "+package in command(env, "app", "list", timeout=15).splitlines()
+                        and (not args.store_version or installed_artifact(data, app["sha256"], package))): break
+                if time.monotonic() > deadline: raise RuntimeError("Android did not finish installing the app. Return Home and retry.")
+                time.sleep(1)
+            packages[args.app] = app["sha256"]
+            save_packages(package_receipt, packages)
+        if args.operation == "install":
+            emit("verified", operation="install", packagePresent=True)
+            return
+        verify(); command(env, "app", "launch", package)
+        emit("ready")
+        while True:
+            verify(); time.sleep(.5)
+    except Stopped:
+        emit("cancelled", operation=args.operation)
+    finally:
+        try:
+            if child is not None and child.poll() is None:
+                child.send_signal(signal.SIGTERM if owned(session(), child.pid, data) else signal.SIGUSR1)
+                try: child.wait(timeout=10)
+                except subprocess.TimeoutExpired: child.kill(); child.wait(timeout=3)
+            if child is not None and owned(session(), child.pid, data):
+                raise RuntimeError("Android did not release this profile's session. Retry after closing Android.")
+            if token:
+                if not stopping and sys.exc_info()[0] is None:
+                    emit("prepared", operation=args.operation, token=token,
+                         packagePresent=args.operation=="install", packageAbsent=args.operation=="uninstall")
+                    deadline = time.monotonic()+30
+                    while not stopping and time.monotonic()<deadline:
+                        if select.select([sys.stdin], [], [], .1)[0]:
+                            sys.stdin.readline()  # Activation token on disk decides commit vs rollback.
+                            break
+                committed = administrator_transaction("recover",root,activation,args.profile).get("committed",False)
+                if not committed:
+                    emit("cancelled", operation=args.operation, rolledBack=True)
+            else:
+                committed = True
+            if committed and not stopping and sys.exc_info()[0] is None:
+                emit("completed", operation=args.operation,
+                     packagePresent=args.operation=="install", packageAbsent=args.operation=="uninstall")
+        finally:
+            if compositor:stop_compositor(compositor,compositor_log)
 
-          if __name__
-                == "__main__" : def stop(*unused)
-    : global stopping stopping =
-                True signal.signal(signal.SIGTERM, stop) signal.signal(signal.SIGINT, stop) try : main() except Stopped:
+
+if __name__ == "__main__":
+    def stop(*unused):
+        global stopping
+        stopping = True
+    signal.signal(signal.SIGTERM, stop)
+    signal.signal(signal.SIGINT, stop)
+    try: main()
+    except Stopped:
         emit("cancelled")
     except Exception as error:
         emit("error", message=str(error) if isinstance(error, (RuntimeError, ValueError)) else "Android setup could not be read. Run the Isolde installer with Android support and retry.")

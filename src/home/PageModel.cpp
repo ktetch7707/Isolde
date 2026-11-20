@@ -176,7 +176,10 @@ PageModel::resolveItems(const QJsonArray& components) const
     for (const auto& value : components)
     {
         const auto object = value.toObject();
-        auto item = object.toVariantMap();
+        // Validate stored fields before attaching renderer-only metadata.
+        auto item = ComponentSchema::component(object.toVariantMap(), true);
+        if (item.isEmpty())
+            continue;
         if (m_owner)
             item["presentation"] = m_owner->componentPresentation(item.value("presentation").toMap());
         const auto actionList = normalizedActionForItem(object);
@@ -193,13 +196,13 @@ PageModel::resolveItems(const QJsonArray& components) const
         item.insert("logoSource", m_owner ? m_owner->resolveArtwork(logoFile) : QString());
         const auto unavailable = resolveItemUnavailableReason(item, actionList, registry);
         item.insert("unavailableReason", unavailable);
-        result.append(ComponentSchema::component(item, true));
+        result.append(item);
     }
     return result;
 }
 
 QVariantMap
-PageModel::resolveItemAppFields(const QVariantMap& item, const ComponentRegistry* registry) const
+PageModel::resolveItemAppFields(const QVariantMap& item, const AppRegistry* registry) const
 {
     const auto appId = item.value("appId").toString();
     const auto* app = registry ? registry->find(appId) : nullptr;
@@ -235,7 +238,7 @@ PageModel::resolveItemActionFields(const QVariantMap& item) const
 
 QString
 PageModel::resolveItemUnavailableReason(const QVariantMap& item, const QVariantList& actionList,
-                                        const ComponentRegistry* registry) const
+                                        const AppRegistry* registry) const
 {
     auto unavailable =
         ComponentSchema::unavailable(actionList.isEmpty() ? QVariantMap() : actionList.first().toMap(),
@@ -510,7 +513,7 @@ PageModel::setAppearance(const QVariantMap& changes)
 }
 
 bool
-PageModel::validateAppearanceKey(const QString& key, const QVariant& value, const QVariantMap& defaults)
+PageModel::validateAppearanceKey(const QString& key, QVariant& value, const QVariantMap& defaults)
 {
     if (key == "colorTheme")
         return validateColorThemeValue(value);
@@ -518,8 +521,18 @@ PageModel::validateAppearanceKey(const QString& key, const QVariant& value, cons
         return validateSourcePolicyValue(value);
     if (key == "surfaceThemes")
         return validateSurfaceThemesValue(value);
+    if (!defaults.contains(key) && !ThemeColors::role(key) && key != "tileRoundness")
+    {
+        m_owner->setError(tr("Unknown appearance key."));
+        return false;
+    }
     if (isColorAppearanceKey(key))
-        return validateColorValue(value);
+    {
+        if (!validateColorValue(value))
+            return false;
+        value = QColor(value.toString()).name();
+        return true;
+    }
     if (key == "fontFamily")
         return validateFontFamilyValue(value);
     if (key == "motionEnabled" || key == "highContrast")
@@ -624,12 +637,18 @@ bool
 PageModel::validateNumericRange(const QString& key, double number, bool ok)
 {
     if (!ok || !qIsFinite(number))
+    {
+        m_owner->setError(tr("Appearance value out of range."));
         return false;
+    }
     const double low = key == "typographyScale" ? 0.8 : key == "homeColumns" ? 2 : key == "spacing" ? 8 : 0;
     const double high = key == "typographyScale" ? 1.3 : key == "homeColumns" ? 6 : key == "spacing" ? 40 : 1;
     if (number < low || number > high ||
         ((key == "homeColumns" || key == "spacing") && number != qFloor(number)))
+    {
+        m_owner->setError(tr("Appearance value out of range."));
         return false;
+    }
     return true;
 }
 
@@ -637,7 +656,10 @@ bool
 PageModel::isKnownAppearanceKey(const QString& key, const QVariantMap& defaults)
 {
     if (!defaults.contains(key) && key != "tileRoundness")
+    {
+        m_owner->setError(tr("Unknown appearance key."));
         return false;
+    }
     return true;
 }
 

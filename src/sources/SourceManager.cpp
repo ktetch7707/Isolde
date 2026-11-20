@@ -28,6 +28,13 @@ isVisibleSource(const QVariantMap& source, const QVariantMap& decision)
 namespace
 {
 
+// Refuse redirected or relative state files before checking their ancestors.
+bool
+isAbsoluteRegularPath(const QFileInfo& file)
+{
+    return file.isAbsolute() && !file.isSymLink();
+}
+
 bool
 unredirectedStatePath(const QString& path)
 {
@@ -41,12 +48,6 @@ unredirectedStatePath(const QString& path)
             return false;
     } while (directory.cdUp());
     return true;
-}
-
-bool
-isAbsoluteRegularPath(const QFileInfo& file)
-{
-    return file.isAbsolute() && !file.isSymLink();
 }
 
 QString
@@ -121,25 +122,31 @@ sourceTileForPath(const QFileInfo& info, const QString& openWith)
                                                                                    : QStringLiteral("media");
     const QVariantMap action{
         {QStringLiteral("type"), actionType}, {QStringLiteral("target"), path}, {QStringLiteral("openWith"), openWith}};
-    return ComponentSchema::component(
+    // Discovery metadata is ephemeral. Validate the launcher and its action first.
+    auto tile = ComponentSchema::component(
         QVariantMap{
             {QStringLiteral("kind"), QStringLiteral("action")},
-            {QStringLiteral("contextual"), true},
             {QStringLiteral("id"), stableSourceId(path)},
             {QStringLiteral("name"), name},
-            {QStringLiteral("section"), QStringLiteral("Detected Sources")},
-            {QStringLiteral("sourceType"), classification},
-            {QStringLiteral("target"), path},
-            {QStringLiteral("openWith"), openWith},
             {QStringLiteral("symbol"), symbolForPath(info)},
             {QStringLiteral("accent"),
              classification == QStringLiteral("game-disc") ? QStringLiteral("#8B5CF6") : QStringLiteral("#06B6D4")},
-            {QStringLiteral("presentationMode"), presentationMode},
-            {QStringLiteral("networkRequirement"), QStringLiteral("none")},
             {QStringLiteral("size"), QStringLiteral("standard")},
-            {QStringLiteral("actionType"), actionType},
             {QStringLiteral("action"), action}},
         true);
+    if (tile.isEmpty())
+        return {};
+    tile.insert({
+        {"contextual", true},
+        {"section", QStringLiteral("Detected Sources")},
+        {"sourceType", classification},
+        {"target", path},
+        {"openWith", openWith},
+        {"presentationMode", presentationMode},
+        {"networkRequirement", QStringLiteral("none")},
+        {"actionType", actionType},
+    });
+    return tile;
 }
 
 } // namespace
@@ -313,7 +320,8 @@ SourceManager::sections() const
 {
     return {};
 }
-int
+// Expose the complete visible count without narrowing the container size.
+qint64
 SourceManager::visibleSourceCount() const
 {
     return items().size();

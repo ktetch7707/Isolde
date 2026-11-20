@@ -123,14 +123,14 @@ class SubtitleService final : public QObject
     void
     cleanStaging(const Job& job) const;
     bool
-    validateReviewJob(int index) const;
+    validateReviewJob(int index);
     bool
-    parseReviewSrt(const QString& srtText, QVector<Cue>& cues, QString* error) const;
+    parseReviewSrt(const QString& srtText, QVector<Cue>& cues, QString* error);
     bool
     validateImportInput(const QString& title, const QString& language, const QString& srtText,
-                        int repositoryFileId) const;
+                        int repositoryFileId);
     QString
-    findAvailableOutputPath(const QString& safeTitle, const QString& normalizedLanguage) const;
+    findAvailableOutputPath(const QString& safeTitle, const QString& normalizedLanguage);
     void
     finishLanguagePackProcess(int exitCode, QProcess::ExitStatus exitStatus);
     bool

@@ -88,17 +88,12 @@ fresh(const QString& base, const QJsonArray& nodes)
     for (int i = 1; i <= 65536; ++i)
     {
         const auto id = QString("%1-%2").arg(base.left(50)).arg(i);
-        if (isUniqueId(id, ids))
+        if (!ids.contains(id))
             return id;
     }
     return {};
 }
 
-bool
-isUniqueId(const QString& id, const QSet<QString>& ids)
-{
-    return !ids.contains(id);
-}
 QJsonArray
 instantiate(const QJsonArray& definition, QJsonArray existing, const QJsonObject& destination, const QString& link)
 {
@@ -161,19 +156,25 @@ StudioSession::previewReuse(const QString& operation, const QVariantMap& a, cons
         return {};
     auto document = QJsonDocument::fromJson(m_draft).object();
     auto layout = page(document, pageId);
-    auto nodes = layout["components"].toArray();
+    if (layout.isEmpty())
+    {
+        setError(tr("Choose an existing page."));
+        return {};
+    }
+    const auto nodes = layout["components"].toArray();
     const auto selected = subtree(nodes, a.value("id").toString());
     QJsonObject library = document["composition"].toObject()["designLibrary"].toObject();
     if (library.isEmpty())
         library = {{"schemaVersion", 1}, {"styles", QJsonArray{}}, {"components", QJsonArray{}}};
-    const auto allNodes = document["components"].toArray();
-    for (const auto& entry : document["pages"].toArray())
-        for (const auto& node : entry.toObject()["layout"].toObject()["components"].toArray())
-            allNodes.append(node);
+    auto composition = document["composition"].toObject();
+    composition["designLibrary"] = library;
+    document["composition"] = composition;
+    if (pageId.isEmpty())
+        layout = document;
     QVariantList impact;
-    const auto name = a.value("name").toString().trimmed();
-    const auto libraryId = a.value("libraryId").toString();
-    using ReuseOp = bool (StudioSession::*)(const QVariantMap&, QJsonObject, QJsonObject,
+    auto args = a;
+    args["operation"] = operation;
+    using ReuseOp = bool (StudioSession::*)(const QVariantMap&, QJsonObject&, QJsonObject,
                                             const QJsonArray&, QVariantList&, const QString&);
     static const QHash<QString, ReuseOp> reuseOps{
         {"responsive", &StudioSession::handleReuseResponsive},
@@ -186,14 +187,12 @@ StudioSession::previewReuse(const QString& operation, const QVariantMap& a, cons
     auto it = reuseOps.constFind(operation);
     if (it != reuseOps.cend())
     {
-        if (!(this->*it)(a, document, layout, selected, impact, pageId))
+        if (!(this->*it.value())(args, document, layout, selected, impact, pageId))
             return {};
     }
-    else if (!handleReuseAppearanceEdit(a, document, layout, selected, library, impact, pageId))
+    else if (!handleReuseAppearanceEdit(args, document, layout, selected, impact, pageId))
         return {};
-    composition = document["composition"].toObject();
-    composition["designLibrary"] = library;
-    document["composition"] = composition;
+    library = document["composition"].toObject()["designLibrary"].toObject();
     if (!DesignSystem::valid(library.toVariantMap()))
     {
         setError(tr("The saved definition is invalid or cyclic. Nested linked symbols are not supported."));
@@ -205,7 +204,7 @@ StudioSession::previewReuse(const QString& operation, const QVariantMap& a, cons
 }
 
 bool
-StudioSession::handleReuseResponsive(const QVariantMap& a, QJsonObject document, QJsonObject layout,
+StudioSession::handleReuseResponsive(const QVariantMap& a, QJsonObject& document, QJsonObject layout,
                                      const QJsonArray& selected, QVariantList& impact, const QString& pageId)
 {
     Q_UNUSED(selected);
@@ -258,12 +257,10 @@ StudioSession::handleReuseResponsive(const QVariantMap& a, QJsonObject document,
 }
 
 bool
-StudioSession::handleReuseSave(const QVariantMap& a, QJsonObject document, QJsonObject layout,
+StudioSession::handleReuseSave(const QVariantMap& a, QJsonObject& document, QJsonObject layout,
                                const QJsonArray& selected, QVariantList& impact, const QString& pageId)
 {
-    Q_UNUSED(document);
     Q_UNUSED(layout);
-    Q_UNUSED(pageId);
     const auto name = a.value("name").toString().trimmed();
     const QString kind = a.value("operation").toString() == "saveStyle" ? "styles" : "components";
     if (selected.isEmpty() || name.isEmpty() || name.size() > 80)
@@ -296,14 +293,16 @@ StudioSession::handleReuseSave(const QVariantMap& a, QJsonObject document, QJson
         entry["nodes"] = prototype(selected);
     entries.append(entry);
     library[kind] = entries;
-    document["composition"].toObject()["designLibrary"] = library;
+    auto composition = document["composition"].toObject();
+    composition["designLibrary"] = library;
+    document["composition"] = composition;
     impact.append(QVariantMap{{"page", pageId}, {"name", name},
                               {"change", tr("Save independent definition")}});
     return true;
 }
 
 bool
-StudioSession::handleReuseEditStyle(const QVariantMap& a, QJsonObject document, QJsonObject layout,
+StudioSession::handleReuseEditStyle(const QVariantMap& a, QJsonObject& document, QJsonObject layout,
                                     const QJsonArray& selected, QVariantList& impact, const QString& pageId)
 {
     Q_UNUSED(selected);
@@ -333,7 +332,9 @@ StudioSession::handleReuseEditStyle(const QVariantMap& a, QJsonObject document, 
         return false;
     }
     library["styles"] = entries;
-    document["composition"].toObject()["designLibrary"] = library;
+    auto composition = document["composition"].toObject();
+    composition["designLibrary"] = library;
+    document["composition"] = composition;
     QStringList pages{QString()};
     for (const auto& entry : document["pages"].toArray())
         pages.append(entry.toObject()["id"].toString());
@@ -353,11 +354,10 @@ StudioSession::handleReuseEditStyle(const QVariantMap& a, QJsonObject document, 
 }
 
 bool
-StudioSession::handleReuseInsert(const QVariantMap& a, QJsonObject document, QJsonObject layout,
+StudioSession::handleReuseInsert(const QVariantMap& a, QJsonObject& document, QJsonObject layout,
                                  const QJsonArray& selected, QVariantList& impact, const QString& pageId)
 {
     Q_UNUSED(selected);
-    Q_UNUSED(pageId);
     QJsonObject library = document["composition"].toObject()["designLibrary"].toObject();
     const auto definition = findComponentDefinition(library, a.value("libraryId").toString());
     if (definition.isEmpty())
@@ -368,17 +368,13 @@ StudioSession::handleReuseInsert(const QVariantMap& a, QJsonObject document, QJs
     QJsonObject destination;
     if (!resolveInsertDestination(destination, a, layout))
         return false;
-    const auto allNodes = document["components"].toArray();
+    auto allNodes = document["components"].toArray();
     for (const auto& entry : document["pages"].toArray())
         for (const auto& node : entry.toObject()["layout"].toObject()["components"].toArray())
             allNodes.append(node);
     if (!destination.contains("placement") && (layout["composition"].toObject()["grid"].isObject() ||
                                                definition["nodes"].toArray()[0].toObject().contains("placement")))
     {
-        const auto allNodes = document["components"].toArray();
-        for (const auto& entry : document["pages"].toArray())
-            for (const auto& node : entry.toObject()["layout"].toObject()["components"].toArray())
-                allNodes.append(node);
         if (!findFreePlacement(destination, layout, allNodes, definition))
         {
             setError(tr("No free placement fits this saved component. Move items or choose another page."));
@@ -388,8 +384,10 @@ StudioSession::handleReuseInsert(const QVariantMap& a, QJsonObject document, QJs
     const auto additions = instantiate(
         definition["nodes"].toArray(), allNodes, destination,
         a.value("linked").toBool() ? a.value("libraryId").toString() : QString());
+    auto nodes = layout["components"].toArray();
     for (const auto& node : additions)
-        layout["components"].toArray().append(node);
+        nodes.append(node);
+    layout["components"] = nodes;
     store(document, pageId, layout);
     impact.append(QVariantMap{
         {"page", pageId},
@@ -399,7 +397,7 @@ StudioSession::handleReuseInsert(const QVariantMap& a, QJsonObject document, QJs
 }
 
 bool
-StudioSession::handleReuseEditAll(const QVariantMap& a, QJsonObject document, QJsonObject layout,
+StudioSession::handleReuseEditAll(const QVariantMap& /*a*/, QJsonObject& document, QJsonObject layout,
                                   const QJsonArray& selected, QVariantList& impact, const QString& pageId)
 {
     Q_UNUSED(layout);
@@ -435,26 +433,27 @@ StudioSession::handleReuseEditAll(const QVariantMap& a, QJsonObject document, QJ
         return false;
     }
     library["components"] = entries;
-    document["composition"].toObject()["designLibrary"] = library;
-    QStringList pages{QString()};
-    for (const auto& entry : document["pages"].toArray())
-        pages.append(entry.toObject()["id"].toString());
-    const auto allNodes = document["components"].toArray();
+    auto composition = document["composition"].toObject();
+    composition["designLibrary"] = library;
+    document["composition"] = composition;
+    auto allNodes = document["components"].toArray();
     for (const auto& entry : document["pages"].toArray())
         for (const auto& node : entry.toObject()["layout"].toObject()["components"].toArray())
             allNodes.append(node);
-    if (!updateLinkedInstances(document, library, allNodes, link, definition, impact))
+    if (!updateLinkedInstances(document, allNodes, link, definition, impact))
         return false;
     return true;
 }
 
 bool
-StudioSession::handleReuseAppearanceEdit(const QVariantMap& a, QJsonObject document, QJsonObject layout,
+StudioSession::handleReuseAppearanceEdit(const QVariantMap& a, QJsonObject& document, QJsonObject layout,
                                          const QJsonArray& selected, QVariantList& impact, const QString& pageId)
 {
-    Q_UNUSED(document);
-    Q_UNUSED(impact);
-    Q_UNUSED(pageId);
+    if (selected.isEmpty())
+    {
+        setError(tr("Select a component first."));
+        return false;
+    }
     QJsonObject library = document["composition"].toObject()["designLibrary"].toObject();
     const auto id = selected[0].toObject()["id"].toString();
     bool changed = false;
@@ -465,9 +464,10 @@ StudioSession::handleReuseAppearanceEdit(const QVariantMap& a, QJsonObject docum
     auto sourceLayout = page(document, a.value("sourcePage").toString());
     const auto source = subtree(sourceLayout["components"].toArray(), a.value("sourceId").toString());
     const auto operation = a.value("operation").toString();
-    for (qsizetype i = 0; i < layout["components"].toArray().size(); ++i)
+    auto nodes = layout["components"].toArray();
+    for (qsizetype i = 0; i < nodes.size(); ++i)
     {
-        auto node = layout["components"].toArray()[i].toObject();
+        auto node = nodes[i].toObject();
         if (operation == "detach")
         {
             bool member = false;
@@ -481,10 +481,12 @@ StudioSession::handleReuseAppearanceEdit(const QVariantMap& a, QJsonObject docum
         }
         else
         {
+            if (node["id"] != id)
+                continue;
             if (!applyAppearanceEditToNode(node, a, library, styleDefinition, source))
                 return false;
         }
-        layout["components"].toArray()[i] = node;
+        nodes[i] = node;
         changed = true;
     }
     if (!changed)
@@ -492,6 +494,7 @@ StudioSession::handleReuseAppearanceEdit(const QVariantMap& a, QJsonObject docum
         setError(tr("The selected component no longer exists."));
         return false;
     }
+    layout["components"] = nodes;
     store(document, pageId, layout);
     impact.append(QVariantMap{{"page", pageId}, {"id", id},
                               {"name", selected[0].toObject()["name"].toString()}, {"change", operation}});
@@ -502,6 +505,7 @@ bool
 StudioSession::findFreePlacement(QJsonObject& destination, QJsonObject layout, const QJsonArray& allNodes,
                                  const QJsonObject& definition)
 {
+    Q_UNUSED(allNodes);
     const auto grid = ComponentSchema::componentGrid(layout["components"].toArray(),
                                                      layout["composition"].toObject().toVariantMap(),
                                                      layout["categories"].toArray(),
@@ -527,47 +531,24 @@ StudioSession::findFreePlacement(QJsonObject& destination, QJsonObject layout, c
 }
 
 bool
-StudioSession::placeComponentAt(const QJsonObject& destination, const QVariantMap& layout,
+StudioSession::placeComponentAt(const QJsonObject& destination, const QJsonObject& layout,
                                 const QVariantMap& proposed) const
 {
-    QVariantMap proposedVariantMap = proposed.toVariantMap();
     for (const auto& value : layout["components"].toArray())
     {
         const auto node = value.toObject();
-        if (node["parentId"].toString() != destination.value("parentId").toString() &&
+        if (node["parentId"].toString() != destination.value("parentId").toString() ||
             node["categoryId"].toString() != destination.value("categoryId").toString())
             continue;
-        if (ComponentSchema::placementsOverlap(proposedVariantMap, node["placement"].toObject().toVariantMap()))
+        if (ComponentSchema::placementsOverlap(proposed, node["placement"].toObject().toVariantMap()))
             return false;
     }
     return true;
 }
 
 bool
-StudioSession::placementFits(const QJsonObject& destination, const QVariantMap& proposed,
-                             const QJsonObject& layout) const
-{
-    QVariantMap proposedVariantMap = proposed.toVariantMap();
-    for (const auto& value : layout["components"].toArray())
-    {
-        const auto node = value.toObject();
-        if (node["parentId"].toString() != destination.value("parentId").toString() &&
-            node["categoryId"].toString() != destination.value("categoryId").toString())
-            continue;
-        if (ComponentSchema::placementsOverlap(proposedVariantMap, node["placement"].toObject().toVariantMap()))
-            return false;
-    }
-    return true;
-}
-            if (!collision)
-            {
-                destination["placement"] = QJsonObject::fromVariantMap(proposed);
-    return true;
-}
-
-bool
-StudioSession::updateLinkedInstances(QJsonObject document, QJsonObject library, const QJsonArray& allNodes,
-                                     const QString& link, const QJsonObject& definition,
+StudioSession::updateLinkedInstances(QJsonObject& document, QJsonArray allNodes,
+                                     const QString& link, const QJsonArray& definition,
                                      QVariantList& impact)
 {
     QStringList pages{QString()};
@@ -616,11 +597,6 @@ StudioSession::updateLinkedInstances(QJsonObject document, QJsonObject library, 
     }
     return true;
 }
-        }
-    }
-    return false;
-}
-
 QJsonObject
 StudioSession::findComponentDefinition(const QJsonObject& library, const QString& libraryId)
 {
@@ -631,7 +607,7 @@ StudioSession::findComponentDefinition(const QJsonObject& library, const QString
 }
 
 bool
-StudioSession::resolveInsertDestination(QJsonObject& destination, QVariantMap a, QJsonObject layout)
+StudioSession::resolveInsertDestination(QJsonObject& destination, QVariantMap a, QJsonObject /*layout*/)
 {
     for (const auto& key : {"placement", "parentId", "categoryId"})
         if (a.contains(key))

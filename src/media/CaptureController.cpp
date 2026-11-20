@@ -130,7 +130,9 @@ CaptureController::CaptureController(VideoCaptureAdapter* videoAdapter,
                 ++m_framesInWindow;
                 if (m_frameRateClock.elapsed() >= 1000)
                 {
-                    m_previewFrameRate = m_framesInWindow * 1000.0 / m_frameRateClock.elapsed();
+                    const double elapsedMs = static_cast<double>(m_frameRateClock.elapsed());
+                    m_previewFrameRate =
+                        elapsedMs > 0.0 ? static_cast<double>(m_framesInWindow) * 1000.0 / elapsedMs : 0.0;
                     m_framesInWindow = 0;
                     m_frameRateClock.restart();
                     metricsChanged = true;
@@ -819,6 +821,7 @@ CaptureController::reportCaptureConfigurationError(bool commandValid, const QStr
                                                               : "Capture settings changed or are invalid. Refresh "
                                                                 "devices and review the draft.";
     emit changed();
+    return false;
 }
 
 bool
@@ -828,6 +831,7 @@ CaptureController::applyCaptureConfigurationValues(const QVariantMap& configurat
                                                    const QString& commandTemplate, const QString& transition,
                                                    const QString& returnPolicy, const QVariantMap& labels)
 {
+    Q_UNUSED(configuration);
     QMap<QString, QVariant> values{{"capture/device", captureId},
                                    {"capture/format", format},
                                    {"capture/audio", audioId},

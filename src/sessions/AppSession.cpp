@@ -2,22 +2,26 @@
 
 #include <utility>
 
+// Attach the session to its QObject owner while retaining its launch definition.
 AppSession::AppSession(AppDefinition definition, QObject* parent)
-    : AppSessionControl(parent), m_info{std::move(definition)}
+    : QObject(parent), m_info{std::move(definition)}
 {
 }
 
+// Expose the launch definition to session management without copying it.
 const AppDefinition&
 AppSession::definition() const
 {
     return m_info.definition;
 }
+// Report lifecycle state to callers coordinating focus and playback.
 AppSessionLifecycleState
 AppSession::state() const
 {
     return m_info.state;
 }
 
+// Notify observers only when the lifecycle actually changes.
 void
 AppSession::setState(AppSessionLifecycleState state)
 {

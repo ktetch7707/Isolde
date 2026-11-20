@@ -63,6 +63,8 @@ profileSubtitleCachePath()
 // Declaration order keeps the engine alive only while its context objects exist.
 struct ProfileRuntime
 {
+    ProfileManager& profileManager;
+    bool launchAtStartup;
     AppRegistry registry;
     SessionManager sessions{&registry};
     FdroidProvider storeProvider;
@@ -116,7 +118,7 @@ struct ProfileRuntime
                             bool initialLaunch,
                             AudioSettings& audio,
                             CaptureController& capture)
-        : audioSettings(audio), captureController(capture),
+        : profileManager(profiles), launchAtStartup(initialLaunch), audioSettings(audio), captureController(capture),
           appVpn(QFileInfo(profiles.layoutPath()).absoluteDir().filePath("app-vpn.json"), profiles.activeId()),
           input(QFileInfo(profiles.layoutPath()).absoluteDir().filePath("remote-bindings.json"))
     {
@@ -138,175 +140,26 @@ struct ProfileRuntime
         setupKodiServiceReady();
         handleLaunchArguments();
     }
-    engine.rootContext()->setContextProperty(QStringLiteral("vpnSettings"), &vpnSettings);
-    engine.rootContext()->setContextProperty(QStringLiteral("appVpn"), &appVpn);
-    engine.rootContext()->setContextProperty(QStringLiteral("sourceManager"), &sourceManager);
-    engine.rootContext()->setContextProperty(QStringLiteral("artPacks"), &artPacks);
-    engine.rootContext()->setContextProperty(QStringLiteral("inputManager"), &input);
-    engine.rootContext()->setContextProperty(QStringLiteral("isoldeVersion"), QCoreApplication::applicationVersion());
-    engine.loadFromModule(QStringLiteral("Isolde"), QStringLiteral("Main"));
-    if (auto* window = qobject_cast<QQuickWindow*>(engine.rootObjects().value(0)))
-        QObject::connect(
-            window, &QQuickWindow::frameSwapped, guide.get(), &GuideController::recordGuidePaint, Qt::QueuedConnection);
-    if (engine.rootObjects().isEmpty())
-        qFatal("Could not load the Isolde interface");
-    const auto presentKodi = [this](bool show)
-    {
-        // Supported X11/XWayland host only. Require exactly one Kodi window;
-        // never activate an arbitrary match or execute a shell command.
-        auto* query = new QProcess(&engine);
-        auto environment = QProcessEnvironment::systemEnvironment();
-        const QDir runtime(environment.value("XDG_RUNTIME_DIR"));
-        const auto auth = runtime.entryList({".mutter-Xwaylandauth.*"}, QDir::Files | QDir::Hidden, QDir::Time);
-        if (!auth.isEmpty())
-            environment.insert("XAUTHORITY", runtime.filePath(auth.first()));
-        query->setProcessEnvironment(environment);
-        QObject::connect(query,
-                         qOverload<int, QProcess::ExitStatus>(&QProcess::finished),
-                         &engine,
-                         [this, query, show](int code, QProcess::ExitStatus)
-                         {
-                             query->deleteLater();
-                             if (show && code != 0 && kodi.playbackActive())
-                                 kodi.presentationFailed();
-                             if (!show && !kodi.playbackActive())
-                             {
-                                 if (auto* window = qobject_cast<QQuickWindow*>(engine.rootObjects().value(0)))
-                                 {
-                                     window->raise();
-                                     window->requestActivate();
-                                 }
-                             }
-                         });
-        QObject::connect(query,
-                         &QProcess::errorOccurred,
-                         &engine,
-                         [this, query, show](QProcess::ProcessError error)
-                         {
-                             if (error == QProcess::FailedToStart)
-                             {
-                                 query->deleteLater();
-                                 if (show)
-                                     kodi.presentationFailed();
-                             }
-                         });
-        auto helper = QCoreApplication::applicationDirPath() + "/../share/isolde/kodi-window.py";
-        if (!QFileInfo::exists(helper))
-            helper = QCoreApplication::applicationDirPath() + "/share/isolde/kodi-window.py";
-        query->start("python3", {helper, show ? "show" : "hide"});
-        QTimer::singleShot(6000,
-                           query,
-                           [query]
-                           {
-                               if (query->state() != QProcess::NotRunning)
-                                   query->kill();
-                           });
-    };
-    QObject::connect(&kodi,
-                     &KodiMedia::playbackStarted,
-                     &engine,
-                     [presentKodi]
-                     {
-                         presentKodi(true);
-                     });
-    QObject::connect(&kodi,
-                     &KodiMedia::playbackPresentationRequested,
-                     &engine,
-                     [presentKodi]
-                     {
-                         presentKodi(true);
-                     });
-    QObject::connect(&kodi,
-                     &KodiMedia::playbackReturned,
-                     &engine,
-                     [this, presentKodi](bool)
-                     {
-                         if (kodi.playbackStatus() != "replaced")
-                             presentKodi(false);
-                         if (auto* window = qobject_cast<QQuickWindow*>(engine.rootObjects().value(0)))
-                         {
-                             window->raise();
-                             window->requestActivate();
-                         }
-                     });
-    QObject::connect(&kodiService,
-                     &KodiService::ready,
-                     &engine,
-                     [this, presentKodi]
-                     {
-                         if (sessions.hasActiveSession())
-                             return;
-                         presentKodi(false);
-                         QTimer::singleShot(3500,
-                                            &engine,
-                                            [this, presentKodi]
-                                            {
-                                                if (!kodi.playbackActive() && !sessions.hasActiveSession())
-                                                    presentKodi(false);
-                                            });
-                         if (auto* window = qobject_cast<QQuickWindow*>(engine.rootObjects().value(0)))
-                         {
-                             window->raise();
-                             window->requestActivate();
-                         }
-                     });
-    QObject::connect(&setup,
-                     &SetupState::changed,
-                     &kodiService,
-                     [this]
-                     {
-                         if (setup.complete() && !kodiImporter.importInProgress() && !kodiImporter.recoveryPending())
-                             kodiService.start();
-                     });
-    if (setup.complete())
-        QTimer::singleShot(1500,
-                           &kodiService,
-                           [this]
-                           {
-                               if (!kodiImporter.importInProgress() && !kodiImporter.recoveryPending())
-                                   kodiService.start();
-                           });
-    const QStringList arguments = QCoreApplication::arguments();
-    for (const auto& argument : arguments)
-    {
-        if (initialLaunch && setup.complete() && argument.startsWith(QStringLiteral("--launch-app=")))
-        {
-            const auto appId = argument.mid(QStringLiteral("--launch-app=").size()).trimmed();
-            if (!appId.isEmpty())
-                QTimer::singleShot(500,
-                                   &sessions,
-                                   [this, appId]
-                                   {
-                                       if (appId == "movies" || appId == "shows")
-                                           actions.dispatch({{"type", "launch-app"}, {"appId", appId}});
-                                       else
-                                           sessions.launch(appId);
-                                   });
-            break;
-        }
-    }
-}
-
 void
 setupAudioAndSound()
 {
     actions.setAudioSettings(&audioSettings);
     kodiArtwork.setManagedArtworkResolver(
-        [this, &profiles](const QString& id)
+        [this](const QString& id)
         {
-            return profiles.editingAllowed() ? homeLayout.resolveArtwork(id) : QString{};
+            return profileManager.editingAllowed() ? homeLayout.resolveArtwork(id) : QString{};
         });
     kodi.setSourceEditGuard(
-        [this, &profiles]
+        [this]
         {
-            return profiles.editingAllowed() &&
+            return profileManager.editingAllowed() &&
                    (!sessions.hasActiveSession() || sessions.currentAppType() == "settings") && !desktopMode.active() &&
                    !kodiService.switching() && !kodiImporter.importInProgress();
         });
     powerSettings.setGuard(
-        [this, &profiles]
+        [this]
         {
-            return profiles.editingAllowed() &&
+            return profileManager.editingAllowed() &&
                    (!sessions.hasActiveSession() || sessions.currentAppType() == "settings") && !desktopMode.active() &&
                    !kodi.playbackActive() && !kodiService.switching() && !kodiImporter.importInProgress();
         });
@@ -316,9 +169,9 @@ void
 setupInterfaceSounds()
 {
     const auto kodiAddons = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/native-profiles/" +
-                            profiles.activeId() + "/kodi/home/.kodi/addons";
+                            profileManager.activeId() + "/kodi/home/.kodi/addons";
     interfaceSounds = std::make_unique<InterfaceSounds>(
-        QFileInfo(profiles.layoutPath()).absoluteDir().filePath("interface-sounds.json"),
+        QFileInfo(profileManager.layoutPath()).absoluteDir().filePath("interface-sounds.json"),
         QStringList{kodiAddons, "/usr/share/kodi/addons", "/usr/local/share/kodi/addons"});
     interfaceSounds->setMuted(audioSettings.muted());
     QObject::connect(&audioSettings,
@@ -414,9 +267,8 @@ setupQmlContextProperties()
     engine.rootContext()->setContextProperty(QStringLiteral("pageData"), &pageData);
     actions.setLayout(&homeLayout);
     pageData.setApplications(&registry, &sessions, &actions);
-    engine.rootContext()->setContextProperty(QStringLiteral("guideController"), guide.get());
-    engine.rootContext()->setContextProperty(QStringLiteral("profileManager"), &profiles);
-    engine.rootContext()->setContextProperty(QStringLiteral("browserStorageName"), "isolde-" + profiles.activeId());
+    engine.rootContext()->setContextProperty(QStringLiteral("profileManager"), &profileManager);
+    engine.rootContext()->setContextProperty(QStringLiteral("browserStorageName"), "isolde-" + profileManager.activeId());
     engine.rootContext()->setContextProperty(QStringLiteral("appRegistry"), &registry);
     engine.rootContext()->setContextProperty(QStringLiteral("sessionManager"), &sessions);
     engine.rootContext()->setContextProperty(QStringLiteral("appCatalog"), &catalog);
@@ -439,7 +291,7 @@ setupQmlContextProperties()
 void
 setupGameLibrary()
 {
-    games = std::make_unique<GameLibrary>(QFileInfo(profiles.layoutPath()).absoluteDir().filePath("games.sqlite"),
+    games = std::make_unique<GameLibrary>(QFileInfo(profileManager.layoutPath()).absoluteDir().filePath("games.sqlite"),
                                           &registry);
     actions.setGames(games.get());
     games->setCatalog(&catalog);
@@ -685,7 +537,7 @@ setupQmlEngineAndPresentKodi()
         qFatal("%s", qPrintable(registry.errorString()));
     if (!catalog.load())
         qWarning("%s", qPrintable(catalog.errorString()));
-    if (!homeLayout.load({}, profiles.layoutPath()))
+    if (!homeLayout.load({}, profileManager.layoutPath()))
         qFatal("%s", qPrintable(homeLayout.errorString()));
     sourceManager.setLayout(&homeLayout);
     const auto updateNativeReturn = [this]
@@ -698,9 +550,10 @@ setupQmlEngineAndPresentKodi()
     };
     updateNativeReturn();
     QObject::connect(&input, &InputManager::bindingsChanged, &desktopMode, updateNativeReturn);
-    guide = std::make_unique<GuideController>(QFileInfo(profiles.layoutPath()).absoluteDir().filePath("guide.sqlite"),
-                                              profiles.activeId());
+    guide = std::make_unique<GuideController>(QFileInfo(profileManager.layoutPath()).absoluteDir().filePath("guide.sqlite"),
+                                              profileManager.activeId());
     actions.setGuide(guide.get());
+    engine.rootContext()->setContextProperty(QStringLiteral("guideController"), guide.get());
     engine.loadFromModule(QStringLiteral("Isolde"), QStringLiteral("Main"));
     if (auto* window = qobject_cast<QQuickWindow*>(engine.rootObjects().value(0)))
         QObject::connect(
@@ -714,6 +567,22 @@ setupQmlEngineAndPresentKodi()
                      {
                          presentKodiWindow(true);
                      });
+    QObject::connect(&kodiService, &KodiService::ready, &engine, [this]
+    {
+        if (sessions.hasActiveSession())
+            return;
+        presentKodiWindow(false);
+        QTimer::singleShot(3500, &engine, [this]
+        {
+            if (!kodi.playbackActive() && !sessions.hasActiveSession())
+                presentKodiWindow(false);
+        });
+        if (auto* window = qobject_cast<QQuickWindow*>(engine.rootObjects().value(0)))
+        {
+            window->raise();
+            window->requestActivate();
+        }
+    });
     QObject::connect(&kodi,
                      &KodiMedia::playbackPresentationRequested,
                      &engine,
@@ -823,7 +692,7 @@ handleLaunchArguments()
     const QStringList arguments = QCoreApplication::arguments();
     for (const auto& argument : arguments)
     {
-        if (initialLaunch && setup.complete() && argument.startsWith(QStringLiteral("--launch-app=")))
+        if (launchAtStartup && setup.complete() && argument.startsWith(QStringLiteral("--launch-app=")))
         {
             const auto appId = argument.mid(QStringLiteral("--launch-app=").size()).trimmed();
             if (!appId.isEmpty())
@@ -840,18 +709,20 @@ handleLaunchArguments()
         }
     }
 }
-kodiImporter.shutdown();
-interfaceSounds->setSuppressed(true);
-pageData.invalidate("This profile is no longer active.");
-guide->invalidate();
-games->invalidate();
-appVpn.cancel();
-QObject::disconnect(&sessions, nullptr, &kodiService, nullptr);
-kodiService.stop();
-sessions.exitCurrent();
+// Invalidate profile-bound clients before their backing runtime is destroyed.
+~ProfileRuntime()
+{
+    kodiImporter.shutdown();
+    interfaceSounds->setSuppressed(true);
+    pageData.invalidate("This profile is no longer active.");
+    guide->invalidate();
+    games->invalidate();
+    appVpn.cancel();
+    QObject::disconnect(&sessions, nullptr, &kodiService, nullptr);
+    kodiService.stop();
+    sessions.exitCurrent();
 }
-}
-;
+};
 
 int
 main(int argc, char* argv[])

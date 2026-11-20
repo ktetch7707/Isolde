@@ -7,6 +7,7 @@
 #include <QJsonObject>
 #include <QObject>
 #include <QSet>
+#include <QVariant>
 #include <QVariantList>
 
 class PageModel;
@@ -118,7 +119,7 @@ class HomeLayout final : public QObject
     validateCategoryIdExists(const QString& categoryId) const;
     bool
     validateActionTileBasic(const QString& cleanName, const QString& cleanTarget,
-                            const QString& cleanActionType, const bool captureInput) const;
+                            const QString& cleanActionType, const QString& cleanOpenWith, bool captureInput) const;
     QJsonObject
     buildActionTile(const QString& name, const QString& actionType, const QString& target,
                     const QString& categoryId, const QJsonObject& normalizedAction);
@@ -188,7 +189,7 @@ class HomeLayout final : public QObject
     validateSkinPageArtwork(const QJsonObject& target) const;
     QVariantList
     buildSkinPageUpdateResults(const QJsonObject& skin, const QJsonArray& recipes,
-                               const QVariantList& homeComponents, const QString& homePageId) const;
+                               const QJsonArray& homeComponents) const;
     Q_INVOKABLE bool
     applySkinPageUpdates(const QString& id);
     Q_INVOKABLE bool
@@ -371,8 +372,8 @@ class HomeLayout final : public QObject
     validateHomePage(const QJsonObject& object, const QJsonValue& homePage, const QSet<QString>& pageIds);
     bool
     validateComposition(const QJsonObject& object, QVariantMap& composition);
-    bool
-    buildAppearance(const QJsonObject& theme, QVariantMap& presentation);
+    QVariantMap
+    buildAppearance(const QJsonObject& theme);
     bool
     validateShellReadability(const QJsonArray& pages, const QJsonValue& homePage,
                              const QVariantMap& presentation, const QColor& start, const QColor& end);
@@ -420,11 +421,13 @@ class HomeLayout final : public QObject
     bool
     applySkinDocument(QJsonObject document, const QJsonObject& assets, bool addMissingPages = false);
     bool
-    applySkinAddMissingPages(QJsonObject document, QJsonArray& mergedPages) const;
+    applySkinAddMissingPages(QJsonObject& document, QJsonArray& mergedPages);
     QJsonObject
-    applySkinWrapSinglePage(QJsonObject document, const QJsonArray& mergedPages, const QJsonObject& previous) const;
+    applySkinWrapSinglePage(QJsonObject document, const QJsonArray& mergedPages, const QByteArray& previous);
     bool
-    applySkinValidateArtwork(QJsonObject document, const QJsonObject& assets) const;
+    applySkinValidateArtwork(QJsonObject& document, const QJsonObject& assets) const;
+    bool
+    isValidSkin(const QJsonObject& skin);
     bool
     storePage(const QString& id, const QJsonObject& document);
     void
@@ -436,26 +439,26 @@ class HomeLayout final : public QObject
     QSet<QString>
     computeHiddenIds() const;
     bool
-    appendItem(const QJsonValue& value, QVariantList& result, const QSet<QString>& hidden);
+    appendItem(const QJsonValue& value, QVariantList& result, const QSet<QString>& hidden) const;
     void
-    setItemKindFields(QVariantMap& item, const QJsonObject& object);
+    setItemKindFields(QVariantMap& item) const;
     void
-    setItemAppFields(QVariantMap& item);
+    setItemAppFields(QVariantMap& item) const;
     void
-    setItemActionFields(QVariantMap& item);
+    setItemActionFields(QVariantMap& item) const;
     void
-    setItemLogo(QVariantMap& item, const QJsonObject& object, const QVariantList& actionList);
+    setItemLogo(QVariantMap& item, const QVariantList& actionList) const;
     void
-    setItemUnavailableReason(QVariantMap& item, const QJsonObject& object, const QVariantList& actionList);
+    setItemUnavailableReason(QVariantMap& item, const QJsonObject& object, const QVariantList& actionList) const;
     void
-    unavailableReasonFromSchema(QVariantMap& item, const QVariantList& actionList);
+    unavailableReasonFromSchema(QVariantMap& item, const QVariantList& actionList) const;
     void
-    unavailableReasonFromSwitchInput(QVariantMap& item, const QVariantList& actionList);
+    unavailableReasonFromSwitchInput(QVariantMap& item, const QVariantList& actionList) const;
     void
-    unavailableReasonFromCapability(QVariantMap& item, const QJsonObject& object);
+    unavailableReasonFromCapability(QVariantMap& item, const QJsonObject& object) const;
     QString
-    unavailableReasonValue(const QVariantMap& item);
-    bool
+    unavailableReasonValue(const QVariantMap& item) const;
+    void
     resolveOriginInfo(const QString& surface, const QString& originId, const QVariantMap& home,
                       QVariantMap& origin, QVariantMap& originTheme, QString& originName) const;
     QVariantMap
@@ -497,14 +500,6 @@ class HomeLayout final : public QObject
     bool
     validateStudioStylePresets(const QJsonArray& presets);
     bool
-    validateStudioDesktop(const QJsonObject& desktop);
-    bool
-    validateStudioThemeGroups(const QJsonArray& groups);
-    bool
-    validateStudioSchemes(const QJsonArray& schemes);
-    bool
-    validateStudioStylePresets(const QJsonArray& presets);
-    bool
     validateStudioTrialDurations(const QJsonArray& trials);
     bool
     validateStudioMenuWidth(const QJsonValue& value);
@@ -533,34 +528,46 @@ class HomeLayout final : public QObject
     bool
     sourceIsCompatible(const QString& itemId, const QString& sourceId) const;
     bool
-    rebindItemAt(qsizetype i, const QJsonObject& item, const QString& sourceId);
+    rebindItemAt(qsizetype i, QJsonObject item, const QString& sourceId);
     QJsonObject
-    validateStudioCatalog(const QVariantArray& catalog, const QVariantMap& presets);
+    validateStudioCatalog(const QVariantList& catalog, const QVariantMap& presets);
     bool
-    validateStudioActions(const QVariantArray& actions);
+    validateStudioActions(const QVariantList& actions);
     bool
-    validateStudioActionCategories(const QVariantArray& categories);
+    validateStudioActionCategories(const QVariantList& categories);
     bool
-    validateStudioGridModes(const QVariantArray& modes, const QVariantMap& defaultGrid);
+    validateStudioGridModes(const QVariantList& modes, const QVariantMap& defaultGrid);
     bool
-    validateStudioOverlayKeys(const QVariantArray& overlayKeys, const QVariantMap& guide);
-    validateStudioCatalog(const QVariantArray& catalog, const QVariantMap& presets);
+    validateStudioOverlayKeys(const QVariantList& overlayKeys, const QVariantMap& guide);
     bool
     validateStudioComponentVariants(const QJsonObject& object, const QJsonObject& presets) const;
     bool
     validateStudioVariantFamily(const QString& familyKey, const QJsonArray& variants, const QJsonObject& presets) const;
     bool
-    validateStudioVariant(const QJsonObject& variant, const QString& familyKey, const QJsonObject& presets) const;
+    validateStudioVariant(const QJsonObject& variant, const QString& familyKey, const QJsonObject& presets,
+                          QSet<QString>& variantsSeen) const;
     bool
     validateStudioPresets(const QJsonObject& presets) const;
     bool
     validateStudioShapeChoices(const QJsonObject& object, const QJsonObject& presets) const;
     bool
+    validateStudioReplacementChoices(const QJsonObject& object) const;
+    bool
+    validateStudioDefaults(const QJsonObject& object, QVariantMap& guide);
+    bool
+    validateStudioBasicSettings(const QJsonObject& object);
+    bool
+    validateStudioThemeSettings(const QJsonObject& object);
+    bool
+    validateStudioLayoutSettings(const QJsonObject& object);
+    bool
+    validateStudioContentSettings(const QJsonObject& object, const QJsonObject& presets);
+    bool
+    finalizeStudioOptions(QVariantMap& result, QVariantMap guide) const;
+    bool
     validateStudioPanelPreset(const QJsonObject& object) const;
     bool
     validateStudioActionsList(const QJsonArray& actions) const;
-    bool
-    validateStudioCatalogIds(const QJsonObject& object, const QJsonObject& presets) const;
     bool
     validateStudioCatalogIds(const QJsonObject& object, const QJsonObject& presets) const;
     bool
@@ -572,16 +579,13 @@ class HomeLayout final : public QObject
     bool
     applyStudioDefaults(QVariantMap& result, const QVariantMap& guide) const;
     bool
-    validateStudioActions(const QVariantArray& actions, const QVariantMap& listings);
+    validateStudioActions(const QVariantList& actions, const QVariantMap& listings);
     bool
-    validateStudioActionCategories(const QVariantArray& categories, const QVariantMap& listings);
-    bool
-    validateStudioGridModes(const QVariantArray& modes, const QVariantMap& defaultGrid);
-    bool
-    validateStudioOverlayKeys(const QVariantArray& overlayKeys, const QVariantMap& guide);
+    validateStudioActionCategories(const QVariantList& categories, const QVariantMap& listings);
+    QJsonObject
     previousItem(qsizetype i) const;
     void
-    setAppId(QJsonObject& first, const QJsonObject& item, const QString& sourceId);
+    setAppId(QVariantMap& first, QJsonObject& item, const QString& sourceId);
     QVariantList
     resolveCategoryItems(const QVariantList& resolved, const QJsonObject& category) const;
     QVariantList

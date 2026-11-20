@@ -17,6 +17,12 @@
 
 namespace
 {
+bool validateSetupAssetSource(const QFileInfo& source, const QString& kind, QString* error);
+bool readAndHashAsset(const QFileInfo& source, qint64 maximum, QCryptographicHash& hash, qint64& total);
+bool writeAndVerifyAsset(const QFileInfo& source, const QString& destination, qint64 maximum,
+                         const QByteArray& firstHash, QCryptographicHash& second, qint64& total,
+                         QString* error);
+QString kindFromPath(const QFileInfo& source);
 bool
 protectedPath(const QString& path)
 {
@@ -165,13 +171,12 @@ pruneFirmware(const QString& root, const QString& keep, QString* error)
     }
     return true;
 }
-namespace
-{
 bool
 hasValidSettingsKeys(const QVariantMap& value)
 {
     const QSet<QString> keys{"schemaVersion", "video", "controller", "firmware"};
-    return QSet<QString>(value.keys().begin(), value.keys().end()) == keys;
+    const auto actual = value.keys();
+    return QSet<QString>(actual.begin(), actual.end()) == keys;
 }
 bool
 hasValidSchemaVersion(const QVariantMap& value)
@@ -251,13 +256,13 @@ importSetupAsset(const QString& root, const QString& sourcePath, const QString& 
     }
     QCryptographicHash second(QCryptographicHash::Sha256);
     if (!writeAndVerifyAsset(source, destination, kind == "xbox-bootset" ? 128LL * 1024 * 1024 : 512LL * 1024 * 1024,
-                             hash.result(), second, error))
+                             hash.result(), second, total, error))
         return {};
     QFile::setPermissions(destination, QFile::ReadOwner | QFile::WriteOwner);
     return name;
 }
 
-bool
+[[maybe_unused]] bool
 validateSetupAssetSource(const QFileInfo& source, const QString& kind, QString* error)
 {
     const qint64 maximum = kind == "xbox-bootset" ? 128LL * 1024 * 1024 : 512LL * 1024 * 1024;
@@ -271,7 +276,7 @@ validateSetupAssetSource(const QFileInfo& source, const QString& kind, QString* 
     return true;
 }
 
-bool
+[[maybe_unused]] bool
 readAndHashAsset(const QFileInfo& source, const qint64 maximum, QCryptographicHash& hash, qint64& total)
 {
     QFile input(source.absoluteFilePath());
@@ -292,9 +297,9 @@ readAndHashAsset(const QFileInfo& source, const qint64 maximum, QCryptographicHa
     return input.error() == QFile::NoError && total == source.size();
 }
 
-bool
+[[maybe_unused]] bool
 writeAndVerifyAsset(const QFileInfo& source, const QString& destination, const qint64 maximum,
-                    const QByteArray& firstHash, QCryptographicHash& second, QString* error)
+                    const QByteArray& firstHash, QCryptographicHash& second, qint64& total, QString* error)
 {
     QFile input(source.absoluteFilePath());
     if (!input.seek(0))
@@ -330,7 +335,7 @@ writeAndVerifyAsset(const QFileInfo& source, const QString& destination, const q
     return true;
 }
 
-QString
+[[maybe_unused]] QString
 kindFromPath(const QFileInfo& source)
 {
     return source.suffix().toLower();
@@ -417,7 +422,7 @@ GameEmulators::validateEmulatorGenerations(const QVariantMap& generations)
             const QSet<QString> actualKeys(keyList.cbegin(), keyList.cend());
             if (!std::all_of(actualKeys.cbegin(),
                              actualKeys.cend(),
-                             [&generationKeys](const QString& k)
+                             [](const QString& k)
                              {
                                  return generationKeys.contains(k);
                              }))
@@ -445,6 +450,7 @@ GameEmulators::validateEmulatorRuntimes(const QVariantList& runtimes, QSet<QStri
     QSet<QString> ids;
     for (const auto& entry : runtimes)
     {
+        const auto item = entry.toMap();
         if (!validateEmulatorRuntimeItem(item, ids, actualPlatforms))
             return false;
     }
@@ -464,7 +470,7 @@ GameEmulators::validateEmulatorRuntimeItem(const QVariantMap& item, QSet<QString
         return false;
     if (!validateEmulatorRuntimePackages(engine, item, packages))
         return false;
-    ids.insert(id);
+    ids.insert(item.value("id").toString());
     for (const auto& package : packages)
         if (!QRegularExpression("^[a-z0-9][a-z0-9+.-]{0,80}$").match(package).hasMatch())
             return false;
@@ -481,12 +487,12 @@ GameEmulators::validateEmulatorRuntimeItemCore(const QVariantMap& item, QSet<QSt
 {
     const auto id = item.value("id").toString();
     const auto engine = item.value("engine").toString();
+    static const QSet<QString> engines{
+        "ppsspp", "dolphin", "pcsx2", "retroarch", "rpcs3", "shadps4", "vita3k", "xemu", "xenia", "cemu"};
     if (item.isEmpty() || !QRegularExpression("^[a-z0-9-]{1,48}$").match(id).hasMatch() || ids.contains(id) ||
         !engines.contains(engine) || item.value("binary").toString().isEmpty() ||
         !QDir::isAbsolutePath(item.value("binary").toString()))
         return false;
-    static const QSet<QString> engines{
-        "ppsspp", "dolphin", "pcsx2", "retroarch", "rpcs3", "shadps4", "vita3k", "xemu", "xenia", "cemu"};
     static const QMap<QString, QString> expandedKinds{{"rpcs3", "ps3-pup"},
                                                       {"shadps4", "none"},
                                                       {"vita3k", "vita-pup"},
@@ -580,8 +586,6 @@ GameEmulators::validateEmulatorCoverage(const QVariantMap& coverage, const QSet<
             return false;
     return true;
 }
-
-QVariantMap
 
 QVariantMap
 GameEmulators::definition(const QString& id)
@@ -706,7 +710,8 @@ GameEmulators::configure(
         *error = "Choose a supported renderer and controller profile.";
         return false;
     }
-    const auto setup = definition(id).value("setup").toMap();
+    const auto runtime = definition(id);
+    const auto setup = runtime.value("setup").toMap();
     if (!setup.isEmpty() && !setup.value("videoModes").toStringList().contains(value.value("video").toString()))
     {
         *error = "This runtime does not provide the selected renderer.";
@@ -722,7 +727,7 @@ GameEmulators::configure(
         }
         return save(root + "/.config/isolde-emulator/settings.json", QJsonDocument::fromVariant(value).toJson(), error);
     }
-    if (!importFirmwareWithoutSetup(root, setup, firmware, id, value, error))
+    if (!importFirmwareWithoutSetup(root, runtime.value("firmwareRequired").toBool(), firmware, id, value, error))
         return false;
     if (!save(root + "/.config/isolde-emulator/settings.json", QJsonDocument::fromVariant(value).toJson(), error))
         return false;
@@ -764,7 +769,7 @@ GameEmulators::importFirmwareWithSetup(
 
 bool
 GameEmulators::importFirmwareWithoutSetup(const QString& root,
-                                           const QVariantMap& setup,
+                                           bool firmwareRequired,
                                            const QString& firmware,
                                            const QString& id,
                                            QVariantMap& value,
@@ -772,7 +777,8 @@ GameEmulators::importFirmwareWithoutSetup(const QString& root,
 {
     if (!firmware.isEmpty())
     {
-        if (!setup.value("firmwareRequired").toBool())
+        // Legacy runtimes declare firmware requirements on the runtime itself.
+        if (!firmwareRequired)
         {
             *error = "This runtime does not require imported firmware.";
             return false;
@@ -853,6 +859,7 @@ GameEmulators::validateFirmwareFile(const QString& root, const QString& firmware
                                     const QString& existingFirmware, QString* error)
 {
     Q_UNUSED(root);
+    Q_UNUSED(id);
     Q_UNUSED(existingFirmware);
     QFileInfo source(firmware);
     if (!source.isFile() || !source.isReadable())

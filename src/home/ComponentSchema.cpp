@@ -47,7 +47,7 @@ bool ComponentSchema::validSourcePolicyField(const QString& key, const QVariant&
         return validSourcePolicyIdList(v, key);
     if (key == "events" || key == "types")
         return validSourcePolicyEventTypeList(v, key);
-    if (key == "reconnect" || key == "suppressPlayback" || key == "suppressSetup" ||
+    if (key == "reconnect" || key == "suppressPlayback" || key == "suppressSetup" || key == "suppressEditing" ||
         key == "discoveryEnabled")
         return validSourcePolicyBool(v);
     if (key == "detectedSource")
@@ -100,7 +100,7 @@ ComponentSchema::validSourcePolicyNumeric(const QVariant& value, const QString& 
         return false;
     if (key == "schemaVersion")
         return n == 1;
-    return n != 0 && (n >= 5 && n <= 60);
+    return n == 0 || (n >= 5 && n <= 60);
 }
 
 /**
@@ -142,6 +142,7 @@ ComponentSchema::validSourcePolicyIdList(const QVariant& value, const QString& k
 bool
 ComponentSchema::validSourcePolicyEventTypeList(const QVariant& value, const QString& key)
 {
+    Q_UNUSED(key);
     if (value.metaType().id() != QMetaType::QVariantList || value.toList().size() > 4)
         return false;
     QSet<QString> seen;
@@ -180,23 +181,23 @@ bool ComponentSchema::validSourcePolicyBool(const QVariant& value)
  */
 bool ComponentSchema::validSourcePolicyDetectedSource(const QVariantMap& value)
 {
-    if (!s.contains(QStringLiteral("id")) || !safeId(s.value(QStringLiteral("id")).toString()))
+    if (!value.contains(QStringLiteral("id")) || !safeId(value.value(QStringLiteral("id")).toString()))
         return false;
-    if (!s.contains(QStringLiteral("type")) ||
+    if (!value.contains(QStringLiteral("type")) ||
         !QStringList{"movie-disc", "game-disc", "media-folder", "file-source"}.contains(
-            s.value(QStringLiteral("type")).toString()))
+            value.value(QStringLiteral("type")).toString()))
         return false;
-    if (s.contains(QStringLiteral("containment")))
+    if (value.contains(QStringLiteral("containment")))
     {
-        const auto& containment = s.value(QStringLiteral("containment")).toString();
+        const auto& containment = value.value(QStringLiteral("containment")).toString();
         if (containment == "remote")
         {
-            if (!s.contains(QStringLiteral("remoteRef")) || s.value(QStringLiteral("remoteRef")).toString().isEmpty())
+            if (!value.contains(QStringLiteral("remoteRef")) || value.value(QStringLiteral("remoteRef")).toString().isEmpty())
                 return false;
         }
         else if (containment == "local")
         {
-            if (!s.contains(QStringLiteral("localPath")))
+            if (!value.contains(QStringLiteral("localPath")))
                 return false;
         }
         else
@@ -214,18 +215,18 @@ bool ComponentSchema::validSourcePolicyDetectedSource(const QVariantMap& value)
  */
 bool ComponentSchema::validSourcePolicyAppliance(const QVariantMap& value)
 {
-    if (!a.contains(QStringLiteral("id")) || !safeId(a.value(QStringLiteral("id")).toString()))
+    if (!value.contains(QStringLiteral("id")) || !safeId(value.value(QStringLiteral("id")).toString()))
         return false;
-    if (!a.contains(QStringLiteral("type")) ||
+    if (!value.contains(QStringLiteral("type")) ||
         !QStringList{"whiteware", "AV appliance", "climate appliance"}.contains(
-            a.value(QStringLiteral("type")).toString()))
+            value.value(QStringLiteral("type")).toString()))
         return false;
-    if (a.contains(QStringLiteral("distributionMode")) &&
+    if (value.contains(QStringLiteral("distributionMode")) &&
         !QStringList{"direct", "partner", "self-install"}.contains(
-            a.value(QStringLiteral("distributionMode")).toString()))
+            value.value(QStringLiteral("distributionMode")).toString()))
         return false;
-    if (a.contains(QStringLiteral("requiresSetup")) &&
-        a.value(QStringLiteral("requiresSetup")).metaType().id() != QMetaType::Bool)
+    if (value.contains(QStringLiteral("requiresSetup")) &&
+        value.value(QStringLiteral("requiresSetup")).metaType().id() != QMetaType::Bool)
         return false;
     return true;
 }
@@ -291,12 +292,6 @@ constexpr int DefaultGridRows = 5;
 constexpr int DefaultGridGap = 12;
 constexpr int DefaultGridMargin = 20;
 
-// PageData runtime caches, per active profile.
-constexpr int MaxPageDataClientKeySize = 330;  // full client key length
-constexpr int MaxPageDataClientIdLength = 160; // id prefix validated with safeId
-constexpr int MaxPageDataClients = 128;        // library clients
-constexpr int MaxPageDataArtwork = 512;        // artwork items
-
 // Action payload limits.
 constexpr int MinMediaId = 1;          // media ids are 1-based
 constexpr int MaxMediaId = 2147483647; // INT_MAX, bounded for safe JSON double decoding
@@ -321,8 +316,8 @@ constexpr int MaxHomeLayoutColumns = 2;
 // Page composition bounds.
 constexpr int MaxNavigationTabs = 64;
 constexpr int MaxHeaderControls = 4;
-// Min/MaxSidebarWidth, Min/MaxSectionHeight, Min/MaxDesignHeight are declared
-// in ComponentSchema.h (shared with HomeLayout).
+constexpr int MinDesignHeight = 480;
+constexpr int MaxDesignHeight = 1440;
 } // namespace
 /**
  * Validates a safe component identity: starts with alphanumeric, bounded
@@ -495,14 +490,19 @@ ComponentSchema::validPresentationField(const QString& key, const QVariant& v, c
     if (key == "libraryChrome")
         return validPresentationLibraryChrome(value, section);
     if (key == "showHeading" || key == "labelPill" || key == "headingBold")
-        return validPresentationHeadingFlags(value, section, container);
+        return validPresentationHeadingFlags({{key, v}}, section, container);
     if (key == "trailingAction")
         return validPresentationTrailingAction(value, section);
-    const QVariantMap m = v.toMap();
+    const QVariantMap presentationMap = (key == "states" || key == "layout" || key == "grid")
+                                            ? v.toMap()
+                                            : QVariantMap{{key, v}};
+    if ((key == "states" || key == "layout" || key == "grid") &&
+        v.metaType().id() != QMetaType::QVariantMap)
+        return false;
     static const QMap<QString, std::function<bool(const QVariantMap&, bool, bool)>> handlers{
         {"states", [](const QVariantMap& m, bool s, bool c) { Q_UNUSED(s); Q_UNUSED(c); return validPresentationStates(m); }},
         {"layout", [](const QVariantMap& m, bool s, bool c) { Q_UNUSED(s); return validPresentationLayout(m, c); }},
-        {"grid", [](const QVariantMap& m, bool s, bool c) { return validPresentationGrid(m, s); }},
+        {"grid", [](const QVariantMap& m, bool s, bool c) { Q_UNUSED(c); return validPresentationGrid(m, s); }},
         {"variant", [](const QVariantMap& m, bool s, bool c) { Q_UNUSED(s); Q_UNUSED(c); return validPresentationVariant(m); }},
         {"fillMode", [](const QVariantMap& m, bool s, bool c) { Q_UNUSED(s); Q_UNUSED(c); return validPresentationFill(m); }},
         {"fillDirection", [](const QVariantMap& m, bool s, bool c) { Q_UNUSED(s); Q_UNUSED(c); return validPresentationFill(m); }},
@@ -549,8 +549,8 @@ ComponentSchema::validPresentationField(const QString& key, const QVariant& v, c
         {"borderColor", [](const QVariantMap& m, bool s, bool c) { Q_UNUSED(s); Q_UNUSED(c); return validPresentationBorderColor(m); }},
         {"focusColor", [](const QVariantMap& m, bool s, bool c) { Q_UNUSED(s); Q_UNUSED(c); return validPresentationBorderColor(m); }},
         {"labelSurfaceColor", [](const QVariantMap& m, bool s, bool c) { Q_UNUSED(s); Q_UNUSED(c); return validPresentationBorderColor(m); }},
-        {"libraryKind", [](const QVariantMap& m, bool s, bool c) { return validPresentationLibraryFields(m, s); }},
-        {"libraryView", [](const QVariantMap& m, bool s, bool c) { return validPresentationLibraryFields(m, s); }},
+        {"libraryKind", [](const QVariantMap& m, bool s, bool c) { Q_UNUSED(c); return validPresentationLibraryFields(m, s); }},
+        {"libraryView", [](const QVariantMap& m, bool s, bool c) { Q_UNUSED(c); return validPresentationLibraryFields(m, s); }},
         {"libraryLayout", [](const QVariantMap& m, bool s, bool c) { Q_UNUSED(c); return validPresentationLibraryFields(m, s); }},
         {"libraryValue", [](const QVariantMap& m, bool s, bool c) { Q_UNUSED(c); return validPresentationLibraryFields(m, s); }},
         {"libraryColumns", [](const QVariantMap& m, bool s, bool c) { Q_UNUSED(c); return validPresentationLibraryFields(m, s); }},
@@ -583,10 +583,10 @@ ComponentSchema::validPresentationField(const QString& key, const QVariant& v, c
         {"guideLabels", [](const QVariantMap& m, bool s, bool c) { Q_UNUSED(s); Q_UNUSED(c); return validPresentationGuideBool(m); }},
         {"guideSourceBadges", [](const QVariantMap& m, bool s, bool c) { Q_UNUSED(s); Q_UNUSED(c); return validPresentationGuideBool(m); }},
         {"imageCrop", [](const QVariantMap& m, bool s, bool c) { Q_UNUSED(s); Q_UNUSED(c); return validPresentationImageCrop(m); }},
-        {"columns", [](const QVariantMap& m, bool s, bool c) { return validPresentationNumericField(m, "columns", s); }},
+        {"columns", [](const QVariantMap& m, bool s, bool c) { Q_UNUSED(c); return validPresentationNumericField(m, "columns", s); }},
         {"span", [](const QVariantMap& m, bool s, bool c) { Q_UNUSED(c); return validPresentationNumericField(m, "span", s); }},
         {"height", [](const QVariantMap& m, bool s, bool c) { Q_UNUSED(c); return validPresentationNumericField(m, "height", s); }},
-        {"progress", [](const QVariantMap& m, bool s, bool c) { return validPresentationNumericField(m, "progress", s); }},
+        {"progress", [](const QVariantMap& m, bool s, bool c) { Q_UNUSED(c); return validPresentationNumericField(m, "progress", s); }},
         {"contentWidth", [](const QVariantMap& m, bool s, bool c) { Q_UNUSED(c); return validPresentationNumericField(m, "contentWidth", s); }},
         {"padding", [](const QVariantMap& m, bool s, bool c) { Q_UNUSED(s); Q_UNUSED(c); return validPresentationNumericField(m, "padding", s); }},
         {"panelOpacity", [](const QVariantMap& m, bool s, bool c) { Q_UNUSED(s); Q_UNUSED(c); return validPresentationNumericField(m, "panelOpacity", s); }},
@@ -601,7 +601,7 @@ ComponentSchema::validPresentationField(const QString& key, const QVariant& v, c
         {"artHeight", [](const QVariantMap& m, bool s, bool c) { Q_UNUSED(s); Q_UNUSED(c); return validPresentationNumericField(m, "artHeight", s); }}};
     auto it = handlers.find(key);
     if (it != handlers.cend())
-        return it.value()(m, section, container);
+        return it.value()(presentationMap, section, container);
     return false;
 }
 
@@ -651,15 +651,13 @@ ComponentSchema::validPresentationStates(const QVariantMap& states)
 bool
 ComponentSchema::validPresentationLayout(const QVariantMap& layout, bool container)
 {
-    return container && layout.metaType().id() == QMetaType::QVariantMap &&
-           validChildLayout(layout.toMap());
+    return container && validChildLayout(layout);
 }
 
 bool
 ComponentSchema::validPresentationGrid(const QVariantMap& grid, bool section)
 {
-    return section && grid.metaType().id() == QMetaType::QVariantMap &&
-           validGrid(grid.toMap()) && grid.toMap().value("mode", "screen") == "screen";
+    return section && validGrid(grid) && grid.value("mode", "screen") == "screen";
 }
 
 bool
@@ -1128,16 +1126,17 @@ ComponentSchema::validPresentationGuideOverlay(const QVariantMap& v)
     {
         const auto key = it.key();
         const auto val = it.value();
-        if (val.metaType().id() != QMetaType::QString)
-            return false;
         if (key == "guideOverlayPosition")
         {
-            if (!QStringList{"top-left", "top-center", "top-right", "center-left", "center",
+            if (val.metaType().id() != QMetaType::QString ||
+                !QStringList{"top-left", "top-center", "top-right", "center-left", "center",
                              "center-right", "bottom-left", "bottom-center", "bottom-right"}.contains(val.toString()))
                 return false;
         }
         else
         {
+            if (val.metaType().id() == QMetaType::QString || val.metaType().id() == QMetaType::Bool)
+                return false;
             const int low = key == "guideOverlayRows" ? 3 : 65;
             const int high = key == "guideOverlayRows" ? 5 : 100;
             bool ok = false;
@@ -1214,7 +1213,7 @@ ComponentSchema::validPresentationTrailingAction(const QVariantMap& value, bool 
 {
     if (!section)
         return false;
-    return !action(value.value("trailingAction").toMap()).isEmpty();
+    return !action(value.value("trailingAction").toMap(), nullptr).isEmpty();
 }
 
 bool
@@ -1340,6 +1339,15 @@ ComponentSchema::validSettingsNavigation(const QVariantMap& value)
     return seen == categoryIds && seenRoutes == routes;
 }
 
+// Navigation documents have exactly one numeric version and a category list.
+bool
+ComponentSchema::validSettingsNavigationVersion(const QVariantMap& value)
+{
+    return value.size() == 2 && QJsonValue::fromVariant(value.value("schemaVersion")).isDouble() &&
+           value.value("schemaVersion").toDouble() == 1 &&
+           value.value("categories").metaType().id() == QMetaType::QVariantList;
+}
+
 /**
  * Validates settings navigation schemaVersion (numeric 1).
  * Validates settings navigation categories list (exact set of 10 categories).
@@ -1414,6 +1422,9 @@ bool
 ComponentSchema::validSettingsNavigationRow(const QVariantMap& row, QSet<QString>& seenRoutes)
 {
     const auto route = row.value("route").toString();
+    static const QSet<QString> routes{
+        "network", "vpn", "display", "audio", "interface-sounds", "studio", "ambient", "store",
+        "store-preferences", "capture", "sources", "remotes", "profiles", "media", "system", "skins"};
     if (row.size() != 3 || !validSettingsNavigationLabel(row.value("name"), 48) ||
         !validSettingsNavigationLabel(row.value("description"), 160) || !routes.contains(route) ||
         seenRoutes.contains(route))
@@ -1441,7 +1452,9 @@ ComponentSchema::validComposition(const QVariantMap& value)
            validCompositionOptionalFields(value) &&
            validCompositionLayout(value) &&
            validCompositionGrid(value) &&
-           validCompositionIdentity(value) &&
+           (!value.contains("identity") || validCompositionIdentity(value)) &&
+           (!value.contains("headerMode") || validCompositionHeaderModeIdentity(value)) &&
+           (!value.contains("headerControls") || validCompositionHeaderControls(value)) &&
            validCompositionScrolling(value) &&
            validCompositionNavigationTabs(value) &&
            validCompositionInitialTab(value);
@@ -1463,8 +1476,18 @@ ComponentSchema::validCompositionOptionalFields(const QVariantMap& value)
 bool
 ComponentSchema::validCompositionLayout(const QVariantMap& value)
 {
+    if (value.contains("designHeight"))
+    {
+        const auto heightValue = value.value("designHeight");
+        bool ok = false;
+        const auto height = heightValue.toDouble(&ok);
+        if (!ok || !std::isfinite(height) || heightValue.metaType().id() == QMetaType::QString ||
+            heightValue.metaType().id() == QMetaType::Bool || height < MinDesignHeight || height > MaxDesignHeight)
+            return false;
+    }
     return (!value.contains("header") ||
-            validCompositionHeader(value["header"].toMap(), value)) &&
+            (value["header"].metaType().id() == QMetaType::QVariantMap &&
+             validCompositionHeader(value["header"].toMap(), value))) &&
            (!value.contains("background") || validCompositionBackground(value)) &&
            (!value.contains("pageNavigation") || validCompositionPageNavigation(value)) &&
            (!value.contains("sidebarWidth") || validCompositionSidebarWidth(value));
@@ -1477,14 +1500,6 @@ ComponentSchema::validCompositionGrid(const QVariantMap& value)
            validCompositionVersionColumnsGrid(value) &&
            (!value.contains("sectionHeight") || validCompositionSectionHeight(value)) &&
            (!value.contains("wallpaper") || validCompositionWallpaper(value));
-}
-
-bool
-ComponentSchema::validCompositionIdentity(const QVariantMap& value)
-{
-    return (!value.contains("headerMode") || validCompositionHeaderModeIdentity(value)) &&
-           (!value.contains("identity") || validCompositionIdentity(value)) &&
-           (!value.contains("headerControls") || validCompositionHeaderControls(value));
 }
 
 bool
@@ -1501,7 +1516,7 @@ ComponentSchema::validCompositionScrolling(const QVariantMap& value)
  * Validates composition header keys only.
  */
 bool
-ComponentSchema::validCompositionHeaderKeys(const QVariantMap& header)
+ComponentSchema::validCompositionKeys(const QVariantMap& header)
 {
     static const QSet<QString> keys{"schemaVersion",
                                     "enabled",
@@ -1531,7 +1546,7 @@ ComponentSchema::validCompositionHeaderKeys(const QVariantMap& header)
                                     "appGallery",
                                     "captureInputArtwork",
                                     "settingsCategoryOrder"};
-    for (auto it = value.cbegin(); it != value.cend(); ++it)
+    for (auto it = header.cbegin(); it != header.cend(); ++it)
         if (!keys.contains(it.key()))
             return false;
     return true;
@@ -1638,8 +1653,9 @@ ComponentSchema::validCompositionAppGalleryLayout(const QVariant& val)
 bool
 ComponentSchema::validCompositionAppGalleryColumns(const QVariant& val)
 {
-    if (val.metaType().id() == QMetaType::Bool || val.metaType().id() != QMetaType::Double &&
-        val.metaType().id() != QMetaType::Int)
+    const auto type = val.metaType().id();
+    if (type != QMetaType::Int && type != QMetaType::UInt && type != QMetaType::LongLong &&
+        type != QMetaType::ULongLong && type != QMetaType::Double)
         return false;
     bool ok = false;
     const double columns = val.toDouble(&ok);
@@ -1697,7 +1713,7 @@ ComponentSchema::validCompositionAppGalleryFavoriteIds(const QVariant& val)
 bool
 ComponentSchema::validCompositionHeader(const QVariantMap& header, const QVariantMap& value)
 {
-    if (header.metaType().id() != QMetaType::QVariantMap || !versionOne(header))
+    if (!versionOne(header))
         return false;
     for (auto it = header.cbegin(); it != header.cend(); ++it)
     {
@@ -1998,7 +2014,7 @@ ComponentSchema::validCompositionHeaderControls(const QVariantMap& value)
             return false;
         unique.insert(id);
     }
-    return unique.contains("settings") && unique.contains("edit");
+    return unique.contains("settings") || unique.contains("edit");
 }
 
 bool
@@ -2047,8 +2063,10 @@ ComponentSchema::validCompositionNavigationTabs(const QVariantMap& value)
 bool
 ComponentSchema::validCompositionNavigationTabsType(const QVariantMap& value)
 {
+    if (!value.contains("navigation"))
+        return true;
     const auto tabs = value.value("navigation");
-    return tabs.size() <= MaxNavigationTabs &&
+    return tabs.toList().size() <= MaxNavigationTabs &&
            tabs.metaType().id() == QMetaType::QVariantList;
 }
 
@@ -2068,7 +2086,7 @@ bool
 ComponentSchema::validNavigationTabKeys(const QVariantMap& tab)
 {
     for (auto it = tab.cbegin(); it != tab.cend(); ++it)
-        if (!QStringList{"id", "name", "actions", "sections"}.contains(it.key()))
+        if (!QStringList{"id", "name", "action", "actions", "sections"}.contains(it.key()))
             return false;
     return true;
 }
@@ -2076,6 +2094,9 @@ ComponentSchema::validNavigationTabKeys(const QVariantMap& tab)
 bool
 ComponentSchema::validNavigationTabActions(const QVariantMap& tab)
 {
+    // Legacy tabs carry one action. Keep a single unambiguous dispatch representation per tab.
+    if (tab.contains("action"))
+        return !tab.contains("actions") && !action(tab.value("action").toMap()).isEmpty();
     if (!tab.contains("actions"))
         return true;
     const auto list = tab["actions"].toList();
@@ -2246,7 +2267,7 @@ ComponentSchema::gameRegistration(const QVariantMap& input, QString* error)
         !gameRegistrationTitlePlatform(input))
         return reject(error, "Choose a title, platform and valid game runtime.");
     if (input.value("runtimeId") == "steam")
-        return gameRegistrationSteam(input, error);
+        return gameRegistrationSteam(input, error) ? input : QVariantMap();
     return gameRegistrationRootTarget(input) ? input : QVariantMap();
 }
 
@@ -2254,9 +2275,12 @@ bool
 ComponentSchema::gameRegistrationKeys(const QVariantMap& input)
 {
     static const QSet<QString> keys{"schemaVersion", "title", "platform", "runtimeId", "root", "target"};
-    return input.size() == keys.size() &&
-           std::all_of(input.cbegin(), input.cend(),
-                       [&keys](const auto& entry) { return keys.contains(entry.key()); });
+    if (input.size() != keys.size())
+        return false;
+    for (auto it = input.keyBegin(); it != input.keyEnd(); ++it)
+        if (!keys.contains(*it))
+            return false;
+    return true;
 }
 
 bool
@@ -2295,7 +2319,10 @@ ComponentSchema::gameRegistrationSteam(const QVariantMap& input, QString* error)
     if (!input.value("root").toString().isEmpty() ||
         !QRegularExpression("^[1-9][0-9]{0,9}$").match(input.value("target").toString()).hasMatch() || !valid ||
         id > 4294967295ULL || QString::number(id) != input.value("target").toString())
-        return reject(error, "Steam games contain a positive Steam App ID, never a path or launch command.");
+    {
+        reject(error, "Steam games contain a positive Steam App ID, never a path or launch command.");
+        return false;
+    }
     return true;
 }
 
@@ -2323,28 +2350,27 @@ ComponentSchema::action(const QVariantMap& input, QString* error)
     auto type = input.value("type").toString();
     if (type == "kodi-collection")
         type = input.value("movieId").toInt() > 0 ? "play-movie" : "open-collection";
-    static const QMap<QString, std::function<QVariantMap(const QVariantMap&, QString*)>> handlers{
-        {"launch-game", [](const QVariantMap& in, QString* err) { return actionLaunchGame(in, err); }},
-        {"open-guide", [](const QVariantMap& in, QString* err) { return actionGuide(in, "open-guide", err); }},
-        {"tune-channel", [](const QVariantMap& in, QString* err) { return actionGuide(in, "tune-channel", err); }},
-        {"launch-app", [](const QVariantMap& in, QString* err) { return actionLaunchApp(in, err); }},
-        {"open-collection", [](const QVariantMap& in, QString* err) { return actionCollection(in, "open-collection", err); }},
-        {"play-movie", [](const QVariantMap& in, QString* err) { return actionCollection(in, "play-movie", err); }},
-        {"open-show", [](const QVariantMap& in, QString* err) { return actionCollection(in, "open-show", err); }},
-        {"open-page", [](const QVariantMap& in, QString* err) { return actionOpenPage(in, err); }},
-        {"app-drawer", [](const QVariantMap& in, QString* err) { return actionShellRoute(in, "app-drawer", err); }},
-        {"open-apps", [](const QVariantMap& in, QString* err) { return actionShellRoute(in, "open-apps", err); }},
-        {"open-search", [](const QVariantMap& in, QString* err) { return actionShellRoute(in, "open-search", err); }},
-        {"root-page", [](const QVariantMap& in, QString* err) { return actionShellRoute(in, "root-page", err); }},
-        {"settings", [](const QVariantMap& in, QString* err) { return actionSettings(in, err); }},
-        {"switch-input", [](const QVariantMap& in, QString* err) { return actionSwitchInput(in, err); }},
-        {"desktop-mode", [](const QVariantMap& in, QString* err) { return actionDesktopMode(in, err); }},
-        {"wait", [](const QVariantMap& in, QString* err) { return actionWait(in, err); }},
-        {"open-folder", [](const QVariantMap& in, QString* err) { return actionOpenTarget(in, "open-folder", err); }},
-        {"open-file", [](const QVariantMap& in, QString* err) { return actionOpenTarget(in, "open-file", err); }},
-        {"open-disc", [](const QVariantMap& in, QString* err) { return actionOpenTarget(in, "open-disc", err); }},
-        {"open-url", [](const QVariantMap& in, QString* err) { return actionOpenTarget(in, "open-url", err); }},
-    };
+    QMap<QString, std::function<QVariantMap(const QVariantMap&, QString*)>> handlers;
+    handlers.insert("launch-game", [](const QVariantMap& in, QString* err) { return actionLaunchGame(in, err); });
+    handlers.insert("open-guide", [](const QVariantMap& in, QString* err) { return actionGuide(in, "open-guide", err); });
+    handlers.insert("tune-channel", [](const QVariantMap& in, QString* err) { return actionGuide(in, "tune-channel", err); });
+    handlers.insert("launch-app", [](const QVariantMap& in, QString* err) { return actionLaunchApp(in, err); });
+    handlers.insert("open-collection", [](const QVariantMap& in, QString* err) { return actionCollection(in, "open-collection", err); });
+    handlers.insert("play-movie", [](const QVariantMap& in, QString* err) { return actionCollection(in, "play-movie", err); });
+    handlers.insert("open-show", [](const QVariantMap& in, QString* err) { return actionCollection(in, "open-show", err); });
+    handlers.insert("open-page", [](const QVariantMap& in, QString* err) { return actionOpenPage(in, err); });
+    handlers.insert("app-drawer", [](const QVariantMap& in, QString* err) { return actionShellRoute(in, "app-drawer", err); });
+    handlers.insert("open-apps", [](const QVariantMap& in, QString* err) { return actionShellRoute(in, "open-apps", err); });
+    handlers.insert("open-search", [](const QVariantMap& in, QString* err) { return actionShellRoute(in, "open-search", err); });
+    handlers.insert("root-page", [](const QVariantMap& in, QString* err) { return actionShellRoute(in, "root-page", err); });
+    handlers.insert("settings", [](const QVariantMap& in, QString* err) { return actionSettings(in, err); });
+    handlers.insert("switch-input", [](const QVariantMap& in, QString* err) { return actionSwitchInput(in, err); });
+    handlers.insert("desktop-mode", [](const QVariantMap& in, QString* err) { return actionDesktopMode(in, err); });
+    handlers.insert("wait", [](const QVariantMap& in, QString* err) { return actionWait(in, err); });
+    handlers.insert("open-folder", [](const QVariantMap& in, QString* err) { return actionOpenTarget(in, "open-folder", err); });
+    handlers.insert("open-file", [](const QVariantMap& in, QString* err) { return actionOpenTarget(in, "open-file", err); });
+    handlers.insert("open-disc", [](const QVariantMap& in, QString* err) { return actionOpenTarget(in, "open-disc", err); });
+    handlers.insert("open-url", [](const QVariantMap& in, QString* err) { return actionOpenTarget(in, "open-url", err); });
     auto it = handlers.find(type);
     if (it != handlers.cend())
         return it.value()(input, error);
@@ -2553,17 +2579,24 @@ ComponentSchema::editorAction(const QVariantMap& input, QString* error)
         return reject(error, "Choose a supported editor action.");
     const auto type = typeValue.toString();
     QVariantMap result{{"schemaVersion", 1}, {"type", type}};
-    static const QMap<QString, std::function<QVariantMap(const QVariantMap&, QString*)>> handlers{
-        {"capture-artwork-apply", editorActionCaptureArtworkApply},
-        {"capture-apply", editorActionCaptureApply},
-        {"capture-switch-input", editorActionCaptureSwitchInput},
-        {"capture-preview-draft", editorActionCapturePreviewDraft},
-        {"capture-preview-start", [](const QVariantMap& in, QString* err) { return editorActionCaptureControl(in, "capture-preview-start", err); }},
-        {"capture-preview-stop", [](const QVariantMap& in, QString* err) { return editorActionCaptureControl(in, "capture-preview-stop", err); }},
-        {"capture-switch-cancel", [](const QVariantMap& in, QString* err) { return editorActionCaptureControl(in, "capture-switch-cancel", err); }},
-        {"capture-refresh", [](const QVariantMap& in, QString* err) { return editorActionCaptureControl(in, "capture-refresh", err); }},
-        {"audio-output-select", editorActionAudioOutputSelect},
-    };
+    QMap<QString, std::function<QVariantMap(const QVariantMap&, QString*)>> handlers;
+    handlers.insert("capture-artwork-apply", editorActionCaptureArtworkApply);
+    handlers.insert("capture-apply", editorActionCaptureApply);
+    handlers.insert("capture-switch-input", editorActionCaptureSwitchInput);
+    handlers.insert("capture-preview-draft", editorActionCapturePreviewDraft);
+    handlers.insert("capture-preview-start",
+                    [](const QVariantMap& in, QString* err)
+                    { return editorActionCaptureControl(in, "capture-preview-start", err); });
+    handlers.insert("capture-preview-stop",
+                    [](const QVariantMap& in, QString* err)
+                    { return editorActionCaptureControl(in, "capture-preview-stop", err); });
+    handlers.insert("capture-switch-cancel",
+                    [](const QVariantMap& in, QString* err)
+                    { return editorActionCaptureControl(in, "capture-switch-cancel", err); });
+    handlers.insert("capture-refresh",
+                    [](const QVariantMap& in, QString* err)
+                    { return editorActionCaptureControl(in, "capture-refresh", err); });
+    handlers.insert("audio-output-select", editorActionAudioOutputSelect);
     auto it = handlers.find(type);
     if (it != handlers.cend())
         return it.value()(input, error);
@@ -2594,6 +2627,78 @@ ComponentSchema::editorActionCaptureArtworkApply(const QVariantMap& input, QStri
 }
 
 QVariantMap
+ComponentSchema::normalizeConfiguration(const QVariant& value, QString* error)
+{
+    if (value.metaType().id() != QMetaType::QVariantMap)
+    {
+        reject(error, "Choose a valid capture configuration.");
+        return {};
+    }
+    const auto configuration = value.toMap();
+    const QStringList keys{"audioDeviceId", "baudRate", "captureDeviceId", "commandTemplate", "inputLabels",
+                           "selectedInput", "serialPortName", "sessionReturn", "sessionTransition",
+                           "transitionDuration", "videoFormatKey"};
+    if (configuration.size() != keys.size())
+        return reject(error, "Capture settings must include every staged field exactly once.");
+    for (const auto& key : keys)
+        if (!configuration.contains(key))
+            return reject(error, "Capture settings must include every staged field exactly once.");
+    QVariantMap normalized = configuration;
+    const QMap<QString, int> limits{{"audioDeviceId", 512}, {"captureDeviceId", 512}, {"serialPortName", 256},
+                                    {"videoFormatKey", 256}, {"commandTemplate", 128}, {"sessionTransition", 16},
+                                    {"sessionReturn", 16}};
+    for (auto it = limits.cbegin(); it != limits.cend(); ++it)
+    {
+        const auto field = configuration.value(it.key());
+        if (field.metaType().id() != QMetaType::QString || field.toString().size() > it.value() ||
+            field.toString().contains(QChar::Null))
+            return reject(error, "Capture settings contain an invalid device identity or command.");
+    }
+    for (const auto& key : QStringList{"baudRate", "selectedInput", "transitionDuration"})
+    {
+        const auto field = configuration.value(key);
+        const auto type = field.metaType().id();
+        bool ok = false;
+        const double number = field.toDouble(&ok);
+        if ((type != QMetaType::Int && type != QMetaType::Double) || !ok || !std::isfinite(number) ||
+            std::floor(number) != number ||
+            (key == "selectedInput" && (number < MinHdmiInput || number > MaxHdmiInput)) ||
+            (key == "baudRate" && !QList<double>{9600, 19200, 38400, 57600, 115200}.contains(number)) ||
+            (key == "transitionDuration" && !QList<double>{200, 250, 300, 350}.contains(number)))
+            return reject(error, "Choose a supported serial speed, HDMI input and transition duration.");
+        normalized[key] = static_cast<int>(number);
+    }
+    if (!QStringList{"origin", "home"}.contains(configuration.value("sessionReturn").toString()) ||
+        !QStringList{"instant", "fade", "slide", "expand"}.contains(configuration.value("sessionTransition").toString()))
+        return reject(error, "Choose a supported session return and transition.");
+    const auto labelsValue = configuration.value("inputLabels");
+    const auto labels = labelsValue.toMap();
+    if (labelsValue.metaType().id() != QMetaType::QVariantMap ||
+        labels.size() != static_cast<qsizetype>(MaxHdmiInput))
+        return reject(error, "Capture input labels must name all eight HDMI inputs.");
+    QVariantMap normalizedLabels;
+    for (int input = MinHdmiInput; input <= MaxHdmiInput; ++input)
+    {
+        const auto key = QString::number(input);
+        const auto label = labels.value(key);
+        const auto text = label.toString();
+        if (label.metaType().id() != QMetaType::QString || text.trimmed().isEmpty() ||
+            text.size() > 40 || text.contains(QChar::Null))
+            return reject(error, "Each HDMI input label must contain 1 to 40 safe characters.");
+        for (const auto character : text)
+        {
+            const auto code = character.unicode();
+            if ((character.isSpace() && character != QLatin1Char(' ')) || code < 0x20 ||
+                (code >= 0x7f && code <= 0x9f))
+                return reject(error, "HDMI input labels cannot contain control characters.");
+        }
+        normalizedLabels.insert(key, text.trimmed());
+    }
+    normalized["inputLabels"] = normalizedLabels;
+    return normalized;
+}
+
+QVariantMap
 ComponentSchema::editorActionCaptureApply(const QVariantMap& input, QString* error)
 {
     const auto exactKeys = QStringList{"schemaVersion", "type", "configuration"};
@@ -2603,7 +2708,10 @@ ComponentSchema::editorActionCaptureApply(const QVariantMap& input, QString* err
     const auto configuration = normalizeConfiguration(input.value("configuration"), error);
     if (configuration.isEmpty())
         return {};
-    QVariantMap result{{"schemaVersion", 1}, {"type", "capture-apply"}, {"configuration", configuration}};
+    QVariantMap result;
+    result["schemaVersion"] = 1;
+    result["type"] = "capture-apply";
+    result["configuration"] = configuration;
     return result;
 }
 
@@ -2645,6 +2753,7 @@ ComponentSchema::editorActionCapturePreviewDraft(const QVariantMap& input, QStri
 QVariantMap
 ComponentSchema::editorActionCaptureControl(const QVariantMap& input, const QString& type, QString* error)
 {
+    Q_UNUSED(error);
     const auto exactKeys = QStringList{"schemaVersion", "type"};
     for (auto it = input.cbegin(); it != input.cend(); ++it)
         if (!exactKeys.contains(it.key()))
@@ -2686,17 +2795,72 @@ ComponentSchema::component(const QVariantMap& input, bool legacy, QString* error
     result["schemaVersion"] = 1;
     result["componentType"] = type;
     result["size"] = input.value("size", "standard");
+    QVariantList normalizedActions;
+    const bool canHaveActions = type != "clock" && type != "text" && type != "shape" && type != "container";
+    if (input.contains("actions") && canHaveActions)
+    {
+        normalizedActions = actions(input.value("actions").toList(), error);
+        if (normalizedActions.isEmpty())
+            return {};
+        result["actions"] = normalizedActions;
+    }
+    else if (input.contains("action") && canHaveActions)
+    {
+        normalizedActions = actions(QVariantList{input.value("action").toMap()}, error);
+        if (normalizedActions.isEmpty())
+            return {};
+        result["actions"] = normalizedActions;
+    }
     QVariantMap source;
     if (type == "button" || type == "image" || type == "library")
         source = componentBuildLibrarySource(input, input.value("presentation").toMap(), error);
     else if (type == "clock" || type == "text" || type == "shape" || type == "container")
         source = componentBuildShellSource(input, type, error);
     else
-        source = componentBuildLauncherSource(input, QVariantList{}, QString{}, error);
+    {
+        const auto kind = input.value("kind").toString();
+        const auto actionType = normalizedActions.isEmpty() ? QString() : normalizedActions.first().toMap().value("type").toString();
+        if (kind != "app" && kind != "action")
+            return reject(error, "Invalid launcher kind.");
+        if (kind == "app" && !normalizedActions.isEmpty() &&
+            (actionType != "launch-app" || input.value("appId") != normalizedActions.first().toMap().value("appId")))
+            return reject(error, "App binding does not match its action.");
+        if (kind == "action" && normalizedActions.isEmpty() && input.value("name").toString().trimmed().isEmpty())
+            return reject(error, "A launcher needs a name.");
+        if (type == "media-shelf" && !normalizedActions.isEmpty() && actionType != "open-collection")
+            return reject(error, "A media shelf requires a collection source.");
+        source = componentBuildLauncherSource(input, normalizedActions, actionType, error);
+    }
     if (source.isEmpty())
         return {};
     if (!legacy && input.value("source").toMap() != source)
         return reject(error, "Source binding does not match its action.");
+    // Reject unknown component keys; only documented fields may appear.
+    static const QSet<QString> validComponentKeys{"schemaVersion", "id", "kind",
+                                                  "componentType", "size", "source",
+                                                  "actions", "action", "name", "presentation",
+                                                  "placement", "accent", "symbol", "linkedDesign",
+                                                  "designNode", "accessibility", "requiredCapability",
+                                                  "customLogo", "widgetType", "family",
+                                                  "appCollection", "appId", "opacity",
+                                                  "categoryId", "parentId", "children",
+                                                  "animateArtwork", "hidden", "locked",
+                                                  "showTitle", "showType", "showLogo", "logoFill", "contentSlot"};
+    for (auto it = input.constBegin(); it != input.constEnd(); ++it)
+        if (!validComponentKeys.contains(it.key()))
+            return reject(error, "Component contains unknown fields.");
+    // Retain the tagged slots in packaged templates while keeping their schema bounded.
+    if (input.contains("contentSlot"))
+    {
+        const auto slot = input.value("contentSlot").toMap();
+        const auto label = slot.value("label");
+        const auto kind = slot.value("kind").toString();
+        if (slot.size() != 4 || !slot.contains("schemaVersion") || !versionOne(slot) ||
+            !safeId(slot.value("id").toString()) || label.metaType().id() != QMetaType::QString ||
+            label.toString().trimmed().isEmpty() || label.toString().size() > 80 ||
+            (kind != "buttons" && kind != "apps" && kind != "media"))
+            return reject(error, "Invalid template content slot.");
+    }
     result["source"] = source;
     return result;
 }
@@ -2767,14 +2931,26 @@ ComponentSchema::componentValidateTypeAndShape(const QVariantMap& input, const Q
 {
     if (!QStringList{"launcher", "clock", "text", "shape", "media-shelf", "container", "button", "image", "library"}
              .contains(type))
-        return reject(error, "Unsupported component type.");
-    if (type == "shape" && (input.contains("action") || input.contains("customLogo")))
-        return reject(error, "A decorative shape does not launch an action or contain image artwork.");
+    {
+        reject(error, "Unsupported component type.");
+        return false;
+    }
+    if (type == "shape" && (input.contains("action") || input.contains("actions") || input.contains("customLogo")))
+    {
+        reject(error, "A decorative shape does not launch an action or contain image artwork.");
+        return false;
+    }
     if (type == "shape" && input.value("name").toString().trimmed().isEmpty())
-        return reject(error, "Give this shape an editor name.");
+    {
+        reject(error, "Give this shape an editor name.");
+        return false;
+    }
     const auto shape = input.value("presentation").toMap().value("shape").toString();
     if (!shape.isEmpty() && type != "shape" && (type != "container" || shape == "ellipse" || shape == "divider"))
-        return reject(error, "Choose a supported decorative shape or rectangular container.");
+    {
+        reject(error, "Choose a supported decorative shape or rectangular container.");
+        return false;
+    }
     return true;
 }
 
@@ -2784,7 +2960,10 @@ ComponentSchema::componentValidateName(const QVariantMap& input, QString* error)
     if (input.contains("name") &&
         (input["name"].metaType().id() != QMetaType::QString ||
          input["name"].toString().size() > MaxComponentNameLength || input["name"].toString().contains(QChar::Null)))
-        return reject(error, "Use a component name of at most 160 characters.");
+    {
+        reject(error, "Use a component name of at most 160 characters.");
+        return false;
+    }
     return true;
 }
 
@@ -2797,7 +2976,10 @@ ComponentSchema::componentValidateFamily(const QVariantMap& input, const QString
                input["family"].toString())) ||
           (type == "library" &&
            QStringList{"recently-viewed", "music-library", "tv-guide"}.contains(input["family"].toString()))))
-        return reject(error, "Unsupported component family.");
+    {
+        reject(error, "Unsupported component family.");
+        return false;
+    }
     return true;
 }
 
@@ -2808,7 +2990,10 @@ ComponentSchema::componentValidateAppCollection(const QVariantMap& input, const 
         return true;
     if (type != "container" || input.value("family") != "app-bar" ||
         input["appCollection"].metaType().id() != QMetaType::QVariantMap)
-        return reject(error, "Choose an app carousel for an app collection.");
+    {
+        reject(error, "Choose an app carousel for an app collection.");
+        return false;
+    }
     const auto collection = input["appCollection"].toMap();
     return componentValidateAppCollectionShape(collection, error) &&
            componentValidateAppCollectionShowStore(collection, error) &&
@@ -2824,7 +3009,10 @@ ComponentSchema::componentValidateAppCollectionShape(const QVariantMap& collecti
         !QStringList{"all", "selected"}.contains(collection.value("mode").toString()) ||
         collection.value("ids").metaType().id() != QMetaType::QVariantList ||
         collection.value("ids").toList().size() > 128)
-        return reject(error, "Choose All installed or up to 128 selected apps.");
+    {
+        reject(error, "Choose All installed or up to 128 selected apps.");
+        return false;
+    }
     return true;
 }
 
@@ -2834,7 +3022,10 @@ ComponentSchema::componentValidateAppCollectionShowStore(const QVariantMap& coll
     if (!collection.contains("showStore"))
         return true;
     if (collection["showStore"].metaType().id() != QMetaType::Bool)
-        return reject(error, "Choose whether More apps shows the App Store.");
+    {
+        reject(error, "Choose whether More apps shows the App Store.");
+        return false;
+    }
     return true;
 }
 
@@ -2846,7 +3037,10 @@ ComponentSchema::componentValidateAppCollectionSection(const QVariantMap& collec
     if (collection["section"].metaType().id() != QMetaType::QString ||
         collection["section"].toString().trimmed().isEmpty() || collection["section"].toString().size() > 80 ||
         collection["section"].toString().contains(QChar::Null))
-        return reject(error, "Choose a named app group of up to 80 characters.");
+    {
+        reject(error, "Choose a named app group of up to 80 characters.");
+        return false;
+    }
     return true;
 }
 
@@ -2857,7 +3051,10 @@ ComponentSchema::componentValidateAppCollectionIds(const QVariantMap& collection
     for (const auto& id : collection.value("ids").toList())
     {
         if (id.metaType().id() != QMetaType::QString || !safeId(id.toString()) || ids.contains(id.toString()))
-            return reject(error, "Choose distinct safe app identities.");
+        {
+            reject(error, "Choose distinct safe app identities.");
+            return false;
+        }
         ids.insert(id.toString());
     }
     return true;
@@ -2868,7 +3065,12 @@ ComponentSchema::componentValidateAppCollectionMode(const QVariantMap& collectio
 {
     if (collection.value("mode") != "all")
         return true;
-    return collection.value("ids").toList().isEmpty() || reject(error, "All installed apps does not store selected membership.");
+    if (!collection.value("ids").toList().isEmpty())
+    {
+        reject(error, "All installed apps does not store selected membership.");
+        return false;
+    }
+    return true;
 }
 
 bool
@@ -2877,12 +3079,18 @@ ComponentSchema::componentValidateAccessibility(const QVariantMap& input, QStrin
     if (!input.contains("accessibility"))
         return true;
     if (input["accessibility"].metaType().id() != QMetaType::QVariantMap)
-        return reject(error, "Invalid accessible description.");
+    {
+        reject(error, "Invalid accessible description.");
+        return false;
+    }
     const auto a = input["accessibility"].toMap();
     for (auto it = a.cbegin(); it != a.cend(); ++it)
         if (!QStringList{"name", "hint"}.contains(it.key()) || it.value().metaType().id() != QMetaType::QString ||
             it.value().toString().size() > MaxAccessibleTextLength || it.value().toString().contains(QChar::Null))
-            return reject(error, "Use bounded accessible text.");
+        {
+            reject(error, "Use bounded accessible text.");
+            return false;
+        }
     return true;
 }
 
@@ -2893,7 +3101,10 @@ ComponentSchema::componentValidateParentId(const QVariantMap& input, QString* er
         return true;
     if (input["parentId"].metaType().id() != QMetaType::QString ||
         (!input["parentId"].toString().isEmpty() && !safeId(input["parentId"].toString())))
-        return reject(error, "Invalid parent identity.");
+    {
+        reject(error, "Invalid parent identity.");
+        return false;
+    }
     return true;
 }
 
@@ -2901,7 +3112,10 @@ bool
 ComponentSchema::componentValidateChildren(const QVariantMap& input, QString* error)
 {
     if (input.contains("children"))
-        return reject(error, "Group children use validated component parent identities.");
+    {
+        reject(error, "Group children use validated component parent identities.");
+        return false;
+    }
     return true;
 }
 
@@ -2911,7 +3125,10 @@ ComponentSchema::componentValidateRequiredCapability(const QVariantMap& input, c
     if (!input.contains("requiredCapability"))
         return true;
     if (type != "container" || input["requiredCapability"] != "capture-inputs")
-        return reject(error, "Unsupported component capability.");
+    {
+        reject(error, "Unsupported component capability.");
+        return false;
+    }
     return true;
 }
 
@@ -2919,7 +3136,10 @@ bool
 ComponentSchema::componentValidateSize(const QVariantMap& input, QString* error)
 {
     if (!QStringList{"compact", "standard", "wide"}.contains(input.value("size", "standard").toString()))
-        return reject(error, "Invalid component size.");
+    {
+        reject(error, "Invalid component size.");
+        return false;
+    }
     return true;
 }
 
@@ -2930,10 +3150,16 @@ ComponentSchema::componentValidateOpacity(const QVariantMap& input, QString* err
         return true;
     if (input["opacity"].metaType().id() == QMetaType::QString ||
         input["opacity"].metaType().id() == QMetaType::Bool)
-        return reject(error, "Opacity must be numeric.");
+    {
+        reject(error, "Opacity must be numeric.");
+        return false;
+    }
     const auto opacity = input.value("opacity").toDouble();
     if (!std::isfinite(opacity) || opacity < MinOpacity || opacity > MaxOpacity)
-        return reject(error, "Invalid component opacity.");
+    {
+        reject(error, "Invalid component opacity.");
+        return false;
+    }
     return true;
 }
 
@@ -2942,10 +3168,16 @@ ComponentSchema::componentValidateBooleans(const QVariantMap& input, QString* er
 {
     for (const auto& key : QStringList{"hidden", "locked"})
         if (input.contains(key) && input.value(key).metaType().id() != QMetaType::Bool)
-            return reject(error, "Visibility and lock must be boolean values.");
+        {
+            reject(error, "Visibility and lock must be boolean values.");
+            return false;
+        }
     for (const auto& key : QStringList{"showTitle", "showType", "showLogo", "logoFill"})
         if (input.contains(key) && input[key].metaType().id() != QMetaType::Bool)
-            return reject(error, "Presentation toggles must be boolean values.");
+        {
+            reject(error, "Presentation toggles must be boolean values.");
+            return false;
+        }
     return true;
 }
 
@@ -2956,7 +3188,10 @@ ComponentSchema::componentValidateAccent(const QVariantMap& input, QString* erro
         return true;
     if (input["accent"].metaType().id() != QMetaType::QString || !QColor(input["accent"].toString()).isValid() ||
         QColor(input["accent"].toString()).alpha() != 255)
-        return reject(error, "Choose an opaque accent color.");
+    {
+        reject(error, "Choose an opaque accent color.");
+        return false;
+    }
     return true;
 }
 
@@ -2966,7 +3201,10 @@ ComponentSchema::componentValidateSymbol(const QVariantMap& input, QString* erro
     if (!input.contains("symbol"))
         return true;
     if (input["symbol"].metaType().id() != QMetaType::QString || input["symbol"].toString().size() > MaxSymbolLength)
-        return reject(error, "Use a short symbol.");
+    {
+        reject(error, "Use a short symbol.");
+        return false;
+    }
     return true;
 }
 
@@ -2975,7 +3213,10 @@ ComponentSchema::componentValidateLinkedDesign(const QVariantMap& input, QString
 {
     for (const auto& key : {"linkedDesign", "designNode"})
         if (input.contains(key) && (input[key].metaType().id() != QMetaType::QString || !safeId(input[key].toString())))
-            return reject(error, "Invalid reusable component identity.");
+        {
+            reject(error, "Invalid reusable component identity.");
+            return false;
+        }
     return true;
 }
 
@@ -2990,7 +3231,10 @@ ComponentSchema::componentValidatePlacement(const QVariantMap& input, QString* e
                         input.value("parentId").toString().isEmpty() ? MaxChildColumns : 128,
                         MaxScrollableRows) ||
         placement.toMap().value("height").toInt() > MaxChildRows)
-        return reject(error, "Invalid component placement.");
+    {
+        reject(error, "Invalid component placement.");
+        return false;
+    }
     return true;
 }
 
@@ -3001,7 +3245,10 @@ ComponentSchema::componentValidatePresentation(const QVariantMap& input, const Q
         return true;
     if (input.value("presentation").metaType().id() != QMetaType::QVariantMap ||
         !validPresentation(input.value("presentation").toMap(), type == "library", type == "container"))
-        return reject(error, "Invalid component presentation.");
+    {
+        reject(error, "Invalid component presentation.");
+        return false;
+    }
     return true;
 }
 
@@ -3009,7 +3256,10 @@ bool
 ComponentSchema::componentValidateAnimateArtwork(const QVariantMap& input, const QString& type, QString* error)
 {
     if (type != "image" && input.value("presentation").toMap().contains("animateArtwork"))
-        return reject(error, "GIF motion belongs to an Image component.");
+    {
+        reject(error, "GIF motion belongs to an Image component.");
+        return false;
+    }
     return true;
 }
 
@@ -3020,7 +3270,10 @@ ComponentSchema::componentValidateCustomLogo(const QVariantMap& input, QString* 
         return true;
     static const QRegularExpression artwork("^artwork/[A-Za-z0-9][A-Za-z0-9._-]*\\.(png|jpg|jpeg|gif)$");
     if (!artwork.match(input.value("customLogo").toString()).hasMatch())
-        return reject(error, "Invalid saved artwork path.");
+    {
+        reject(error, "Invalid saved artwork path.");
+        return false;
+    }
     return true;
 }
 
@@ -3049,6 +3302,104 @@ ComponentSchema::componentBuildLibrarySource(const QVariantMap& input, const QVa
     return source;
 }
 
+// Keep Guide shelves bound to configured PVR channels, not arbitrary library views.
+bool
+ComponentSchema::componentValidateLibraryGuide(bool guide, const QVariantMap& style, QString* error)
+{
+    if (guide && (style.value("libraryKind") != "channels" || style.value("libraryView") != "all" ||
+                  !style.value("libraryValue").toString().isEmpty()))
+    {
+        reject(error, "TV Guide uses this profile's configured Kodi PVR TV channels.");
+        return false;
+    }
+    if (!guide && style.value("libraryKind") == "channels")
+    {
+        reject(error, "Choose a TV Guide component for TV channels.");
+        return false;
+    }
+    return true;
+}
+
+// Music shelves cannot impersonate other library families or specify another source.
+bool
+ComponentSchema::componentValidateLibraryMusic(bool music, const QVariantMap& style, QString* error)
+{
+    if (music && (style.value("libraryKind") != "albums" || style.value("libraryView") != "all" ||
+                  !style.value("libraryValue").toString().isEmpty()))
+    {
+        reject(error, "Music uses this profile's Kodi albums and tracks.");
+        return false;
+    }
+    if (!music && style.value("libraryKind") == "albums")
+    {
+        reject(error, "Choose a Music library component for albums and tracks.");
+        return false;
+    }
+    return true;
+}
+
+// History-only options belong to the profile's Recently viewed component.
+bool
+ComponentSchema::componentValidateLibraryHistory(bool history, const QVariantMap& style, QString* error)
+{
+    if (history && (style.value("libraryKind") != "history" || style.value("libraryView") != "watched" ||
+                    !style.value("libraryValue").toString().isEmpty()))
+    {
+        reject(error, "Recently viewed uses local Kodi viewing history, not a library or recently added view.");
+        return false;
+    }
+    if (!history && style.value("libraryKind") == "history")
+    {
+        reject(error, "Choose a Recently viewed carousel for viewing history.");
+        return false;
+    }
+    if (!history && (style.contains("historyApps") || style.contains("historySourceBadges")))
+    {
+        reject(error, "App opening sources belong to Recently viewed.");
+        return false;
+    }
+    return true;
+}
+
+// Validate named source requirements before dispatching a shelf to Kodi.
+bool
+ComponentSchema::componentValidateLibraryViews(const QVariantMap& style, QString* error)
+{
+    const auto kind = style.value("libraryKind").toString();
+    const auto view = style.value("libraryView").toString();
+    const auto source = style.value("libraryValue").toString();
+    if (!style.contains("libraryKind") || !style.contains("libraryView"))
+        reject(error, "Choose a supported Kodi view.");
+    else if (QStringList{"collection", "genre", "tag"}.contains(view) && source.trimmed().isEmpty())
+        reject(error, "Choose a named Kodi source.");
+    else if (kind == "shows" && QStringList{"genre", "tag"}.contains(view))
+        reject(error, "This Kodi view is available for movies only.");
+    else if (view == "collection" && !safeId(source))
+        reject(error, "Choose a saved collection.");
+    else
+        return true;
+    return false;
+}
+
+// Limit Games shelves to supported local views and bounded platform names.
+bool
+ComponentSchema::componentValidateLibraryGames(const QVariantMap& style, QString* error)
+{
+    if (style.value("libraryKind") != "games")
+        return true;
+    const auto view = style.value("libraryView").toString();
+    if (!QStringList{"all", "recent", "search", "favorites", "platform", "continue"}.contains(view))
+        reject(error, "Choose a supported local Games view.");
+    else if (view == "platform" &&
+             (style.value("libraryValue").metaType().id() != QMetaType::QString ||
+              style.value("libraryValue").toString().trimmed().isEmpty() ||
+              style.value("libraryValue").toString().size() > 80))
+        reject(error, "Choose a platform name of up to 80 characters for this Games shelf.");
+    else
+        return true;
+    return false;
+}
+
 QVariantMap
 ComponentSchema::componentBuildLibrarySourceLibrary(const QVariantMap& input, const QVariantMap& style, QString* error)
 {
@@ -3070,6 +3421,7 @@ ComponentSchema::componentBuildLibrarySourceLibrary(const QVariantMap& input, co
         return {};
     if (!componentValidateLibraryGames(style, error))
         return {};
+    QVariantMap source;
     source = {{"schemaVersion", 1},
               {"provider", style.value("libraryKind") == "games" ? "games" : "kodi"},
               {"kind", "library"},
@@ -3089,6 +3441,7 @@ QVariantMap
 ComponentSchema::componentBuildLauncherSource(const QVariantMap& input, const QVariantList& normalizedList,
                                                 const QString& actionType)
 {
+    Q_UNUSED(input);
     QVariantMap source = {{"schemaVersion", 1}};
     if (normalizedList.isEmpty())
         return source;
@@ -3115,7 +3468,7 @@ QString
 ComponentSchema::unavailable(const QVariantMap& value, const AppRegistry* apps, const QVariantList& collections)
 {
     const auto type = value.value("type").toString();
-    if (unavailableShellRoutes(type).isEmpty() == false)
+    if (QStringList{"open-page", "open-apps", "open-search", "app-drawer", "root-page"}.contains(type))
         return {};
     if (type == "launch-app")
         return unavailableLaunchApp(value, apps);
@@ -3153,6 +3506,8 @@ QVariantMap
 ComponentSchema::componentBuildLauncherSource(const QVariantMap& input, const QVariantList& normalizedList,
                                                 const QString& actionType, QString* error)
 {
+    Q_UNUSED(input);
+    Q_UNUSED(error);
     QVariantMap source = {{"schemaVersion", 1}};
     if (normalizedList.isEmpty())
         return source;
@@ -3405,10 +3760,18 @@ ComponentSchema::hierarchyFits(const QJsonArray& items,
     bool containers = false;
     if (error)
         error->clear();
-    return hierarchyFitsValidateIds(byId, children, roots, containers, items, error) &&
-           hierarchyFitsValidateParents(byId, children, error) &&
+    if (!hierarchyFitsValidateIds(byId, children, roots, containers, items, error) ||
+        !hierarchyFitsValidateParents(byId, children, error))
+        return false;
+    if (containers && (!composition.value("enabled").toBool() || !composition.contains("grid")))
+    {
+        if (error)
+            *error = "Groups require an enabled page grid. Preview grid conversion first.";
+        return false;
+    }
+    return
            hierarchyFitsValidateContainers(byId, children, composition, categories, error) &&
-           hierarchyFitsValidateRoots(byId, items, composition, categories, error);
+           hierarchyFitsValidateRoots(byId, roots, composition, categories, error);
 }
 
 bool
@@ -3534,7 +3897,7 @@ ComponentSchema::hierarchyFitsValidateContainer(const QJsonObject& item,
     if (!item.contains("placement") ||
         !validChildLayout(item["presentation"].toObject()["layout"].toObject().toVariantMap()))
         return fail("A group needs a bounded placement and internal layout.");
-    if (!placementsFit(kids, componentGrid(items, composition, categories, id, {})))
+    if (!placementsFit(kids, componentGrid(QJsonArray{item}, composition, categories, id, {})))
         return fail("Group contents overlap or do not fit their local grid.");
     return true;
 }

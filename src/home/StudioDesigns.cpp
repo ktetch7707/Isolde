@@ -122,21 +122,13 @@ mergeDesignLibrary(QJsonObject& incoming, const QJsonObject& existing)
     }
     // References in incoming definitions and instances move together; existing definitions never change.
     auto components = merged["components"].toArray();
-    const int oldCount = existing["components"].toArray().size();
+    const auto oldCount = existing["components"].toArray().size();
     for (qsizetype i = oldCount; i < components.size(); ++i)
         components[i] = remapDesignReferences(components[i], styles, symbols);
     merged["components"] = components;
     incoming = remapDesignReferences(incoming, styles, symbols).toObject();
     return merged;
 }
-QJsonObject
-selectedPage(QJsonObject document, const QString& id)
-{
-    if (id.isEmpty())
-        return removeStudioKeys(document);
-    return findPageLayout(document, id);
-}
-
 QJsonObject
 findPageLayout(QJsonObject document, const QString& id)
 {
@@ -152,6 +144,14 @@ removeStudioKeys(QJsonObject document)
     for (const auto& key : {"pages", "homePageId", "rootPage", "studioAppearance"})
         document.remove(key);
     return document;
+}
+// Select the portable page without carrying interface-level Studio metadata.
+QJsonObject
+selectedPage(QJsonObject document, const QString& id)
+{
+    if (id.isEmpty())
+        return removeStudioKeys(document);
+    return findPageLayout(document, id);
 }
 bool
 portableValue(const QJsonValue& value, QString& error, int depth = 0)
@@ -548,7 +548,7 @@ StudioSession::proposeDesign(QJsonObject document,
 }
 
 bool
-StudioSession::validateProposeInputs(const QString& scope, const QString& pageId) const
+StudioSession::validateProposeInputs(const QString& scope, const QString& /*pageId*/)
 {
     if (!editingPermitted())
         return false;
@@ -561,7 +561,7 @@ StudioSession::validateProposeInputs(const QString& scope, const QString& pageId
 }
 
 bool
-StudioSession::normalizeDesignDocument(QJsonObject& document) const
+StudioSession::normalizeDesignDocument(QJsonObject& document)
 {
     HomeLayout normalized(m_live->registry());
     configureWorker(normalized);
@@ -663,8 +663,8 @@ StudioSession::resolveDesignDestination(QJsonObject& document, QJsonObject& cand
     return true;
 }
 
-QVariantMap
-SubtitleService::buildDesignChanges(const QJsonObject& baseline, const QJsonObject& candidate)
+QVariantList
+StudioSession::buildDesignChanges(const QJsonObject& baseline, const QJsonObject& candidate)
 {
     QVariantList changes;
     if (selectedPage(baseline, {}) != selectedPage(candidate, {}) || baseline["rootPage"] != candidate["rootPage"])
@@ -747,6 +747,12 @@ StudioSession::previewImport(const QString& value,
         return {};
     }
     const auto document = package["layout"].toObject();
+    // Check portability before staging artwork or creating an import proposal.
+    if (!portableValue(document, error))
+    {
+        setError(error);
+        return {};
+    }
     if (package["kind"] == "page" &&
         (document.contains("pages") || document.contains("homePageId") || document.contains("rootPage")))
     {
@@ -880,6 +886,12 @@ StudioSession::exportDesign(const QString& value, const QString& scope, const QS
     QJsonObject assets;
     qint64 assetBytes = 0;
     QString error;
+    // Reject private data before collecting assets or writing the export.
+    if (!portableValue(document, error))
+    {
+        setError(error);
+        return false;
+    }
     if (!collectExportAssets(document, assets, assetBytes, error))
     {
         setError(error);

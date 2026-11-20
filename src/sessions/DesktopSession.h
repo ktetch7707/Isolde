@@ -1,11 +1,14 @@
 #pragma once
 
 #include "sessions/AppSession.h"
+#include "sessions/NativeSandbox.h"
 #include "sessions/SteamSessionOutput.h"
 
 #include <QLockFile>
 #include <QProcess>
 #include <memory>
+
+struct ResolvedDesktopLaunch;
 
 class DesktopSession final : public AppSession
 {
@@ -27,13 +30,14 @@ class DesktopSession final : public AppSession
     void
     exit() override;
     bool
-    applyLaunchConfiguration(QJsonObject& configuration, const QString& steamGame, const QString& managedGame,
-                             const QJsonObject& resolvedLaunch, const NativeSandboxPlan& sandbox,
+    applyLaunchConfiguration(QVariantMap& configuration, const QString& steamGame, const QString& managedGame,
+                             ResolvedDesktopLaunch& resolvedLaunch, const NativeSandboxPlan& sandbox,
                              QStringList& launchArguments);
     bool
     applyContainmentTimers(const QString& containmentMode);
     bool
-    prepareLaunch(QJsonObject& resolvedLaunch, QStringList& launchArguments);
+    prepareLaunch(const QString& desktopId, const QProcessEnvironment& environment,
+                  ResolvedDesktopLaunch& resolvedLaunch, QStringList& launchArguments);
 
   private:
     bool
@@ -45,9 +49,9 @@ class DesktopSession final : public AppSession
     void
     readDiagnostics();
     bool
-    parseGamepadStatusLine(const QString& line, QVariantMap& status) const;
+    parseGamepadStatusLine(const QByteArray& line, QVariantMap& status) const;
     bool
-    processGamepadStatusLine(const QVariantMap& status) const;
+    processGamepadStatusLine(const QVariantMap& status);
     void
     processSteamOutput(const QByteArray& output);
     bool m_stopping = false;

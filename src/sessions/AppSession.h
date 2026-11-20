@@ -59,15 +59,9 @@ class AppSession : public QObject, public AppSessionControl
     ~AppSession() override = default;
 
     [[nodiscard]] const AppDefinition&
-    definition() const
-    {
-        return m_info.definition;
-    }
+    definition() const;
     [[nodiscard]] AppSessionLifecycleState
-    state() const
-    {
-        return m_info.state;
-    }
+    state() const;
     [[nodiscard]] QString
     errorString() const
     {
@@ -84,13 +78,7 @@ class AppSession : public QObject, public AppSessionControl
 
   protected:
     void
-    setState(AppSessionLifecycleState state)
-    {
-        if (m_info.state == state)
-            return;
-        m_info.state = state;
-        emit stateChanged(state);
-    }
+    setState(AppSessionLifecycleState state);
 
   private:
     AppSessionInfo m_info;

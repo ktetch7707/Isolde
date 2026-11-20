@@ -202,7 +202,7 @@ StudioSession::canUndoRedo(bool isEmpty, const char* message)
         return false;
     if (isEmpty)
     {
-        setError(QStringLiteral(message));
+        setError(QString::fromUtf8(message));
         return false;
     }
     return true;
@@ -338,7 +338,6 @@ StudioSession::isStaleAgainst(const QByteArray& currentApplied) const
     if (currentApplied.isEmpty())
         return true;
     QByteArray mine, theirs;
-    StudioSession* self = const_cast<StudioSession*>(this);
     if (!canonicalizeCommitted(m_committed, currentApplied, mine, theirs))
         return true;
     return mine != theirs;

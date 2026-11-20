@@ -18,14 +18,6 @@
 #include <QUuid>
 
 namespace
-
-static bool
-canEditStudio()
-{
-    return editingPermitted() && currentProfile();
-}
-
-namespace
 {
 constexpr qint64 VersionBytes = 40 * 1024 * 1024;
 constexpr int VersionCount = 10;
@@ -67,13 +59,15 @@ profileFile(const QString& path)
 }
 } // namespace
 
-bool
+// Summarize page-level differences so users can review a draft before applying it.
+QVariantList
 StudioSession::changeSummary() const
 {
     QVariantList result;
     const auto before = QJsonDocument::fromJson(m_committed).object();
     const auto after = QJsonDocument::fromJson(m_draft).object();
-    QVariantMap homeChanges;
+    if (pageDocument(before, {}) != pageDocument(after, {}) || before["rootPage"] != after["rootPage"])
+        appendPageChange(result, {}, m_model ? m_model->rootPageName() : tr("Home"), tr("Changed"));
     QSet<QString> seen;
     int previousIndex = 0;
     const auto nextPages = after["pages"].toArray();
@@ -92,30 +86,31 @@ StudioSession::changeSummary() const
                 break;
             }
         if (entry != next)
-            appendPageChange(result, id, entry["name"].toString(), next.isEmpty() ? tr("Removed") : tr("Changed"),
-                             entry, next);
+            appendPageChange(result, id, entry["name"].toString(), next.isEmpty() ? tr("Removed") : tr("Changed"));
         else if (previousIndex != nextIndex)
-            appendPageChange(result, id, entry["name"].toString(), tr("Reordered"), {}, {});
+            appendPageChange(result, id, entry["name"].toString(), tr("Reordered"));
         ++previousIndex;
     }
     for (const auto& value : after["pages"].toArray())
     {
         const auto entry = value.toObject();
         if (!seen.contains(entry["id"].toString()))
-            appendPageChange(result, entry["id"].toString(), entry["name"].toString(), tr("Added"), {}, {});
+            appendPageChange(result, entry["id"].toString(), entry["name"].toString(), tr("Added"));
     }
     if (before["homePageId"] != after["homePageId"])
-        appendPageChange(result, after["homePageId"].toString(), tr("Startup page"), tr("Changed"), {}, {});
+        appendPageChange(result, after["homePageId"].toString(), tr("Startup page"), tr("Changed"));
     if (before["studioAppearance"] != after["studioAppearance"])
-        appendPageChange(result, {}, tr("Editor appearance"), tr("Changed"), {}, {});
+        appendPageChange(result, {}, tr("Editor appearance"), tr("Changed"));
     return result;
 }
 
+// Count changes in each page's actual layout rather than its metadata wrapper.
 void
 StudioSession::appendPageChange(QVariantList& result, const QString& id, const QString& name,
-                                const QString& change, const QVariantMap& previous,
-                                const QVariantMap& next) const
+                                const QString& change) const
 {
+    auto previous = pageDocument(QJsonDocument::fromJson(m_committed).object(), id);
+    auto next = pageDocument(QJsonDocument::fromJson(m_draft).object(), id);
     QHash<QString, QJsonObject> oldNodes, newNodes;
     for (const auto& value : previous["components"].toArray())
         oldNodes.insert(value.toObject()["id"].toString(), value.toObject());
@@ -132,6 +127,8 @@ StudioSession::appendPageChange(QVariantList& result, const QString& id, const Q
     for (auto it = newNodes.begin(); it != newNodes.end(); ++it)
         if (!oldNodes.contains(it.key()))
             ++added;
+    previous.remove("components");
+    next.remove("components");
     const auto detail = tr("%1 added, %2 removed, %3 changed").arg(added).arg(removed).arg(changed) +
                         (previous != next ? tr("; page settings changed") : QString());
     result.append(QVariantMap{{"pageId", id}, {"name", name}, {"change", change}, {"details", detail}});
@@ -147,6 +144,7 @@ StudioSession::healthFindings() const
     QSet<QString> pageIds;
     for (const auto& value : document["pages"].toArray())
         pageIds.insert(value.toObject()["id"].toString());
+    inspectPageComponents(document, {}, findings, pageIds);
     for (const auto& value : document["pages"].toArray())
     {
         const auto entry = value.toObject();
@@ -273,7 +271,7 @@ StudioSession::editingPermitted()
 {
     if (!profileActive())
         return false;
-    if (editorLocked())
+    if (!editorAccessPermitted())
         return false;
     return true;
 }
@@ -289,8 +287,9 @@ StudioSession::profileActive()
     return true;
 }
 
+// Reject restricted edits while preserving the separately exposed lock state.
 bool
-StudioSession::editorLocked()
+StudioSession::editorAccessPermitted()
 {
     if (m_editorLocked || !ProfileManager::allows("edit"))
     {
@@ -327,8 +326,14 @@ StudioSession::readVersions(QJsonArray& entries, QJsonObject* assets)
         setError(tr("The version archive cannot be read or exceeds its bounded storage budget. Nothing was replaced."));
         return false;
     }
-    QJsonParseError error;
-    const auto object = QJsonDocument::fromJson(input.readAll(), &error).object();
+    QJsonParseError parseError;
+    const auto object = QJsonDocument::fromJson(input.readAll(), &parseError).object();
+    QString error;
+    if (parseError.error != QJsonParseError::NoError)
+    {
+        setError(tr("Unsupported or damaged version archive. Nothing was replaced."));
+        return false;
+    }
     if (!validateVersionArchive(object, error))
     {
         setError(error);
@@ -355,8 +360,9 @@ StudioSession::readVersions(QJsonArray& entries, QJsonObject* assets)
 bool
 StudioSession::validateVersionArchive(const QJsonObject& object, QString& error)
 {
-    if (error.error != QJsonParseError::NoError || object.size() != 3 || object["schemaVersion"].toInt() != 1 ||
-        !object["assets"].isObject() || !object["versions"].isArray())
+    if (object.size() != 3 || object["schemaVersion"].toInt() != 1 ||
+        !object["assets"].isObject() || !object["versions"].isArray() ||
+        object["versions"].toArray().size() > VersionCount)
     {
         error = QObject::tr("Unsupported or damaged version archive. Nothing was replaced.");
         return false;
@@ -633,7 +639,7 @@ bool
 StudioSession::previewDefaults(const QString& scope, const QString& pageId)
 {
     cancelPreview();
-    if (!canEditStudio())
+    if (!editingPermitted() || !currentProfile())
         return false;
     if (scope == "page")
         return previewCommand("restorePageDefaults", {}, pageId);

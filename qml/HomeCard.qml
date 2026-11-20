@@ -24,7 +24,8 @@ Item {
     readonly property string visualState:item.designState || (item.unavailableReason?"unavailable":mouseArea.pressed?"pressed":item.current?"selected":selected?"focused":"normal")
     readonly property var style:Object.assign({},baseStyle,(baseStyle.states || {}).normal || {},(baseStyle.states || {})[visualState] || {})
     readonly property string kind: item.componentType==="shape"?"shape":item.widgetType === "text" ? "text" : style.appIconStyle?"orb":(style.variant || variant) === "launcher" ? "source" : (style.variant || variant)
-    readonly property bool launcherArtwork:(kind==="source" || kind==="summary") && !!item.actions && item.actions.length>0 && item.actions[0].type==="launch-app" && !item.customLogo
+    readonly property var primaryAction: item.actions && item.actions.length ? item.actions[0] : (item.action || {})
+    readonly property bool launcherArtwork: (kind === "source" || kind === "summary") && primaryAction.type === "launch-app" && !item.customLogo
     readonly property bool showLauncherArtwork:launcherArtwork && !!item.logoSource && item.showLogo!==false && !style.icon
     readonly property color ink: appearance.labelColor || appearance.textColor || "#EEEAF0"
     readonly property color muted: appearance.mutedColor || "#AAA4B2"
@@ -39,7 +40,7 @@ Item {
     readonly property color surfaceInk: root.style.surfaceColor || root.appearance.surfaceColor || "#28262F"
     readonly property bool legacyBody:style.bodySize===undefined && style.bodyAlign===undefined && style.bodyBold===undefined
     readonly property bool customLabel:style.labelPosition!==undefined
-    readonly property bool interactive:item.componentType!=="shape" && item.componentType!=="text" && (item.componentType!=="image" || (!!item.actions && item.actions.length>0))
+    readonly property bool interactive: item.componentType !== "shape" && item.componentType !== "text" && (item.componentType !== "image" || !!primaryAction.type)
     // Geometry comes from the rendered surface, including the orb's own diameter.
     // Editors can retain this outline when the authored body is transparent.
     readonly property var focusFrame:kind==="orb" ? orb.focusFrame : ({x:(surface.x-3*unit)*ellipseScaleX,y:(surface.y-3*unit)*ellipseScaleY,width:(surface.width+6*unit)*ellipseScaleX,height:(surface.height+6*unit)*ellipseScaleY,radius:surface.radius+3*unit,ellipse:ellipse,color:style.focusColor || selColor,lineWidth:Math.max(2,style.focusWidth===undefined?3:style.focusWidth)*unit})

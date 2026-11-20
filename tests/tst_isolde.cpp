@@ -223,7 +223,7 @@ class IsoldeTests final : public QObject
         AppCatalog catalog(&registry);
         const auto state = temp.filePath("state.json"), packages = temp.filePath("packages");
         QVERIFY(catalog.load(QFINDTESTDATA("../config/catalog.json"), state, packages));
-        const QString package = "org.example.demo";
+        const QString package = "com.goodtoolapps.zeus";
         const auto id =
             "fdroid-" + QString::fromLatin1(
                             QCryptographicHash::hash(package.toUtf8(), QCryptographicHash::Sha256).toHex().left(24));
@@ -237,7 +237,7 @@ class IsoldeTests final : public QObject
                              {"provenance", "Verified test repository"}};
         AppCatalog::Entry entry;
         QVERIFY(catalog.customEntry(manifest, &entry));
-        QCOMPARE(entry.app.launchConfiguration.value("storeVersion").toString(), QString("1234567890"));
+        QCOMPARE(entry.core.app.launchConfiguration.value("storeVersion").toString(), QString("1234567890"));
         for (const auto& key : QStringList{"id", "packageName", "version", "sha256"})
         {
             auto invalid = manifest;
@@ -263,6 +263,10 @@ class IsoldeTests final : public QObject
         QVERIFY(restored.isInstalled(id));
         QVERIFY(restoredRegistry.find(id));
         QCOMPARE(restoredRegistry.find(id)->type, QString("android"));
+        QCOMPARE(restored.browserApps().size(), 1);
+        QVERIFY(restored.defaultBrowser().isEmpty());
+        QVERIFY(!restored.setDefaultBrowser("not-installed"));
+        QVERIFY(restored.setDefaultBrowser(id));
         // Subscription changes are profile-local, atomic, and suppress late offers.
         CountingStoreProvider provider;
         restored.setStoreProvider(&provider);
@@ -272,6 +276,7 @@ class IsoldeTests final : public QObject
         AppRegistry preferencesRegistry;
         AppCatalog preferences(&preferencesRegistry);
         QVERIFY(preferences.load(QFINDTESTDATA("../config/catalog.json"), state, packages));
+        QCOMPARE(preferences.defaultBrowser(), id);
         QVERIFY(preferences.m_updatesDisabled.contains(id));
         QFile before(state);
         QVERIFY(before.open(QIODevice::ReadOnly));
@@ -280,6 +285,8 @@ class IsoldeTests final : public QObject
         const auto blocked = temp.filePath("state-is-a-directory");
         QVERIFY(QDir().mkpath(blocked));
         preferences.m_statePath = blocked;
+        QVERIFY(!preferences.setDefaultBrowser({}));
+        QCOMPARE(preferences.defaultBrowser(), id);
         QVERIFY(!preferences.setUpdatesEnabled(id, true));
         QVERIFY(preferences.m_updatesDisabled.contains(id));
         QVERIFY(before.open(QIODevice::ReadOnly));
@@ -310,7 +317,7 @@ class IsoldeTests final : public QObject
         restored.m_statePath = blocked;
         QSignalSpy registryChanges(&restoredRegistry, &AppRegistry::appsChanged);
         QVERIFY(!restored.commitUpdate(update));
-        QCOMPARE(restored.findEntry(id)->version, QString("1234567890"));
+        QCOMPARE(restored.findEntry(id)->core.version, QString("1234567890"));
         QCOMPARE(restoredRegistry.find(id)->launchConfiguration.value("storeVersion").toString(),
                  QString("1234567890"));
         QCOMPARE(restoredRegistry.apps().size(), 1);

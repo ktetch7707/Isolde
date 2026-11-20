@@ -237,6 +237,7 @@ qt_add_qml_module(isolde
         qml/HomeCard.qml
         qml/LineIcon.qml
         qml/SkinLibrary.qml
+        qml/SkinPicker.qml
         qml/PageNavigation.qml
         qml/PageSurface.qml
         qml/PageStudioView.qml
@@ -618,7 +619,7 @@ if(BUILD_TESTING)
     qt_add_resources(isolde_studio_design_tests "studio_test_defaults" PREFIX "/" FILES config/studio-defaults.json)
     add_test(NAME studio_design_contracts COMMAND isolde_studio_design_tests)
     set_tests_properties(studio_design_contracts PROPERTIES TIMEOUT 60)
-    add_test(NAME studio_unit COMMAND isolde_component_tests
+    add_test(NAME studio_unit COMMAND isolde_studio_session_tests
         studioSessionDraftUndoBoundsAndNoWrite studioCommandsAreAtomicAndProfileScoped
         studioApplyAtomicFailureAndFocusPreserved studioCollisionProposalsAndParity
         studioShiftCascadesAreBoundedAndAtomic studioScrollingPagesAreBoundedAndAtomic

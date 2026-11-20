@@ -141,11 +141,15 @@ class AudioSettings final : public QObject
     bool
     handleGetDefaultSinkCommand(const QString& output);
     bool
-    handleGetVolumeCommand(const QString& output);
+    handleGetVolumeCommand(const QString& output, bool& mute);
     bool
     handleGetSinkVolumeCommand(const QString& output);
     bool
-    handleGetSinkMuteCommand(const QString& output);
+    handleGetSinkMuteCommand(const QString& output, bool& mute);
+    void
+    applyVolumeDirectly(int volume, bool muted);
+    bool
+    isPactlMixer();
     void
     finalizeCommand(bool readComplete, bool mute);
     void

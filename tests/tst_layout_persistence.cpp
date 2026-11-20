@@ -566,8 +566,9 @@ LayoutPersistenceTests::sourcePoliciesRejectUnsafeDataWithoutRewritingLayouts()
     QVERIFY(home.load(defaults, saved));
     QCOMPARE(readFile(saved), invalid);
     QVERIFY(!home.appearance().contains("sourcePolicy"));
-    QVERIFY(
-        home.setAppearance({{"sourcePolicy", QVariantMap{{"schemaVersion", 1}, {"mode", "widget"}, {"duration", 0}}}}));
+    QVERIFY2(
+        home.setAppearance({{"sourcePolicy", QVariantMap{{"schemaVersion", 1}, {"mode", "widget"}, {"duration", 0}}}}),
+        qPrintable(home.errorString()));
     const auto original = readFile(saved);
     HomeLayout reload(&registry);
     QVERIFY(reload.load(defaults, saved));

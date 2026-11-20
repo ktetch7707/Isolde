@@ -61,7 +61,8 @@ AmbientSettings::photoUrls() const
 {
     return m_photoUrls;
 }
-int
+// Report the full collection size without narrowing Qt's container count.
+qint64
 AmbientSettings::photoCount() const
 {
     return m_photoUrls.size();

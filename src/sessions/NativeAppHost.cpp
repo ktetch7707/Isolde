@@ -80,21 +80,38 @@ connectedGamepadNodes()
 QSet<QString>
 attachGamepadNodes(const QSet<QString>& connected,
                    const QSet<QString>& boundAtLaunch,
+                   QMap<QString, quint64>* createdNodes);
+bool
+attachGamepadNode(const QSet<QString>& connected,
+                  const QSet<QString>& boundAtLaunch,
+                  QMap<QString, quint64>* createdNodes,
+                  QSet<QString>& dynamicEvents,
+                  const QDir& sysInput,
+                  const QString& name);
+bool
+attachExistingGamepadNode(QMap<QString, quint64>::iterator& it,
+                          QMap<QString, quint64>* createdNodes,
+                          const QSet<QString>& connected,
+                          QSet<QString>& dynamicEvents);
+
+QSet<QString>
+attachGamepadNodes(const QSet<QString>& connected,
+                   const QSet<QString>& boundAtLaunch,
                    QMap<QString, quint64>* createdNodes)
 {
     QSet<QString> dynamicEvents;
 #ifdef Q_OS_LINUX
+    const QDir sysInput("/sys/class/input");
     for (auto it = createdNodes->begin(); it != createdNodes->end();)
     {
-        if (attachExistingGamepadNode(it, connected, dynamicEvents))
+        if (attachExistingGamepadNode(it, createdNodes, connected, dynamicEvents))
             ++it;
         else
             it = createdNodes->erase(it);
     }
-    const QDir sysInput("/sys/class/input");
     for (const auto& name : connected)
     {
-        attachGamepadNode(connected, boundAtLaunch, createdNodes, dynamicEvents, name);
+        attachGamepadNode(connected, boundAtLaunch, createdNodes, dynamicEvents, sysInput, name);
     }
 #else
     Q_UNUSED(connected);
@@ -109,6 +126,7 @@ attachGamepadNode(const QSet<QString>& connected,
                   const QSet<QString>& boundAtLaunch,
                   QMap<QString, quint64>* createdNodes,
                   QSet<QString>& dynamicEvents,
+                  const QDir& sysInput,
                   const QString& name)
 {
     if (boundAtLaunch.contains(name) || createdNodes->contains(name))
@@ -205,13 +223,63 @@ setupGamepadMonitoring(QCoreApplication& app, QTimer& gamepadTimer, bool gameSes
                        QSet<QString>& boundAtLaunch, QVariantMap& lastStatus,
                        QMap<QString, quint64>& createdNodes);
 
+// Keep the session mode in the callback so deferred shutdown uses a live value.
 auto
 makeStopHandler(QProcess& child, QCoreApplication& app, qint64& childGroup,
-                bool& stopping, bool steamSession);
+                 bool& stopping, bool steamSession)
+{
+    return [&, steamSession]
+    {
+        if (stopping)
+            return;
+        stopping = true;
+#ifdef Q_OS_UNIX
+        if (child.state() != QProcess::NotRunning)
+            ::kill(pid_t(child.processId()), SIGTERM);
+#else
+        child.terminate();
+#endif
+        QTimer::singleShot(steamSession ? 14000 : 2000,
+                           &app,
+                           [&]
+                           {
+#ifdef Q_OS_UNIX
+                               if (child.state() != QProcess::NotRunning)
+                                   ::kill(-pid_t(childGroup), SIGKILL);
+#else
+                               child.kill();
+#endif
+                           });
+    };
+}
 
+// Preserve the child result and session mode until delayed process-group cleanup finishes.
 auto
 makeChildFinishedHandler(QProcess& child, QCoreApplication& app, qint64& childGroup,
-                         bool& stopping, bool& remoteFailed, bool steamSession);
+                         bool& stopping, bool& remoteFailed, bool steamSession)
+{
+    return [&, steamSession](int code, QProcess::ExitStatus status)
+    {
+        if (!stopping)
+        {
+            app.exit(status == QProcess::NormalExit ? code : 1);
+            return;
+        }
+#ifdef Q_OS_UNIX
+        ::kill(-pid_t(childGroup), SIGTERM);
+#endif
+        QTimer::singleShot(
+            1500,
+            &app,
+            [&, code, status, steamSession]
+            {
+#ifdef Q_OS_UNIX
+                ::kill(-pid_t(childGroup), SIGKILL);
+#endif
+                app.exit(remoteFailed || (steamSession && (status != QProcess::NormalExit || code != 0)) ? 1 : 0);
+            });
+    };
+}
 
 #ifdef Q_OS_LINUX
 bool
@@ -332,6 +400,16 @@ parseLaunchArguments(QCoreApplication& app)
             }
             gameSession = true;
         }
+        else if (flag == "--web-remote")
+        {
+            // Consume the supervisor option before checking the child command delimiter.
+            if (!config.remoteAppearance.isEmpty())
+                return config;
+            config.remoteAppearance = parseWebRemoteAppearance(arguments);
+            if (config.remoteAppearance.isEmpty())
+                return config;
+            arguments.removeAt(2);
+        }
         else
             break;
         arguments.removeAt(1);
@@ -412,61 +490,6 @@ setupGamepadMonitoring(QCoreApplication& app, QTimer& gamepadTimer, bool gameSes
     gamepadTimer.start();
 }
 
-auto
-makeStopHandler(QProcess& child, QCoreApplication& app, qint64& childGroup, bool& stopping, bool steamSession)
-{
-    return [&]
-    {
-        if (stopping)
-            return;
-        stopping = true;
-#ifdef Q_OS_UNIX
-        if (child.state() != QProcess::NotRunning)
-            ::kill(pid_t(child.processId()), SIGTERM);
-#else
-        child.terminate();
-#endif
-        QTimer::singleShot(steamSession ? 14000 : 2000,
-                           &app,
-                           [&]
-                           {
-#ifdef Q_OS_UNIX
-                               if (child.state() != QProcess::NotRunning)
-                                   ::kill(-pid_t(childGroup), SIGKILL);
-#else
-                               child.kill();
-#endif
-                           });
-    };
-}
-
-auto
-makeChildFinishedHandler(QProcess& child, QCoreApplication& app, qint64& childGroup,
-                         bool& stopping, bool& remoteFailed, bool steamSession)
-{
-    return [&](int code, QProcess::ExitStatus status)
-    {
-        if (!stopping)
-        {
-            app.exit(status == QProcess::NormalExit ? code : 1);
-            return;
-        }
-#ifdef Q_OS_UNIX
-        ::kill(-pid_t(childGroup), SIGTERM);
-#endif
-        QTimer::singleShot(
-            1500,
-            &app,
-            [&, code, status]
-            {
-#ifdef Q_OS_UNIX
-                ::kill(-pid_t(childGroup), SIGKILL);
-#endif
-                app.exit(remoteFailed || (steamSession && (status != QProcess::NormalExit || code != 0)) ? 1 : 0);
-            });
-    };
-}
-
 #ifdef Q_OS_LINUX
 bool
 setupChromiumRemote(QCoreApplication& app, QProcess& child, const QVariantMap& remoteAppearance,
@@ -491,7 +514,8 @@ setupChromiumRemote(QCoreApplication& app, QProcess& child, const QVariantMap& r
         app,
         child,
         remoteAppearance,
-        [&]
+        // The asynchronous bridge must own the stop callback beyond setup.
+        [&remoteFailed, stop]
         {
             remoteFailed = true;
             stop();

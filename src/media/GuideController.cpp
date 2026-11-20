@@ -33,7 +33,7 @@ class GuideWorker final : public QObject
 {
     Q_OBJECT
   public:
-    explicit GuideWorker(QString path) : path(std::move(path)) {}
+    explicit GuideWorker(QString path_) : path(std::move(path_)) {}
     QString path;
     std::unique_ptr<GuideStore> store;
   signals:
@@ -56,7 +56,7 @@ integer(const QVariant& value, qint64 minimum, qint64 maximum)
         return false;
     bool ok = false;
     const auto number = value.toDouble(&ok);
-    return ok && std::isfinite(number) && std::floor(number) == number && number >= minimum && number <= maximum;
+    return ok && std::isfinite(number) && std::floor(number) == number && number >= static_cast<double>(minimum) && number <= static_cast<double>(maximum);
 }
 QVariantMap
 outcome(bool ok, GuideStore& store)
@@ -263,16 +263,16 @@ GuideController::GuideController(const QString& path,
             {
                 if (m_valid && m_ready && !m_busy && m_clockWarning.isEmpty())
                 {
-                    const auto profile = m_profileDirectory;
+                    const auto profileDir = m_profileDirectory;
                     submit(
-                        [profile](GuideStore& store)
+                        [profileDir](GuideStore& store)
                         {
                             auto result = outcome(store.setActive(true, now()), store);
                             const auto observation = GuideClock::observation();
-                            const auto warning = GuideClock::warning(profile, observation);
+                            const auto warning = GuideClock::warning(profileDir, observation);
                             result["clockWarning"] = warning;
                             if (warning.isEmpty() && result.value("ok").toBool() &&
-                                !GuideClock::save(profile, observation))
+                                !GuideClock::save(profileDir, observation))
                                 result = {{"ok", false}, {"error", "Cannot save this profile's clock observation."}};
                             return result;
                         },
@@ -577,7 +577,8 @@ GuideController::previewLocal(const QVariantMap& definition, const QString& kind
     m_previewDefinition = validated;
     m_candidates.clear();
     m_previewReady = false;
-    m_skipped = m_page = m_kindIndex = m_snapshotBytes = 0;
+    m_skipped = m_page = m_kindIndex = 0;
+    m_snapshotBytes = 0;
     m_importRemapping.clear();
     m_kinds = requested;
     m_busy = m_reading = true;
@@ -692,11 +693,17 @@ GuideController::consume()
         consumePvr(result.toVariantMap());
         return;
     }
-    const auto limits = result.value("limits").toObject();
+    const auto limitsObj = result.value("limits").toObject();
     const auto items = result.value("items").toArray();
-    const int start = limits.value("start").toInt(-1), end = limits.value("end").toInt(-1),
-              total = limits.value("total").toInt(-1), skipped = result.value("skipped").toInt(-1);
-    if (!validateGuidePage(result, limits, items, start, end, total, skipped))
+    QVariantMap limits;
+    for (auto it = limitsObj.begin(); it != limitsObj.end(); ++it)
+        limits[it.key()] = it.value().toVariant();
+    QVariantMap resultMap;
+    for (auto it = result.begin(); it != result.end(); ++it)
+        resultMap[it.key()] = it.value().toVariant();
+    const int start = limits.value("start").toInt(), end = limits.value("end").toInt(),
+              total = limits.value("total").toInt(), skipped = resultMap.value("skipped").toInt();
+    if (!validateGuidePage(resultMap, limits, items, start, end, total, skipped))
         return;
     QVariantList candidates = m_candidates;
     if (!processGuideItems(items, candidates, m_previewDefinition, m_snapshotBytes, m_skipped))
@@ -1234,7 +1241,8 @@ GuideController::previewPvr()
     }
     m_sourceRefreshed = now();
     m_sourceIndex = -1;
-    m_page = m_snapshotBytes = m_skipped = 0;
+    m_page = m_skipped = 0;
+    m_snapshotBytes = 0;
     m_sourcePreviewReady = false;
     m_pvrReading = m_reading = m_busy = true;
     m_background = false;
@@ -1260,9 +1268,10 @@ GuideController::consumePvr(const QVariantMap& result)
 {
     const auto limits = result.value("limits").toMap();
     const auto key = m_sourceIndex < 0 ? QString("channels") : QString("broadcasts");
-    const auto items = result.value(key).toList();
+    const auto page = result.value(key);
+    const auto items = page.toList();
     const int end = limits.value("end", -1).toInt(), total = limits.value("total", -1).toInt();
-    if (!validatePvrPage(result, limits))
+    if (!validatePvrPage(page, limits))
         return;
     if (m_sourceIndex < 0)
     {
@@ -1282,7 +1291,7 @@ GuideController::consumePvr(const QVariantMap& result)
                 return;
             used.insert(number);
             m_sourcePreview.append(QVariantMap{{"definition", definition}, {"programs", QVariantList()}});
-            m_snapshotBytes += QJsonDocument::fromVariant(definition).toJson(QJsonDocument::Compact).size() + 40;
+            m_snapshotBytes += static_cast<qint64>(QJsonDocument::fromVariant(definition).toJson(QJsonDocument::Compact).size()) + 40;
         }
     }
     else
@@ -1348,7 +1357,7 @@ GuideController::previewFeed(const QString& instance,
     if (!xmltvPath.isEmpty() && !readFeedFile(xmltvPath, 16 * 1024 * 1024, xml))
         return fail(tr("Cannot read a bounded local XMLTV file. Cached listings were preserved."));
     return submit(
-        [instance, playlistPath, xmltvPath, directUrl, directName, refreshed, playlist, xml](GuideStore& store)
+        [this, instance, playlistPath, xmltvPath, directUrl, directName, refreshed, playlist, xml](GuideStore& store)
         {
             auto result = GuideFeeds::parse(playlist,
                                             xml,
@@ -1365,7 +1374,7 @@ GuideController::previewFeed(const QString& instance,
             QSet<int> used;
             for (const auto& v : store.channels())
                 used.insert(v.toMap().value("number").toInt());
-            if (!processFeedEntries(entries, listings, used, store))
+            if (!this->processFeedEntries(entries, listings, used, store))
                 return QVariantMap{{"ok", false},
                                    {"error",
                                     "A previously mapped XMLTV channel is missing from this refresh. Cached "
@@ -1783,14 +1792,14 @@ GuideController::setSourceEnabled(const QString& instance, const QVariant& enabl
         });
 }
 bool
-GuideController::validatePvrPage(const QVariantMap& result, const QVariantMap& limits)
+GuideController::validatePvrPage(const QVariant& page, const QVariantMap& limits)
 {
-    const auto key = result.value("limits").toMap().isEmpty() ? QString("channels") : QString("broadcasts");
+    // Validate the response field selected by the outstanding request before advancing its cursor.
     const int start = limits.value("start", -1).toInt(), end = limits.value("end", -1).toInt(),
               total = limits.value("total", -1).toInt();
-    const auto items = result.value(key).toList();
+    const auto items = page.toList();
     if (!integer(limits.value("start"), 0, 1024) || !integer(limits.value("end"), 0, 1024) ||
-        !integer(limits.value("total"), 0, 1024) || result.value(key).metaType().id() != QMetaType::QVariantList ||
+        !integer(limits.value("total"), 0, 1024) || page.metaType().id() != QMetaType::QVariantList ||
         start != m_page || end != start + items.size() || items.size() > 50 || total < end ||
         total > (m_sourceIndex < 0 ? 1024 : 1000) || (end == start && total > end))
     {
@@ -1898,7 +1907,7 @@ GuideController::processPvrPrograms(const QVariantList& items, QVariantMap& entr
     m_sourcePreview[m_sourceIndex] = entry;
 }
 void
-GuideController::finalizePvrLoad(int& page, int& sourceIndex, bool& sourcePreviewReady)
+GuideController::finalizePvrLoad(int& page, int& sourceIndex, bool& sourcePreviewReady, int end, int total)
 {
     closeBridge();
     if (m_snapshotBytes > 4 * 1024 * 1024 - 4096)
@@ -1996,7 +2005,7 @@ GuideController::processFeedEntries(QVariantList& entries, const QVariantMap& li
     return true;
 }
 void
-GuideController::finalizeFeedLoad(QVariantMap& result, QVariantList& entries, QVariantList& sourcePreview,
+GuideController::finalizeFeedLoad(const QVariantMap& result, QVariantList& entries, QVariantList& sourcePreview,
                                   QVariantMap& feedListings, bool& sourcePreviewReady, qint64& snapshotBytes)
 {
     sourcePreview = entries;
@@ -2008,7 +2017,8 @@ bool
 GuideController::validateGuidePage(const QVariantMap& result, const QVariantMap& limits, const QJsonArray& items,
                                    int start, int end, int total, int skipped)
 {
-    if (!result.value("items").isArray() || start != m_page || end < start || end > start + 50 || total < end ||
+    Q_UNUSED(limits);
+    if (result.value("items").userType() != QMetaType::QVariantList || start != m_page || end < start || end > start + 50 || total < end ||
         total > 100000 || (end == start && total > end) || skipped < 0 || items.size() + skipped != end - start)
     {
         readFailure(tr("Kodi returned an invalid guide metadata page."));
@@ -2018,8 +2028,9 @@ GuideController::validateGuidePage(const QVariantMap& result, const QVariantMap&
 }
 bool
 GuideController::processGuideItems(const QJsonArray& items, QVariantList& candidates,
-                                   const QVariantMap& previewDefinition, qint64& snapshotBytes, int& skipped)
+                                   QVariantMap& previewDefinition, qint64& snapshotBytes, int& skipped)
 {
+    Q_UNUSED(skipped);
     for (const auto& v : items)
     {
         const auto item = v.toObject().toVariantMap();
@@ -2039,7 +2050,8 @@ void
 GuideController::finalizeGuideLoad(QVariantList& candidates, int& page, int& kindIndex, int& sourceIndex,
                                    bool& previewReady, qint64& snapshotBytes, int end, int total, int skipped)
 {
-    Q_UNUSED(result);
+    Q_UNUSED(sourceIndex);
+    Q_UNUSED(snapshotBytes);
     m_candidates = candidates;
     m_skipped += skipped;
     closeBridge();

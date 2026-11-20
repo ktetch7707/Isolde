@@ -4,7 +4,8 @@
 #include <QDataStream>
 #include <QFileInfo>
 
-void
+// Stop owned helper processes before destroying their settings object.
+static void
 stopProcess(QProcess& process)
 {
     if (process.state() != QProcess::NotRunning)
@@ -155,16 +156,6 @@ AudioSettings::~AudioSettings()
 }
 
 void
-stopProcess(QProcess& process)
-{
-    if (process.state() != QProcess::NotRunning)
-    {
-        process.kill();
-        process.waitForFinished(1000);
-    }
-}
-
-void
 AudioSettings::playTestSound()
 {
     if (m_testPlayer.state() != QProcess::NotRunning)
@@ -210,7 +201,7 @@ AudioSettings::playTestSound()
         const int section = frame / rate;
         const double t = double(frame % rate) / rate;
         const double envelope = qBound(0.0, qMin(t / 0.03, (0.7 - t) / 0.03), 1.0);
-        const qint16 sample = qRound(3276 * envelope * std::sin(2 * M_PI * (section == 1 ? 660 : 440) * t));
+        const auto sample = static_cast<qint16>(qRound(3276 * envelope * std::sin(2 * M_PI * (section == 1 ? 660 : 440) * t)));
         stream << qint16(section == 1 ? 0 : sample) << qint16(section == 0 ? 0 : sample);
     }
     if (stream.status() != QDataStream::Ok || !m_testFile->flush())
@@ -649,17 +640,28 @@ AudioSettings::completeCommand(int exitCode, QProcess::ExitStatus status)
     const QString output = QString::fromUtf8(m_output).trimmed();
     bool readComplete = false, mute = false;
     if (command == "status")
-        readComplete = handleStatusCommand(output);
+        handleStatusCommand(output);
     else if (command == "list")
-        readComplete = handleListCommand(output);
+        handleListCommand(output);
     else if (command == "get-default-sink")
-        readComplete = handleGetDefaultSinkCommand(output);
+        handleGetDefaultSinkCommand(output);
     else if (command == "get-volume")
-        readComplete = handleGetVolumeCommand(output, mute);
+    {
+        if (!handleGetVolumeCommand(output, mute))
+            return;
+        readComplete = true;
+    }
     else if (command == "get-sink-volume")
-        readComplete = handleGetSinkVolumeCommand(output);
+    {
+        if (!handleGetSinkVolumeCommand(output))
+            return;
+    }
     else if (command == "get-sink-mute")
-        readComplete = handleGetSinkMuteCommand(output, mute);
+    {
+        if (!handleGetSinkMuteCommand(output, mute))
+            return;
+        readComplete = true;
+    }
     finalizeCommand(readComplete, mute);
     runNext();
 }

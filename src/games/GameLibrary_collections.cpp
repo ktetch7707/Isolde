@@ -1,11 +1,38 @@
-﻿#include <QFileInfo>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonValue>
 #include <QSaveFile>
 #include <QSqlQuery>
+#include <QSqlError>
 #include <QUuid>
 #include "GameLibrary.h"
+#include "GameResourceLimits.h"
+#include "media/MediaGrants.h"
 #include "OpticalDiscIdentity.h"
+#include "home/ComponentSchema.h"
+
+QString sqlText(const QVariant& value);
+bool approvedMediaDirectory(const QString& profile, const QString& path);
+bool exactKeys(const QJsonObject& object, const QStringList& keys);
+bool archiveInteger(const QJsonValue& value, qint64* result);
+QByteArray normalizeArtwork(const QByteArray& source);
+QString artworkHash(const QByteArray& bytes);
+bool persistArtwork(const QString& databasePath, const QByteArray& bytes, QString* hash, QString* error);
+
+namespace
+{
+constexpr int MaxGames = GamesResourceLimits::CatalogEntries;
+constexpr int MaxPlatforms = GamesResourceLimits::Platforms;
+constexpr int MaxCollections = GamesResourceLimits::Collections;
+constexpr int MaxProvenanceRecords = GamesResourceLimits::ProvenanceRecords;
+constexpr int MaxTags = 32;
+constexpr qsizetype MaxCatalogArchiveBytes = GamesResourceLimits::CatalogArchiveBytes;
+constexpr qint64 MaxManagedArtworkBytes = 12 * 1024 * 1024;
+constexpr qint64 MaxRestoreArtworkBytes = GamesResourceLimits::ArtworkRestoreBytes;
+constexpr int PageSize = GamesResourceLimits::PageEntries;
+}
 
 QVariantList
 GameLibrary::collections()
@@ -138,7 +165,7 @@ GameLibrary::createCollectionCheckLimit()
     return true;
 }
 
-QVariantMap
+QString
 GameLibrary::createCollectionInsert(const QString& clean, const QString& kind, const QString& filterType,
                                     const QString& filterValue)
 {
@@ -444,7 +471,22 @@ GameLibrary::pageCollection(const QString& id, int offset)
     }
     QVariantList result;
     while (query.next())
-        result.append(row(query, artworkDirectory()));
+    {
+        QVariantMap entry;
+        entry["id"] = query.value(0).toString();
+        entry["title"] = query.value(1).toString();
+        entry["platform"] = query.value(2).toString();
+        entry["runtimeId"] = query.value(3).toString();
+        entry["favorite"] = query.value(4).toBool();
+        entry["franchise"] = query.value(5).toString();
+        entry["tags"] = QJsonDocument::fromJson(query.value(6).toByteArray()).array().toVariantList();
+        entry["aliases"] = m_hasRichMetadata
+                               ? QJsonDocument::fromJson(query.value(7).toByteArray()).array().toVariantList()
+                               : QVariantList{};
+        entry["summary"] = m_hasRichMetadata ? query.value(8).toString() : QString();
+        entry["artworkHash"] = m_hasArtwork ? query.value(m_hasRichMetadata ? 9 : 7).toString() : QString();
+        result.append(entry);
+    }
     return result;
 }
 
@@ -470,6 +512,7 @@ bool
 GameLibrary::pageCollectionBuildWhere(const QString& kind, const QString& filter, const QString& filterValue,
                                       bool hasEditions, QString& sql)
 {
+    Q_UNUSED(filterValue);
     if (kind == "manual")
     {
         sql += " JOIN game_collection_members cm ON cm.game_id=g.id WHERE cm.collection_id=? ORDER BY cm.position, "
@@ -506,7 +549,8 @@ GameLibrary::pageCollectionBuildWhere(const QString& kind, const QString& filter
             "BY g.title COLLATE NOCASE,g.id";
         return true;
     }
-    if (filter == "recent" && hasEditions)
+    // Collections already require the organization schema, which includes activity.
+    if (filter == "recent")
     {
         sql +=
             " WHERE EXISTS(SELECT 1 FROM game_activity a WHERE a.game_id=g.id) ORDER BY (SELECT a.last_played FROM "
@@ -560,7 +604,7 @@ GameLibrary::exportCatalog(const QString& destination)
                             {"runtimeId", query.value(4).toString()},
                             {"root", query.value(5).toString()},
                             {"target", query.value(6).toString()}});
-            estimatedArchiveBytes += QJsonDocument(editionsArray.last()).toJson(QJsonDocument::Compact).size() + 1;
+            estimatedArchiveBytes += QJsonDocument(editionsArray.last().toObject()).toJson(QJsonDocument::Compact).size() + 1;
             if (estimatedArchiveBytes > MaxCatalogArchiveBytes)
                 return fail(tr("Catalog export exceeds the 32 MiB size limit."));
         }
@@ -802,6 +846,34 @@ GameLibrary::exportCatalogWriteFile(const QString& destination, const QByteArray
     return true;
 }
 
+// Restrict restore to an explicitly confirmed, bounded regular file at its canonical path.
+bool
+GameLibrary::restoreCatalogValidateArgs(const QString& source, bool confirmed)
+{
+    const QFileInfo file(source);
+    return m_ready && confirmed && QDir::isAbsolutePath(source) && QDir::cleanPath(source) == source &&
+           !file.isSymLink() && file.isFile() && file.canonicalFilePath() == source &&
+           file.size() > 0 && file.size() <= MaxCatalogArchiveBytes;
+}
+
+// Check the archive envelope before parsing records or touching the database.
+bool
+GameLibrary::restoreCatalogValidateArchive(const QJsonObject& archive)
+{
+    const int version = archive.value("schemaVersion").toInt(-1);
+    const auto keys = version == 4 ? QStringList{"schemaVersion", "games", "editions", "collections", "provenance"}
+                                   : QStringList{"schemaVersion", "games", "editions", "collections"};
+    if (!exactKeys(archive, keys) || !archive.value("schemaVersion").isDouble() ||
+        archive.value("schemaVersion").toDouble() != version || version < 1 || version > 4 ||
+        !archive.value("games").isArray() || archive.value("games").toArray().size() > MaxGames ||
+        !archive.value("editions").isArray() || archive.value("editions").toArray().size() > MaxGames ||
+        !archive.value("collections").isArray() || archive.value("collections").toArray().size() > MaxCollections ||
+        (version == 4 && (!archive.value("provenance").isArray() ||
+                          archive.value("provenance").toArray().size() > MaxProvenanceRecords)))
+        return fail(tr("Unsupported Games backup version or catalog bounds."));
+    return true;
+}
+
 bool
 GameLibrary::restoreCatalog(const QString& source, bool confirmed)
 {
@@ -822,13 +894,12 @@ GameLibrary::restoreCatalog(const QString& source, bool confirmed)
     if (parse.error != QJsonParseError::NoError || !document.isObject())
         return fail(tr("Invalid Games backup JSON."));
     const auto archive = document.object();
+    const int archiveVersion = archive.value("schemaVersion").toInt();
     QList<QVariantMap> games, editionsData, collectionsData, provenanceData;
     QSet<QString> ids, gameIds, editionIds, platforms, names, installations;
     QMap<QString, int> editionCounts;
     qint64 restoreArtworkBytes = 0;
-    if (!restoreCatalogValidateArchive(archive, ids, gameIds, editionIds, platforms, names, installations,
-                                       editionCounts, games, editionsData, collectionsData, provenanceData,
-                                       restoreArtworkBytes))
+    if (!restoreCatalogValidateArchive(archive))
         return false;
     for (const auto& entry : archive.value("games").toArray())
     {
@@ -927,7 +998,8 @@ GameLibrary::restoreCatalog(const QString& source, bool confirmed)
         for (const auto& alias : archiveAliases)
         {
             if (!alias.isString() || alias.toString().isEmpty() || alias.toString() != alias.toString().trimmed() ||
-                alias.toString().size() > 160 || alias.contains(';') || alias.contains(QChar::Null) ||
+                alias.toString().size() > 160 || alias.toString().contains(';') ||
+                alias.toString().contains(QChar::Null) ||
                 aliasSet.contains(alias.toString().toCaseFolded()))
                 return fail(tr("Invalid or duplicate alias in backup."));
             aliasSet.insert(alias.toString().toCaseFolded());
@@ -1190,18 +1262,6 @@ GameLibrary::restoreCatalog(const QString& source, bool confirmed)
              query.exec("CREATE INDEX game_editions_owner ON game_editions(game_id)");
     for (const auto& game : games)
     {
-        query.prepare(
-            "INSERT INTO games(id,title,platform,runtime,root,target,favorite,added) VALUES(?,?,?,?,?,?,?,?)");
-        for (const auto& key :
-             QStringList{"id", "title", "platform", "runtimeId", "root", "target", "favorite", "added"})
-            query.addBindValue(game.value(key));
-        ok = ok && query.exec();
-        query.prepare(
-            "INSERT INTO game_metadata(game_id,franchise,tags,aliases,summary,artwork_hash) VALUES(?,?,?,?,?,?)");
-        query.addBindValue(game.value("id"));
-        query.addBindValue(sqlText(game.value("franchise")));
-    for (const auto& game : games)
-    {
         if (!ok)
             break;
         ok = restoreCatalogApplyGame(query, game);
@@ -1224,10 +1284,14 @@ GameLibrary::restoreCatalog(const QString& source, bool confirmed)
             break;
         ok = restoreCatalogApplyProvenanceRecord(query, record);
     }
-    ok = restoreCatalogApplyFinal(query, ok, m_hasProvenance, backupPath);
+    // Check the completed transaction once, before publishing any schema changes.
+    if (ok && m_hasProvenance)
+        ok = query.exec("SELECT count(*) FROM game_provenance") && query.next() &&
+             query.value(0).toInt() <= MaxProvenanceRecords;
+    ok = ok && query.exec("PRAGMA user_version=6");
     if (!ok || !m_db.commit())
     {
-        const auto reason = query.lastError().text();
+        const auto reason = ok ? m_db.lastError().text() : query.lastError().text();
         m_db.rollback();
         return fail(
             tr("Restore failed; the prior catalog remains intact. Recovery copy: %1. %2").arg(backupPath, reason));
@@ -1257,6 +1321,7 @@ GameLibrary::restoreCatalogApplyGame(QSqlQuery& query, const QVariantMap& game)
     query.prepare(
         "INSERT INTO game_metadata(game_id,franchise,tags,aliases,summary,artwork_hash) VALUES(?,?,?,?,?,?)");
     query.addBindValue(game.value("id"));
+    query.addBindValue(sqlText(game.value("franchise")));
     QJsonArray tags;
     for (const auto& tag : game.value("tags").toStringList())
         tags.append(tag);
@@ -1326,33 +1391,4 @@ GameLibrary::restoreCatalogApplyProvenanceRecord(QSqlQuery& query, const QVarian
                                        "recordedAt"})
         query.addBindValue(record.value(key));
     return query.exec();
-}
-
-bool
-GameLibrary::restoreCatalogApplyFinal(QSqlQuery& query, bool ok, bool hasProvenance, const QString& backupPath)
-{
-    if (ok && hasProvenance)
-    {
-        if (!query.exec("SELECT count(*) FROM game_provenance") || !query.next() ||
-            query.value(0).toInt() > MaxProvenanceRecords)
-            ok = false;
-    }
-    ok = ok && query.exec("PRAGMA user_version=6");
-    if (!ok || !query.exec("COMMIT"))
-    {
-        const auto reason = query.lastError().text();
-        query.exec("ROLLBACK");
-        return fail(
-            tr("Restore failed; the prior catalog remains intact. Recovery copy: %1. %2").arg(backupPath, reason));
-    }
-    m_hasActivity = true;
-    m_hasMetadata = true;
-    m_hasCollections = true;
-    m_hasRichMetadata = true;
-    m_hasArtwork = true;
-    m_hasEditions = m_hasEditions || !m_editionsData.empty();
-    m_error.clear();
-    emit errorChanged();
-    emit changed();
-    return true;
 }

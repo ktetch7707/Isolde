@@ -1,4 +1,10 @@
+#include "home/ComponentSchema.h"
+#include "home/HomeLayout.h"
 #include "home/StudioSession.h"
+
+#include <algorithm>
+#include <cmath>
+#include <functional>
 
 QVariantList
 StudioSession::actionChoices() const
@@ -140,6 +146,26 @@ StudioSession::validNewAction(const QVariantMap& value)
     return true;
 }
 
+// Check every destination before a sequence becomes part of a Studio draft.
+bool
+StudioSession::validNewActions(const QVariant& value)
+{
+    if (value.metaType().id() != QMetaType::QVariantList)
+    {
+        setError(tr("Choose a valid action sequence."));
+        return false;
+    }
+    for (const auto& entry : value.toList())
+        if (entry.metaType().id() != QMetaType::QVariantMap || entry.toMap().isEmpty() ||
+            !validNewAction(entry.toMap()))
+        {
+            if (m_error.isEmpty())
+                setError(tr("Choose a valid action sequence."));
+            return false;
+        }
+    return true;
+}
+
 QVariantMap
 StudioSession::componentPrototype(const QString& type, const QVariantMap& configuration)
 {
@@ -157,7 +183,7 @@ StudioSession::componentPrototype(const QString& type, const QVariantMap& config
     nodes[0] = configured;
     if (configuration.contains("buttons") && !applyCarouselButtons(configuration, options, type, configured, nodes))
         return {};
-    if (configuration.contains("apps") && !applyAppCollection(configuration, configured, nodes))
+    if (configuration.contains("apps") && !applyAppCollection(type, configuration, configured, nodes))
         return {};
     return finalizePrototype(type, nodes);
 }
@@ -227,7 +253,7 @@ StudioSession::validateComponentConfigKeys(const QVariantMap& configuration)
 {
     for (auto it = configuration.cbegin(); it != configuration.cend(); ++it)
     {
-        if (!QStringList{"name", "action", "customLogo", "presentation", "appCollection", "apps", "buttons", "variant"}
+        if (!QStringList{"name", "action", "actions", "customLogo", "presentation", "appCollection", "apps", "buttons", "variant"}
                  .contains(it.key()))
         {
             setError(tr("Unsupported component configuration."));
@@ -268,7 +294,7 @@ StudioSession::applyCarouselButtons(const QVariantMap& configuration, const QVar
         auto child = QJsonObject::fromVariantMap(options.value("buttonChildPreset").toMap());
         for (auto it = changes.cbegin(); it != changes.cend(); ++it)
         {
-            if (!QStringList{"name", "action"}.contains(it.key()))
+            if (!QStringList{"name", "action", "actions"}.contains(it.key()))
             {
                 setError(tr("Unsupported carousel button property."));
                 return false;
@@ -286,7 +312,7 @@ StudioSession::applyCarouselButtons(const QVariantMap& configuration, const QVar
 }
 
 bool
-StudioSession::applyAppCollection(const QVariantMap& configuration, QJsonObject& configured, QJsonArray& nodes)
+StudioSession::applyAppCollection(const QString& type, const QVariantMap& configuration, QJsonObject& configured, QJsonArray& nodes)
 {
     const auto apps = configuration.value("apps").toList();
     QSet<QString> selected;
@@ -420,6 +446,9 @@ StudioSession::allocateNodeIdentities(QJsonArray& nodes, const QString& type, QH
     {
         if (!validNewAction(nodes[i].toObject()["action"].toObject().toVariantMap()))
             return false;
+        if (nodes[i].toObject().contains("actions") &&
+            !validNewActions(nodes[i].toObject()["actions"].toVariant()))
+            return false;
         QString error;
         const auto canonical = ComponentSchema::component(nodes[i].toObject().toVariantMap(), true, &error);
         if (canonical.isEmpty())
@@ -506,7 +535,8 @@ StudioSession::replacementProposal(const QString& id, const QString& type, const
     if (!validateReplacementResult(replacement))
         return fail(tr("These properties do not fit the replacement. Keep the original or choose another type."));
     entries[index] = QJsonObject::fromVariantMap(ComponentSchema::component(replacement.toVariantMap(), true));
-    QJsonObject page = document["pages"].toArray().value(pageIndex).toObject()["layout"].toObject();
+    pages = document["pages"].toArray();
+    QJsonObject page = pageIndex < 0 ? document : pages.at(pageIndex).toObject()["layout"].toObject();
     page["components"] = entries;
     if (!updateReplacementDocument(document, entries, pages, pageIndex, page))
         return fail(tr("Replacement document failed validation."));
@@ -531,7 +561,7 @@ StudioSession::findReplacementTarget(const QString& id, const QString& pageId, Q
         if (pageIndex < 0)
             return false;
     }
-    auto page = document["pages"].toArray().value(pageIndex).toObject()["layout"].toObject();
+    auto page = pageIndex < 0 ? document : pages.at(pageIndex).toObject()["layout"].toObject();
     entries = page["components"].toArray();
     index = -1;
     hasChildren = false;
@@ -550,6 +580,7 @@ bool
 StudioSession::validateComponentReplaceable(const QJsonObject& original, const QJsonArray& entries, const QString& id,
                                             const QString& type)
 {
+    Q_UNUSED(type);
     if (ComponentSchema::positionLocked(entries, id))
         return false;
     const auto compType = original["componentType"].toString();
@@ -575,7 +606,7 @@ StudioSession::buildReplacementPrototype(const QString& type, const QJsonObject&
     for (auto it = oldStyle.begin(); it != oldStyle.end(); ++it)
     {
         const auto key = it.key();
-        if (isSemanticStyleKey(key, it.value(), type) ||
+        if (isSemanticStyleKey(key, it.value().toVariant(), type) ||
             !ComponentSchema::validPresentation({{key, it.value().toVariant()}}, false, type == "container"))
         {
             losses.append(lossMessageForKey(key));
@@ -586,10 +617,15 @@ StudioSession::buildReplacementPrototype(const QString& type, const QJsonObject&
     replacement["presentation"] = presentation;
     if (original["componentType"] == "text" && type != "text" && !losses.contains(tr("Text body")))
         losses.append(tr("Text body"));
-    if (original.contains("action"))
+    if (original.contains("action") || original.contains("actions"))
     {
         if (type == "button" || type == "image")
-            replacement["action"] = original["action"];
+        {
+            if (original.contains("action"))
+                replacement["action"] = original["action"];
+            if (original.contains("actions"))
+                replacement["actions"] = original["actions"];
+        }
         else
             losses.append(tr("Action link"));
     }
@@ -633,7 +669,7 @@ StudioSession::validateReplacementResult(const QJsonObject& replacement)
 
 bool
 StudioSession::updateReplacementDocument(QJsonObject& document, const QJsonArray& entries,
-                                         const QJsonArray& pages, int pageIndex, const QJsonObject& page)
+                                         QJsonArray pages, int pageIndex, const QJsonObject& page)
 {
     QJsonObject updatedPage = page;
     updatedPage["components"] = entries;
@@ -649,6 +685,57 @@ StudioSession::updateReplacementDocument(QJsonObject& document, const QJsonArray
     HomeLayout validator(m_live->registry());
     configureWorker(validator);
     return validator.loadDocument(QJsonDocument(document).toJson(), false);
+}
+
+// Include the selected item first and every displaced neighbor in one atomic proposal.
+QVariantList
+StudioSession::collectPlacementChanges(const QJsonArray& entries, const QJsonArray& originalEntries, int selected)
+{
+    QVariantList changes;
+    const auto append = [&](int index)
+    {
+        const auto item = entries[index].toObject();
+        changes.append(QVariantMap{{"id", item.value("id").toString()},
+                                   {"placement", item.value("placement").toObject().toVariantMap()},
+                                   {"categoryId", item.value("categoryId").toString()},
+                                   {"parentId", item.value("parentId").toString()}});
+    };
+    append(selected);
+    for (int i = 0; i < entries.size(); ++i)
+    {
+        const auto item = entries[i].toObject();
+        const auto original = originalEntries[i].toObject();
+        if (i != selected && (item.value("placement") != original.value("placement") ||
+                              item.value("categoryId") != original.value("categoryId") ||
+                              item.value("parentId") != original.value("parentId")))
+            append(i);
+    }
+    return changes;
+}
+
+// Scrolling and page-menu conversion belong to the same draft transaction as the addition.
+bool
+StudioSession::applyAdditionProposalOptions(QJsonObject& document, const QString& type, const QString& pageId,
+                                             bool enableScrolling, const QString& parentId, const QString& categoryId)
+{
+    if (enableScrolling)
+    {
+        if (!parentId.isEmpty() || !categoryId.isEmpty())
+        {
+            setError(tr("Choose the page before enabling vertical scrolling."));
+            return false;
+        }
+        auto composition = document["composition"].toObject();
+        composition["verticalScrolling"] = true;
+        document["composition"] = composition;
+    }
+    if (type == "page-menu" && !pageId.isEmpty())
+    {
+        auto composition = document["composition"].toObject();
+        composition["pageNavigation"] = "none";
+        document["composition"] = composition;
+    }
+    return true;
 }
 
 QVariantMap
@@ -670,8 +757,10 @@ StudioSession::placementProposal(const QString& id,
     if (!resolvePlacementDestination(doc, entries, id, options, pageId, category, parent,
                                      sourceCategory, sourceParent, sections, composition))
         return {{"valid", false}, {"reason", m_error}};
+    if (!pageId.isEmpty() && !findPageLayout(doc, pageId, doc))
+        return {{"valid", false}, {"reason", tr("The page no longer exists.")}};
     const auto grid =
-        ComponentSchema::componentGrid(entries, composition, doc["categories"].toArray(), parent, category);
+        ComponentSchema::componentGrid(entries, composition.toVariantMap(), doc["categories"].toArray(), parent, category);
     const int cols = grid["columns"].toInt(), rows = grid["rows"].toInt();
     if (!ComponentSchema::validPlacement(placement, cols, rows))
         return {{"valid", false}, {"reason", QStringLiteral("The candidate is outside the grid.")}};
@@ -679,7 +768,7 @@ StudioSession::placementProposal(const QString& id,
         return {{"valid", false}, {"reason", tr("A component can be at most ten rows tall.")}};
     const QList<int> colliders =
         findPlacementColliders(entries, id, placement, parent, category, sections,
-                               grid.value("overlap").toBool());
+                               grid.value("overlap").toBool() && strategy != "swap");
     int selected = -1;
     QVariantMap origin;
     if (!findPlacementTarget(entries, id, selected, origin))
@@ -688,16 +777,27 @@ StudioSession::placementProposal(const QString& id,
         return {{"valid", false},
                 {"reason", tr("A locked component occupies this region. Unlock it or choose another position.")}};
     QJsonArray workingEntries = entries;
+    auto moving = workingEntries[selected].toObject();
+    moving["placement"] = QJsonObject::fromVariantMap(placement);
+    if (category.isEmpty())
+        moving.remove("categoryId");
+    else
+        moving["categoryId"] = category;
+    if (parent.isEmpty())
+        moving.remove("parentId");
+    else
+        moving["parentId"] = parent;
+    workingEntries[selected] = moving;
     int attempts = 0;
     bool affectedLimit = false;
     if (!executePlacementStrategy(entries, workingEntries, id, strategy, colliders, placement, origin,
-                                  parent, category, cols, rows, attempts, affectedLimit, sections))
+                                  parent, category, sourceParent, sourceCategory, cols, rows, attempts, affectedLimit, sections))
         return {{"valid", false}, {"reason", m_error}};
     QVariantList changes = collectPlacementChanges(workingEntries, entries, selected);
     QJsonObject resultDoc = doc;
     resultDoc["components"] = workingEntries;
     QString error;
-    if (!ComponentSchema::hierarchyFits(workingEntries, composition, doc["categories"].toArray(), &error))
+    if (!ComponentSchema::hierarchyFits(workingEntries, composition.toVariantMap(), doc["categories"].toArray(), &error))
         return {{"valid", false}, {"reason", error}};
     return {{"valid", true}, {"placements", changes}, {"reason", QString()}};
 }
@@ -890,6 +990,7 @@ StudioSession::resolvePlacementDestination(const QJsonObject& document, QJsonArr
         category = ComponentSchema::effectiveCategory(entries, id);
     if (options.contains("categoryId"))
     {
+        category = options.value("categoryId").toString();
         bool categoryValid = false;
         if (!validatePlacementCategory(doc, category, sections, parent, categoryValid))
             return false;
@@ -993,10 +1094,10 @@ StudioSession::handlePlacementCancelStrategy(const QList<int>& colliders)
 }
 
 bool
-StudioSession::handlePlacementSwapStrategy(const QJsonArray& entries, QJsonArray& entriesOut, const QString& id,
+StudioSession::handlePlacementSwapStrategy(const QJsonArray& entries, QJsonArray& entriesOut,
                                            const QList<int>& colliders, const QVariantMap& origin,
                                            const QString& sourceCategory, const QString& sourceParent,
-                                           QString& category, QString& parent)
+                                           const QString& category)
 {
     if (colliders.size() != 1 || origin.isEmpty())
     {
@@ -1019,7 +1120,6 @@ StudioSession::handlePlacementSwapStrategy(const QJsonArray& entries, QJsonArray
     else
         other["parentId"] = sourceParent;
     other["placement"] = QJsonObject::fromVariantMap(replacement);
-    entriesOut = entries;
     entriesOut[colliders.first()] = other;
     return true;
 }
@@ -1029,10 +1129,11 @@ StudioSession::handlePlacementShiftStrategy(const QJsonArray& entries, QJsonArra
                                             const QList<int>& colliders, const QVariantMap& placement,
                                             const QVariantMap& origin, const QString& parent,
                                             const QString& category, int cols, int rows, int& attempts,
-                                            bool& affectedLimit)
+                                            bool& affectedLimit, bool sections)
 {
+    Q_UNUSED(origin);
     const auto originalEntries = entries;
-    QJsonArray workingEntries = entries;
+    QJsonArray workingEntries = entriesOut;
     const auto stableOrder = [&originalEntries](int a, int b)
     {
         const auto x = originalEntries[a].toObject(), y = originalEntries[b].toObject();
@@ -1082,13 +1183,63 @@ StudioSession::handlePlacementShiftStrategy(const QJsonArray& entries, QJsonArra
         item.remove("placement");
         workingEntries[index] = item;
         const auto vacant = workingEntries;
-        QList<QPair<int, int>> cells = generateSortedCells(cols, rows, placement,
+        int searchRows = rows;
+        if (rows == ComponentSchema::MaxScrollableRows)
+        {
+            int bottom = placement.value("y").toInt() + placement.value("height").toInt();
+            for (const auto& value : originalEntries)
+            {
+                const auto entry = value.toObject();
+                if (entry.value("parentId").toString() != parent)
+                    continue;
+                const auto p = entry["placement"].toObject();
+                bottom = qMax(bottom, p["y"].toInt() + p["height"].toInt());
+            }
+            searchRows = qMin(rows, bottom + 10);
+        }
+        const auto cells = generateSortedCells(cols, searchRows, placement,
                                                             target["x"].toInt(), target["y"].toInt());
         for (int pass = 0; pass < 2; ++pass)
         {
-            if (!tryPlacementCell(workingEntries, index, target, originalEntries, fixed, pending,
-                                  cols, rows, localAttempts, solve, affectedLimit))
-                return false;
+            for (const auto& cell : cells)
+            {
+                if (++localAttempts > 4096)
+                {
+                    workingEntries = baseline;
+                    fixed = fixedBefore;
+                    return false;
+                }
+                target["x"] = cell.first;
+                target["y"] = cell.second;
+                if (!ComponentSchema::validPlacement(target, cols, rows))
+                    continue;
+                const auto displaced = findCollidersForTarget(workingEntries, index, target, parent, category,
+                                                               sections, fixed);
+                bool blocked = false;
+                for (int j : displaced)
+                    if (fixed.contains(j) || workingEntries[j].toObject().value("locked").toBool())
+                    {
+                        blocked = true;
+                        break;
+                    }
+                if (shouldSkipShiftCell(blocked, pass, displaced))
+                    continue;
+                auto placed = item;
+                placed["placement"] = QJsonObject::fromVariantMap(target);
+                workingEntries[index] = placed;
+                fixed.insert(index);
+                auto next = pending;
+                next.append(displaced);
+                if (solve(next))
+                    return true;
+                workingEntries = vacant;
+                fixed = fixedBefore;
+                if (localAttempts > 4096)
+                {
+                    workingEntries = baseline;
+                    return false;
+                }
+            }
         }
         workingEntries = baseline;
         fixed = fixedBefore;
@@ -1108,56 +1259,6 @@ StudioSession::handlePlacementShiftStrategy(const QJsonArray& entries, QJsonArra
     attempts = localAttempts;
     entriesOut = workingEntries;
     return true;
-}
-
-bool
-StudioSession::tryPlacementCell(QJsonArray& workingEntries, int index, const QVariantMap& target,
-                                const QJsonArray& originalEntries, QSet<int>& fixed, QList<int>& pending,
-                                int cols, int rows, int& localAttempts,
-                                std::function<bool(QList<int>)>& solve, bool& affectedLimit)
-{
-    for (const auto& cell : cells)
-    {
-        if (++localAttempts > 4096)
-        {
-            workingEntries = baseline;
-            fixed = fixedBefore;
-            return false;
-        }
-        target["x"] = cell.first;
-        target["y"] = cell.second;
-        if (!ComponentSchema::validPlacement(target, cols, rows))
-            continue;
-        QList<int> displaced = findCollidersForTarget(workingEntries, index, target, parent, category,
-                                                      sections, fixed);
-        bool blocked = false;
-        for (int j : displaced)
-        {
-            if (fixed.contains(j) || workingEntries[j].toObject().value("locked").toBool())
-            {
-                blocked = true;
-                break;
-            }
-        }
-        if (shouldSkipShiftCell(blocked, pass, displaced))
-            continue;
-        auto placed = item;
-        placed["placement"] = QJsonObject::fromVariantMap(target);
-        workingEntries[index] = placed;
-        fixed.insert(index);
-        auto next = pending;
-        next.append(displaced);
-        if (solve(next))
-            return true;
-        workingEntries = vacant;
-        fixed = fixedBefore;
-        if (localAttempts > 4096)
-        {
-            workingEntries = baseline;
-            return false;
-        }
-    }
-    return false;
 }
 
 int
@@ -1208,6 +1309,7 @@ StudioSession::findCollidersForTarget(const QJsonArray& entries, int index, cons
                                       const QString& parent, const QString& category, bool sections,
                                       const QSet<int>& fixed)
 {
+    Q_UNUSED(fixed);
     QList<int> colliders;
     for (int j = 0; j < entries.size(); ++j)
     {
@@ -1226,10 +1328,7 @@ QList<QPair<int, int>>
 StudioSession::generateSortedCells(int cols, int rows, const QVariantMap& placement, int originalX, int originalY)
 {
     QList<QPair<int, int>> cells;
-    int searchRows = rows;
-    int bottom = placement.value("y").toInt() + placement.value("height").toInt();
-    // Note: searchRows uses full rows; the caller may adjust based on entries.
-    Q_UNUSED(searchRows);
+    Q_UNUSED(placement);
     for (int row = 0; row < rows; ++row)
         for (int col = 0; col < cols; ++col)
             cells.append({col, row});
@@ -1253,7 +1352,8 @@ bool
 StudioSession::executePlacementStrategy(const QJsonArray& entries, QJsonArray& entriesOut, const QString& id,
                                         const QString& strategy, const QList<int>& colliders,
                                         const QVariantMap& placement, const QVariantMap& origin,
-                                        const QString& parent, const QString& category, int cols, int rows,
+                                        const QString& parent, const QString& category,
+                                        const QString& sourceParent, const QString& sourceCategory, int cols, int rows,
                                         int& attempts, bool& affectedLimit, bool sections)
 {
     if (!colliders.isEmpty() && strategy == "cancel")
@@ -1263,9 +1363,8 @@ StudioSession::executePlacementStrategy(const QJsonArray& entries, QJsonArray& e
     }
     if (!colliders.isEmpty() && strategy == "swap")
     {
-        if (!handlePlacementSwapStrategy(entries, entriesOut, id, colliders, origin,
-                                         /*sourceCategory=*/category, /*sourceParent=*/parent,
-                                         category, parent))
+        if (!handlePlacementSwapStrategy(entries, entriesOut, colliders, origin,
+                                         sourceCategory, sourceParent, category))
         {
             setError(QStringLiteral("Swap needs one occupant and an existing origin."));
             return false;
@@ -1292,6 +1391,5 @@ StudioSession::executePlacementStrategy(const QJsonArray& entries, QJsonArray& e
         setError(QStringLiteral("Choose a collision strategy."));
         return false;
     }
-    entriesOut = entries;
     return true;
 }

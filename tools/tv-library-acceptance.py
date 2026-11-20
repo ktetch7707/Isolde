@@ -1,44 +1,73 @@
-#!/ usr / bin / env python3
-""
-    "Opt-in real-Kodi TV acceptance. NEW synthetic profile/media only.
+#!/usr/bin/env python3
+"""Opt-in real-Kodi TV acceptance. NEW synthetic profile/media only.
 
-    Kodi imports the test library through its native media -
-    settings dialog.No database edits,
-    user media writes,
-    network control listener or
-        profile copies.The normal Isolde service is restored even if an assertion fails
-            .""
-             "
-        import argparse import base64 import ctypes import ctypes.util import fcntl import hashlib import json import os
-            from pathlib import Path import socket import sqlite3 from datetime import datetime,
-    timedelta,
-    timezone import signal import importlib.util from urllib
-        .parse import unquote import sys import struct import subprocess from guide_features import remote_text import
-            tempfile import time import uuid import zlib import re from xml.sax.saxutils import escape
+Kodi imports the test library through its native media-settings dialog. No
+database edits, user media writes, network control listener or profile copies.
+The normal Isolde service is restored even if an assertion fails.
+"""
+import argparse
+import base64
+import ctypes
+import ctypes.util
+import fcntl
+import hashlib
+import json
+import os
+from pathlib import Path
+import socket
+import sqlite3
+from datetime import datetime, timedelta, timezone
+import signal
+import importlib.util
+from urllib.parse import unquote
+import sys
+import struct
+import subprocess
+from guide_features import remote_text
+import tempfile
+import time
+import uuid
+import zlib
+import re
+from xml.sax.saxutils import escape
 
-                def run(*args, **kwargs)
-    : try:
-    return subprocess.run(args, check = True, text = True, capture_output = True, **kwargs)
-               .stdout except subprocess.CalledProcessError as failure
-        : print('Fixture command stderr: ' + (failure.stderr or '')[-4096:], file = sys.stderr, flush = True) raise
 
-              def
-              rpc(directory, method, params = None)
-        : fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW) try : with socket
-        .socket(socket.AF_UNIX) as client : client.settimeout(5);
-client.connect(f "/proc/self/fd/{fd}/rpc.sock") client.sendall(
-    (json.dumps({"jsonrpc" : "2.0", "id" : 1, "method" : method, "params" : params or {}}) + "\n").encode()) raw =
-    b "" while not raw.endswith(b "\n")
-    : part = client.recv(65536) if not part or len(raw) + len(part) > 4194304
-    : raise RuntimeError("Invalid bridge response") raw += part reply = json.loads(raw) if "error" in reply
-    : raise RuntimeError(str(reply["error"])) return reply["result"] finally : os.close(fd)
+def run(*args, **kwargs):
+    try:
+        return subprocess.run(args, check=True, text=True, capture_output=True, **kwargs).stdout
+    except subprocess.CalledProcessError as failure:
+        print('Fixture command stderr: '+(failure.stderr or '')[-4096:],file=sys.stderr,flush=True)
+        raise
 
-                                                                                   def tag_fixture_flac(path, title)
-    : data = path.read_bytes() if not data.startswith(b 'fLaC') or
-             len(data) > 4 * 1024 * 1024 : raise RuntimeError('Invalid generated FLAC fixture') offset = 4;
-blocks = [] while True : header = data [offset:offset + 4] if len (header) != 4
-    : raise RuntimeError('Truncated FLAC metadata') length = int.from_bytes(header [1:], 'big');
-offset += 4 payload = data [offset:offset + length];offset+=length
+
+def rpc(directory, method, params=None):
+    fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        with socket.socket(socket.AF_UNIX) as client:
+            client.settimeout(5); client.connect(f"/proc/self/fd/{fd}/rpc.sock")
+            client.sendall((json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": params or {}}) + "\n").encode())
+            raw = b""
+            while not raw.endswith(b"\n"):
+                part = client.recv(65536)
+                if not part or len(raw) + len(part) > 4194304: raise RuntimeError("Invalid bridge response")
+                raw += part
+            reply = json.loads(raw)
+            if "error" in reply: raise RuntimeError(str(reply["error"]))
+            return reply["result"]
+    finally:
+        os.close(fd)
+
+
+def tag_fixture_flac(path, title):
+    data=path.read_bytes()
+    if not data.startswith(b'fLaC') or len(data)>4*1024*1024:
+        raise RuntimeError('Invalid generated FLAC fixture')
+    offset=4;blocks=[]
+    while True:
+        header=data[offset:offset+4]
+        if len(header)!=4:raise RuntimeError('Truncated FLAC metadata')
+        length=int.from_bytes(header[1:],'big');offset+=4
+        payload=data[offset:offset+length];offset+=length
         if len(payload)!=length:raise RuntimeError('Truncated FLAC metadata block')
         if header[0]&127!=4:blocks.append((header[0]&127,payload))
         if header[0]&128:break
@@ -51,7 +80,7 @@ offset += 4 payload = data [offset:offset + length];offset+=length
     tagged=b'fLaC'+b''.join(bytes([kind|(128 if index==len(blocks)-1 else 0)])+len(value).to_bytes(3,'big')+value
         for index,(kind,value) in enumerate(blocks))+data[offset:]
     path.write_bytes(tagged)
-#Fail before starting the application if any required embedded field is absent.
+    # Fail before starting the application if any required embedded field is absent.
     if any(comment not in tagged for comment in comments):raise RuntimeError('Missing fixture tags')
 
 
@@ -77,26 +106,25 @@ def main():
     if args.guide_lifecycle:args.guide=args.guide_surfaces=True
     if args.guide_features:args.guide=args.guide_surfaces=True
     if args.guide_surfaces and not args.guide:parser.error("--guide-surfaces requires --guide")
-    lock = open("/tmp/isolde-home-components-acceptance.lock", "a");
-fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB) profile = str(uuid.uuid4()) evidence = Path(
-    tempfile.mkdtemp(prefix = "isolde-tv-acceptance-"))
-    print("Fixture evidence: " + str(evidence) + " - profile " + profile, flush = True) media =
-        Path.home() / "Videos/Isolde-Acceptance" /
-        ("Isolde-tv-test-" + profile) data = Path(os.environ.get("XDG_DATA_HOME", str(Path.home() / ".local/share")))
-            userdata = data / "Isolde/native-profiles" / profile / "kodi/home/.kodi/userdata" if media.exists() or
-                       userdata.exists() : raise RuntimeError("Fixture must be new") media.mkdir(parents = True);
-userdata.mkdir(parents = True, mode = 0o700) if args.movie_art or args.music_transport
-    : (userdata / 'advancedsettings.xml')
-          .write_text('<advancedsettings><loglevel hide="true">1</loglevel></advancedsettings>') if args.playlists
-    : playlists = userdata / "playlists/video";
-playlists.mkdir(parents = True)(playlists / "Fixture episodes.xsp")
-    .write_text(
-        '<smartplaylist type="episodes"><name>Fixture episodes</name><match>all</match><rule field="tvshow" operator="is"><value>Isolde Television Fixture</value></rule><order direction="ascending">episode</order></smartplaylist>')
-        show = media / "Isolde Television Fixture"; show.mkdir()
+    lock = open("/tmp/isolde-home-components-acceptance.lock", "a"); fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    profile = str(uuid.uuid4())
+    evidence = Path(tempfile.mkdtemp(prefix="isolde-tv-acceptance-"))
+    print("Fixture evidence: " + str(evidence) + " - profile " + profile, flush=True)
+    media = Path.home() / "Videos/Isolde-Acceptance" / ("Isolde-tv-test-" + profile)
+    data = Path(os.environ.get("XDG_DATA_HOME", str(Path.home() / ".local/share")))
+    userdata = data / "Isolde/native-profiles" / profile / "kodi/home/.kodi/userdata"
+    if media.exists() or userdata.exists(): raise RuntimeError("Fixture must be new")
+    media.mkdir(parents=True); userdata.mkdir(parents=True, mode=0o700)
+    if args.movie_art or args.music_transport:
+        (userdata/'advancedsettings.xml').write_text('<advancedsettings><loglevel hide="true">1</loglevel></advancedsettings>')
+    if args.playlists:
+        playlists=userdata/"playlists/video";playlists.mkdir(parents=True)
+        (playlists/"Fixture episodes.xsp").write_text('<smartplaylist type="episodes"><name>Fixture episodes</name><match>all</match><rule field="tvshow" operator="is"><value>Isolde Television Fixture</value></rule><order direction="ascending">episode</order></smartplaylist>')
+    show = media / "Isolde Television Fixture"; show.mkdir()
     clip = show / "Fixture S01E01.ogv"
     if args.movie_art:
-#Two real silent audio tracks exercise selection without making a
-#physical - output claim; twenty minutes permits default Kodi resume.
+        # Two real silent audio tracks exercise selection without making a
+        # physical-output claim; twenty minutes permits default Kodi resume.
         command=['gst-launch-1.0','-q','oggmux','name=mux','!','filesink','location='+str(clip),
             'videotestsrc','num-buffers=6000','!','video/x-raw,width=320,height=180,framerate=5/1','!','theoraenc','!','queue','!','mux.']
         for _ in range(2):command+=['audiotestsrc','wave=silence','num-buffers=9375','samplesperbuffer=1024','!','audio/x-raw,rate=8000,channels=1','!','vorbisenc','!','queue','!','mux.']
@@ -133,26 +161,24 @@ playlists.mkdir(parents = True)(playlists / "Fixture episodes.xsp")
         collision_file=playlists/'1.xsp'
         collision_file.write_text('<smartplaylist type="tvshows"><name>Collision fixture</name><match>all</match><order direction="ascending">title</order></smartplaylist>')
         collision_bytes=collision_file.read_bytes()
-    imported = media / "import";
-imported.mkdir()(imported / "videodb.xml")
-    .write_text("<videodb><version>1</version><tvshow><title>Isolde Television Fixture</title>" f
-                "<plot>Local synthetic television "
-                "acceptance.</plot><path>{escape(str(show))}/</path><basepath>{escape(str(show))}/</basepath>" f
-                "<art><poster>{escape(str(poster))}</poster></art>" +
-                "".join(episodes) + "</tvshow><paths/></videodb>")
-        exported_art = imported / "tvshows/Isolde_Television_Fixture" exported_art.mkdir(parents = True) if args.guide :
-#Native Kodi XML import, not database writes.Supply both the declared
-#local movie and Kodi's export-art companion path (Omega ImportFromXML).
-    movie = media / 'Fixture Movie.ogv';
-os.link(clip, movie) guide_movies = imported / 'movies';
-guide_movies.mkdir();os.link(clip,guide_movies/'Fixture_Movie_2026.avi')
+    imported = media / "import"; imported.mkdir()
+    (imported / "videodb.xml").write_text("<videodb><version>1</version><tvshow><title>Isolde Television Fixture</title>"
+        f"<plot>Local synthetic television acceptance.</plot><path>{escape(str(show))}/</path><basepath>{escape(str(show))}/</basepath>"
+        f"<art><poster>{escape(str(poster))}</poster></art>" + "".join(episodes) + "</tvshow><paths/></videodb>")
+    exported_art = imported / "tvshows/Isolde_Television_Fixture"
+    exported_art.mkdir(parents=True)
+    if args.guide:
+        # Native Kodi XML import, not database writes. Supply both the declared
+        # local movie and Kodi's export-art companion path (Omega ImportFromXML).
+        movie=media/'Fixture Movie.ogv';os.link(clip,movie)
+        guide_movies=imported/'movies';guide_movies.mkdir();os.link(clip,guide_movies/'Fixture_Movie_2026.avi')
         document=(imported/'videodb.xml').read_text().replace('<tvshow><title>','<tvshow><studio>Cartoon Network</studio><title>',1)
         document=document.replace('<paths/>',f'<movie><title>Fixture Movie</title><year>2026</year><studio>Cartoon Network</studio><runtime>2</runtime><filenameandpath>{escape(str(movie))}</filenameandpath><path>{escape(str(media))}/</path><file>{movie.name}</file><basepath>{escape(str(media))}/</basepath><art><poster>{escape(str(poster))}</poster></art></movie><paths/>')
         (imported/'videodb.xml').write_text(document)
     if args.guide or args.history:
-#Kodi's native import resolves exported episode entries to these
-#export - relative filenames.Supply actual fixture media there rather
-#than relying on an ignored filenameandpath override in the XML.
+        # Kodi's native import resolves exported episode entries to these
+        # export-relative filenames. Supply actual fixture media there rather
+        # than relying on an ignored filenameandpath override in the XML.
         for season, number in fixture_episodes:
             os.link(clip,exported_art/f"s{season:02}e{number:02}.avi")
         if args.history:
@@ -211,21 +237,21 @@ if ''' + repr(str(imported)) + ''' in selected:
         music = media / "music";music.mkdir()
         for number in ((1,) if args.music_transport else (1,2)):
             song=music/f'Fixture song {number}.flac'
-#Use standard embedded Vorbis comments through the existing media
-#stack, avoiding format - dependent RIFF INFO interpretation.
+            # Use standard embedded Vorbis comments through the existing media
+            # stack, avoiding format-dependent RIFF INFO interpretation.
             run('gst-launch-1.0','-q','audiotestsrc','wave=silence','num-buffers=469','samplesperbuffer=1024',
                 '!','audio/x-raw,rate=8000,channels=1','!','audioconvert','!',
                 'flacenc','!','filesink','location='+str(song))
             tag_fixture_flac(song,f'Fixture song {number}')
     if args.movie_art:
-#Fresh source setup is performed by Isolde below, never a Kodi import dialog.
+        # Fresh source setup is performed by Isolde below, never a Kodi import dialog.
         movies = media / "movies"
         folder = movies / "Big Buck Bunny (2008)"; folder.mkdir(parents=True)
         movie_file = folder / "Big Buck Bunny (2008).ogv"
         os.link(clip, movie_file)
-#Kodi can update its bundled provider after first launch.Initialize
-#the updated provider BEFORE importing source settings, otherwise the
-#source keeps the old provider's incomplete artwork configuration.
+        # Kodi can update its bundled provider after first launch. Initialize
+        # the updated provider BEFORE importing source settings, otherwise the
+        # source keeps the old provider's incomplete artwork configuration.
         provider_setup = '''import xbmc, xbmcaddon, time
 deadline=time.monotonic()+45
 while True:
@@ -241,8 +267,8 @@ for setting in ("fetch_posters","fanart","landscape","keyart"):
 provider.setSettingString("language","en-US")
 provider.setSettingString("searchlanguage","en-US")
 '''
-#Only provider default initialization remains a synthetic fixture setup.
-#It does not add sources, import a database, scan or open Kodi settings.
+        # Only provider default initialization remains a synthetic fixture setup.
+        # It does not add sources, import a database, scan or open Kodi settings.
         (userdata / "tv-fixture-import.py").write_text(provider_setup)
         manifest=Path('/opt/isolde-managed-kodi/manifest.json')
         if not manifest.is_file() or json.loads(manifest.read_text()).get('feature')!='isolde-sources-v1':
@@ -279,7 +305,7 @@ provider.setSettingString("searchlanguage","en-US")
         managed_poster.write_bytes(poster.read_bytes())
         (config/'profiles'/profile/'home-layout.json').write_text(json.dumps(dict(schemaVersion=1,rootPage=dict(name='Home',visible=True,position=0),categories=[dict(id='apps',name='Apps')],items=[dict(kind='app',id='movies',appId='movies',size='standard',categoryId='apps'),dict(kind='app',id='desktop-mode',appId='desktop-mode',size='standard',categoryId='apps')],composition=dict(schemaVersion=1,enabled=False,headerControls=['settings']))))
     if args.music_transport:
-#Use the same Home Movies card and library toolbar as the installed journey.
+        # Use the same Home Movies card and library toolbar as the installed journey.
         layout=config/'profiles'/profile/'home-layout.json'
         layout.parent.mkdir(parents=True)
         layout.write_text(json.dumps(dict(schemaVersion=1,rootPage=dict(name='Home',visible=True,position=0),
@@ -376,8 +402,8 @@ provider.setSettingString("searchlanguage","en-US")
         raise RuntimeError(label + " timed out; " + str(evidence))
     def windows():
         result = subprocess.run(["wmctrl", "-lp"], env=env, text=True, capture_output=True, timeout=5)
-#XWayland may exist before the compositor publishes its client list.
-#Retain diagnostics and let the existing bounded ready - wait observe it.
+        # XWayland may exist before the compositor publishes its client list.
+        # Retain diagnostics and let the existing bounded ready-wait observe it.
         if result.returncode:
             (evidence/"window-discovery.json").write_text(json.dumps({"exit":result.returncode,"error":result.stderr[:2048]}))
             return []
@@ -424,9 +450,9 @@ provider.setSettingString("searchlanguage","en-US")
                     for _ in range(count):
                         key(shell,name,.08)
                     time.sleep(.3)
-#Exercise the installed importer against the guest's existing
-#desktop Kodi, read - only at the source.All writes remain in
-#this disposable Isolde profile and its verified snapshots.
+                # Exercise the installed importer against the guest's existing
+                # desktop Kodi, read-only at the source. All writes remain in
+                # this disposable Isolde profile and its verified snapshots.
                 import_spec=importlib.util.spec_from_file_location('installed_import_inventory',Path(__file__).with_name('kodi-import.py'))
                 import_support=importlib.util.module_from_spec(import_spec);import_spec.loader.exec_module(import_support)
                 desktop=Path.home()/'.kodi'
@@ -598,8 +624,8 @@ provider.setSettingString("searchlanguage","en-US")
                     return rows if any(row['path']==str(music)+'/' and row['category']=='music' for row in rows) else None
                 saved=wait(saved_music,'Music source saved through the same remote setup workflow')
                 guide_capture('musicsource')
-#Exercise real Kodi transaction / recovery against a denied
-#sources.xml publication, solely in this disposable profile.
+                # Exercise real Kodi transaction/recovery against a denied
+                # sources.xml publication, solely in this disposable profile.
                 source_bytes=(userdata/'sources.xml').read_bytes()
                 source_index=saved.index(target_source)
                 source_press('Up',20);source_press('Down',3+source_index);source_press('Return')
@@ -660,8 +686,8 @@ provider.setSettingString("searchlanguage","en-US")
                 assert imported_channels()==[cached]
                 surface_phases=[]
                 if args.guide_surfaces:
-#Every write below is performed through the reviewed remote UI.
-#SQLite is opened read - only solely to verify committed results.
+                    # Every write below is performed through the reviewed remote UI.
+                    # SQLite is opened read-only solely to verify committed results.
                     guide_capture('guidelocaldraft')
                     assert len(imported_channels())==1,'Opening a local draft saved a channel'
                     guide_capture('guidelocalpreview')
@@ -783,7 +809,7 @@ provider.setSettingString("searchlanguage","en-US")
                 import io
                 image=Image.open(io.BytesIO(raw)); image.verify()
                 (evidence/"movie-artwork.jpg").write_bytes(raw)
-#Open Movies using only the remote - operated Home card.
+                # Open Movies using only the remote-operated Home card.
                 run("wmctrl","-i","-a",shell,env=env)
                 def open_movie_card():
                     source_press('Home');source_press('Up',20);source_press('Down');source_press('Return');time.sleep(1)
@@ -850,8 +876,8 @@ provider.setSettingString("searchlanguage","en-US")
                     return value if value.get('position',0)>180 else None
                 resume=wait(stored_resume,'Kodi persisted actual movie resume progress')
                 run('wmctrl','-i','-a',shell,env=env);poster_capture('moviefreshreturned')
-#The preference changes in Settings; a library launch must
-#remain direct even while discovery would show viewing choices.
+                # The preference changes in Settings; a library launch must
+                # remain direct even while discovery would show viewing choices.
                 source_press('Home');source_press('Up',20);source_press('Left',10);source_press('Return')
                 source_press('Up',20);source_press('Down',7);source_press('Return')
                 source_press('Up',20);source_press('Down',10);source_press('Return');time.sleep(1)
@@ -863,9 +889,9 @@ provider.setSettingString("searchlanguage","en-US")
                 poster_capture('sourceprogresspreserved')
                 source_press('Escape');source_press('Up');source_press('Return')
                 poster_capture('localplaybackon')
-#A fresh profile reads the packaged On default without writing
-#Kodi.conf.Persist Off / On through the product before injecting
-#a failure into an existing settings file.
+                # A fresh profile reads the packaged On default without writing
+                # Kodi.conf. Persist Off/On through the product before injecting
+                # a failure into an existing settings file.
                 source_press('Return');source_press('Return')
                 preference_file=config/'Kodi.conf'
                 wait(lambda:preference_file.is_file(),'Playback preference persisted through Isolde')
@@ -888,13 +914,13 @@ provider.setSettingString("searchlanguage","en-US")
                 wait(lambda:(value if (value:=rpc(directory,'Isolde.PlaybackStatus')).get('state')=='ended' and value.get('home') is True else None),'Native Home stopped playback and returned to Isolde')
                 run('wmctrl','-i','-a',shell,env=env);poster_capture('moviefreshhome')
                 open_movie_card();source_press('Up',20);source_press('Right',20);source_press('Return')
-#Music toolbar opens albums; scan stays a separate deliberate
-#action in Media Settings, using Kodi's own tag reader.
+                # Music toolbar opens albums; scan stays a separate deliberate
+                # action in Media Settings, using Kodi's own tag reader.
                 source_press('Home');source_press('Up',20);source_press('Left',10);source_press('Return')
                 source_press('Up',20);source_press('Down',7);source_press('Return')
-#Settings preserves the Playback Preferences subpage visited
-#above.Back returns to its exact Media menu origin before
-#selecting the scan action; Up / Down do not leave that subpage.
+                # Settings preserves the Playback Preferences subpage visited
+                # above. Back returns to its exact Media menu origin before
+                # selecting the scan action; Up/Down do not leave that subpage.
                 source_press('Escape')
                 source_press('Up',30);source_press('Down',11)
                 poster_capture('musicscanselected')
@@ -970,7 +996,7 @@ provider.setSettingString("searchlanguage","en-US")
                 remote_text(press,'fixture');time.sleep(3);capture('localsearchresults')
                 for _ in range(60):press('Down')
                 capture('localsearchmore');press('Return');time.sleep(2);capture('localsearchnext')
-#The busy result clamps selection to the Previous Episodes row.
+                # The busy result clamps selection to the Previous Episodes row.
                 press('Return');time.sleep(2);capture('localsearchprevious')
                 for _ in range(60):press('Down')
                 press('Return');time.sleep(2);press('Down');press('Return')
@@ -997,7 +1023,7 @@ provider.setSettingString("searchlanguage","en-US")
                 assert not viewed(),'Fresh imported fixtures must not masquerade as viewed media'
                 run('wmctrl','-i','-a',shell,env=env)
                 history_capture('historylibrary')
-#Use the ordinary Isolde library, not a history / date setter.
+                # Use the ordinary Isolde library, not a history/date setter.
                 press('Up');press('Left',30);press('Right',30);press('Return');time.sleep(1)
                 press('Down');press('Return');time.sleep(1);press('Return');time.sleep(1);press('Return')
                 wait(lambda:rpc(directory,'Isolde.PlaybackStatus').get('state')=='playing','Initial real episode playback')
@@ -1078,7 +1104,7 @@ provider.setSettingString("searchlanguage","en-US")
                         manage_playlist(renamed.name);press('Down',4);press('Return');press('Return');press('Escape')
                         rename_bytes=renamed.read_bytes()
                         assert b'<rule' not in rename_bytes,'Cancelled rule draft changed the saved definition'
-#Replace rules only after a real read - only Kodi preview and explicit review.
+                        # Replace rules only after a real read-only Kodi preview and explicit review.
                         press('Down',4);press('Return');press('Return');press('Down');press('Return')
                         remote_text(press,'fixture')
                         press('Return');time.sleep(2);playlist_capture('playlistrules')
@@ -1104,7 +1130,7 @@ provider.setSettingString("searchlanguage","en-US")
                         manage_playlist(renamed.name);press('Down',3);press('Return');playlist_capture('playlistdelete');press('Return')
                         wait(lambda:not renamed.exists(),'Confirmed playlist deletion removed only its definition')
                         assert collision_file.read_bytes()==collision_bytes and member_file.read_bytes()==expected_members
-#Open the real episode playlist through the existing management UI.
+                    # Open the real episode playlist through the existing management UI.
                     manage_playlist('Fixture episodes.xsp');press("Return");time.sleep(2)
                     playlist_capture("playlistlibrary")
                     press("Down");press("Return")
@@ -1119,8 +1145,8 @@ provider.setSettingString("searchlanguage","en-US")
                         return next((row[0] for row in windows() if row[2]==str(process.pid) and row[-1]=='Isolde playback controls'),None)
                     controls=wait(controls_window,'Native Menu opened the owned Isolde playback controls')
                     playlist_capture('playlistcontrols')
-#Transport rows vary by available neighbors.The video
-#options follow them, immediately above the three final rows.
+                    # Transport rows vary by available neighbors. The video
+                    # options follow them, immediately above the three final rows.
                     for _ in range(12):key(controls,'Down',.08)
                     for _ in range(3):key(controls,'Up',.08)
                     key(controls,'Return');key(controls,'Down');key(controls,'Return')
@@ -1151,8 +1177,8 @@ provider.setSettingString("searchlanguage","en-US")
                     key(controls,'Escape');time.sleep(.5)
                     active_window=run('xprop','-root','_NET_ACTIVE_WINDOW',env=env,timeout=5).strip().split()[-1]
                     assert int(active_window,16)==int(next(row[0] for row in windows() if 'Kodi' in row[-1]),16),'Closing controls did not restore native playback focus'
-#Kodi logs rejected input during the OSD closing animation.
-#Let that animation settle before the managed Back->Stop key.
+                    # Kodi logs rejected input during the OSD closing animation.
+                    # Let that animation settle before the managed Back -> Stop key.
                     time.sleep(3)
                     key("kodi","Escape")
                     wait(lambda:rpc(directory,"Isolde.PlaybackStatus").get("state")=="ended","Real playlist episode stopped")
@@ -1283,7 +1309,7 @@ provider.setSettingString("searchlanguage","en-US")
                 (evidence/"result.json").write_text(json.dumps({"passed":True,"profile":profile,"page_id":page_id,"settings_only_creation_and_customization":True,"home_tab":False,"home_tab_note":"Native route/tab contracts supplement this installed direct-destination journey; no Home tab is injected or claimed.","direct_launcher_destination":True,"navigation_modes":["left","top","none"],"real_kodi_episode_play_pause_stop_return":True,"skin_includes_pages":True,"media_unchanged":True,"normal_profile_used":False,"visual_review_required":True,"executable":str(args.executable.resolve()),"inputTrace":input_trace,"captureTrace":capture_trace,"actualInputActions":len(input_trace),"journeyElapsedSeconds":time.monotonic()-started},indent=2))
                 print("Evidence: "+str(evidence),flush=True)
                 return
-#Refresh initially empty Shows using its toolbar's Refresh button.
+            # Refresh initially empty Shows using its toolbar's Refresh button.
             key(shell, "Up")
             for _ in range(5): key(shell, "Right")
             key(shell, "Return"); time.sleep(1)

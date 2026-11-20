@@ -5,6 +5,51 @@
 #include <QRegularExpression>
 #include "app/AppCatalog.h"
 
+// Limit the chooser to verified Android packages installed in this catalog's profile.
+QVariantList AppCatalog::browserApps() const
+{
+    const auto packages = m_storeOptions.value("androidBrowserPackages").toList();
+    QVariantList browsers;
+    for (const auto& entry : m_entries)
+        if (entry.setup.custom && entry.core.app.type == "android" &&
+            isInstalled(entry.core.app.id) && packages.contains(entry.meta.publisher))
+            browsers.append(QVariantMap{{"id", entry.core.app.id}, {"name", entry.core.app.name}});
+    return browsers;
+}
+
+// An uninstalled choice cannot route a launch, even if its preference is still saved.
+QString AppCatalog::defaultBrowser() const
+{
+    for (const auto& browser : browserApps())
+        if (browser.toMap().value("id") == m_defaultBrowser)
+            return m_defaultBrowser;
+    return {};
+}
+
+// Persist the profile preference through the Store's existing atomic save.
+bool AppCatalog::setDefaultBrowser(const QString& id)
+{
+    bool available = id.isEmpty();
+    for (const auto& browser : browserApps())
+        available |= browser.toMap().value("id") == id;
+    if (busy() || !available)
+    {
+        setError(tr("Choose an installed browser after the current Store operation finishes."));
+        return false;
+    }
+    if (id == m_defaultBrowser)
+        return true;
+    const auto previous = m_defaultBrowser;
+    m_defaultBrowser = id;
+    if (!saveState())
+    {
+        m_defaultBrowser = previous;
+        return false;
+    }
+    emit entriesChanged();
+    return true;
+}
+
 bool
 AppCatalog::setAndroidContainment(const QString& mode)
 {

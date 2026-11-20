@@ -956,7 +956,7 @@ HomeNavigationTests::skinsAndDesignAreReachableFromSettings()
     QVERIFY(command(InputManager::Back));
     QVERIFY(home.applySkin(id));
     QCOMPARE(home.composition()["gap"].toInt(), 9);
-    QVERIFY(home.applySkin("builtin-lounge"));
+    QVERIFY2(home.applySkin("builtin-lounge"), qPrintable(home.errorString()));
     // The legacy editor retains coverage of both standing reference documents.
     for (const auto& fixture :
          {QStringLiteral(REFERENCE_DIR), QStringLiteral(REFERENCE_DIR) + "/../home-pastel-reference"})
@@ -2071,7 +2071,8 @@ HomeNavigationTests::composedReferenceNavigationAndGeometry()
     QVERIFY(registry.loadFromData(
         R"([{"id":"movies","name":"Movies","type":"mock","section":"Library","accent":"#556677"},{"id":"shows","name":"Shows","type":"mock","section":"Library","accent":"#556677"}])"));
     HomeLayout home(&registry);
-    QVERIFY(home.load(QStringLiteral(REFERENCE_DIR) + "/recreation-config.json", dir.filePath("personal.json")));
+    QVERIFY2(home.load(QStringLiteral(REFERENCE_DIR) + "/recreation-config.json", dir.filePath("personal.json")),
+             qPrintable(home.errorString()));
     QVERIFY(QDir().mkpath(dir.filePath("artwork")));
     QVERIFY(QFile::copy(QStringLiteral(REFERENCE_DIR) + "/reference.jpg", dir.filePath("artwork/reference.jpg")));
     InputManager input;
@@ -2572,7 +2573,7 @@ HomeNavigationTests::gridEditorMoveResizeDuplicateRemove()
     QVERIFY(registry.loadFromData(
         R"([{"id":"app-a","name":"App A","type":"mock","section":"Apps","accent":"#556677"},{"id":"app-b","name":"App B","type":"mock","section":"Apps","accent":"#556677"},{"id":"app-c","name":"App C","type":"mock","section":"Apps","accent":"#556677"}] )"));
     HomeLayout home(&registry);
-    QVERIFY(home.load(defaults.fileName(), dir.filePath("user.json")));
+    QVERIFY2(home.load(defaults.fileName(), dir.filePath("user.json")), qPrintable(home.errorString()));
     InputManager input;
     QQmlEngine engine;
     engine.rootContext()->setContextProperty("inputManager", &input);

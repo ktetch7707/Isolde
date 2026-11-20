@@ -93,7 +93,7 @@ HomeLayout::surfaceAppearance(const QString& surface, const QString& originId) c
 QVariantMap
 HomeLayout::surfacePolicy(const QVariantMap& originTheme, const QString& surface) const
 {
-    const auto policies = home().value("surfaceThemes").toMap();
+    const auto policies = homeAppearance().value("surfaceThemes").toMap();
     const auto localPolicies = originTheme.value("surfaceThemes").toMap();
     return (surface != "settings" && localPolicies.contains(surface) ? localPolicies : policies).value(surface).toMap();
 }
@@ -103,6 +103,7 @@ HomeLayout::buildSurfaceAppearance(const QVariantMap& home, const QVariantMap& o
                                    const QVariantMap& originTheme, const QString& originName,
                                    const QString& surface, const QVariantMap& policy) const
 {
+    Q_UNUSED(originTheme);
     const auto mode = policy.value("mode", surface == "settings" ? "home" : "origin").toString();
     auto effective = mode == "home" || surface == "settings" ? home : origin;
     if (mode == "custom")
@@ -118,11 +119,13 @@ HomeLayout::buildSurfaceAppearance(const QVariantMap& home, const QVariantMap& o
     return result;
 }
 
-QVariantMap
+// Resolve the originating page's overrides while retaining Home as a fallback.
+void
 HomeLayout::resolveOriginInfo(const QString& surface, const QString& originId, const QVariantMap& home,
                               QVariantMap& origin, QVariantMap& originTheme, QString& originName) const
 {
     Q_UNUSED(surface);
+    Q_UNUSED(home);
     if (originId.isEmpty())
     {
         originName = rootPageName();
@@ -144,44 +147,14 @@ HomeLayout::resolveOriginInfo(const QString& surface, const QString& originId, c
             }
         }
     }
-    return originTheme;
-}
-
-QVariantMap
-HomeLayout::surfacePolicy(const QVariantMap& originTheme, const QString& surface) const
-{
-    const auto policies = home().value("surfaceThemes").toMap();
-    const auto localPolicies = originTheme.value("surfaceThemes").toMap();
-    return (surface != "settings" && localPolicies.contains(surface) ? localPolicies : policies).value(surface).toMap();
-}
-
-QVariantMap
-HomeLayout::buildSurfaceAppearance(const QVariantMap& home, const QVariantMap& origin,
-                                   const QVariantMap& originTheme, const QString& originName,
-                                   const QString& surface, const QVariantMap& policy) const
-{
-    Q_UNUSED(home);
-    Q_UNUSED(originTheme);
-    const auto mode = policy.value("mode", surface == "settings" ? "home" : "origin").toString();
-    auto effective = mode == "home" || surface == "settings" ? home : origin;
-    if (mode == "custom")
-    {
-        const auto tokens = policy.value("tokens").toMap();
-        for (auto it = tokens.cbegin(); it != tokens.cend(); ++it)
-            effective[it.key()] = it.value();
-    }
-    auto result = ComponentSchema::surfacePalette(effective);
-    result["themeSource"] = surface == "settings" || mode == "home" || originName.isEmpty()
-        ? sourceForPage(surface) : originName;
-    result["themeMode"] = mode;
-    return result;
+    for (auto it = originTheme.cbegin(); it != originTheme.cend(); ++it)
+        origin[it.key()] = it.value();
 }
 
 QString
 HomeLayout::sourceForPage(const QString& surface) const
 {
-    if (surface == "settings")
-        return "settings";
+    Q_UNUSED(surface);
     for (const auto& entry : m_pages)
     {
         const auto page = entry.toObject();

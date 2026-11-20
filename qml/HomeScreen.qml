@@ -252,7 +252,8 @@ Item {
             return "Network needed"
         return ""
     }
-    function hasAction(item){return !!(item.actions && item.actions.length>0)}
+    // Older Home models can expose a single validated action instead of an action list.
+    function hasAction(item) { return !!((item.actions && item.actions.length > 0) || (item.action && item.action.type)) }
     function focusable(item){return editMode || item && item.componentType!=="shape" && item.componentType!=="text" && !(item.componentType==="image" && !hasAction(item))}
     function repairFocus(){if(editMode)return;if(composition.enabled && (sections || []).some(s=>(s.presentation || {}).variant==="library"))return;if(items[focusedIndex] && focusable(items[focusedIndex]))return;const first=items.findIndex(i=>focusable(i));if(first<0){if(!recoveryFocused)focusRecoveryHeader();return}focusedIndex=first;focusedItemId=items[first].id;recoveryFocused=false}
 
@@ -568,7 +569,9 @@ Item {
                                                 if (modelData.unavailableReason) { root.settingsRequested(1); return }
                                                 if (root.unavailableReason(modelData) !== "")
                                                     return
-                                                if (modelData.action) root.actionActivated(modelData.action, modelData.id)
+                                                if (modelData.actions && modelData.actions.length)
+                                                    root.actionActivated({actions: modelData.actions}, modelData.id)
+                                                else if (modelData.action) root.actionActivated(modelData.action, modelData.id)
                                             }
                                         }
                                     }

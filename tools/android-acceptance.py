@@ -1,4 +1,4 @@
-#!/ usr / bin / env python3
+#!/usr/bin/env python3
 """Guest-only Android compatibility probe, not Isolde app/UI acceptance."""
 import argparse
 import fcntl
@@ -60,8 +60,8 @@ def main():
     if hashlib.sha256(apk.read_bytes()).hexdigest() != metadata.get("apkSha256"):
         raise RuntimeError("Staged Android application checksum mismatch")
     evidence = Path(tempfile.mkdtemp(prefix="isolde-components-acceptance-android-"))
-#The probe has no Isolde profile identity and never changes profiles.json.
-#Keep its userdata for diagnosis; never recursively remove root - owned / data.
+    # The probe has no Isolde profile identity and never changes profiles.json.
+    # Keep its userdata for diagnosis; never recursively remove root-owned /data.
     root = Path.home()/".local/share/Isolde/android-probes"
     if root.resolve() != root or root.is_symlink():
         raise RuntimeError("Redirected Android probe directory")
@@ -83,56 +83,67 @@ def main():
     def command(*args, timeout=60):
         with tempfile.TemporaryFile() as output:
             try:
-                subprocess
-    .run([ "/usr/bin/waydroid", "--details-to-stdout", *args ],
-         env = env,
-         stdout = output,
-         stderr = subprocess.STDOUT,
-         check = True,
-         timeout = timeout) finally : output.seek(0) raw = output.read(1024 * 1024 + 1) text = raw[:1024 * 1024]
-        .decode(errors = "replace") log.write(text);
-log.flush() if len (raw) > 1024 * 1024 : raise RuntimeError("Oversized Android command output") return text try
-    : subprocess
-    .run([ "systemctl", "--user", "stop", "isolde.service" ], check = True, timeout = 30) with(evidence / "android.log")
-        .open("w") as log
-        : process = subprocess.Popen([ "/usr/bin/waydroid", "--details-to-stdout", "session", "start" ],
-                                     env = env,
-                                     stdout = log,
-                                     stderr = subprocess.STDOUT) deadline = time.monotonic() + 120 while True
-        : state = session() if state and not owned(state, process.pid, data, os.getuid())
-        : raise RuntimeError("Android session ownership mismatch; refusing app operations") if state.get("state") ==
-                                             "RUNNING"
-        : break if process.poll() is not None
-        : raise RuntimeError("Android session exited before boot") if time.monotonic() > deadline
-        : raise RuntimeError("Android session boot timed out") time.sleep(.5) result["userdataBindingVerified"] = True
-#Listing can fail internally while CLI returns zero : require actual package state.
-        command("app", "install", str(apk), timeout = 120) def verify()
-        : if not owned(session(), process.pid, data, os.getuid())
-        : raise RuntimeError("Android session changed during install")
-#Upstream commits a PackageInstaller session asynchronously.CLI
-#completion acknowledges submission, not package availability.
-              await_package(lambda : command("app", "list", timeout = 15), verify) result["packageInstalled"] =
-                  True command("app", "launch", "org.smarttube.stable") time.sleep(10) if process.poll() is not None or
-                  not owned(session(), process.pid, data, os.getuid())
-        : raise RuntimeError("Android session lost after launch request") result["launchRequested"] =
-                      True print("ANDROID_READY " + str(evidence), flush = True) deadline =
-                          time.monotonic() + 100 while not(evidence / "android-captured")
-                                                 .exists()
-        : if time.monotonic() >
-                          deadline
-        : raise RuntimeError("Android framebuffer capture timed out") time.sleep(.2) result["passed"] =
-                              True except Exception as error
-        : result["error"] = str(error) raise finally : if process is not None and process
-                                                                                      .poll() is None :
-#Signal only the child we created.Never issue global 'session stop'.
-#SIGUSR1 ends only Waydroid's user service. SIGTERM also stops
-#its container, so use that only while binding still matches.
-        process.send_signal(signal.SIGTERM if owned (session(), process.pid, data, os.getuid()) else signal.SIGUSR1) try
-        : process
-        .wait(timeout = 20) except subprocess.TimeoutExpired : process.kill();
-process.wait(timeout = 5) state = session() result["ownedSessionStopped"] =
-    not(state and process is not None and owned(state, process.pid, data, os.getuid()))(evidence / "result.json")
-           .write_text(json.dumps(result, indent = 2)) print("EVIDENCE " + str(evidence), flush = True)
+                subprocess.run(["/usr/bin/waydroid", "--details-to-stdout", *args], env=env,
+                               stdout=output, stderr=subprocess.STDOUT, check=True, timeout=timeout)
+            finally:
+                output.seek(0)
+                raw = output.read(1024*1024+1)
+                text = raw[:1024*1024].decode(errors="replace")
+                log.write(text); log.flush()
+            if len(raw) > 1024*1024: raise RuntimeError("Oversized Android command output")
+            return text
+    try:
+        subprocess.run(["systemctl", "--user", "stop", "isolde.service"], check=True, timeout=30)
+        with (evidence/"android.log").open("w") as log:
+            process = subprocess.Popen(["/usr/bin/waydroid", "--details-to-stdout", "session", "start"],
+                                       env=env, stdout=log, stderr=subprocess.STDOUT)
+            deadline = time.monotonic()+120
+            while True:
+                state = session()
+                if state and not owned(state, process.pid, data, os.getuid()):
+                    raise RuntimeError("Android session ownership mismatch; refusing app operations")
+                if state.get("state") == "RUNNING": break
+                if process.poll() is not None: raise RuntimeError("Android session exited before boot")
+                if time.monotonic() > deadline: raise RuntimeError("Android session boot timed out")
+                time.sleep(.5)
+            result["userdataBindingVerified"] = True
+            # Listing can fail internally while CLI returns zero: require actual package state.
+            command("app", "install", str(apk), timeout=120)
+            def verify():
+                if not owned(session(), process.pid, data, os.getuid()):
+                    raise RuntimeError("Android session changed during install")
+            # Upstream commits a PackageInstaller session asynchronously. CLI
+            # completion acknowledges submission, not package availability.
+            await_package(lambda: command("app", "list", timeout=15), verify)
+            result["packageInstalled"] = True
+            command("app", "launch", "org.smarttube.stable")
+            time.sleep(10)
+            if process.poll() is not None or not owned(session(), process.pid, data, os.getuid()):
+                raise RuntimeError("Android session lost after launch request")
+            result["launchRequested"] = True
+            print("ANDROID_READY " + str(evidence), flush=True)
+            deadline = time.monotonic()+100
+            while not (evidence/"android-captured").exists():
+                if time.monotonic() > deadline: raise RuntimeError("Android framebuffer capture timed out")
+                time.sleep(.2)
+            result["passed"] = True
+    except Exception as error:
+        result["error"] = str(error)
+        raise
+    finally:
+        if process is not None and process.poll() is None:
+            # Signal only the child we created. Never issue global 'session stop'.
+            # SIGUSR1 ends only Waydroid's user service. SIGTERM also stops
+            # its container, so use that only while binding still matches.
+            process.send_signal(signal.SIGTERM if owned(session(), process.pid, data, os.getuid()) else signal.SIGUSR1)
+            try: process.wait(timeout=20)
+            except subprocess.TimeoutExpired:
+                process.kill(); process.wait(timeout=5)
+        state = session()
+        result["ownedSessionStopped"] = not (state and process is not None and owned(state, process.pid, data, os.getuid()))
+        (evidence/"result.json").write_text(json.dumps(result, indent=2))
+        print("EVIDENCE " + str(evidence), flush=True)
 
-               if __name__
-    == "__main__" : main()
+
+if __name__ == "__main__":
+    main()

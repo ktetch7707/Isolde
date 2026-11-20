@@ -2,6 +2,7 @@
 #include "home/DesignSystem.h"
 #include "home/HomeLayout.h"
 #include "home/ManagedGif.h"
+#include "home/StudioSession.h"
 #include "home/ThemeColors.h"
 #include "settings/ProfileManager.h"
 
@@ -21,8 +22,29 @@
 #include <QtMath>
 #include <algorithm>
 
-namespace
+namespace HomeLayoutDetail
 {
+
+bool validateAppearanceKey(QVariantMap& values, const QString& key, const QVariantMap& defaults);
+bool validateColorThemeKey(QVariantMap& values, const QString& key);
+bool validateSourcePolicyKey(QVariantMap& values, const QString& key);
+bool validateSurfaceThemesKey(QVariantMap& values, const QString& key);
+bool validateColorKey(QVariantMap& values, const QString& key);
+bool validateFontFamilyKey(QVariantMap& values, const QString& key);
+bool validateBooleanKey(QVariantMap& values, const QString& key);
+bool validateNumericKey(QVariantMap& values, const QString& key, const QVariantMap& defaults);
+bool validateUnknownKey(const QString& key, const QVariantMap& defaults);
+bool validateColorValue(const QVariant& value);
+bool validateFontFamilyValue(const QVariant& value);
+bool validateBooleanValue(const QVariant& value);
+bool validateNumericValue(const QVariant& value, const QString& key, const QVariantMap& defaults);
+bool validateNumericKeyDefaults(const QString& key, const QVariantMap& defaults);
+bool validateNumericValueType(const QVariant& value);
+double numericRangeLow(const QString& key);
+double numericRangeHigh(const QString& key);
+bool isValidNumber(double number, bool ok, double low, double high, const QString& key);
+bool validateSurfaceColors(QVariantMap values);
+bool validateFocusColor(QVariantMap values);
 
 QVariantMap
 appearanceDefaults()
@@ -56,21 +78,21 @@ normalizeAppearance(QVariantMap& values)
 bool
 validateAppearanceKey(QVariantMap& values, const QString& key, const QVariantMap& defaults)
 {
-    if (validateColorThemeKey(values, key))
-        return true;
-    if (validateSourcePolicyKey(values, key))
-        return true;
-    if (validateSurfaceThemesKey(values, key))
-        return true;
-    if (validateColorKey(values, key))
-        return true;
-    if (validateFontFamilyKey(values, key))
-        return true;
-    if (validateBooleanKey(values, key))
-        return true;
-    if (validateNumericKey(values, key, defaults))
-        return true;
-    return validateUnknownKey(key);
+    if (key == "colorTheme")
+        return validateColorThemeKey(values, key);
+    if (key == "sourcePolicy")
+        return validateSourcePolicyKey(values, key);
+    if (key == "surfaceThemes")
+        return validateSurfaceThemesKey(values, key);
+    if (!validateUnknownKey(key, defaults))
+        return false;
+    if (key.endsWith("Color") || key == "backgroundStart" || key == "backgroundEnd")
+        return validateColorKey(values, key);
+    if (key == "fontFamily")
+        return validateFontFamilyKey(values, key);
+    if (key == "motionEnabled" || key == "highContrast")
+        return validateBooleanKey(values, key);
+    return validateNumericKey(values, key, defaults);
 }
 
 bool
@@ -300,14 +322,6 @@ isSupportedActionType(const QString& type)
     return actionTypes.contains(type);
 }
 
-QString
-defaultActionTypeForKind(const QJsonObject& item)
-{
-    if (item.value(QStringLiteral("kind")).toString() == QStringLiteral("app"))
-        return QStringLiteral("launch-app");
-    return {};
-}
-
 QVariantList
 normalizedActionForItem(const QJsonObject& item)
 {
@@ -324,7 +338,9 @@ normalizedActionForItem(const QJsonObject& item)
     return result;
 }
 
-} // namespace
+} // namespace HomeLayoutDetail
+
+using namespace HomeLayoutDetail;
 
 HomeLayout::HomeLayout(AppRegistry* registry, QObject* parent) : QObject(parent), m_registry(registry)
 {
@@ -385,28 +401,33 @@ HomeLayout::computeHiddenIds() const
 }
 
 bool
-HomeLayout::appendItem(const QJsonValue& value, QVariantList& result, const QSet<QString>& hidden)
+HomeLayout::appendItem(const QJsonValue& value, QVariantList& result, const QSet<QString>& hidden) const
 {
     const auto object = value.toObject();
     if (hidden.contains(object["id"].toString()))
         return false;
-    auto item = object.toVariantMap();
+    // Validate stored fields before attaching renderer-only metadata.
+    auto item = ComponentSchema::component(object.toVariantMap(), true);
+    if (item.isEmpty())
+        return false;
     item["presentation"] = componentPresentation(item.value("presentation").toMap());
     const auto actionList = normalizedActionForItem(object);
     if (!actionList.isEmpty())
     {
         item.insert("actionType", actionList.first().toMap().value(QStringLiteral("type")).toString());
+        // Keep the single-action view for older callers while dispatch uses the full list.
+        item.insert("action", actionList.first());
         item.insert("actions", actionList);
     }
-    setItemKindFields(item, object);
-    setItemLogo(item, object, actionList);
+    setItemKindFields(item);
+    setItemLogo(item, actionList);
     setItemUnavailableReason(item, object, actionList);
-    result.append(ComponentSchema::component(item, true));
+    result.append(item);
     return true;
 }
 
 void
-HomeLayout::setItemKindFields(QVariantMap& item, const QJsonObject& object)
+HomeLayout::setItemKindFields(QVariantMap& item) const
 {
     const auto kind = item.value("kind").toString();
     if (kind == QStringLiteral("app"))
@@ -416,7 +437,7 @@ HomeLayout::setItemKindFields(QVariantMap& item, const QJsonObject& object)
 }
 
 void
-HomeLayout::setItemAppFields(QVariantMap& item)
+HomeLayout::setItemAppFields(QVariantMap& item) const
 {
     const auto appId = item.value("appId").toString();
     const auto* app = m_registry->find(appId);
@@ -431,7 +452,7 @@ HomeLayout::setItemAppFields(QVariantMap& item)
 }
 
 void
-HomeLayout::setItemActionFields(QVariantMap& item)
+HomeLayout::setItemActionFields(QVariantMap& item) const
 {
     const auto section = item.value("section").toString();
     const auto symbol = item.value("symbol").toString();
@@ -444,7 +465,7 @@ HomeLayout::setItemActionFields(QVariantMap& item)
 }
 
 void
-HomeLayout::setItemLogo(QVariantMap& item, const QJsonObject& object, const QVariantList& actionList)
+HomeLayout::setItemLogo(QVariantMap& item, const QVariantList& actionList) const
 {
     const auto logoFile = item.value("customLogo").toString();
     auto logo = resolveArtwork(logoFile);
@@ -468,7 +489,7 @@ HomeLayout::setItemLogo(QVariantMap& item, const QJsonObject& object, const QVar
 }
 
 void
-HomeLayout::setItemUnavailableReason(QVariantMap& item, const QJsonObject& object, const QVariantList& actionList)
+HomeLayout::setItemUnavailableReason(QVariantMap& item, const QJsonObject& object, const QVariantList& actionList) const
 {
     unavailableReasonFromSchema(item, actionList);
     unavailableReasonFromSwitchInput(item, actionList);
@@ -477,14 +498,14 @@ HomeLayout::setItemUnavailableReason(QVariantMap& item, const QJsonObject& objec
 }
 
 void
-HomeLayout::unavailableReasonFromSchema(QVariantMap& item, const QVariantList& actionList)
+HomeLayout::unavailableReasonFromSchema(QVariantMap& item, const QVariantList& actionList) const
 {
     item["unavailableReason"] = ComponentSchema::unavailable(
         actionList.isEmpty() ? QVariantMap() : actionList.first().toMap(), m_registry, m_collections);
 }
 
 void
-HomeLayout::unavailableReasonFromSwitchInput(QVariantMap& item, const QVariantList& actionList)
+HomeLayout::unavailableReasonFromSwitchInput(QVariantMap& item, const QVariantList& actionList) const
 {
     if (unavailableReasonValue(item).isEmpty() && !actionList.isEmpty() &&
         actionList.first().toMap().value("type").toString() == "switch-input" && !m_captureInputsReady)
@@ -492,15 +513,14 @@ HomeLayout::unavailableReasonFromSwitchInput(QVariantMap& item, const QVariantLi
 }
 
 void
-HomeLayout::unavailableReasonFromCapability(QVariantMap& item, const QJsonObject& object)
+HomeLayout::unavailableReasonFromCapability(QVariantMap& item, const QJsonObject& object) const
 {
-    if (unavailableReasonValue(item).isEmpty() && object.value("requiredCapability") == "capture-inputs" &&
-        !m_captureInputsReady)
+    if (object.value("requiredCapability") == "capture-inputs" && !m_captureInputsReady)
         item["unavailableReason"] = tr("HDMI capture unavailable · configure inputs in Settings");
 }
 
 QString
-HomeLayout::unavailableReasonValue(const QVariantMap& item)
+HomeLayout::unavailableReasonValue(const QVariantMap& item) const
 {
     return item.value("unavailableReason").toString();
 }
@@ -623,8 +643,9 @@ HomeLayout::sourceIsCompatible(const QString& itemId, const QString& sourceId) c
 }
 
 bool
-HomeLayout::rebindItemAt(qsizetype i, const QJsonObject& item, const QString& sourceId)
+HomeLayout::rebindItemAt(qsizetype i, QJsonObject item, const QString& sourceId)
 {
+    const auto previous = item;
     auto actionList = normalizedActionForItem(item);
     if (actionList.isEmpty())
         return false;
@@ -645,7 +666,7 @@ HomeLayout::rebindItemAt(qsizetype i, const QJsonObject& item, const QString& so
     m_items[i] = item;
     if (!save())
     {
-        m_items[i] = previousItem(i);
+        m_items[i] = previous;
         return false;
     }
     emit layoutChanged();
@@ -659,9 +680,9 @@ HomeLayout::previousItem(qsizetype i) const
 }
 
 void
-HomeLayout::setAppId(QJsonObject& first, const QJsonObject& item, const QString& sourceId)
+HomeLayout::setAppId(QVariantMap& first, QJsonObject& item, const QString& sourceId)
 {
-    first["appId"] = sourceId;
+    item["appId"] = sourceId;
     if (item.value("kind") == "app")
         first["appId"] = sourceId;
 }
@@ -853,6 +874,179 @@ HomeLayout::grid() const
 {
     return ComponentSchema::normalizedGrid(m_composition.value("grid").toMap());
 }
+
+// Changing the grid goes through composition validation and its atomic save.
+bool
+HomeLayout::setGrid(const QVariantMap& value)
+{
+    if (!ComponentSchema::validGrid(value))
+    {
+        setError(tr("Invalid Home grid."));
+        return false;
+    }
+    auto updated = grid();
+    for (auto it = value.cbegin(); it != value.cend(); ++it)
+        updated.insert(it.key(), it.value());
+    auto config = m_composition;
+    if (config.isEmpty())
+        config = {{"schemaVersion", 1}, {"enabled", true}};
+    config["grid"] = updated;
+    return setComposition(config);
+}
+
+// Validate the complete placement before saving and roll back on write failure.
+bool
+HomeLayout::setItemPlacement(const QString& id, const QVariantMap& placement)
+{
+    for (qsizetype i = 0; i < m_items.size(); ++i)
+    {
+        auto item = m_items[i].toObject();
+        if (item.value("id").toString() != id)
+            continue;
+        const auto previous = item;
+        item["placement"] = QJsonObject::fromVariantMap(placement);
+        auto proposed = m_items;
+        proposed[i] = item;
+        if (!ComponentSchema::layoutPlacementsFit(proposed, m_composition, m_categories))
+        {
+            setError(tr("The placement exceeds its grid or overlaps another component in that section."));
+            return false;
+        }
+        m_items[i] = item;
+        if (!save())
+        {
+            m_items[i] = previous;
+            return false;
+        }
+        emit layoutChanged();
+        setError({});
+        return true;
+    }
+    setError(tr("The component no longer exists."));
+    return false;
+}
+
+// Removing a placement must not alter stored geometry if saving fails.
+bool
+HomeLayout::clearItemPlacement(const QString& id)
+{
+    for (qsizetype i = 0; i < m_items.size(); ++i)
+    {
+        auto item = m_items[i].toObject();
+        if (item.value("id").toString() != id || !item.contains("placement"))
+            continue;
+        const auto previous = item;
+        item.remove("placement");
+        m_items[i] = item;
+        if (!save())
+        {
+            m_items[i] = previous;
+            return false;
+        }
+        emit layoutChanged();
+        setError({});
+        return true;
+    }
+    setError(tr("The component has no placement."));
+    return false;
+}
+
+// Duplicate into an unplaced item so an existing placement is never overwritten.
+bool
+HomeLayout::duplicateItem(const QString& id)
+{
+    for (const auto& value : m_items)
+    {
+        auto copy = value.toObject();
+        if (copy.value("id").toString() != id)
+            continue;
+        const auto base = id + QStringLiteral("-copy");
+        auto candidate = base;
+        int suffix = 2;
+        const auto exists = [this](const QString& name)
+        {
+            for (const auto& entry : m_items)
+                if (entry.toObject().value("id").toString() == name)
+                    return true;
+            return false;
+        };
+        while (exists(candidate))
+            candidate = base + QString::number(suffix++);
+        if (!ComponentSchema::safeId(candidate) || m_items.size() >= 1024)
+        {
+            setError(tr("The component cannot be duplicated within the layout bounds."));
+            return false;
+        }
+        copy["id"] = candidate;
+        copy.remove("placement");
+        m_items.append(copy);
+        if (!save())
+        {
+            m_items.removeLast();
+            return false;
+        }
+        emit layoutChanged();
+        setError({});
+        return true;
+    }
+    setError(tr("The component no longer exists."));
+    return false;
+}
+
+// Expose only explicit placements so the editor can distinguish unplaced items.
+QVariantList
+HomeLayout::placements() const
+{
+    QVariantList result;
+    for (const auto& entry : m_items)
+    {
+        const auto item = entry.toObject();
+        if (item.contains("placement"))
+            result.append(QVariantMap{{"id", item.value("id").toString()},
+                                      {"placement", item.value("placement").toObject().toVariantMap()}});
+    }
+    return result;
+}
+
+// Collision checks use the item's own parent and section rather than the whole page.
+QVariantList
+HomeLayout::gridCollisions(const QString& itemId, const QVariantMap& placement) const
+{
+    QVariantList result;
+    QString category, parent;
+    for (const auto& entry : m_items)
+    {
+        const auto item = entry.toObject();
+        if (item.value("id").toString() == itemId)
+        {
+            category = item.value("categoryId").toString();
+            parent = item.value("parentId").toString();
+            break;
+        }
+    }
+    const auto configured = ComponentSchema::componentGrid(m_items, m_composition, m_categories, parent, category);
+    if (!ComponentSchema::validPlacement(placement, configured.value("columns").toInt(), configured.value("rows").toInt()))
+        return result;
+    for (const auto& entry : m_items)
+    {
+        const auto item = entry.toObject();
+        if (item.value("id").toString() == itemId || !item.contains("placement") ||
+            item.value("parentId").toString() != parent ||
+            (parent.isEmpty() && grid().value("mode") == "sections" && item.value("categoryId").toString() != category) ||
+            !ComponentSchema::placementsOverlap(placement, item.value("placement").toObject().toVariantMap()))
+            continue;
+        auto name = item.value("name").toString();
+        if (item.value("kind").toString() == "app" && m_registry)
+        {
+            const auto* app = m_registry->find(item.value("appId").toString());
+            if (app)
+                name = app->name;
+        }
+        result.append(QVariantMap{{"id", item.value("id").toString()}, {"name", name}});
+    }
+    return result;
+}
+
 QString
 HomeLayout::wallpaperSource() const
 {
@@ -885,7 +1079,7 @@ HomeLayout::captureArtworkChoices() const
     }
     return result;
 }
-QVariantList
+QString
 HomeLayout::captureArtworkSource(int input) const
 {
     if (input < 1 || input > 8)
@@ -1138,6 +1332,15 @@ HomeLayout::loadDocument(const QByteArray& data, bool userDocument)
     if (!validateDocumentStructure(data, userDocument, version, entries))
         return false;
     QJsonObject object = QJsonDocument::fromJson(data).object();
+    static const QSet<QString> baseKeys{"schemaVersion", "composition", "rootPage", "theme",
+                                        "categories", "pages", "homePageId", "studioAppearance"};
+    const auto entriesKey = version == 1 ? QStringLiteral("items") : QStringLiteral("components");
+    for (auto it = object.constBegin(); it != object.constEnd(); ++it)
+        if (!baseKeys.contains(it.key()) && it.key() != entriesKey && !(version == 1 && it.key() == "grid"))
+        {
+            setError(tr("Home layout contains unknown top-level keys."));
+            return false;
+        }
     QString designError;
     if (!m_owner && !DesignSystem::validDocument(object, &designError))
     {
@@ -1158,6 +1361,19 @@ HomeLayout::loadDocument(const QByteArray& data, bool userDocument)
     if (!validateHomePage(object, homePage, pageIds))
         return false;
     QVariantMap composition = object.value("composition").toObject().toVariantMap();
+    // Legacy documents carried grid dimensions at the root. Normalize them only in memory.
+    if (version == 1 && object.contains("grid"))
+    {
+        const auto grid = object.value("grid").toObject().toVariantMap();
+        if (!object.value("grid").isObject() || !ComponentSchema::validGrid(grid) || composition.contains("grid"))
+        {
+            setError(tr("Invalid or ambiguous legacy Home grid."));
+            return false;
+        }
+        if (composition.isEmpty())
+            composition = {{"schemaVersion", 1}, {"enabled", true}};
+        composition.insert("grid", grid);
+    }
     if (!validateComposition(object, composition))
         return false;
     const QJsonObject theme = object.value("theme").toObject();
@@ -1175,7 +1391,6 @@ HomeLayout::loadDocument(const QByteArray& data, bool userDocument)
         if (!validateShellReadability(pages, homePage, presentation, start, end))
             return false;
     }
-    QSet<QString> categoryIds;
     const auto categoryArray = object.value("categories").toArray();
     QJsonArray components;
     if (!validateCategoriesAndComponents(data, version, categoryArray, entries, components))
@@ -1269,7 +1484,7 @@ HomeLayout::buildAppearance(const QJsonObject& theme)
     if (theme.contains("surfaceThemes"))
         presentation["surfaceThemes"] = theme["surfaceThemes"].toVariant();
     if (theme.contains("sourcePolicy"))
-        presentation["sourcePolicy"] = theme["sourcePolicy"];
+        presentation["sourcePolicy"] = theme["sourcePolicy"].toVariant();
     if (theme.contains("colorTheme"))
         presentation["colorTheme"] = theme["colorTheme"].toVariant();
     for (const auto& keys : ThemeColors::roles())
@@ -1341,9 +1556,10 @@ HomeLayout::validateDocumentStructure(const QByteArray& data, bool userDocument,
     QJsonParseError error;
     const auto document = QJsonDocument::fromJson(data, &error);
     version = document.object().value("schemaVersion").toInt();
-    entries = document.object().value(version == 1 ? "items" : "components").toArray();
+    const auto entriesValue = document.object().value(version == 1 ? "items" : "components");
+    entries = entriesValue.toArray();
     if (error.error != QJsonParseError::NoError || !document.isObject() || (version != 1 && version != 2) ||
-        !entries.isArray() || data.size() > 4 * 1024 * 1024 || entries.size() > 1024)
+        !entriesValue.isArray() || entries.size() > 1024)
     {
         setError(userDocument ? tr("User Home layout is invalid; defaults were restored.")
                               : tr("Default Home layout is invalid."));
@@ -1404,7 +1620,8 @@ bool
 HomeLayout::validateRootPage(const QJsonObject& object, const QJsonObject& rootPage, const QJsonArray& pages,
                              const QSet<QString>& pageIds, const QJsonValue& homePage)
 {
-    bool valid = !m_owner && rootPage.isObject();
+    Q_UNUSED(pageIds);
+    bool valid = !m_owner && object.value("rootPage").isObject();
     for (auto it = rootPage.begin(); it != rootPage.end(); ++it)
         if (!QStringList{"name", "visible", "position"}.contains(it.key()))
             valid = false;
@@ -1478,6 +1695,7 @@ HomeLayout::validateCategoriesAndComponents(const QByteArray& data, int version,
                                             const QJsonArray& categoryArray, const QJsonArray& entries,
                                             QJsonArray& components)
 {
+    Q_UNUSED(data);
     QSet<QString> categoryIds;
     if (categoryArray.size() > HomeLayout::MaxLayoutCategories)
     {
@@ -1493,7 +1711,7 @@ HomeLayout::validateCategoriesAndComponents(const QByteArray& data, int version,
         }
     }
     QSet<QString> ids;
-    for (const auto& value : entries.toArray())
+    for (const auto& value : entries)
     {
         QJsonObject item;
         QString componentError;
@@ -1526,7 +1744,6 @@ bool
 HomeLayout::validateComponentItem(const QJsonObject& entry, int version, const QSet<QString>& categoryIds,
                                   QSet<QString>& ids, QJsonObject& item, QString& componentError) const
 {
-    QString componentError;
     const auto normalized =
         ComponentSchema::component(entry.toVariantMap(), version == 1, &componentError);
     item = QJsonObject::fromVariantMap(normalized);
@@ -1542,7 +1759,8 @@ HomeLayout::validateComponentItem(const QJsonObject& entry, int version, const Q
         !isValidComponentKind(kind) || !isValidComponentAction(kind, actionType, item) ||
         !isValidComponentCategoryRef(item, categoryIds) || !isValidComponentOpacity(item))
     {
-        componentError = tr("Home layout contains an invalid or duplicate item.");
+        if (componentError.isEmpty())
+            componentError = tr("Home layout contains an invalid or duplicate item.");
         return false;
     }
     return true;
@@ -1587,7 +1805,7 @@ bool
 HomeLayout::validateComponents(const QJsonArray& entries, int version, const QSet<QString>& categoryIds,
                                QSet<QString>& ids, QJsonArray& components)
 {
-    for (const auto& value : entries.toArray())
+    for (const auto& value : entries)
     {
         QJsonObject item;
         QString componentError;
@@ -1661,8 +1879,17 @@ HomeLayout::addActionTile(const QString& name,
 {
     if (!validateActionTileParams(name, actionType, target, categoryId, openWith))
         return false;
-    const auto actionList = QJsonArray{normalizedAction};
-    const auto tile = buildActionTile(name, actionType, target, categoryId, normalizedAction);
+    const auto cleanType = actionType.trimmed();
+    QVariantMap requestedAction{{"type", cleanType}};
+    if (cleanType == QStringLiteral("switch-input"))
+        requestedAction["input"] = target.trimmed().toInt();
+    else
+    {
+        requestedAction["target"] = target.trimmed();
+        requestedAction["openWith"] = openWith.trimmed();
+    }
+    const auto normalizedAction = ComponentSchema::action(requestedAction);
+    const auto tile = buildActionTile(name, cleanType, target, categoryId, QJsonObject::fromVariantMap(normalizedAction));
     m_items.append(tile);
     if (!save())
     {
@@ -1682,7 +1909,7 @@ HomeLayout::validateActionTileParams(const QString& name, const QString& actionT
     const auto cleanTarget = target.trimmed();
     const auto cleanOpenWith = openWith.trimmed();
     const bool captureInput = cleanActionType == QStringLiteral("switch-input");
-    if (!validateActionTileBasic(cleanName, cleanTarget, cleanActionType, captureInput))
+    if (!validateActionTileBasic(cleanName, cleanTarget, cleanActionType, cleanOpenWith, captureInput))
         return false;
     QVariantMap requestedAction{{"type", cleanActionType}};
     if (captureInput)
@@ -1705,7 +1932,7 @@ HomeLayout::validateActionTileParams(const QString& name, const QString& actionT
 
 bool
 HomeLayout::validateActionTileBasic(const QString& cleanName, const QString& cleanTarget,
-                                    const QString& cleanActionType, const bool captureInput) const
+                                    const QString& cleanActionType, const QString& cleanOpenWith, bool captureInput) const
 {
     if (cleanName.isEmpty() || cleanTarget.isEmpty() || !isSupportedActionType(cleanActionType) ||
         cleanActionType == QStringLiteral("launch-app") || cleanActionType == QStringLiteral("desktop-mode") ||
@@ -1740,17 +1967,8 @@ HomeLayout::buildActionTile(const QString& name, const QString& actionType, cons
                             const QString& categoryId, const QJsonObject& normalizedAction)
 {
     const auto cleanName = name.trimmed().left(80);
-    const auto cleanTarget = target.trimmed();
-    const auto cleanOpenWith = target.trimmed();
-    const bool captureInput = actionType == QStringLiteral("switch-input");
-    QVariantMap requestedAction{{"type", actionType}};
-    if (captureInput)
-        requestedAction["input"] = cleanTarget.toInt();
-    else
-    {
-        requestedAction["target"] = cleanTarget;
-        requestedAction["openWith"] = cleanOpenWith;
-    }
+    Q_UNUSED(actionType);
+    Q_UNUSED(target);
     const auto base = cleanName.toLower();
     auto baseCopy = base;
     baseCopy.replace(QRegularExpression(QStringLiteral("[^a-z0-9]+")), QStringLiteral("-"));

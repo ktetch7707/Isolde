@@ -169,7 +169,7 @@ ActionDispatcher::surfGuide(int direction)
              (channel.value("sourceAvailable").toBool() && channel.value("sourceEnabled", true).toBool())))
             ids.append(channel.value("id").toString());
     }
-    const int current = ids.indexOf(m_guideChannel);
+    const int current = static_cast<int>(ids.indexOf(m_guideChannel));
     if (current < 0 || ids.size() < 2)
         return false;
     m_surfChannel = ids[(current + direction + ids.size()) % ids.size()];
@@ -376,6 +376,7 @@ ActionDispatcher::dispatch(const QVariantMap& input, const QString& originId)
     return dispatchSingleAction(value, originId);
 }
 
+bool
 ActionDispatcher::dispatchEditorAction(const QVariantMap& input)
 {
     QString error;
@@ -416,11 +417,11 @@ ActionDispatcher::dispatchEditorAction(const QVariantMap& input)
         }
         else if (type == "capture-switch-input")
         {
-            const auto input = value.value("input").toInt();
-            if (!m_capture->canSwitchInput(input))
+            const auto hdmiInput = value.value("input").toInt();
+            if (!m_capture->canSwitchInput(hdmiInput))
                 error = m_capture->switchStatus();
             else
-                accepted = m_capture->switchInput(input);
+                accepted = m_capture->switchInput(hdmiInput);
         }
         else if (type == "capture-preview-start")
         {
@@ -598,6 +599,7 @@ ActionDispatcher::handleOpenPage(const QVariantMap& value, const QString& origin
 bool
 ActionDispatcher::handleOpenCollection(const QVariantMap& value, const QString& originId)
 {
+    Q_UNUSED(originId);
     if (m_service->frontend() == "kodi")
         return launchApp("kodi");
     emit libraryRequested(value.value("type").toString() == "play-movie");
@@ -653,6 +655,7 @@ ActionDispatcher::validateAndPreflightSingleAction(const QVariantMap& input, con
 bool
 ActionDispatcher::handleRootPage(const QVariantMap& value, const QString& originId)
 {
+    Q_UNUSED(value);
     if (m_layout && m_layout->rootPageVisible())
     {
         emit pageRequested(QString(), originId);

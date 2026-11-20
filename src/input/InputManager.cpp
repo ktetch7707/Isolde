@@ -490,6 +490,7 @@ InputManager::clearBinding(int command)
     return true;
 }
 
+// Restrict binding operations to the declared remote commands.
 bool
 InputManager::isValidCommand(int command)
 {

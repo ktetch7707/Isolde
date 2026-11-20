@@ -14,9 +14,6 @@
 #include <QVariantList>
 #include <QVariantMap>
 
-namespace
-{
-
 struct ResolvedDesktopLaunch
 {
     QString desktopPath;
@@ -28,6 +25,9 @@ struct ResolvedDesktopLaunch
     QStringList arguments;
     QString error;
 };
+
+namespace
+{
 
 QProcessEnvironment
 desktopEnvironment()
@@ -99,6 +99,8 @@ unescapeDesktopValue(QString value)
     return value;
 }
 
+QStringList cleanExecTokens(const QStringList& tokens, QString* error);
+
 QStringList
 parseExecTokens(const QString& execLine, QString* error)
 {
@@ -146,7 +148,7 @@ parseExecTokens(const QString& execLine, QString* error)
 }
 
 QStringList
-cleanExecTokens(const QVariantList& tokens, QString* error)
+cleanExecTokens(const QStringList& tokens, QString* error)
 {
     QStringList cleaned;
     for (auto item : tokens)
@@ -265,7 +267,12 @@ appendActionArguments(ResolvedDesktopLaunch* launch, const QVariantMap& configur
     return false;
 }
 
-QString
+bool parseDesktopEntry(QFile& desktopFile, ResolvedDesktopLaunch& resolved);
+bool validateDesktopEntry(ResolvedDesktopLaunch& resolved, QString& error);
+QString resolveDesktopExecutablePath(const QString& program);
+
+// Resolve and validate the desktop entry before constructing the sandbox.
+ResolvedDesktopLaunch
 resolveDesktopLaunch(const QString& desktopId, const QProcessEnvironment& environment)
 {
     ResolvedDesktopLaunch resolved;
@@ -282,7 +289,7 @@ resolveDesktopLaunch(const QString& desktopId, const QProcessEnvironment& enviro
         return resolved;
     }
     QString error;
-    if (!parseDesktopEntry(desktopFile, resolved, error))
+    if (!parseDesktopEntry(desktopFile, resolved))
     {
         resolved.error = error;
         return resolved;
@@ -292,10 +299,11 @@ resolveDesktopLaunch(const QString& desktopId, const QProcessEnvironment& enviro
         resolved.error = error;
         return resolved;
     }
-    const auto executable = resolveDesktopExecutablePath(resolved.execLine);
+    const auto program = resolved.arguments.takeFirst();
+    const auto executable = resolveDesktopExecutablePath(program);
     if (executable.isEmpty())
     {
-        resolved.error = QStringLiteral("Desktop Exec program is not available: %1").arg(resolved.execLine);
+        resolved.error = QStringLiteral("Desktop Exec program is not available: %1").arg(program);
         return resolved;
     }
     resolved.program = executable;
@@ -303,9 +311,10 @@ resolveDesktopLaunch(const QString& desktopId, const QProcessEnvironment& enviro
 }
 
 bool
-parseDesktopEntry(QFile& desktopFile, ResolvedDesktopLaunch& resolved, QString& error)
+parseDesktopEntry(QFile& desktopFile, ResolvedDesktopLaunch& resolved)
 {
     QTextStream stream(&desktopFile);
+    bool inDesktopEntry = false;
     while (!stream.atEnd())
     {
         const auto line = stream.readLine().trimmed();
@@ -313,8 +322,14 @@ parseDesktopEntry(QFile& desktopFile, ResolvedDesktopLaunch& resolved, QString& 
             continue;
         if (line.startsWith(QLatin1Char('[')) && line.endsWith(QLatin1Char(']')))
         {
+            const auto section = line.mid(1, line.size() - 2);
+            if (inDesktopEntry && section != QStringLiteral("Desktop Entry"))
+                break;
+            inDesktopEntry = section == QStringLiteral("Desktop Entry");
             continue;
         }
+        if (!inDesktopEntry)
+            continue;
         const auto separator = line.indexOf(QLatin1Char('='));
         if (separator <= 0)
             continue;
@@ -333,7 +348,7 @@ parseDesktopEntry(QFile& desktopFile, ResolvedDesktopLaunch& resolved, QString& 
 }
 
 bool
-validateDesktopEntry(const ResolvedDesktopLaunch& resolved, QString& error)
+validateDesktopEntry(ResolvedDesktopLaunch& resolved, QString& error)
 {
     if (resolved.type != QStringLiteral("Application"))
     {
@@ -365,6 +380,7 @@ validateDesktopEntry(const ResolvedDesktopLaunch& resolved, QString& error)
             return false;
         }
     }
+    resolved.arguments = tokens;
     return true;
 }
 
@@ -387,12 +403,12 @@ DesktopSession::launch()
 {
     auto environment = desktopEnvironment();
     const auto desktopId = definition().launchConfiguration.value(QStringLiteral("desktopId")).toString();
-    QJsonObject resolvedLaunch;
+    ResolvedDesktopLaunch resolvedLaunch;
     QStringList launchArguments;
     if (!prepareLaunch(desktopId, environment, resolvedLaunch, launchArguments))
         return;
     qInfo() << "Isolated native session launching" << definition().id << "profile" << qApp->property("isoldeProfile");
-    m_launcher.setArguments(resolvedLaunch.arguments);
+    m_launcher.setArguments(launchArguments + resolvedLaunch.arguments);
     connect(&m_launcher, &QProcess::readyReadStandardError, this, &DesktopSession::readDiagnostics);
     connect(&m_launcher,
             &QProcess::readyReadStandardOutput,
@@ -431,7 +447,7 @@ DesktopSession::launch()
 
 bool
 DesktopSession::prepareLaunch(const QString& desktopId, const QProcessEnvironment& environment,
-                              QJsonObject& resolvedLaunch, QStringList& launchArguments)
+                              ResolvedDesktopLaunch& resolvedLaunch, QStringList& launchArguments)
 {
     const auto launch = resolveDesktopLaunch(desktopId, environment);
     if (!launch.error.isEmpty())
@@ -444,7 +460,18 @@ DesktopSession::prepareLaunch(const QString& desktopId, const QProcessEnvironmen
     resolvedLaunch = launch;
     const auto steamGame = definition().launchConfiguration.value("steamGameId").toString();
     const auto managedGame = definition().launchConfiguration.value("managedGameExecutable").toString();
-    const auto configuration = definition().launchConfiguration;
+    if (!managedGame.isEmpty())
+    {
+        resolvedLaunch.program = managedGame;
+        resolvedLaunch.arguments.clear();
+    }
+    else if (!steamGame.isEmpty())
+    {
+        resolvedLaunch.program = "/usr/bin/python3";
+        resolvedLaunch.arguments = {"/run/steam-games.py", "--launch", steamGame};
+        m_steamOutput = std::make_unique<SteamSessionOutput>(steamGame);
+    }
+    auto configuration = definition().launchConfiguration;
     auto sandbox = NativeSandbox::prepare(qApp->property("isoldeProfile").toString(),
                                           definition().id,
                                           resolvedLaunch.program,
@@ -457,6 +484,12 @@ DesktopSession::prepareLaunch(const QString& desktopId, const QProcessEnvironmen
                                           definition().launchConfiguration.value("managedGameRoot").toString(),
                                           definition().launchConfiguration.value("opticalMediaId").toString(),
                                           definition().launchConfiguration.value("opticalObservationId").toString());
+    if (!sandbox.error.isEmpty())
+    {
+        setError(sandbox.error);
+        setState(State::Exited);
+        return false;
+    }
     if (!applyLaunchConfiguration(configuration, steamGame, managedGame, resolvedLaunch, sandbox,
                                   launchArguments))
         return false;
@@ -477,8 +510,8 @@ DesktopSession::applyContainmentTimers(const QString& containmentMode)
 }
 
 bool
-DesktopSession::applyLaunchConfiguration(QJsonObject& configuration, const QString& steamGame,
-                                         const QString& managedGame, const QJsonObject& resolvedLaunch,
+DesktopSession::applyLaunchConfiguration(QVariantMap& configuration, const QString& steamGame,
+                                         const QString& managedGame, ResolvedDesktopLaunch& resolvedLaunch,
                                          const NativeSandboxPlan& sandbox, QStringList& launchArguments)
 {
     if (definition().id == "kodi" || definition().id == "steam")
@@ -506,13 +539,36 @@ DesktopSession::applyLaunchConfiguration(QJsonObject& configuration, const QStri
         resolvedLaunch.program = sandbox.actionTarget;
     if (!steamGame.isEmpty())
         for (const auto& library : sandbox.steamLibraryRoots)
-            launchArguments << "--library" << library;
+            resolvedLaunch.arguments << "--library" << library;
 
     const auto emulator = configuration.value("emulatorRuntime").toString();
     if (!emulator.isEmpty())
         resolvedLaunch.arguments = {"/run/emulator-session.py", "--runtime", emulator, sandbox.actionTarget};
 
     launchArguments = sandbox.arguments;
+    m_launcher.setProcessEnvironment(sandbox.environment);
+    m_launcher.setProgram(sandbox.program);
+    if (definition().presentationMode == "web-kiosk")
+    {
+        const auto appearance = qApp->property("isoldeRemoteAppearance").toMap();
+        if (!appearance.contains("focusColor"))
+        {
+            setError("The app's remote appearance is unavailable. Return Home and retry.");
+            setState(State::Exited);
+            return false;
+        }
+        const auto index = launchArguments.lastIndexOf("--");
+        if (index < 0)
+        {
+            setError("The native isolation service supplied invalid launch arguments.");
+            setState(State::Exited);
+            return false;
+        }
+        launchArguments.insert(index, "--web-remote");
+        launchArguments.insert(index + 1,
+                               QString::fromLatin1(QJsonDocument::fromVariant(appearance)
+                                                       .toJson(QJsonDocument::Compact).toBase64()));
+    }
     return true;
 }
 
@@ -590,6 +646,7 @@ DesktopSession::readDiagnostics()
     m_protocolBuffer += output;
     if (m_protocolBuffer.size() > 4096)
         m_protocolBuffer.clear();
+    qsizetype newline = -1;
     while ((newline = m_protocolBuffer.indexOf('\n')) >= 0)
     {
         const auto line = m_protocolBuffer.left(newline).trimmed();
@@ -617,7 +674,7 @@ DesktopSession::readDiagnostics()
 }
 
 bool
-DesktopSession::parseGamepadStatusLine(const QString& line, QVariantMap& status) const
+DesktopSession::parseGamepadStatusLine(const QByteArray& line, QVariantMap& status) const
 {
     constexpr auto prefix = "ISOLDE_GAMEPAD_STATUS ";
     if (!line.startsWith(prefix) || line.size() > 512)
@@ -643,7 +700,7 @@ DesktopSession::parseGamepadStatusLine(const QString& line, QVariantMap& status)
 }
 
 bool
-DesktopSession::processGamepadStatusLine(const QVariantMap& status) const
+DesktopSession::processGamepadStatusLine(const QVariantMap& status)
 {
     if (status.isEmpty() || status.value("available").toInt() > status.value("connected").toInt() ||
         status.value("new").toInt() > status.value("connected").toInt())

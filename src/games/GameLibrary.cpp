@@ -38,9 +38,44 @@
 #include "home/ComponentSchema.h"
 #include "media/MediaGrants.h"
 
-namespace
-{
 QString
+sqlText(const QVariant& value);
+bool
+exactKeys(const QJsonObject& object, const QStringList& keys);
+bool
+archiveInteger(const QJsonValue& value, qint64* result);
+bool
+approvedMediaDirectory(const QString& profile, const QString& path);
+bool
+isGrantPathMatch(const QString& path, const QString& grant);
+QByteArray
+normalizeArtwork(const QByteArray& source);
+bool
+validArtworkSourceBytes(const QByteArray& source);
+bool
+validArtworkFormat(const QByteArray& format, const QSize& size);
+bool
+validArtworkImage(const QImage& image);
+bool
+validManagedArtworkBytes(const QByteArray& normalized);
+QString
+artworkHash(const QByteArray& bytes);
+bool
+persistArtwork(const QString& databasePath, const QByteArray& bytes, QString* hash, QString* error);
+bool
+validArtworkBytes(const QByteArray& bytes);
+bool
+prepareArtworkDirectory(const QString& directory);
+bool
+secureArtworkDirectory(const QString& directory);
+bool
+verifyExistingArtwork(const QFileInfo& info, const QString& path, const QByteArray& bytes);
+bool
+storeArtworkFile(const QString& directory, const QString& path, const QByteArray& bytes);
+bool
+isSteamRuntime(const QString& runtime);
+
+[[maybe_unused]] QString
 sqlText(const QVariant& value)
 {
     const auto text = value.toString();
@@ -58,7 +93,7 @@ constexpr qsizetype MaxManagedArtworkBytes = 12 * 1024 * 1024;
 constexpr qint64 MaxArtworkPixels = 16 * 1024 * 1024;
 constexpr qint64 MaxArtworkStoreBytes = GamesResourceLimits::ArtworkStoreBytes;
 constexpr qint64 MaxRestoreArtworkBytes = GamesResourceLimits::ArtworkRestoreBytes;
-bool
+[[maybe_unused]] bool
 exactKeys(const QJsonObject& object, const QStringList& keys)
 {
     QStringList actual = object.keys();
@@ -67,7 +102,7 @@ exactKeys(const QJsonObject& object, const QStringList& keys)
     expected.sort();
     return actual == expected;
 }
-bool
+[[maybe_unused]] bool
 archiveInteger(const QJsonValue& value, qint64* result)
 {
     if (!value.isDouble() || !std::isfinite(value.toDouble()) || std::floor(value.toDouble()) != value.toDouble() ||
@@ -76,7 +111,7 @@ archiveInteger(const QJsonValue& value, qint64* result)
     *result = qint64(value.toDouble());
     return true;
 }
-bool
+[[maybe_unused]] bool
 approvedMediaDirectory(const QString& profile, const QString& path)
 {
     if (!MediaGrants::validate(path).isEmpty())
@@ -96,7 +131,7 @@ isGrantPathMatch(const QString& path, const QString& grant)
 {
     return path == grant || path.startsWith(grant + '/');
 }
-QByteArray
+[[maybe_unused]] QByteArray
 normalizeArtwork(const QByteArray& source)
 {
     if (!validArtworkSourceBytes(source))
@@ -152,7 +187,7 @@ artworkHash(const QByteArray& bytes)
 {
     return QString::fromLatin1(QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex());
 }
-bool
+[[maybe_unused]] bool
 persistArtwork(const QString& databasePath, const QByteArray& bytes, QString* hash, QString* error)
 {
     if (!validArtworkBytes(bytes))
@@ -217,7 +252,7 @@ secureArtworkDirectory(const QString& directory)
     return QFile::setPermissions(directory, QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
 }
 
-bool
+[[maybe_unused]] bool
 verifyExistingArtwork(const QFileInfo& info, const QString& path, const QByteArray& bytes)
 {
     if (info.isSymLink() || !info.isFile() || info.canonicalFilePath() != path || info.size() != bytes.size())
@@ -226,7 +261,7 @@ verifyExistingArtwork(const QFileInfo& info, const QString& path, const QByteArr
     return existing.open(QIODevice::ReadOnly) && existing.readAll() == bytes;
 }
 
-bool
+[[maybe_unused]] bool
 storeArtworkFile(const QString& directory, const QString& path, const QByteArray& bytes)
 {
     qint64 used = 0;
@@ -289,7 +324,7 @@ sourceKind(const QString& runtime, const QString& root, const QString& profile)
     return "runtime-entry";
 }
 
-bool
+[[maybe_unused]] bool
 isSteamRuntime(const QString& runtime)
 {
     return runtime == "steam";
@@ -319,10 +354,9 @@ sourceProvenance(const QString& runtime,
             {"sourceFingerprint",
              QString::fromLatin1(QCryptographicHash::hash(identity.toUtf8(), QCryptographicHash::Sha256).toHex())}};
 }
-} // namespace
 
 GameLibrary::GameLibrary(const QString& path, AppRegistry* apps, QObject* parent)
-    : QObject(parent), m_connection("games-" + QUuid::createUuid().toString(QUuid::WithoutBraces)), m_apps(apps)
+    : QObject(parent), m_connection("games-" + QUuid::createUuid().toString(QUuid::WithoutBraces)), m_apps(apps), m_path(path)
 {
     connect(apps, &AppRegistry::appsChanged, this, &GameLibrary::changed);
     m_emulatorProfile = qApp->property("isoldeProfile").toString();
@@ -347,8 +381,10 @@ GameLibrary::GameLibrary(const QString& path, AppRegistry* apps, QObject* parent
     m_setupDeadline.setSingleShot(true);
     m_setupDeadline.setInterval(2400000);
     connect(&m_setupDeadline, &QTimer::timeout, this, &GameLibrary::cancelEmulatorSetup);
-    connect(&m_setup, &QProcess::readyReadStandardOutput, this, &GameLibrary::onSetupOutput);
-    connect(&m_setup, &QProcess::readyReadStandardError, this, &GameLibrary::onSetupOutput);
+    connect(&m_setup, &QProcess::readyReadStandardOutput, this,
+            [this]() { onSetupOutput(m_setup.readAllStandardOutput()); });
+    connect(&m_setup, &QProcess::readyReadStandardError, this,
+            [this]() { onSetupOutput(m_setup.readAllStandardError()); });
     connect(&m_setup, &QProcess::errorOccurred, this, &GameLibrary::onSetupError);
     connect(&m_setup, qOverload<int, QProcess::ExitStatus>(&QProcess::finished), this, &GameLibrary::onSetupFinished);
     m_portableInstallDeadline.setSingleShot(true);
@@ -394,6 +430,12 @@ GameLibrary::GameLibrary(const QString& path, AppRegistry* apps, QObject* parent
     if (!checkPendingRecoveries(query))
         return;
     query.finish();
+    m_ready = true;
+    for (const auto& disc : OpticalDiscHash::mountedDiscs())
+        m_lastOpticalObservationIds.append(disc.toMap().value("observationId").toString());
+    m_lastOpticalObservationIds.sort();
+    m_opticalRefreshTimer.start();
+    }
 
     void GameLibrary::onSteamScanFinished(int code, QProcess::ExitStatus status)
     {
@@ -427,6 +469,7 @@ GameLibrary::GameLibrary(const QString& path, AppRegistry* apps, QObject* parent
                 cancelImport();
                 return;
             }
+            seen.insert(game.value("target").toString());
         }
         m_preview = games;
         m_importReady = true;
@@ -949,7 +992,7 @@ GameLibrary::GameLibrary(const QString& path, AppRegistry* apps, QObject* parent
 
     bool GameLibrary::validateCatalogPath()
     {
-        if (!QDir::isAbsolutePath(path) || QFileInfo(path).isSymLink())
+        if (!QDir::isAbsolutePath(m_path) || QFileInfo(m_path).isSymLink())
         {
             fail(tr("Choose a private games catalog path."));
             return false;
@@ -959,36 +1002,18 @@ GameLibrary::GameLibrary(const QString& path, AppRegistry* apps, QObject* parent
 
     bool GameLibrary::openCatalogDatabase()
     {
-        const bool exists = QFileInfo::exists(path);
-        if (!exists && !QDir().mkpath(QFileInfo(path).absolutePath()))
+        const bool exists = QFileInfo::exists(m_path);
+        if (!exists && !QDir().mkpath(QFileInfo(m_path).absolutePath()))
         {
             fail(tr("Cannot create the games catalog folder."));
             return false;
         }
         m_db = QSqlDatabase::addDatabase("QSQLITE", m_connection);
-        m_db.setDatabaseName(path);
+        m_db.setDatabaseName(m_path);
         m_db.setConnectOptions("QSQLITE_BUSY_TIMEOUT=1000");
         if (!m_db.open())
         {
             fail(tr("Cannot open the games catalog: %1").arg(m_db.lastError().text()));
-            return false;
-        }
-        return true;
-    }
-
-    bool GameLibrary::validateCatalogVersion(QSqlQuery & query)
-    {
-        if (!query.exec("PRAGMA user_version") || !query.next())
-        {
-            fail(tr("Cannot read the games catalog version."));
-            return false;
-        }
-        const int version = query.value(0).toInt();
-        query.finish();
-        if (m_catalogExisted && version != 1 && version != 2 && version != 3 && version != 4 && version != 5 &&
-            version != 6 && version != 7)
-        {
-            fail(tr("Unsupported games catalog version. Original data was preserved."));
             return false;
         }
         return true;
@@ -1006,7 +1031,7 @@ GameLibrary::GameLibrary(const QString& path, AppRegistry* apps, QObject* parent
 
     bool GameLibrary::initializeCatalogSchema(QSqlQuery & query)
     {
-        if (!m_catalogExisted)
+        if (m_catalogExisted)
             return true;
         if (!m_db.transaction())
         {
@@ -1057,7 +1082,8 @@ GameLibrary::GameLibrary(const QString& path, AppRegistry* apps, QObject* parent
         }
         if (!m_catalogExisted)
             return true;
-        if (m_catalogVersion == 2 || m_catalogVersion >= 3)
+        // Version 2 denotes an editions migration. Later activity schemas may have no editions.
+        if (m_catalogVersion == 2)
         {
             if (!validateEditionsSchema(query))
                 return false;
@@ -1233,7 +1259,7 @@ GameLibrary::GameLibrary(const QString& path, AppRegistry* apps, QObject* parent
         return MaxGames;
     }
 
-    bool GameLibrary::fail(const QString& error)
+    bool GameLibrary::fail(const QString& error) const
     {
         m_error = error;
         emit errorChanged();
@@ -1273,10 +1299,14 @@ GameLibrary::GameLibrary(const QString& path, AppRegistry* apps, QObject* parent
             const auto app = entry.toMap();
             const auto id = app.value("id").toString();
             if (compatibleRuntime(id, true) || compatibleRuntime(id, false))
-                result.append(QVariantMap{{"id", id},
-                                          {"name", app.value("name")},
-                                          {"file", compatibleRuntime(id, true)},
-                                          {"provider", id == "steam" ? "steam" : "local"}});
+            {
+                QVariantMap appEntry;
+                appEntry["id"] = id;
+                appEntry["name"] = app.value("name");
+                appEntry["file"] = compatibleRuntime(id, true);
+                appEntry["provider"] = id == "steam" ? "steam" : "local";
+                result.append(appEntry);
+            }
         }
         return result;
     }
@@ -1424,6 +1454,8 @@ GameLibrary::GameLibrary(const QString& path, AppRegistry* apps, QObject* parent
 
     QString GameLibrary::buildWhereClause(const QString& view, const QString& search, const QString& platform) const
     {
+        Q_UNUSED(platform);
+        Q_UNUSED(search);
         QString sql = "WHERE (?=0 OR g.favorite=1) AND (?='' OR lower(g.platform)=lower(?)";
         if (m_hasEditions)
             sql += " OR EXISTS(SELECT 1 FROM game_editions e WHERE e.game_id=g.id AND lower(e.platform)=lower(?))";
@@ -1845,7 +1877,7 @@ GameLibrary::GameLibrary(const QString& path, AppRegistry* apps, QObject* parent
         return true;
     }
 
-    QVariantMap GameLibrary::registration(const QString& id)
+    QVariantMap GameLibrary::registration(const QString& id) const
     {
         if (!m_ready || !ComponentSchema::safeId(id))
             return {};
@@ -1899,7 +1931,7 @@ GameLibrary::GameLibrary(const QString& path, AppRegistry* apps, QObject* parent
     }
 
     bool GameLibrary::validUpdateRegistration(
-        const QVariantMap& value, const QString& runtime, const QString& root, const QString& target) const
+        const QVariantMap& value, const QString& runtime, const QString& root, const QString& target)
     {
         if (!platformAvailable(value.value("platform").toString()))
             return fail(
@@ -1943,28 +1975,32 @@ GameLibrary::GameLibrary(const QString& path, AppRegistry* apps, QObject* parent
         result["sourceReference"] = OpticalDiscIdentify::isRootReference(query.value(10).toString())
                                         ? OpticalDiscIdentify::mediaIdFromRoot(query.value(10).toString())
                                         : query.value(11).toString();
-        result["acquisitionProvenance"] = QVariantMap{{"recorded", false},
-                                                      {"sourceKind", "not-recorded"},
-                                                      {"origin", "unknown"},
-                                                      {"sourceReference", QString()},
-                                                      {"sourceFingerprint", QString()},
-                                                      {"recordedAt", QVariant::fromValue<qlonglong>(0)}};
+        QVariantMap provenance;
+        provenance["recorded"] = false;
+        provenance["sourceKind"] = "not-recorded";
+        provenance["origin"] = "unknown";
+        provenance["sourceReference"] = QString();
+        provenance["sourceFingerprint"] = QString();
+        provenance["recordedAt"] = QVariant::fromValue<qlonglong>(0);
+        result["acquisitionProvenance"] = provenance;
         if (m_hasProvenance)
         {
-            QSqlQuery provenance(m_db);
-            provenance.prepare(
+            QSqlQuery provQuery(m_db);
+            provQuery.prepare(
                 "SELECT entity_type,source_kind,origin,source_reference,source_fingerprint,recorded_at FROM "
                 "game_provenance WHERE entity_id=?");
-            provenance.addBindValue(id);
-            if (provenance.exec() && provenance.next())
+            provQuery.addBindValue(id);
+            if (provQuery.exec() && provQuery.next())
             {
-                result["acquisitionProvenance"] = QVariantMap{{"recorded", true},
-                                                              {"entityType", provenance.value(0)},
-                                                              {"sourceKind", provenance.value(1)},
-                                                              {"origin", provenance.value(2)},
-                                                              {"sourceReference", provenance.value(3)},
-                                                              {"sourceFingerprint", provenance.value(4)},
-                                                              {"recordedAt", provenance.value(5).toLongLong()}};
+                QVariantMap provMap;
+                provMap["recorded"] = true;
+                provMap["entityType"] = provQuery.value(0);
+                provMap["sourceKind"] = provQuery.value(1);
+                provMap["origin"] = provQuery.value(2);
+                provMap["sourceReference"] = provQuery.value(3);
+                provMap["sourceFingerprint"] = provQuery.value(4);
+                provMap["recordedAt"] = provQuery.value(5).toLongLong();
+                result["acquisitionProvenance"] = provMap;
             }
         }
         return result;
@@ -2063,7 +2099,7 @@ GameLibrary::GameLibrary(const QString& path, AppRegistry* apps, QObject* parent
         return true;
     }
 
-    bool GameLibrary::platformAvailable(const QString& platform)
+    bool GameLibrary::platformAvailable(const QString& platform) const
     {
         if (!m_ready || platform.trimmed().isEmpty() || platform.size() > 80)
             return false;
@@ -2182,10 +2218,12 @@ GameLibrary::GameLibrary(const QString& path, AppRegistry* apps, QObject* parent
                 return {};
             if (referenced)
                 continue;
-            result.append(QVariantMap{{"id", identity},
-                                      {"path", pending},
-                                      {"markerPresent", QFileInfo(pending + "/.isolde-install.json").isFile()},
-                                      {"conflict", QFileInfo::exists(root) || QFileInfo(root).isSymLink()}});
+            QVariantMap entry;
+            entry["id"] = identity;
+            entry["path"] = pending;
+            entry["markerPresent"] = QFileInfo(pending + "/.isolde-install.json").isFile();
+            entry["conflict"] = QFileInfo::exists(root) || QFileInfo(root).isSymLink();
+            result.append(entry);
         }
         return result;
     }
@@ -2214,7 +2252,12 @@ GameLibrary::GameLibrary(const QString& path, AppRegistry* apps, QObject* parent
             if (!rootReferenced(root, &referenced))
                 return {};
             if (!referenced)
-                result.append(QVariantMap{{"id", identity}, {"path", root}});
+            {
+                QVariantMap entry;
+                entry["id"] = identity;
+                entry["path"] = root;
+                result.append(entry);
+            }
         }
         return result;
     }
@@ -2250,7 +2293,7 @@ GameLibrary::GameLibrary(const QString& path, AppRegistry* apps, QObject* parent
                marker.canonicalFilePath() == marker.absoluteFilePath();
     }
 
-    bool GameLibrary::rootReferenced(const QString& root, bool* referenced) const
+    bool GameLibrary::rootReferenced(const QString& root, bool* referenced)
     {
         return catalogReferencesRoot(root, referenced);
     }
@@ -2308,7 +2351,7 @@ GameLibrary::GameLibrary(const QString& path, AppRegistry* apps, QObject* parent
     }
 
     bool GameLibrary::resolveLaunchQuery(
-        const QString& id, const QString& editionId, QString& runtime, QString& root, QString& relative) const
+        const QString& id, const QString& editionId, QString& runtime, QString& root, QString& relative)
     {
         QSqlQuery query(m_db);
         if (editionId.isEmpty() || editionId == id)
@@ -2346,7 +2389,7 @@ GameLibrary::GameLibrary(const QString& path, AppRegistry* apps, QObject* parent
         return GameEmulators::setupAssetReady(m_emulatorProfile, runtime, &error);
     }
 
-    QVariantMap GameLibrary::resolveSteamLaunch(const QString& relative) const
+    QVariantMap GameLibrary::resolveSteamLaunch(const QString& relative)
     {
         if (ComponentSchema::gameRegistration({{"schemaVersion", 1},
                                                {"title", "Steam game"},
@@ -2371,8 +2414,11 @@ GameLibrary::GameLibrary(const QString& path, AppRegistry* apps, QObject* parent
         const auto media =
             optical ? OpticalDiscClassify::resolveRootReference(root).value("disc").toMap() : QVariantMap{};
         const auto sourceRoot = optical ? media.value("mountRoot").toString() : root;
-        QVariantMap action{
-            {"type", "open-file"}, {"openWith", runtime}, {"target", target}, {"sourceRoot", sourceRoot}};
+        QVariantMap action;
+        action["type"] = "open-file";
+        action["openWith"] = runtime;
+        action["target"] = target;
+        action["sourceRoot"] = sourceRoot;
         if (optical)
         {
             action["opticalMediaId"] = media.value("mediaId");
@@ -2382,7 +2428,7 @@ GameLibrary::GameLibrary(const QString& path, AppRegistry* apps, QObject* parent
         return action;
     }
 
-    bool GameLibrary::installationExists(const QString& runtime, const QString& root, const QString& target)
+    bool GameLibrary::installationExists(const QString& runtime, const QString& root, const QString& target) const
     {
         QSqlQuery query(m_db);
         query.prepare("SELECT id FROM games WHERE runtime=? AND root=? AND target=?" +
@@ -2403,15 +2449,17 @@ GameLibrary::GameLibrary(const QString& path, AppRegistry* apps, QObject* parent
         return query.next();
     }
 
-    QVariantList GameLibrary::editions(const QString& id)
+    QVariantList GameLibrary::editions(const QString& id) const
     {
         const auto base = registration(id);
         if (base.isEmpty())
             return {};
-        QVariantList result{QVariantMap{{"id", id},
-                                        {"title", base.value("title")},
-                                        {"platform", base.value("platform")},
-                                        {"runtimeId", base.value("runtimeId")}}};
+        QVariantMap entry;
+        entry["id"] = id;
+        entry["title"] = base.value("title");
+        entry["platform"] = base.value("platform");
+        entry["runtimeId"] = base.value("runtimeId");
+        QVariantList result{entry};
         if (!m_hasEditions)
             return result;
         QSqlQuery query(m_db);
@@ -2423,10 +2471,14 @@ GameLibrary::GameLibrary(const QString& path, AppRegistry* apps, QObject* parent
             return {};
         }
         while (query.next())
-            result.append(QVariantMap{{"id", query.value(0)},
-                                      {"title", query.value(1)},
-                                      {"platform", query.value(2)},
-                                      {"runtimeId", query.value(3)}});
+        {
+            QVariantMap rowEntry;
+            rowEntry["id"] = query.value(0);
+            rowEntry["title"] = query.value(1);
+            rowEntry["platform"] = query.value(2);
+            rowEntry["runtimeId"] = query.value(3);
+            result.append(rowEntry);
+        }
         return result;
     }
 
@@ -2456,7 +2508,7 @@ GameLibrary::GameLibrary(const QString& path, AppRegistry* apps, QObject* parent
         return query.exec() && query.next();
     }
 
-    QString GameLibrary::addEdition(const QString& id, const QVariantMap& input)
-    {
-        return addEditionWithOrigin(id, input, "manual-registration");
-    }
+QString GameLibrary::addEdition(const QString& id, const QVariantMap& input)
+{
+    return addEditionWithOrigin(id, input, QStringLiteral("manual-registration"));
+}

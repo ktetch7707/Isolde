@@ -1,4 +1,21 @@
+#include "app/AppArtwork.h"
+#include "home/HomeLayout.h"
+#include "home/ManagedGif.h"
 #include "home/StudioSession.h"
+
+#include <QBuffer>
+#include <QColor>
+#include <QCryptographicHash>
+#include <QDir>
+#include <QDirIterator>
+#include <QFile>
+#include <QFileInfo>
+#include <QImageReader>
+#include <QSaveFile>
+#include <QStandardPaths>
+#include <QTemporaryDir>
+#include <QUrl>
+#include <algorithm>
 
 static bool
 appendArtworkChoice(QVariantList& result, QSet<QString>& paths, const QString& path);
@@ -163,7 +180,7 @@ StudioSession::cleanIconArtwork(const QString& source, int strength, const QStri
     const auto target = QDir(m_assetStage->path()).filePath(QFileInfo(relative).fileName());
     if (!m_stagedAssets.contains(relative))
     {
-        if (!validateArtworkBudget(bytes.size()))
+        if (!checkArtworkBudget(bytes))
         {
             setError(tr("This draft's artwork budget is 128 images / 64 MiB. Original retained."));
             return {};
@@ -211,8 +228,7 @@ StudioSession::stageArtwork(const QString& source)
     buffer.open(QIODevice::ReadOnly);
     QImageReader reader(&buffer);
     const auto format = reader.format();
-    const auto size = reader.size();
-    const bool gif = format == "gif";
+    bool gif = format == "gif";
     if (!validateArtworkFormat(data, reader, gif))
         return {};
     const auto relative = "artwork/studio-" +
@@ -220,7 +236,7 @@ StudioSession::stageArtwork(const QString& source)
                           (gif ? ".gif" : format == "png" ? ".png" : ".jpg");
     if (m_stagedAssets.contains(relative))
         return relative;
-    if (!checkArtworkBudget(data, relative))
+    if (!checkArtworkBudget(data))
         return {};
     if (!m_assetStage)
         m_assetStage = new QTemporaryDir;
@@ -246,7 +262,7 @@ StudioSession::stageArtwork(const QString& source)
 }
 
 bool
-StudioSession::validateArtworkSource(const QString& source, QString& path) const
+StudioSession::validateArtworkSource(const QString& source, QString& path)
 {
     const QUrl url(source);
     path = url.isLocalFile() ? url.toLocalFile() : url.scheme().isEmpty() ? source : QString();
@@ -259,7 +275,7 @@ StudioSession::validateArtworkSource(const QString& source, QString& path) const
 }
 
 bool
-StudioSession::validateArtworkFile(const QFileInfo& info, QByteArray& data) const
+StudioSession::validateArtworkFile(const QFileInfo& info, QByteArray& data)
 {
     QFile input(info.absoluteFilePath());
     if (info.absoluteFilePath().isEmpty() || !input.open(QIODevice::ReadOnly) || input.size() < 8 ||
@@ -273,7 +289,7 @@ StudioSession::validateArtworkFile(const QFileInfo& info, QByteArray& data) cons
 }
 
 bool
-StudioSession::validateArtworkFormat(const QByteArray& data, QImageReader& reader, bool& gif) const
+StudioSession::validateArtworkFormat(const QByteArray& data, QImageReader& reader, bool& gif)
 {
     const auto format = reader.format();
     const auto size = reader.size();
@@ -318,7 +334,7 @@ StudioSession::validateArtworkSize(const QSize& size) const
 }
 
 bool
-StudioSession::checkArtworkBudget(const QByteArray& data, const QString& relative) const
+StudioSession::checkArtworkBudget(const QByteArray& data)
 {
     qint64 total = data.size();
     for (const auto& path : m_stagedAssets)

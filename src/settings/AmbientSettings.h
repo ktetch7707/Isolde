@@ -17,7 +17,7 @@ class AmbientSettings final : public QObject
     Q_PROPERTY(bool showSystemHint READ showSystemHint NOTIFY changed)
     Q_PROPERTY(QString photoDirectory READ photoDirectory NOTIFY changed)
     Q_PROPERTY(QVariantList photoUrls READ photoUrls NOTIFY changed)
-    Q_PROPERTY(int photoCount READ photoCount NOTIFY changed)
+    Q_PROPERTY(qint64 photoCount READ photoCount NOTIFY changed)
     Q_PROPERTY(QString imageFit READ imageFit NOTIFY changed)
     Q_PROPERTY(bool shuffle READ shuffle NOTIFY changed)
     Q_PROPERTY(QString errorString READ errorString NOTIFY changed)
@@ -50,7 +50,7 @@ class AmbientSettings final : public QObject
     photoDirectory() const;
     [[nodiscard]] QVariantList
     photoUrls() const;
-    [[nodiscard]] int
+    [[nodiscard]] qint64
     photoCount() const;
     [[nodiscard]] QString
     imageFit() const;

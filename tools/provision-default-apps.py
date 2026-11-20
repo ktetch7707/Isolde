@@ -1,36 +1,49 @@
-#!/ usr / bin / env python3
-""
-    "Explicit Ubuntu appliance provisioning; never run on the Windows host.
+#!/usr/bin/env python3
+"""Explicit Ubuntu appliance provisioning; never run on the Windows host.
 
-    System phase downloads native clients.User phase atomically registers verified clients and private web -
-    app launchers.No account login,
-    game purchase or layout rewrite is performed.Package data never contains executable commands
-                         .""
-                          "
-                     import argparse import hashlib import json import os import stat from pathlib import Path import re
-                         import shutil import subprocess import sys import tempfile
-                             import struct import urllib.request from urllib.parse import urlparse,
-    urljoin from html.parser import HTMLParser
+System phase downloads native clients. User phase atomically registers verified
+clients and private web-app launchers. No account login, game purchase or layout
+rewrite is performed. Package data never contains executable commands.
+"""
+import argparse
+import hashlib
+import json
+import os
+import stat
+from pathlib import Path
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+import struct
+import urllib.request
+from urllib.parse import urlparse, urljoin
+from html.parser import HTMLParser
 
-        LIMIT = 512 * 1024 *
-                1024
+LIMIT = 512 * 1024 * 1024
 
-                def run(*args, **kw)
-    : return subprocess.run(args, check = True, timeout = kw.pop("timeout", 600), **kw)
 
-          def
-          atomic(path, data, mode = 0o600)
-    : ancestor = path.parent.absolute() while not ancestor.exists()
-    : if ancestor.is_symlink()
-    : raise ValueError("Refusing redirected output") ancestor = ancestor.parent if ancestor.resolve() != ancestor
-    : raise ValueError("Refusing redirected output")
-          path.parent.mkdir(parents = True, exist_ok = True) if path.is_symlink()
-    : raise ValueError("Refusing redirected output") fd,
-        name = tempfile.mkstemp(dir = path.parent, prefix = ".isolde-") try : with os
-    .fdopen(fd, "wb") as output : output.write(data);
-output.flush();
-os.fsync(output.fileno()) os.chmod(name, mode) os.replace(name, path) directory =
-    os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY) try : os.fsync(directory)
+def run(*args, **kw):
+    return subprocess.run(args, check=True, timeout=kw.pop("timeout", 600), **kw)
+
+
+def atomic(path, data, mode=0o600):
+    ancestor = path.parent.absolute()
+    while not ancestor.exists():
+        if ancestor.is_symlink(): raise ValueError("Refusing redirected output")
+        ancestor = ancestor.parent
+    if ancestor.resolve() != ancestor: raise ValueError("Refusing redirected output")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.is_symlink(): raise ValueError("Refusing redirected output")
+    fd, name = tempfile.mkstemp(dir=path.parent, prefix=".isolde-")
+    try:
+        with os.fdopen(fd, "wb") as output:
+            output.write(data); output.flush(); os.fsync(output.fileno())
+        os.chmod(name, mode)
+        os.replace(name, path)
+        directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+        try: os.fsync(directory)
         finally: os.close(directory)
     finally:
         if os.path.exists(name): os.unlink(name)
@@ -198,8 +211,8 @@ def install_surfshark(source):
         metadata=run("gpg","--batch","--show-keys","--with-colons",str(key),capture_output=True,text=True).stdout
         fingerprints=[line.split(":")[9] for line in metadata.splitlines() if line.startswith("fpr:")]
         if not fingerprints or fingerprints[0]!=provider["signingFingerprint"]: raise RuntimeError("Unexpected Surfshark repository signing key")
-#Extract only the reviewed key.Never execute the downloaded script,
-#remove an existing client, or grant its key global repository trust.
+        # Extract only the reviewed key. Never execute the downloaded script,
+        # remove an existing client, or grant its key global repository trust.
         keyring=Path("/usr/share/keyrings/isolde-surfshark.asc")
         repository=Path("/etc/apt/sources.list.d/isolde-surfshark.list")
         atomic(keyring,key.read_bytes(),0o644)
@@ -214,7 +227,7 @@ def install_surfshark(source):
 
 
 def provider_icon(url, destination, page_url=None):
-#Public provider artwork only.No cookies, browser profiles or account data.
+    # Public provider artwork only. No cookies, browser profiles or account data.
     with tempfile.TemporaryDirectory(prefix="isolde-provider-icon-") as temporary:
         path = Path(temporary) / "icon"
         def fetch(candidate):
@@ -233,17 +246,19 @@ def provider_icon(url, destination, page_url=None):
         candidates = []
         if page_url:
             try:
-                page
-    = Path(temporary) / "page" download(page_url, page, 1024 * 1024, timeout = 8) links = Links(); links.feed(page.read_text(errors="replace"))
+                page = Path(temporary)/"page"
+                download(page_url, page, 1024*1024, timeout=8)
+                links = Links(); links.feed(page.read_text(errors="replace"))
                 candidates = [value for _, value in sorted(links.icons, reverse=True)]
             except (OSError, ValueError): pass
-#Inspect actual image dimensions, not just advertised HTML sizes.A
-#working 16px favicon must not suppress a provider's 512px app logo.
+        # Inspect actual image dimensions, not just advertised HTML sizes. A
+        # working 16px favicon must not suppress a provider's 512px app logo.
         best = None; last_error = "No supported artwork"
         for candidate in list(dict.fromkeys(candidates))[:5] + [url]:
             try:
-                result
-    = fetch(candidate) if best is None or result[0] > best[0] : best = result except(OSError, ValueError) as error: last_error = str(error)
+                result = fetch(candidate)
+                if best is None or result[0] > best[0]: best = result
+            except (OSError, ValueError) as error: last_error = str(error)
         if best is None: raise ValueError("Provider artwork unavailable: " + last_error)
         _, digest, suffix, content = best
         output = destination / (digest+suffix)
@@ -260,14 +275,14 @@ def icon_quality(content):
         count = int.from_bytes(content[4:6], "little")
         if not 1 <= count <= 64 or len(content) < 6+count*16: raise ValueError("Invalid icon directory")
         return ".ico", max(min(content[6+i*16] or 256, content[7+i*16] or 256) for i in range(count))
-#SVGs may contain active / external content.Keep acquisition to bounded
-#raster provider icons until the managed SVG sanitizer owns this path.
+    # SVGs may contain active/external content. Keep acquisition to bounded
+    # raster provider icons until the managed SVG sanitizer owns this path.
     raise ValueError("Provider did not return a supported raster icon")
 
 
 def native_icon(app_id, fallback, root=Path("/usr/share")):
-#Read supplied metadata without executing its launch command.Wrappers
-#retain vendor icon names(for example spotify - client), not guessed IDs.
+    # Read supplied metadata without executing its launch command. Wrappers
+    # retain vendor icon names (for example spotify-client), not guessed IDs.
     entry = root/"applications"/(app_id+".desktop")
     if entry.is_file() and entry.stat().st_size <= 65536:
         group = ""
@@ -286,14 +301,12 @@ def activate(source, document, config=None, data=None, applications=None):
     config = config or Path(os.environ.get("XDG_CONFIG_HOME", str(Path.home()/".config"))) / "Isolde"
     data = data or Path(os.environ.get("XDG_DATA_HOME", str(Path.home()/".local/share"))) / "Isolde"
     applications = applications or data.parent / "applications"
-#Complete preflight before publishing any launcher or activation record.
+    # Complete preflight before publishing any launcher or activation record.
     missing = native_missing(document)
     if missing: raise RuntimeError("Default application downloads are incomplete: " + ", ".join(missing))
     state_path = config / "installed-apps.json"
-    state = json.loads(state_path.read_text()) if state_path.exists() else {
-    "installed" : [], "packageStates" : {}
-}
-if not isinstance (state.get("installed"), list) or not isinstance(state.get("packageStates", {}), dict): raise ValueError("Invalid installed state; refusing overwrite")
+    state = json.loads(state_path.read_text()) if state_path.exists() else {"installed": [], "packageStates": {}}
+    if not isinstance(state.get("installed"), list) or not isinstance(state.get("packageStates", {}), dict): raise ValueError("Invalid installed state; refusing overwrite")
     icon_failures = {}
     for app_id in document["apps"]:
         manifest_path = source / "config/packages" / app_id / "manifest.json"
@@ -307,56 +320,45 @@ if not isinstance (state.get("installed"), list) or not isinstance(state.get("pa
             desktop_id, executable = "isolde-"+app_id, "/usr/bin/google-chrome-stable"
             arguments = ["--no-first-run", "--start-fullscreen", "--class="+desktop_id, "--app="+app["url"]]
             icon = app_id
-            try: icon
-        = provider_icon(app["iconUrl"], data.parent / "icons/isolde", app["url"]) except(OSError, ValueError) as error
-            : icon_failures[app_id] = str(error)
-#These bounded arguments are fixed provisioner output, never a shell.
-                  command = " ".join([executable] + arguments) desktop =
-                      f "[Desktop "
-                        "Entry]\nType=Application\nName={manifest['name']}\nExec={command}\nIcon={icon}\nTerminal="
-                        "false\n" atomic(applications / (desktop_id + ".desktop"), desktop.encode(), 0o644)
-                              atomic(data / "packages" / app_id / manifest["version"] / "manifest.json",
-                                     manifest_path.read_bytes()) if app_id not in state["installed"]
-            : state["installed"]
-                  .append(app_id) state.setdefault("packageStates", {})
-                  .setdefault(app_id,
-                              "needs-setup" if manifest.get("setup", {})
-                                  .get("required") else "ready") if state["packageStates"][app_id] == "needs-setup" and
-                      not manifest.get("setup", {})
-                              .get("required")
-            : state["packageStates"][app_id] =
-                          "ready" atomic(state_path, json.dumps(state, indent = 2).encode()) result = {
-                              "registered" : document["apps"],
-                              "gamesBackend" : document["gamesBackend"],
-                              "nativeExecutablesVerified" : True,
-                              "subscriptionPlaybackVerified" : False,
-                              "iconsUnavailable" : icon_failures
-                          } atomic(config / "default-apps-completed.json",
-                                   json.dumps(result, indent = 2).encode()) return result
+            try: icon = provider_icon(app["iconUrl"], data.parent / "icons/isolde", app["url"])
+            except (OSError, ValueError) as error: icon_failures[app_id] = str(error)
+        # These bounded arguments are fixed provisioner output, never a shell.
+        command = " ".join([executable] + arguments)
+        desktop = f"[Desktop Entry]\nType=Application\nName={manifest['name']}\nExec={command}\nIcon={icon}\nTerminal=false\n"
+        atomic(applications / (desktop_id+".desktop"), desktop.encode(), 0o644)
+        atomic(data / "packages" / app_id / manifest["version"] / "manifest.json", manifest_path.read_bytes())
+        if app_id not in state["installed"]: state["installed"].append(app_id)
+        state.setdefault("packageStates", {}).setdefault(app_id, "needs-setup" if manifest.get("setup", {}).get("required") else "ready")
+        if state["packageStates"][app_id] == "needs-setup" and not manifest.get("setup", {}).get("required"):
+            state["packageStates"][app_id] = "ready"
+    atomic(state_path, json.dumps(state, indent=2).encode())
+    result = {"registered": document["apps"], "gamesBackend": document["gamesBackend"], "nativeExecutablesVerified": True, "subscriptionPlaybackVerified": False, "iconsUnavailable": icon_failures}
+    atomic(config / "default-apps-completed.json", json.dumps(result, indent=2).encode())
+    return result
 
-                              def main()
-            : parser =
-                  argparse.ArgumentParser(description = __doc__) parser
-                      .add_argument("action", choices = [ "plan", "system", "activate", "isolation", "surfshark" ])
-                          parser
-                      .add_argument("--source", type = Path, default = Path(__file__).resolve().parents[1]) parser
-                      .add_argument(
-                          "--sudo-apt",
-                          action = "store_true",
-                          help =
-                              "Use existing delegated apt-get/dpkg privileges; repositories must already be configured")
-                          args = parser.parse_args() source = args.source.resolve(strict = True) document =
-                      load(source) if args.action == "plan" : print(json.dumps(document, indent = 2));
-return platform() if args.action == "surfshark" : print(json.dumps(install_surfshark(source)));
-return if args.action == "isolation" : import socket if socket.gethostname() !=
-       "isolde-test" : raise RuntimeError("This sandbox exception is authorized only in Isolde-Test")
-                           print(json.dumps(install_native_isolation()));
-return if args.action ==
-       "system" : system(document, args.sudo_apt)
-                      run(sys.executable, str(source / "tools/vpn-setup.py"), "defaults", timeout = 1800) else
-    : print(json.dumps(activate(source, document)))
 
-          if __name__ ==
-      "__main__" : try
-    : main() except(OSError, ValueError, RuntimeError, subprocess.SubprocessError, StopIteration) as error:
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("action", choices=["plan", "system", "activate", "isolation", "surfshark"])
+    parser.add_argument("--source", type=Path, default=Path(__file__).resolve().parents[1])
+    parser.add_argument("--sudo-apt", action="store_true", help="Use existing delegated apt-get/dpkg privileges; repositories must already be configured")
+    args = parser.parse_args()
+    source = args.source.resolve(strict=True)
+    document = load(source)
+    if args.action == "plan": print(json.dumps(document, indent=2)); return
+    platform()
+    if args.action == "surfshark": print(json.dumps(install_surfshark(source))); return
+    if args.action == "isolation":
+        import socket
+        if socket.gethostname() != "isolde-test": raise RuntimeError("This sandbox exception is authorized only in Isolde-Test")
+        print(json.dumps(install_native_isolation())); return
+    if args.action == "system":
+        system(document, args.sudo_apt)
+        run(sys.executable, str(source/"tools/vpn-setup.py"), "defaults", timeout=1800)
+    else: print(json.dumps(activate(source, document)))
+
+
+if __name__ == "__main__":
+    try: main()
+    except (OSError, ValueError, RuntimeError, subprocess.SubprocessError, StopIteration) as error:
         sys.exit("Default application provisioning stopped: " + str(error))
