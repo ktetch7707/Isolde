@@ -102,8 +102,8 @@ Item {
                 property var source: posterTexture
                 property real posterHeight: Math.max(1, poster.height)
                 property real reflectionHeight: Math.max(1, reflectionArea.height)
-                property real opacity: root.reflectionAlpha
-                fragmentShader: "#ifdef GL_ES\nprecision mediump float;\n#endif\nuniform sampler2D source;\nuniform float posterHeight;\nuniform float reflectionHeight;\nuniform float opacity;\nvarying vec2 qt_TexCoord0;\nvoid main() {\n  float t = qt_TexCoord0.y * (reflectionHeight / posterHeight);\n  vec4 color = texture2D(source, vec2(qt_TexCoord0.x, 1.0 - t));\n  float fade = 1.0 - qt_TexCoord0.y;\n  gl_FragColor = color * vec4(1.0, 1.0, 1.0, opacity * fade);\n}"
+                property real reflOpacity: root.reflectionAlpha
+                fragmentShader: "#ifdef GL_ES\nprecision mediump float;\n#endif\nuniform sampler2D source;\nuniform float posterHeight;\nuniform float reflectionHeight;\nuniform float reflOpacity;\nvarying vec2 qt_TexCoord0;\nvoid main() {\n  float t = qt_TexCoord0.y * (reflectionHeight / posterHeight);\n  vec4 color = texture2D(source, vec2(qt_TexCoord0.x, 1.0 - t));\n  float fade = 1.0 - qt_TexCoord0.y;\n  gl_FragColor = color * vec4(1.0, 1.0, 1.0, reflOpacity * fade);\n}"
                 vertexShader: "attribute highp vec4 vertex;\nattribute highp vec2 textureCoordinate;\nvarying highp vec2 qt_TexCoord0;\nuniform highp mat4 qt_Matrix;\nvoid main() {\n  gl_Position = qt_Matrix * vertex;\n  qt_TexCoord0 = textureCoordinate;\n}\n"
             }
         }
