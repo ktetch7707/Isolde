@@ -10,8 +10,8 @@
       "kodi": {"schemaVersion": 1, "mode": "origin"}
     },
     "brandVisible": false,
-    "colorTheme": {"schemaVersion":1,"colors":{"background":"#19191e","cards":"#202126","text":"#f5f1f3","highlight":"#c994a5","accent":"#c994a5"}},
-    "tileRoundness": 0.18
+    "colorTheme": {"schemaVersion":1,"colors":{"background":"#0b0d13","cards":"#141720","text":"#e8e6ea","highlight":"#6ea8d1","accent":"#6ea8d1"}},
+    "tileRoundness": 0.14
   },
   "categories": [
     { "id": "widgets", "name": "Widgets" },
@@ -22,6 +22,7 @@
   ],
   "items": [
     { "kind": "widget", "id": "clock", "widgetType": "clock", "size": "standard", "categoryId": "widgets" },
+    { "kind": "widget", "id": "movies-shelf", "widgetType": "library", "size": "wide", "categoryId": "apps", "source": { "kind": "library", "libraryKind": "movies", "provider": "kodi", "libraryView": "all", "schemaVersion": 1, "libraryValue": "" }, "presentation": { "libraryKind": "movies", "libraryView": "all", "libraryLayout": "row", "libraryColumns": 6, "libraryLimit": 20, "libraryChrome": true, "reflection": true, "reflectionHeight": 40, "reflectionOpacity": 0.45 } },
     { "kind": "app", "id": "movies", "appId": "movies", "size": "standard", "categoryId": "apps" },
     { "kind": "app", "id": "shows", "appId": "shows", "size": "standard", "categoryId": "apps" },
     { "kind": "app", "id": "youtube", "appId": "youtube", "size": "standard", "categoryId": "apps" },

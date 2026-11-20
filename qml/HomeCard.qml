@@ -40,6 +40,11 @@ Item {
     readonly property color surfaceInk: root.style.surfaceColor || root.appearance.surfaceColor || "#28262F"
     readonly property bool legacyBody:style.bodySize===undefined && style.bodyAlign===undefined && style.bodyBold===undefined
     readonly property bool customLabel:style.labelPosition!==undefined
+    // Poster reflection: mirrors the already rendered poster art directly beneath the card.
+    // Stored per shelf in the shared appearance model (reflection/reflectionHeight/reflectionOpacity).
+    readonly property bool reflectionEnabled: style.reflection === true
+    readonly property real reflectionHeight: reflectionEnabled ? (style.reflectionHeight || 0) * unit : 0
+    readonly property real reflectionOpacity: style.reflectionOpacity === undefined ? 0.45 : style.reflectionOpacity
     readonly property bool interactive: item.componentType !== "shape" && item.componentType !== "text" && (item.componentType !== "image" || !!primaryAction.type)
     // Geometry comes from the rendered surface, including the orb's own diameter.
     // Editors can retain this outline when the authored body is transparent.
@@ -73,6 +78,56 @@ Item {
             crop: root.style.imageCrop || null; radius: surface.radius
             visible:root.item.showLogo!==false && !root.launcherArtwork
             fit:root.style.artFit || "cover";focalX:root.style.artFocalX===undefined?0.5:root.style.artFocalX;focalY:root.style.artFocalY===undefined?0.5:root.style.artFocalY;zoom:root.style.artZoom || 1
+        }
+        // Poster reflection: mirrors the already rendered poster art directly beneath the card, fading to
+        // transparent. Reuses the poster texture via ShaderEffectSource so no new artwork request is made.
+        Item {
+            id: reflectionArea
+            anchors.top: poster.bottom
+            anchors.left: parent.left
+            anchors.right: parent.right
+            height: root.reflectionHeight
+            clip: true
+            visible: root.reflectionEnabled && root.reflectionHeight > 0 && poster.visible && poster.loadedSource.toString()
+            ShaderEffectSource {
+                id: posterTexture
+                sourceItem: poster
+                live: true
+                visible: false
+                textureSize: Qt.size(Math.max(1, poster.width), Math.max(1, poster.height))
+            }
+            ShaderEffect {
+                anchors.fill: parent
+                visible: reflectionArea.visible
+                property var source: posterTexture
+                property real posterHeight: Math.max(1, poster.height)
+                property real reflectionHeight: Math.max(1, reflectionArea.height)
+                property real opacity: root.reflectionOpacity
+                fragmentShader:
+                    "#ifdef GL_ES\n"
+                    "precision mediump float;\n"
+                    "#endif\n"
+                    "uniform sampler2D source;\n"
+                    "uniform float posterHeight;\n"
+                    "uniform float reflectionHeight;\n"
+                    "uniform float opacity;\n"
+                    "varying vec2 qt_TexCoord0;\n"
+                    "void main() {\n"
+                    "  float t = qt_TexCoord0.y * (reflectionHeight / posterHeight);\n"
+                    "  vec4 color = texture2D(source, vec2(qt_TexCoord0.x, 1.0 - t));\n"
+                    "  float fade = 1.0 - qt_TexCoord0.y;\n"
+                    "  gl_FragColor = color * vec4(1.0, 1.0, 1.0, opacity * fade);\n"
+                    "}\n"
+                vertexShader:
+                    "attribute highp vec4 vertex;\n"
+                    "attribute highp vec2 textureCoordinate;\n"
+                    "varying highp vec2 qt_TexCoord0;\n"
+                    "uniform highp mat4 qt_Matrix;\n"
+                    "void main() {\n"
+                    "  gl_Position = qt_Matrix * vertex;\n"
+                    "  qt_TexCoord0 = textureCoordinate;\n"
+                    "}\n"
+            }
         }
         LineIcon {
             visible: !root.showLauncherArtwork && (root.kind === "source" || root.kind === "summary") && root.item.widgetType !== "clock"

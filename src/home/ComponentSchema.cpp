@@ -598,7 +598,10 @@ ComponentSchema::validPresentationField(const QString& key, const QVariant& v, c
         {"iconSize", [](const QVariantMap& m, bool s, bool c) { Q_UNUSED(s); Q_UNUSED(c); return validPresentationNumericField(m, "iconSize", s); }},
         {"surfaceOpacity", [](const QVariantMap& m, bool s, bool c) { Q_UNUSED(s); Q_UNUSED(c); return validPresentationNumericField(m, "surfaceOpacity", s); }},
         {"cardGap", [](const QVariantMap& m, bool s, bool c) { Q_UNUSED(s); Q_UNUSED(c); return validPresentationNumericField(m, "cardGap", s); }},
-        {"artHeight", [](const QVariantMap& m, bool s, bool c) { Q_UNUSED(s); Q_UNUSED(c); return validPresentationNumericField(m, "artHeight", s); }}};
+        {"artHeight", [](const QVariantMap& m, bool s, bool c) { Q_UNUSED(s); Q_UNUSED(c); return validPresentationNumericField(m, "artHeight", s); }},
+        {"reflection", [](const QVariantMap& m, bool s, bool c) { Q_UNUSED(s); Q_UNUSED(c); return validPresentationBoolFlag(m, "reflection"); }},
+        {"reflectionHeight", [](const QVariantMap& m, bool s, bool c) { Q_UNUSED(s); Q_UNUSED(c); return validPresentationNumericField(m, "reflectionHeight", s); }},
+        {"reflectionOpacity", [](const QVariantMap& m, bool s, bool c) { Q_UNUSED(s); Q_UNUSED(c); return validPresentationNumericField(m, "reflectionOpacity", s); }}};
     auto it = handlers.find(key);
     if (it != handlers.cend())
         return it.value()(presentationMap, section, container);
@@ -1257,6 +1260,10 @@ ComponentSchema::validPresentationNumericField(const QVariantMap& v, const QStri
     if (QStringList{"padding", "radius", "headingSize", "diameter", "labelSize", "iconSize", "cardGap",
                     "artHeight"}.contains(key))
         return validPresentationNumericSize(number);
+    if (key == "reflectionHeight")
+        return number >= 0 && number <= 400;
+    if (key == "reflectionOpacity")
+        return number >= 0 && number <= 1;
     if (key == "contentWidth")
         return validPresentationNumericContentWidth(number, section);
     return false;
