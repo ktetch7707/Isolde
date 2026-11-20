@@ -103,30 +103,32 @@ Item {
                 property real posterHeight: Math.max(1, poster.height)
                 property real reflectionHeight: Math.max(1, reflectionArea.height)
                 property real opacity: root.reflectionOpacity
-                fragmentShader:
-                    "#ifdef GL_ES\n"
-                    "precision mediump float;\n"
-                    "#endif\n"
-                    "uniform sampler2D source;\n"
-                    "uniform float posterHeight;\n"
-                    "uniform float reflectionHeight;\n"
-                    "uniform float opacity;\n"
-                    "varying vec2 qt_TexCoord0;\n"
-                    "void main() {\n"
-                    "  float t = qt_TexCoord0.y * (reflectionHeight / posterHeight);\n"
-                    "  vec4 color = texture2D(source, vec2(qt_TexCoord0.x, 1.0 - t));\n"
-                    "  float fade = 1.0 - qt_TexCoord0.y;\n"
-                    "  gl_FragColor = color * vec4(1.0, 1.0, 1.0, opacity * fade);\n"
-                    "}\n"
-                vertexShader:
-                    "attribute highp vec4 vertex;\n"
-                    "attribute highp vec2 textureCoordinate;\n"
-                    "varying highp vec2 qt_TexCoord0;\n"
-                    "uniform highp mat4 qt_Matrix;\n"
-                    "void main() {\n"
-                    "  gl_Position = qt_Matrix * vertex;\n"
-                    "  qt_TexCoord0 = textureCoordinate;\n"
-                    "}\n"
+                fragmentShader: """
+                #ifdef GL_ES
+                precision mediump float;
+                #endif
+                uniform sampler2D source;
+                uniform float posterHeight;
+                uniform float reflectionHeight;
+                uniform float opacity;
+                varying vec2 qt_TexCoord0;
+                void main() {
+                  float t = qt_TexCoord0.y * (reflectionHeight / posterHeight);
+                  vec4 color = texture2D(source, vec2(qt_TexCoord0.x, 1.0 - t));
+                  float fade = 1.0 - qt_TexCoord0.y;
+                  gl_FragColor = color * vec4(1.0, 1.0, 1.0, opacity * fade);
+                }
+                """
+                vertexShader: """
+                attribute highp vec4 vertex;
+                attribute highp vec2 textureCoordinate;
+                varying highp vec2 qt_TexCoord0;
+                uniform highp mat4 qt_Matrix;
+                void main() {
+                  gl_Position = qt_Matrix * vertex;
+                  qt_TexCoord0 = textureCoordinate;
+                }
+                """
             }
         }
         LineIcon {
