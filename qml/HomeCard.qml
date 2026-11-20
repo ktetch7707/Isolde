@@ -103,32 +103,8 @@ Item {
                 property real posterHeight: Math.max(1, poster.height)
                 property real reflectionHeight: Math.max(1, reflectionArea.height)
                 property real opacity: root.reflectionOpacity
-                fragmentShader: """
-                #ifdef GL_ES
-                precision mediump float;
-                #endif
-                uniform sampler2D source;
-                uniform float posterHeight;
-                uniform float reflectionHeight;
-                uniform float opacity;
-                varying vec2 qt_TexCoord0;
-                void main() {
-                  float t = qt_TexCoord0.y * (reflectionHeight / posterHeight);
-                  vec4 color = texture2D(source, vec2(qt_TexCoord0.x, 1.0 - t));
-                  float fade = 1.0 - qt_TexCoord0.y;
-                  gl_FragColor = color * vec4(1.0, 1.0, 1.0, opacity * fade);
-                }
-                """
-                vertexShader: """
-                attribute highp vec4 vertex;
-                attribute highp vec2 textureCoordinate;
-                varying highp vec2 qt_TexCoord0;
-                uniform highp mat4 qt_Matrix;
-                void main() {
-                  gl_Position = qt_Matrix * vertex;
-                  qt_TexCoord0 = textureCoordinate;
-                }
-                """
+                fragmentShader: "#ifdef GL_ES\nprecision mediump float;\n#endif\nuniform sampler2D source;\nuniform float posterHeight;\nuniform float reflectionHeight;\nuniform float opacity;\nvarying vec2 qt_TexCoord0;\nvoid main() {\n  float t = qt_TexCoord0.y * (reflectionHeight / posterHeight);\n  vec4 color = texture2D(source, vec2(qt_TexCoord0.x, 1.0 - t));\n  float fade = 1.0 - qt_TexCoord0.y;\n  gl_FragColor = color * vec4(1.0, 1.0, 1.0, opacity * fade);\n}"
+                vertexShader: "attribute highp vec4 vertex;\nattribute highp vec2 textureCoordinate;\nvarying highp vec2 qt_TexCoord0;\nuniform highp mat4 qt_Matrix;\nvoid main() {\n  gl_Position = qt_Matrix * vertex;\n  qt_TexCoord0 = textureCoordinate;\n}\n"
             }
         }
         LineIcon {
