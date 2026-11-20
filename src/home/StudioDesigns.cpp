@@ -747,6 +747,12 @@ StudioSession::previewImport(const QString& value,
         return {};
     }
     const auto document = package["layout"].toObject();
+    // Check portability before staging artwork or creating an import proposal.
+    if (!portableValue(document, error))
+    {
+        setError(error);
+        return {};
+    }
     if (package["kind"] == "page" &&
         (document.contains("pages") || document.contains("homePageId") || document.contains("rootPage")))
     {
@@ -880,6 +886,12 @@ StudioSession::exportDesign(const QString& value, const QString& scope, const QS
     QJsonObject assets;
     qint64 assetBytes = 0;
     QString error;
+    // Reject private data before collecting assets or writing the export.
+    if (!portableValue(document, error))
+    {
+        setError(error);
+        return false;
+    }
     if (!collectExportAssets(document, assets, assetBytes, error))
     {
         setError(error);

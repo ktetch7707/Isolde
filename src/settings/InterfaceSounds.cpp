@@ -391,6 +391,9 @@ InterfaceSounds::findSoundResourceExtension(const QByteArray& addon, QString* er
         return false;
     };
     QXmlStreamReader manifest(addon);
+    // Step into the manifest root before inspecting its extension children.
+    if (!manifest.readNextStartElement() || manifest.name() != QLatin1String("addon"))
+        return fail("Expected a Kodi sound resource add-on.");
     bool soundResource = false;
     while (manifest.readNextStartElement())
     {

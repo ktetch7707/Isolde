@@ -1,4 +1,4 @@
-﻿#include <QFileInfo>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -549,7 +549,8 @@ GameLibrary::pageCollectionBuildWhere(const QString& kind, const QString& filter
             "BY g.title COLLATE NOCASE,g.id";
         return true;
     }
-    if (filter == "recent" && hasEditions)
+    // Collections already require the organization schema, which includes activity.
+    if (filter == "recent")
     {
         sql +=
             " WHERE EXISTS(SELECT 1 FROM game_activity a WHERE a.game_id=g.id) ORDER BY (SELECT a.last_played FROM "
@@ -1283,10 +1284,14 @@ GameLibrary::restoreCatalog(const QString& source, bool confirmed)
             break;
         ok = restoreCatalogApplyProvenanceRecord(query, record);
     }
-    ok = restoreCatalogApplyFinal(query, ok, m_hasProvenance, needEditionTable, backupPath);
+    // Check the completed transaction once, before publishing any schema changes.
+    if (ok && m_hasProvenance)
+        ok = query.exec("SELECT count(*) FROM game_provenance") && query.next() &&
+             query.value(0).toInt() <= MaxProvenanceRecords;
+    ok = ok && query.exec("PRAGMA user_version=6");
     if (!ok || !m_db.commit())
     {
-        const auto reason = query.lastError().text();
+        const auto reason = ok ? m_db.lastError().text() : query.lastError().text();
         m_db.rollback();
         return fail(
             tr("Restore failed; the prior catalog remains intact. Recovery copy: %1. %2").arg(backupPath, reason));
@@ -1316,6 +1321,7 @@ GameLibrary::restoreCatalogApplyGame(QSqlQuery& query, const QVariantMap& game)
     query.prepare(
         "INSERT INTO game_metadata(game_id,franchise,tags,aliases,summary,artwork_hash) VALUES(?,?,?,?,?,?)");
     query.addBindValue(game.value("id"));
+    query.addBindValue(sqlText(game.value("franchise")));
     QJsonArray tags;
     for (const auto& tag : game.value("tags").toStringList())
         tags.append(tag);
@@ -1385,34 +1391,4 @@ GameLibrary::restoreCatalogApplyProvenanceRecord(QSqlQuery& query, const QVarian
                                        "recordedAt"})
         query.addBindValue(record.value(key));
     return query.exec();
-}
-
-bool
-GameLibrary::restoreCatalogApplyFinal(QSqlQuery& query, bool ok, bool hasProvenance, bool needEditionTable,
-                                      const QString& backupPath)
-{
-    if (ok && hasProvenance)
-    {
-        if (!query.exec("SELECT count(*) FROM game_provenance") || !query.next() ||
-            query.value(0).toInt() > MaxProvenanceRecords)
-            ok = false;
-    }
-    ok = ok && query.exec("PRAGMA user_version=6");
-    if (!ok || !query.exec("COMMIT"))
-    {
-        const auto reason = query.lastError().text();
-        query.exec("ROLLBACK");
-        return fail(
-            tr("Restore failed; the prior catalog remains intact. Recovery copy: %1. %2").arg(backupPath, reason));
-    }
-    m_hasActivity = true;
-    m_hasMetadata = true;
-    m_hasCollections = true;
-    m_hasRichMetadata = true;
-    m_hasArtwork = true;
-    m_hasEditions = m_hasEditions || needEditionTable;
-    m_error.clear();
-    emit errorChanged();
-    emit changed();
-    return true;
 }

@@ -63,7 +63,7 @@ importFirmwareWithSetup(
                          const QString& existingFirmware, QString* error);
     bool
     importFirmwareWithoutSetup(const QString& root,
-                           const QVariantMap& setup,
+                           bool firmwareRequired,
                            const QString& firmware,
                            const QString& id,
                            QVariantMap& value,

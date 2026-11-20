@@ -176,7 +176,10 @@ PageModel::resolveItems(const QJsonArray& components) const
     for (const auto& value : components)
     {
         const auto object = value.toObject();
-        auto item = object.toVariantMap();
+        // Validate stored fields before attaching renderer-only metadata.
+        auto item = ComponentSchema::component(object.toVariantMap(), true);
+        if (item.isEmpty())
+            continue;
         if (m_owner)
             item["presentation"] = m_owner->componentPresentation(item.value("presentation").toMap());
         const auto actionList = normalizedActionForItem(object);
@@ -193,7 +196,7 @@ PageModel::resolveItems(const QJsonArray& components) const
         item.insert("logoSource", m_owner ? m_owner->resolveArtwork(logoFile) : QString());
         const auto unavailable = resolveItemUnavailableReason(item, actionList, registry);
         item.insert("unavailableReason", unavailable);
-        result.append(ComponentSchema::component(item, true));
+        result.append(item);
     }
     return result;
 }

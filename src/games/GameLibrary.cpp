@@ -1082,7 +1082,8 @@ GameLibrary::GameLibrary(const QString& path, AppRegistry* apps, QObject* parent
         }
         if (!m_catalogExisted)
             return true;
-        if (m_catalogVersion == 2 || m_catalogVersion >= 3)
+        // Version 2 denotes an editions migration. Later activity schemas may have no editions.
+        if (m_catalogVersion == 2)
         {
             if (!validateEditionsSchema(query))
                 return false;

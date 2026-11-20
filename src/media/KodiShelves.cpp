@@ -118,19 +118,22 @@ KodiShelves::sections() const
                 action["movieId"] = itemId;
             if (actionType == "open-show")
                 action["tvShowId"] = itemId;
-            return ComponentSchema::component({{"id", prefix + '-' + key},
-                                               {"kind", "action"},
-                                               {"name", name},
-                                               {"section", "Collection"},
-                                               {"symbol",
-                                                actionType == "play-movie"  ? "▶"
-                                                : actionType == "open-show" ? "TV"
-                                                                            : "≡"},
-                                               {"accent", "#5B8DEF"},
-                                               {"size", "standard"},
-                                               {"networkRequirement", "none"},
-                                               {"action", action}},
-                                              true);
+            // Collection rows use display metadata which does not belong in a saved component.
+            const auto symbol = actionType == "play-movie" ? "▶" : actionType == "open-show" ? "TV" : "≡";
+            auto item = ComponentSchema::component({{"id", prefix + '-' + key},
+                                                    {"kind", "action"},
+                                                    {"name", name},
+                                                    {"symbol", QString::fromUtf8(symbol)},
+                                                    {"accent", "#5B8DEF"},
+                                                    {"size", "standard"},
+                                                    {"action", action}},
+                                                   true);
+            if (!item.isEmpty())
+            {
+                item["section"] = "Collection";
+                item["networkRequirement"] = "none";
+            }
+            return item;
         };
         QVariantList items;
         QString label = "Browse collection";

@@ -1268,9 +1268,10 @@ GuideController::consumePvr(const QVariantMap& result)
 {
     const auto limits = result.value("limits").toMap();
     const auto key = m_sourceIndex < 0 ? QString("channels") : QString("broadcasts");
-    const auto items = result.value(key).toList();
+    const auto page = result.value(key);
+    const auto items = page.toList();
     const int end = limits.value("end", -1).toInt(), total = limits.value("total", -1).toInt();
-    if (!validatePvrPage(result, limits))
+    if (!validatePvrPage(page, limits))
         return;
     if (m_sourceIndex < 0)
     {
@@ -1791,14 +1792,14 @@ GuideController::setSourceEnabled(const QString& instance, const QVariant& enabl
         });
 }
 bool
-GuideController::validatePvrPage(const QVariantMap& result, const QVariantMap& limits)
+GuideController::validatePvrPage(const QVariant& page, const QVariantMap& limits)
 {
-    const auto key = result.value("limits").toMap().isEmpty() ? QString("channels") : QString("broadcasts");
+    // Validate the response field selected by the outstanding request before advancing its cursor.
     const int start = limits.value("start", -1).toInt(), end = limits.value("end", -1).toInt(),
               total = limits.value("total", -1).toInt();
-    const auto items = result.value(key).toList();
+    const auto items = page.toList();
     if (!integer(limits.value("start"), 0, 1024) || !integer(limits.value("end"), 0, 1024) ||
-        !integer(limits.value("total"), 0, 1024) || result.value(key).metaType().id() != QMetaType::QVariantList ||
+        !integer(limits.value("total"), 0, 1024) || page.metaType().id() != QMetaType::QVariantList ||
         start != m_page || end != start + items.size() || items.size() > 50 || total < end ||
         total > (m_sourceIndex < 0 ? 1024 : 1000) || (end == start && total > end))
     {

@@ -237,6 +237,7 @@ qt_add_qml_module(isolde
         qml/HomeCard.qml
         qml/LineIcon.qml
         qml/SkinLibrary.qml
+        qml/SkinPicker.qml
         qml/PageNavigation.qml
         qml/PageSurface.qml
         qml/PageStudioView.qml

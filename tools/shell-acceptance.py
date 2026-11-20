@@ -1,16 +1,21 @@
-#!/ usr / bin / env python3
-""
-    "Review the actual installed shell through bounded guest-only remote input."
-    "" import argparse import fcntl import json import os from pathlib import Path import re import socket import
-        subprocess import tempfile import time
+#!/usr/bin/env python3
+"""Review the actual installed shell through bounded guest-only remote input."""
+import argparse
+import fcntl
+import json
+import os
+from pathlib import Path
+import re
+import socket
+import subprocess
+import tempfile
+import time
 
-            def run(*args)
-    : return subprocess.run(args, check = True, capture_output = True, text = True, timeout = 15)
-          .stdout
+def run(*args):
+    return subprocess.run(args,check=True,capture_output=True,text=True,timeout=15).stdout
 
-      def main()
-    : parser = argparse.ArgumentParser();
-parser.add_argument("executable", type = Path);args=parser.parse_args()
+def main():
+    parser=argparse.ArgumentParser();parser.add_argument("executable",type=Path);args=parser.parse_args()
     if os.name!="posix" or socket.gethostname()!="isolde-test":raise RuntimeError("Guest-only shell acceptance")
     lock=open("/tmp/isolde-home-components-acceptance.lock","a")
     fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
@@ -22,12 +27,11 @@ parser.add_argument("executable", type = Path);args=parser.parse_args()
         key,_,value=line.partition("=")
         if key in {"DISPLAY","XAUTHORITY","XDG_RUNTIME_DIR","DBUS_SESSION_BUS_ADDRESS"}:env[key]=value
     env["QT_QPA_PLATFORM"]="xcb"
-    os.environ.update({
-key:env[key] for key in ("DISPLAY","XAUTHORITY") if key in env})
+    os.environ.update({key:env[key] for key in ("DISPLAY","XAUTHORITY") if key in env})
     service=subprocess.run(["systemctl","--user","is-active","--quiet","isolde.service"]).returncode==0
     process=None
     try:
-    if service:run("systemctl","--user","stop","isolde.service")
+        if service:run("systemctl","--user","stop","isolde.service")
         with (evidence/"shell.log").open("w") as log:
             process=subprocess.Popen([str(args.executable.resolve())],env=env,stdout=log,stderr=log)
             deadline=time.monotonic()+25;window=None
@@ -35,9 +39,11 @@ key:env[key] for key in ("DISPLAY","XAUTHORITY") if key in env})
                 if process.poll() is not None:raise RuntimeError("Shell exited; inspect shell.log")
                 for line in run("wmctrl","-lp",).splitlines():
                     cells=line.split(None,4)
-                    if len(cells)>=3 and cells[2]==str(process.pid) and re.fullmatch(r"0x[0-9a-fA-F]+",cells[0]):window=cells[0];
-break if window : break time.sleep(.2) if not window : raise RuntimeError("Installed shell created no window")
-                                                           run("wmctrl", "-ia", window);time.sleep(3)
+                    if len(cells)>=3 and cells[2]==str(process.pid) and re.fullmatch(r"0x[0-9a-fA-F]+",cells[0]):window=cells[0];break
+                if window:break
+                time.sleep(.2)
+            if not window:raise RuntimeError("Installed shell created no window")
+            run("wmctrl","-ia",window);time.sleep(3)
             phases=("shellnavigation","shellgallery","shellstore","shellreturn","shellambient","shellwake")
             for phase in phases:
                 print(phase.upper()+"_READY "+str(evidence),flush=True)
@@ -52,10 +58,9 @@ break if window : break time.sleep(.2) if not window : raise RuntimeError("Insta
     finally:
         if process and process.poll() is None:
             process.terminate()
-            try:process
-    .wait(timeout = 15) except subprocess.TimeoutExpired : process.kill();
-process.wait(timeout = 5) if service : run("systemctl", "--user", "start", "isolde.service")
-                                           print("EVIDENCE " + str(evidence), flush = True)
+            try:process.wait(timeout=15)
+            except subprocess.TimeoutExpired:process.kill();process.wait(timeout=5)
+        if service:run("systemctl","--user","start","isolde.service")
+        print("EVIDENCE "+str(evidence),flush=True)
 
-                                               if __name__
-    == "__main__" : main()
+if __name__=="__main__":main()

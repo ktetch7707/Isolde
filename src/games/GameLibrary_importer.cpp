@@ -220,6 +220,15 @@ GameLibrary::rebuildEmulatorData(const QString& id)
         return false;
     if (!QFileInfo::exists(root))
         return true;
+    // Use the preparer's lock and retain it through the move to avoid racing a rebuild.
+    const auto lockPath = home + "/.config/isolde-emulator/prepare.lock";
+    const QFileInfo lockInfo(lockPath);
+    if (lockInfo.isSymLink() ||
+        QFileInfo(lockInfo.absolutePath()).canonicalFilePath() != lockInfo.absolutePath())
+        return fail(tr("Emulator preparation storage is redirected."));
+    QFile lock(lockPath);
+    if (!lock.open(QIODevice::ReadWrite) || ::flock(int(lock.handle()), LOCK_EX | LOCK_NB) != 0)
+        return fail(tr("Emulator preparation is active. Return after it stops, then retry."));
     if (!checkRetirementLimit(home))
         return false;
     return retirePreparedData(home, root);
@@ -240,22 +249,9 @@ GameLibrary::validPreparedRoot(const QString& root) const
         fail(tr("Prepared emulator storage is redirected. Nothing was moved."));
         return false;
     }
-    if (QFileInfo(root).canonicalFilePath() != root)
+    if (QFileInfo::exists(root) && QFileInfo(root).canonicalFilePath() != root)
     {
         fail(tr("Prepared emulator storage is redirected. Nothing was moved."));
-        return false;
-    }
-    const auto lockPath = QFileInfo(root).absolutePath() + "/.config/isolde-emulator/prepare.lock";
-    if (QFileInfo(lockPath).isSymLink() ||
-        QFileInfo(QFileInfo(lockPath).absolutePath()).canonicalFilePath() != QFileInfo(lockPath).absolutePath())
-    {
-        fail(tr("Emulator preparation storage is redirected."));
-        return false;
-    }
-    QFile lock(lockPath);
-    if (!lock.open(QIODevice::ReadWrite) || ::flock(int(lock.handle()), LOCK_EX | LOCK_NB) != 0)
-    {
-        fail(tr("Emulator preparation is active. Return after it stops, then retry."));
         return false;
     }
     return true;

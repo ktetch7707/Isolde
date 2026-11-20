@@ -2086,7 +2086,7 @@ bool
 ComponentSchema::validNavigationTabKeys(const QVariantMap& tab)
 {
     for (auto it = tab.cbegin(); it != tab.cend(); ++it)
-        if (!QStringList{"id", "name", "actions", "sections"}.contains(it.key()))
+        if (!QStringList{"id", "name", "action", "actions", "sections"}.contains(it.key()))
             return false;
     return true;
 }
@@ -2094,6 +2094,9 @@ ComponentSchema::validNavigationTabKeys(const QVariantMap& tab)
 bool
 ComponentSchema::validNavigationTabActions(const QVariantMap& tab)
 {
+    // Legacy tabs carry one action. Keep a single unambiguous dispatch representation per tab.
+    if (tab.contains("action"))
+        return !tab.contains("actions") && !action(tab.value("action").toMap()).isEmpty();
     if (!tab.contains("actions"))
         return true;
     const auto list = tab["actions"].toList();
@@ -2842,10 +2845,22 @@ ComponentSchema::component(const QVariantMap& input, bool legacy, QString* error
                                                   "appCollection", "appId", "opacity",
                                                   "categoryId", "parentId", "children",
                                                   "animateArtwork", "hidden", "locked",
-                                                  "showTitle", "showType", "showLogo", "logoFill"};
+                                                  "showTitle", "showType", "showLogo", "logoFill", "contentSlot"};
     for (auto it = input.constBegin(); it != input.constEnd(); ++it)
         if (!validComponentKeys.contains(it.key()))
             return reject(error, "Component contains unknown fields.");
+    // Retain the tagged slots in packaged templates while keeping their schema bounded.
+    if (input.contains("contentSlot"))
+    {
+        const auto slot = input.value("contentSlot").toMap();
+        const auto label = slot.value("label");
+        const auto kind = slot.value("kind").toString();
+        if (slot.size() != 4 || !slot.contains("schemaVersion") || !versionOne(slot) ||
+            !safeId(slot.value("id").toString()) || label.metaType().id() != QMetaType::QString ||
+            label.toString().trimmed().isEmpty() || label.toString().size() > 80 ||
+            (kind != "buttons" && kind != "apps" && kind != "media"))
+            return reject(error, "Invalid template content slot.");
+    }
     result["source"] = source;
     return result;
 }

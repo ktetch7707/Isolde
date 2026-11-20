@@ -109,7 +109,8 @@ KodiMedia::consume()
         fail("Kodi returned an incompatible response.");
         return;
     }
-    const auto result = response.value("result").toObject();
+    // Scan and quit return a scalar acknowledgement. Keep it intact for their handlers.
+    const auto result = m_stage == 2 || m_stage == 4 ? response : response.value("result").toObject();
     m_timeout.stop();
     using StageHandler = bool (KodiMedia::*)(const QJsonObject&);
     static const QHash<int, StageHandler> stageHandlers{

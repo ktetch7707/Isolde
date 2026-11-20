@@ -427,9 +427,6 @@ class GameLibrary final : public QObject
     restoreCatalogApplyCollection(QSqlQuery& query, const QVariantMap& collection);
     bool
     restoreCatalogApplyProvenanceRecord(QSqlQuery& query, const QVariantMap& record);
-    bool
-    restoreCatalogApplyFinal(QSqlQuery& query, bool ok, bool hasProvenance, bool needEditionTable,
-                             const QString& backupPath);
     Q_INVOKABLE bool
     restoreCatalog(const QString& source, bool confirmed);
     Q_INVOKABLE QVariantMap

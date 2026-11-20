@@ -113,6 +113,13 @@ class StoreProvider : public StoreIdentityProvider,
     using StoreUpdateProvider::StoreUpdateProvider;
     ~StoreProvider() override = default;
 
+    // Synchronous providers publish through the same signal as asynchronous providers.
+    void requestSearch(const QString& query) override
+    {
+        StoreSearchProvider::requestSearch(query);
+        emit resultsChanged();
+    }
+
   signals:
     void providerError(const QString& message);
     void resultsChanged();

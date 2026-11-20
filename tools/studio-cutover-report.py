@@ -1,4 +1,4 @@
-#!/ usr / bin / env python3
+#!/usr/bin/env python3
 """Prepare and audit T24 evidence locally; never starts or contacts the VM.
 
 Initialize before freezing the acceptance candidate. Fill the resulting records
@@ -241,23 +241,31 @@ def performance_errors(performance):
 
 
 def main():
+    """Prepare a blank receipt or audit an existing one for complete evidence."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("operation", choices=("init", "check"))
     parser.add_argument("report", type=Path)
     parser.add_argument("--source-root", required=True, type=Path)
     args = parser.parse_args()
-    try:
-    if args
-.operation == "init"
-    : args.report.parent.mkdir(parents = True,
-                               exist_ok = True) with args.report.open("x", encoding = "utf-8") as output
-    : json.dump(template(args.source_root.resolve(strict = True)), output, indent = 2) output.write("\n")
-          print(f "Prepared {len(TASKS)} pending tasks; no application checks run: {args.report}") return 0 report =
-    json.loads(args.report.read_text(encoding = "utf-8")) errors =
-        audit(report, args.source_root.resolve(strict = True), args.report.parent)
-            print(json.dumps({"evidenceComplete" : not errors, "errors" : errors}, indent = 2)) return 1 if errors
-        else 0 except(OSError, ValueError, TypeError, AttributeError) as error
-    : print(json.dumps({"evidenceComplete" : False, "errors" : [str(error)]})) return 1
 
-      if __name__
-      == "__main__" : raise SystemExit(main())
+    try:
+        source_root = args.source_root.resolve(strict=True)
+        if args.operation == "init":
+            args.report.parent.mkdir(parents=True, exist_ok=True)
+            with args.report.open("x", encoding="utf-8") as output:
+                json.dump(template(source_root), output, indent=2)
+                output.write("\n")
+            print(f"Prepared {len(TASKS)} pending tasks; no application checks run: {args.report}")
+            return 0
+
+        report = json.loads(args.report.read_text(encoding="utf-8"))
+        errors = audit(report, source_root, args.report.parent)
+        print(json.dumps({"evidenceComplete": not errors, "errors": errors}, indent=2))
+        return 1 if errors else 0
+    except (OSError, ValueError, TypeError, AttributeError) as error:
+        print(json.dumps({"evidenceComplete": False, "errors": [str(error)]}))
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

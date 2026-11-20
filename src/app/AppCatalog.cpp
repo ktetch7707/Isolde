@@ -549,8 +549,14 @@ AppCatalog::load(const QString& catalogPath, const QString& statePath, const QSt
     m_updatesDisabled.clear();
     m_availableUpdates.clear();
     m_storeTransaction.clear();
+    m_defaultBrowser.clear();
     cleanStagingDirectories();
-    if (!loadStateFile(m_statePath))
+    QString stateReadPath = m_statePath;
+    // Use the shared legacy activation list only before the profile has its own state.
+    if (!m_legacyInstallRoot.isEmpty() && !QFileInfo::exists(m_statePath))
+        stateReadPath =
+            QDir(QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation)).filePath("installed-apps.json");
+    if (!loadStateFile(stateReadPath))
         return false;
     setError({});
     emit entriesChanged();
@@ -607,7 +613,12 @@ bool
 AppCatalog::loadStoreOptions(const QJsonObject& options)
 {
     if (options.isEmpty())
+    {
+        // Minimal catalogs still need a valid value for the first state save.
+        m_storeOptions.clear();
+        m_androidContainment = QStringLiteral("fullscreen");
         return true;
+    }
     if (!validateStoreOptionKeys(options))
         return false;
     if (!validateStoreSizes(options))
@@ -644,6 +655,7 @@ AppCatalog::validateStoreOptionKeys(const QJsonObject& options)
                                 "cardHeight",
                                 "detailRatio",
                                 "webBackend",
+                                "androidBrowserPackages",
                                 "webDesktopId",
                                 "webCategory",
                                 "appSection",
@@ -731,6 +743,28 @@ AppCatalog::validateStorePlatformItem(const QJsonObject& p, QSet<QString>& types
 bool
 AppCatalog::validateStoreWebOptions(const QJsonObject& options)
 {
+    const auto browsers = options.value("androidBrowserPackages");
+    if (!browsers.isUndefined())
+    {
+        const QRegularExpression packageName("^[A-Za-z][A-Za-z0-9_]*(?:\\.[A-Za-z0-9_]+)+$");
+        QSet<QString> names;
+        const auto entries = browsers.toArray();
+        if (!browsers.isArray() || entries.size() > 16)
+        {
+            setError(tr("Invalid Android browser catalog."));
+            return false;
+        }
+        for (const auto& entry : entries)
+        {
+            const auto name = entry.toString();
+            if (name.size() > 200 || !packageName.match(name).hasMatch() || names.contains(name))
+            {
+                setError(tr("Invalid Android browser package identity."));
+                return false;
+            }
+            names.insert(name);
+        }
+    }
     if (options.contains("webBackend") &&
         (options.value("webBackend") != "chromium" && options.value("webBackend") != "embedded"))
     {
@@ -899,7 +933,8 @@ bool
 AppCatalog::loadStateFile(const QString& stateReadPath)
 {
     QFile state(stateReadPath);
-    if (!state.exists())
+    // A directory at the state path has no readable state. Atomic saves still report failure.
+    if (!state.exists() || QFileInfo(stateReadPath).isDir())
         return true;
     if (!state.open(QIODevice::ReadOnly))
     {
@@ -931,10 +966,20 @@ AppCatalog::loadStateFile(const QString& stateReadPath)
 bool
 AppCatalog::loadStateAndroidContainment(const QJsonObject& stateObject)
 {
-    const auto presentation = stateObject.value("androidContainment");
-    if (!presentation.isUndefined())
+    const auto browser = stateObject.value("defaultBrowser");
+    if (!browser.isUndefined() && (!browser.isString() ||
+        (!browser.toString().isEmpty() && !QRegularExpression("^fdroid-[a-f0-9]{24}$").match(browser.toString()).hasMatch())))
     {
-        if (!isValidAndroidContainment(presentation))
+        setError(tr("Invalid default browser preference."));
+        return false;
+    }
+    m_defaultBrowser = browser.toString();
+    const auto presentation = stateObject.value("androidContainment");
+    // Early builds could save an empty default for catalogs without Store options.
+    if (!presentation.isUndefined() && !(presentation.isString() && presentation.toString().isEmpty()))
+    {
+        // Validate the JSON string as its native variant type, not as a QJsonValue wrapper.
+        if (!isValidAndroidContainment(presentation.toVariant()))
         {
             setError(tr("Invalid Android presentation preference."));
             return false;
@@ -1531,8 +1576,7 @@ AppCatalog::beginDownload(const QVariantMap& result, bool update)
         emit operationFailed(m_errorString);
         return false;
     }
-    if (!setupDownloadState(result, storeId, update))
-        return false;
+    setupDownloadState(result, storeId, update);
     if (!validateDownloadResult(result))
         return false;
     initializeDownloadOperation(result, update);
@@ -1552,14 +1596,14 @@ AppCatalog::validateArtifactUrl(const QUrl& artifactUrl) const
            artifactUrl.userInfo().isEmpty();
 }
 
-bool
+// Capture the provider's expected digest so validation can report missing metadata consistently.
+void
 AppCatalog::setupDownloadState(const QVariantMap& result, const QString& storeId, bool update)
 {
     m_downloadProfile = qApp->property("isoldeProfile").toString();
     m_downloadStoreId = storeId;
     m_downloadExpectedHash =
         update ? QByteArray::fromHex(result.value("sha256").toByteArray()) : m_provider->artifactHash(storeId);
-    return m_downloadExpectedHash.size() == 32;
 }
 
 bool
@@ -2045,7 +2089,8 @@ AppCatalog::saveState()
                                                 {"customPackages", customPackages},
                                                 {"updatesDisabled", disabled},
                                                 {"storeTransaction", m_storeTransaction},
-                                                {"androidContainment", m_androidContainment}})
+                                                {"androidContainment", m_androidContainment},
+                                                {"defaultBrowser", m_defaultBrowser}})
                           .toJson();
     if (!file.open(QIODevice::WriteOnly) || file.write(data) != data.size() || !file.commit())
     {

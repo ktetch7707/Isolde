@@ -303,7 +303,7 @@ class GuideController final : public QObject
     finalizeGuideLoad(QVariantList& candidates, int& page, int& kindIndex, int& sourceIndex, bool& previewReady,
                       qint64& snapshotBytes, int end, int total, int skipped);
     bool
-    validatePvrPage(const QVariantMap& result, const QVariantMap& limits);
+    validatePvrPage(const QVariant& page, const QVariantMap& limits);
     bool
     processNewPvrChannel(const QVariantMap& item, QVariantMap& source, QString& id, int& number, QVariantMap& definition, QSet<int>& used);
     void

@@ -968,7 +968,8 @@ def main():
                        "Scrolling page saved through the normal Studio checkbox")
                 scrolling_document = json.loads(layout.read_text())
                 assert next(item for item in scrolling_document["components"] if item["id"] == "clock")["placement"]["y"] == 15
-                key("Escape", 2); key("Down", 2)  # Close Studio and Settings; runtime navigation reveals the offscreen Clock.
+                # Back leaves the editor, the Home category, and then Settings before exercising runtime focus.
+                key("Escape", 3); key("Down", 2)
                 capture("scrollinghome")
                 colors = exercise_studio_colors(evidence,layout,key,capture,expect)
                 workflows = exercise_studio_workflows(evidence,layout,key,capture,expect)

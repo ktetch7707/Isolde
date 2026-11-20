@@ -400,6 +400,16 @@ parseLaunchArguments(QCoreApplication& app)
             }
             gameSession = true;
         }
+        else if (flag == "--web-remote")
+        {
+            // Consume the supervisor option before checking the child command delimiter.
+            if (!config.remoteAppearance.isEmpty())
+                return config;
+            config.remoteAppearance = parseWebRemoteAppearance(arguments);
+            if (config.remoteAppearance.isEmpty())
+                return config;
+            arguments.removeAt(2);
+        }
         else
             break;
         arguments.removeAt(1);
@@ -504,7 +514,8 @@ setupChromiumRemote(QCoreApplication& app, QProcess& child, const QVariantMap& r
         app,
         child,
         remoteAppearance,
-        [&]
+        // The asynchronous bridge must own the stop callback beyond setup.
+        [&remoteFailed, stop]
         {
             remoteFailed = true;
             stop();

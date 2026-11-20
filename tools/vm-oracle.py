@@ -1206,6 +1206,30 @@ def campaign_results(path):
              else 'skipped' if case.find('skipped') is not None or case.get('status') in {'notrun','disabled'} else 'passed'} for case in cases]
 
 
+def timed_out_campaign_results(path, registered):
+    """Recover completed registrations from CTest output when the deadline prevented JUnit export."""
+    summary = re.compile(
+        r'^\s*(\d+)/(\d+) Test\s+#(\d+): (\S+) \.+\s*'
+        r'(Passed|\*\*\*Failed|\*\*\*Timeout|\*\*\*Skipped|\*\*\*Not Run|'
+        r'[^\r\n]*\*\*\*Exception:[^\r\n]*?)\s+[\d.]+ sec\s*$'
+    )
+    results = []
+    with path.open(encoding='utf-8', errors='replace') as log:
+        for line in log:
+            match = summary.fullmatch(line)
+            if not match:
+                continue
+            ordinal, total, number, name, outcome = match.groups()
+            index = int(number) - 1
+            if int(total) != len(registered) or ordinal != number or not 0 <= index < len(registered) or registered[index] != name:
+                raise RuntimeError('CTest timeout log does not match the frozen registration inventory')
+            state = 'passed' if outcome == 'Passed' else 'skipped' if outcome in {'***Skipped', '***Not Run'} else 'failed'
+            results.append({'name': name, 'state': state})
+    if not results:
+        raise RuntimeError('CTest timeout log contains no completed registrations')
+    return results
+
+
 def diagnostic_campaign_receipt(result, progress):
     if result.get('acceptance') is not False or result.get('passed') is not False or result.get('fullSuite') is not False:
         raise RuntimeError('Diagnostic receipt must retain failed/nonacceptance status')
@@ -1602,6 +1626,7 @@ class Oracle:
         if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{0,63}', previous_id) or previous_id==self.run.name:
             raise RuntimeError('Invalid campaign base')
         previous=self.root/'runs'/previous_id
+        timeout_log = None
         prior=manifest(previous/'files.sha256')
         harness={'tools/vm-oracle.py','tools/vm-test.ps1','tools/test-all.ps1','tools/run-visual-acceptance.ps1','tools/tv-library-acceptance.py','tests/test_vm_oracle.py'}
         changed={name for name in set(entries)|set(prior) if entries.get(name)!=prior.get(name)}
@@ -1616,7 +1641,13 @@ class Oracle:
             state=json.loads((previous/'status.json').read_text())
             if state.get('suite')!='all' or state.get('stage')!='ctest' or state.get('state')!='failed':
                 raise RuntimeError('Campaign base must be a diagnosed failed full CTest run')
-            chain=[previous_id];results=campaign_results(previous/'ctest.xml');origin=previous
+            chain = [previous_id]
+            origin = previous
+            junit = previous/'ctest.xml'
+            if not junit.exists() and state.get('error', '').startswith('ctest exceeded '):
+                timeout_log = previous/'ctest.log'
+            else:
+                results = campaign_results(junit)
         if len(chain)>128 or previous_id!=chain[-1] or self.run.name in chain or any(not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{0,63}', item) for item in chain):
             raise RuntimeError('Invalid campaign chain')
         original=manifest(origin/'files.sha256');work=self.root/'work';build=work/'build'
@@ -1630,13 +1661,18 @@ class Oracle:
             raise RuntimeError('Incremental cache no longer belongs to the campaign candidate')
         inventory=subprocess.run(['ctest','--test-dir',str(build),'--show-only=json-v1'],capture_output=True,text=True,timeout=30,check=True)
         registered=[item['name'] for item in json.loads(inventory.stdout)['tests']]
+        if timeout_log is not None:
+            results = timed_out_campaign_results(timeout_log, registered)
         pending=campaign_pending(registered,results)
-        if not pending:raise RuntimeError('Campaign already attempted every registration; inspect retained failures')
+        # A complete failed base can be staged directly for diagnosis without repeating CTest.
+        if not pending and (progress_path.is_file() or all(item['state'] == 'passed' for item in results)):
+            raise RuntimeError('Campaign already attempted every registration; inspect retained results')
         before_service,before_links=self.service(),self.links()
         self.update(suite='campaign-diagnostic',sourceDigest=digest(origin/'files.sha256'),campaignOrigin=chain[0])
         command=ctest_command(build,self.run/'ctest.xml')+['-R','^('+'|'.join(re.escape(name) for name in pending)+')$']
         try:
-            self.stage('ctest',command,900,dict(os.environ,QT_QPA_PLATFORM='offscreen',QT_QUICK_BACKEND='software',ISOLDE_TEST_ARTIFACTS=str(self.run)))
+            if pending:
+                self.stage('ctest',command,900,dict(os.environ,QT_QPA_PLATFORM='offscreen',QT_QUICK_BACKEND='software',ISOLDE_TEST_ARTIFACTS=str(self.run)))
         finally:
             if (self.run/'ctest.xml').is_file():results+=campaign_results(self.run/'ctest.xml')
             remaining=campaign_pending(registered,results)

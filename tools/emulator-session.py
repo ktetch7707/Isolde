@@ -1,29 +1,33 @@
-#!/ usr / bin / env python3
-""
-        "Trusted native-namespace emulator adapter. No downloads or shell execution.
+#!/usr/bin/env python3
+"""Trusted native-namespace emulator adapter. No downloads or shell execution.
 
-        Only packaged runtime identities are accepted.HOME is the native sandbox's profile /
-        app -
-    private home;
-firmware, settings and saves never use the host
-              home.""
-                   "
-          import argparse import ctypes import ctypes.util import hashlib import json import importlib.util import os
-              from pathlib import Path import re import sys import tempfile
+Only packaged runtime identities are accepted. HOME is the native sandbox's
+profile/app-private home; firmware, settings and saves never use the host home.
+"""
+import argparse
+import ctypes
+import ctypes.util
+import hashlib
+import json
+import importlib.util
+import os
+from pathlib import Path
+import re
+import sys
+import tempfile
 
-                  MAX_SETTINGS = 16384 OPTIONS = {
-    "video" : {"automatic", "software"},
-    "controller" : {"xbox", "xbox-wii-classic"}
-} PSX_FIRMWARE = {
-    "b05def971d8ec59f346f2d9ac21fb742e3eb6917" : "scph5500.bin",
-    "0555c6fae8906f3f09baf5988f00e55f88e9f30b" : "scph5501.bin",
-    "f6bc2d1f5eb6593de7d089c425ac681d6fffd3f0" : "scph5502.bin",
+MAX_SETTINGS = 16384
+OPTIONS = {"video": {"automatic", "software"}, "controller": {"xbox", "xbox-wii-classic"}}
+PSX_FIRMWARE = {
+    "b05def971d8ec59f346f2d9ac21fb742e3eb6917": "scph5500.bin",
+    "0555c6fae8906f3f09baf5988f00e55f88e9f30b": "scph5501.bin",
+    "f6bc2d1f5eb6593de7d089c425ac681d6fffd3f0": "scph5502.bin",
 }
 
-          def expanded_adapter()
-    : spec = importlib.util.spec_from_file_location("expanded_emulators",
-                                                    Path(__file__).with_name("expanded-emulators.py")) module =
-          importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+
+def expanded_adapter():
+    spec=importlib.util.spec_from_file_location("expanded_emulators",Path(__file__).with_name("expanded-emulators.py"))
+    module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
     return module
 
 
@@ -144,10 +148,11 @@ def atomic(path, data):
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     fd, temporary = tempfile.mkstemp(prefix=".emulator-", dir=path.parent)
     try:
-        with os
-    .fdopen(fd, "wb") as output : output.write(data);
-output.flush();
-os.fsync(output.fileno()) os.replace(temporary, path) directory = os.open(path.parent, os.O_DIRECTORY) try : os.fsync(directory)
+        with os.fdopen(fd, "wb") as output:
+            output.write(data); output.flush(); os.fsync(output.fileno())
+        os.replace(temporary, path)
+        directory = os.open(path.parent, os.O_DIRECTORY)
+        try: os.fsync(directory)
         finally: os.close(directory)
     finally:
         if os.path.exists(temporary): os.unlink(temporary)
@@ -168,7 +173,7 @@ def settings(home):
 
 
 def ini(path, sections):
-#These files are generated exclusively by Isolde, never imported user INI.
+    # These files are generated exclusively by Isolde, never imported user INI.
     result = "".join("[" + section + "]\n" + "".join(k+" = "+str(v)+"\n" for k,v in values.items())
                      + "\n" for section,values in sections.items())
     atomic(path, result.encode())
@@ -216,14 +221,15 @@ def dolphin_controller():
     library=ctypes.util.find_library("SDL3")
     if not library:return None
     sdl=ctypes.CDLL(library)
-    sdl.SDL_Init.argtypes=[ctypes.c_uint32];
-sdl.SDL_Init.restype = ctypes.c_bool sdl.SDL_GetGamepads.argtypes = [ctypes.POINTER(ctypes.c_int)];
-sdl.SDL_GetGamepads.restype = ctypes.POINTER(ctypes.c_uint32) sdl.SDL_GetGamepadNameForID.argtypes = [ctypes.c_uint32];
-sdl.SDL_GetGamepadNameForID.restype = ctypes.c_char_p sdl.SDL_free.argtypes =
-    [ctypes.c_void_p] if not sdl.SDL_Init(0x2000) : return None try : count
-    = ctypes.c_int();
-devices = sdl.SDL_GetGamepads(ctypes.byref(count)) try :
-    if not devices or count.value<1:return None
+    sdl.SDL_Init.argtypes=[ctypes.c_uint32];sdl.SDL_Init.restype=ctypes.c_bool
+    sdl.SDL_GetGamepads.argtypes=[ctypes.POINTER(ctypes.c_int)];sdl.SDL_GetGamepads.restype=ctypes.POINTER(ctypes.c_uint32)
+    sdl.SDL_GetGamepadNameForID.argtypes=[ctypes.c_uint32];sdl.SDL_GetGamepadNameForID.restype=ctypes.c_char_p
+    sdl.SDL_free.argtypes=[ctypes.c_void_p]
+    if not sdl.SDL_Init(0x2000):return None
+    try:
+        count=ctypes.c_int();devices=sdl.SDL_GetGamepads(ctypes.byref(count))
+        try:
+            if not devices or count.value<1:return None
             name=sdl.SDL_GetGamepadNameForID(devices[0])
             if not name:return None
             value=name.decode("utf-8",errors="strict")
@@ -258,8 +264,8 @@ def command(runtime, target, home):
     for path in (base, home/"saves", home/"states", home/"firmware"):
         protected(path).mkdir(parents=True, exist_ok=True, mode=0o700)
     if engine == "ppsspp":
-#v1.20.4 uses XDG_CONFIG_HOME / ppsspp as the memory - stick root on Linux.
-#-- root is host0, and must never be used for save isolation.
+        # v1.20.4 uses XDG_CONFIG_HOME/ppsspp as the memory-stick root on Linux.
+        # --root is host0, and must never be used for save isolation.
         ini(home/".config/ppsspp/PSP/SYSTEM/ppsspp.ini", {
             "General": {"FirstRun": "False", "CheckForNewVersion": "False", "EnableDiscordPresence": "False"},
             "Graphics": {"GraphicsBackend": 0, "SoftwareRendering": str(options["video"]=="software"), "FullScreen": "True"},
@@ -314,8 +320,8 @@ def command(runtime, target, home):
             "Folders": {"Bios":str(firmware.parent),"MemoryCards":str(home/"saves"),"Savestates":str(home/"states")},
             "Filenames": {"BIOS":firmware.name}, "InputSources": {"SDL":"true"}, "Pad1":pad,
             "EmuCore/GS": {"Renderer":13 if options["video"]=="software" else -1}})
-# 2.6.3 has no - settings option.HOME / XDG isolation selects this profile's
-#normal configuration directory; do not invent a launch flag.
+        # 2.6.3 has no -settings option. HOME/XDG isolation selects this profile's
+        # normal configuration directory; do not invent a launch flag.
         return [str(binary), "-batch", "-nogui", "-fullscreen", "--", str(game)]
     if engine == "retroarch":
         core = Path(runtime["core"])

@@ -1,14 +1,24 @@
-#!/ usr / bin / env python3
-""
-    "Explicit, guest-only freely distributed gameplay fixtures. Never a ROM scraper."
-    "" import hashlib import io import itertools import json import os from pathlib import Path import socket import
-        stat import tempfile import urllib.request import zipfile
+#!/usr/bin/env python3
+"""Explicit, guest-only freely distributed gameplay fixtures. Never a ROM scraper."""
+import hashlib
+import io
+import itertools
+import json
+import os
+from pathlib import Path
+import socket
+import stat
+import tempfile
+import urllib.request
+import zipfile
 
-            URL = "https://store.ppsspp.org/files/webfest.zip" SHA256 =
-    "cde1525771bed0413e6de0dd197884be4971b9e127a40b02ad817b8eac7ec595"
+URL="https://store.ppsspp.org/files/webfest.zip"
+SHA256="cde1525771bed0413e6de0dd197884be4971b9e127a40b02ad817b8eac7ec595"
 
-    def members(data)
-    : if hashlib.sha256(data).hexdigest() != SHA256 : raise ValueError("Gameplay fixture hash mismatch") files = {};total=0
+
+def members(data):
+    if hashlib.sha256(data).hexdigest()!=SHA256:raise ValueError("Gameplay fixture hash mismatch")
+    files={};total=0
     with zipfile.ZipFile(io.BytesIO(data)) as archive:
         if len(archive.infolist())>1024:raise ValueError("Too many fixture files")
         for entry in archive.infolist():
@@ -42,20 +52,18 @@ def fetch():
             if response.url!=URL:raise ValueError("Unexpected fixture redirect")
             data=response.read(2*1024**2+1)
     if len(data)>2*1024**2:raise ValueError("Oversized fixture download")
-    files=members(data);
-destination = parent / "webfest-1.2" if not cached.exists()
-    : fd,
-temporary = tempfile.mkstemp(prefix = ".archive-", dir = parent) try : with os
-    .fdopen(fd, "wb") as output : output.write(data);
-output.flush();os.fsync(output.fileno())
+    files=members(data);destination=parent/"webfest-1.2"
+    if not cached.exists():
+        fd,temporary=tempfile.mkstemp(prefix=".archive-",dir=parent)
+        try:
+            with os.fdopen(fd,"wb") as output:output.write(data);output.flush();os.fsync(output.fileno())
             os.replace(temporary,cached)
         finally:
             if os.path.exists(temporary):os.unlink(temporary)
     if destination.exists() or destination.is_symlink():
         if destination.is_symlink() or destination.resolve()!=destination:raise ValueError("Redirected existing fixture")
         existing=list(itertools.islice(destination.rglob('*'),2049))
-        if len(existing)>2048 or any(path.is_symlink() for path in existing) or {str(path.relative_to(destination)) for path in existing if path.is_file()
-}!=set(files):
+        if len(existing)>2048 or any(path.is_symlink() for path in existing) or {str(path.relative_to(destination)) for path in existing if path.is_file()}!=set(files):
             raise ValueError("Existing fixture contains unexpected files; preserve it and review")
         for path,content in files.items():
             candidate=destination/path
@@ -65,24 +73,12 @@ output.flush();os.fsync(output.fileno())
         with tempfile.TemporaryDirectory(prefix=".webfest-",dir=parent) as temporary:
             stage=Path(temporary)/"game";stage.mkdir()
             for path,content in files.items():
-                candidate=stage/path;
-candidate.parent.mkdir(parents = True, exist_ok = True);
-candidate.write_bytes(content) os.rename(stage, destination) return {
-    "name" : "Webfest",
-             "version" : "1.2",
-                         "platform" : "PSP",
-                                      "runtimeId" : "ppsspp",
-                                                    "root" : str(destination / "webfest"),
-                                                             "target" : "EBOOT.PBP",
-                                                                        "archiveSha256" : SHA256,
-                                                                                          "source" : URL,
-                                                                                                     "terms"
-        : "https://www.ppsspp.org/docs/reference/homebrew-store-distribution/",
-          "gameplayVerified" : False,
-                               "files" : {
-    path:hashlib.sha256(content).hexdigest() for path,content in files.items()
-    }
-}
+                candidate=stage/path;candidate.parent.mkdir(parents=True,exist_ok=True);candidate.write_bytes(content)
+            os.rename(stage,destination)
+    return {"name":"Webfest","version":"1.2","platform":"PSP","runtimeId":"ppsspp","root":str(destination/"webfest"),
+        "target":"EBOOT.PBP","archiveSha256":SHA256,"source":URL,
+        "terms":"https://www.ppsspp.org/docs/reference/homebrew-store-distribution/",
+        "gameplayVerified":False,"files":{path:hashlib.sha256(content).hexdigest() for path,content in files.items()}}
 
-if __name__
-== "__main__" : print(json.dumps(fetch(), indent = 2))
+
+if __name__=="__main__":print(json.dumps(fetch(),indent=2))

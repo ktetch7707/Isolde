@@ -1,4 +1,4 @@
-#!/ usr / bin / env python3
+#!/usr/bin/env python3
 """Check real Linux playback completion, without changing volume or mute.
 
 This is an integration diagnostic, not a CTest: it makes a quiet audible tone.
@@ -16,6 +16,7 @@ from pathlib import Path
 
 
 def main():
+    """Generate and check a short stereo tone while leaving mixer settings intact."""
     player = shutil.which('pw-play') or shutil.which('paplay')
     if not player:
         print(json.dumps({'passed': False, 'reason': 'No playback command installed'}))
@@ -35,18 +36,21 @@ def main():
             audio.writeframes(data)
         started = time.monotonic()
         try:
-            result
-= subprocess.run([ player, str(path) ], capture_output = True, timeout = 8)
-      passed = result.returncode ==
-               0 reason = 'Player completed; physical audibility not verified' if passed else 'Player failed' except
-                              subprocess.TimeoutExpired : passed,
-      reason = False,
-      'Playback stalled beyond eight seconds' print(json.dumps({
-          'passed' : passed,
-          'reason' : reason,
-          'elapsed_seconds' : round(time.monotonic() - started, 2),
-          'player' : player
-      })) return 0 if passed else 1
+            result = subprocess.run([player, str(path)], capture_output=True, timeout=8)
+            passed = result.returncode == 0
+            reason = "Player completed; physical audibility not verified" if passed else "Player failed"
+        except subprocess.TimeoutExpired:
+            passed, reason = False, "Playback stalled beyond eight seconds"
+        except OSError:
+            passed, reason = False, "Player could not be started"
+        print(json.dumps({
+            "passed": passed,
+            "reason": reason,
+            "elapsed_seconds": round(time.monotonic() - started, 2),
+            "player": player,
+        }))
+        return 0 if passed else 1
 
-          if __name__
-          == '__main__' : raise SystemExit(main())
+
+if __name__ == "__main__":
+    raise SystemExit(main())

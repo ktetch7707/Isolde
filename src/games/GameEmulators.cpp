@@ -710,7 +710,8 @@ GameEmulators::configure(
         *error = "Choose a supported renderer and controller profile.";
         return false;
     }
-    const auto setup = definition(id).value("setup").toMap();
+    const auto runtime = definition(id);
+    const auto setup = runtime.value("setup").toMap();
     if (!setup.isEmpty() && !setup.value("videoModes").toStringList().contains(value.value("video").toString()))
     {
         *error = "This runtime does not provide the selected renderer.";
@@ -726,7 +727,7 @@ GameEmulators::configure(
         }
         return save(root + "/.config/isolde-emulator/settings.json", QJsonDocument::fromVariant(value).toJson(), error);
     }
-    if (!importFirmwareWithoutSetup(root, setup, firmware, id, value, error))
+    if (!importFirmwareWithoutSetup(root, runtime.value("firmwareRequired").toBool(), firmware, id, value, error))
         return false;
     if (!save(root + "/.config/isolde-emulator/settings.json", QJsonDocument::fromVariant(value).toJson(), error))
         return false;
@@ -768,7 +769,7 @@ GameEmulators::importFirmwareWithSetup(
 
 bool
 GameEmulators::importFirmwareWithoutSetup(const QString& root,
-                                           const QVariantMap& setup,
+                                           bool firmwareRequired,
                                            const QString& firmware,
                                            const QString& id,
                                            QVariantMap& value,
@@ -776,7 +777,8 @@ GameEmulators::importFirmwareWithoutSetup(const QString& root,
 {
     if (!firmware.isEmpty())
     {
-        if (!setup.value("firmwareRequired").toBool())
+        // Legacy runtimes declare firmware requirements on the runtime itself.
+        if (!firmwareRequired)
         {
             *error = "This runtime does not require imported firmware.";
             return false;

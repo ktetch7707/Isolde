@@ -1,8 +1,7 @@
-#!/ usr / bin / env python3
-""
-    "Explicit appliance Android setup. Never run on the Windows host.
+#!/usr/bin/env python3
+"""Explicit appliance Android setup. Never run on the Windows host.
 
-    Stages the verified SmartTube APK; installing into a user's Android data is a
+Stages the verified SmartTube APK; installing into a user's Android data is a
 separate profile-scoped operation. A receipt never claims an app was launched.
 """
 import argparse
@@ -66,29 +65,32 @@ def configure_software_rendering(path):
     changes = {"ro.hardware.gralloc": "default", "ro.hardware.egl": "swiftshader"}
     if all(cfg.get("properties", k, fallback=None) == v for k, v in changes.items()): return False
     for k, v in changes.items(): cfg.set("properties", k, v)
-    output = io.StringIO();
-cfg.write(output) shared.atomic(path.with_suffix(".cfg.isolde-backup"),
-                                before,
-                                0o600) shared.atomic(path, output.getvalue().encode(), mode) try
-    : shared
-    .run("waydroid", "--details-to-stdout", "upgrade", "-o", timeout = 120) except Exception
-        : shared.atomic(path, before, mode) raise return True
+    output = io.StringIO(); cfg.write(output)
+    shared.atomic(path.with_suffix(".cfg.isolde-backup"), before, 0o600)
+    shared.atomic(path, output.getvalue().encode(), mode)
+    try:
+        shared.run("waydroid", "--details-to-stdout", "upgrade", "-o", timeout=120)
+    except Exception:
+        shared.atomic(path, before, mode)
+        raise
+    return True
 
-          def require_idle_runtime(initialized)
-        :
-#A newly installed daemon raises "not initialized" for GetSession.There
-#cannot be an Android session before initialization has completed.
-          if not initialized : return import dbus bus = dbus.SystemBus() if bus.name_has_owner("id.waydro.Container")
-        : manager = dbus.Interface(bus.get_object("id.waydro.Container", "/ContainerManager"),
-                                   "id.waydro.ContainerManager") if manager.GetSession(timeout = 5)
-        : raise RuntimeError(
-              "Close the active Android session before runtime setup; existing sessions are never taken over")
 
-              def selector_cleanup_source(before)
-        : ""
-          "Bounded fix for Waydroid #2357; preserve vendor source and fail on unknown shapes."
-          "" if len (before) > 128 * 1024 : raise RuntimeError("Oversized Android runtime helper") text =
-                        before.decode(); tree=ast.parse(text)
+def require_idle_runtime(initialized):
+    # A newly installed daemon raises "not initialized" for GetSession. There
+    # cannot be an Android session before initialization has completed.
+    if not initialized: return
+    import dbus
+    bus = dbus.SystemBus()
+    if bus.name_has_owner("id.waydro.Container"):
+        manager = dbus.Interface(bus.get_object("id.waydro.Container", "/ContainerManager"), "id.waydro.ContainerManager")
+        if manager.GetSession(timeout=5): raise RuntimeError("Close the active Android session before runtime setup; existing sessions are never taken over")
+
+
+def selector_cleanup_source(before):
+    """Bounded fix for Waydroid #2357; preserve vendor source and fail on unknown shapes."""
+    if len(before)>128*1024: raise RuntimeError("Oversized Android runtime helper")
+    text=before.decode(); tree=ast.parse(text)
     functions=[n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name=="foreground_pipe"]
     if len(functions)!=1: raise RuntimeError("Unknown Android runtime helper; selector repair refused")
     function=functions[0]
@@ -98,12 +100,9 @@ cfg.write(output) shared.atomic(path.with_suffix(".cfg.isolde-backup"),
         raise RuntimeError("Unknown Android selector cleanup; repair refused")
     selectors=[n for n in function.body if isinstance(n,ast.Assign) and len(n.targets)==1 and ast.unparse(n.targets[0])=="sel" and ast.unparse(n.value)=="selectors.DefaultSelector()"]
     if len(selectors)!=1 or not isinstance(function.body[-1],ast.Return): raise RuntimeError("Unknown Android selector allocation; repair refused")
-    selector=selectors[0];
-tail = function.body [function.body.index(selector) + 1:] if not tail or
-       ast.unparse(tail[0]) != "sel.register(process.stdout, selectors.EVENT_READ)"
-    : raise RuntimeError("Unknown Android selector registration; repair refused")
-          lines = text.splitlines(keepends = True);
-start = selector.end_lineno;end=function.end_lineno
+    selector=selectors[0];tail=function.body[function.body.index(selector)+1:]
+    if not tail or ast.unparse(tail[0])!="sel.register(process.stdout, selectors.EVENT_READ)": raise RuntimeError("Unknown Android selector registration; repair refused")
+    lines=text.splitlines(keepends=True);start=selector.end_lineno;end=function.end_lineno
     result="".join(lines[:start])+"    # Isolde: close the selector on every path (Waydroid #2357).\n    try:\n"+"".join("    "+line if line.strip() else line for line in lines[start:end])+"    finally:\n        sel.close()\n        process.stdout.close()\n"+"".join(lines[end:])
     compile(result,"waydroid-selector-cleanup","exec")
     return result.encode()
@@ -112,21 +111,23 @@ start = selector.end_lineno;end=function.end_lineno
 def repair_selector_helper():
     path=Path("/usr/lib/waydroid/tools/helpers/run_core.py")
     if path.resolve()!=path or not path.is_file() or path.stat().st_uid!=0 or path.stat().st_mode & 0o022 or path.stat().st_size>128*1024: raise RuntimeError("Unsafe Android runtime helper")
-    before=path.read_bytes();
-after = selector_cleanup_source(before) if before !=
-        after : shared.atomic(path.with_suffix(".py.isolde-backup"), before, 0o600)
-                    shared.atomic(path, after, stat.S_IMODE(path.stat().st_mode)) return hashlib.sha256(after)
-                        .hexdigest()
+    before=path.read_bytes();after=selector_cleanup_source(before)
+    if before!=after:
+        shared.atomic(path.with_suffix(".py.isolde-backup"),before,0o600)
+        shared.atomic(path,after,stat.S_IMODE(path.stat().st_mode))
+    return hashlib.sha256(after).hexdigest()
 
-                            def repair_runtime(source)
-    : shared.platform() if os.geteuid() !=
-        0 : raise RuntimeError("Android repair requires a guest administrator") data = load(source);receipt=system_receipt()
+
+def repair_runtime(source):
+    shared.platform()
+    if os.geteuid()!=0: raise RuntimeError("Android repair requires a guest administrator")
+    data=load(source);receipt=system_receipt()
     if not receipt or receipt.get("configurationSha256")!=hashlib.sha256((source/"config/android-runtime.json").read_bytes()).hexdigest(): raise RuntimeError("Run Android setup before runtime repair")
     version=shared.run("dpkg-query","-W","-f=${Version}","waydroid",capture_output=True,text=True,timeout=15).stdout.strip()
     if version.split("-",1)[0]!=data["runtimeVersion"]: raise RuntimeError("Android runtime version differs from the tested repair")
     require_idle_runtime(True)
     checksum=repair_selector_helper()
-#The existing daemon has already exhausted descriptors; reload only while idle.
+    # The existing daemon has already exhausted descriptors; reload only while idle.
     require_idle_runtime(True)
     shared.run("systemctl","restart","waydroid-container.service",timeout=60)
     sys.path.insert(0,"/usr/lib/waydroid")
@@ -175,7 +176,7 @@ def system(source, software_rendering=False):
         shared.atomic(Path("/usr/share/isolde/android/smarttube.apk"), apk.read_bytes(), 0o644)
     if not initialized:
         shared.run("waydroid", "--details-to-stdout", "init", "-s", data["systemType"], timeout=1800)
-#Never force reinitialize an existing runtime or delete its userdata.
+    # Never force reinitialize an existing runtime or delete its userdata.
     if software_rendering:
         configure_software_rendering(cfg_path)
     if initialized: require_idle_runtime(True)
@@ -199,20 +200,17 @@ def refresh_store_metadata(source):
     helper=source/'fdroid-store.py'
     if not helper.is_file():helper=source/'tools/fdroid-store.py'
     spec=importlib.util.spec_from_file_location('android_store_metadata',helper)
-    store=importlib.util.module_from_spec(spec);
-spec.loader.exec_module(store) images = store.image_identity() destination = Path('/var/lib/isolde');
-destination.mkdir(mode = 0o755, exist_ok = True) if destination.resolve() != destination
-    or destination.stat().st_uid != 0
-    : raise RuntimeError('Untrusted Android metadata storage')
-#Older provisioners inherited the administrator's group-writable umask.
-#Seal only this verified root - owned application directory, never its parent.
-          destination.chmod(0o755) root = Path(tempfile.mkdtemp(prefix = 'android-metadata-',
-                                                                dir = destination)) system = root / 'system';
-vendor = root / 'vendor';
-system.mkdir();
-vendor.mkdir();
-mounted = [] try:
+    store=importlib.util.module_from_spec(spec);spec.loader.exec_module(store)
+    images=store.image_identity()
+    destination=Path('/var/lib/isolde');destination.mkdir(mode=0o755,exist_ok=True)
+    if destination.resolve()!=destination or destination.stat().st_uid!=0:raise RuntimeError('Untrusted Android metadata storage')
+    # Older provisioners inherited the administrator's group-writable umask.
+    # Seal only this verified root-owned application directory, never its parent.
+    destination.chmod(0o755)
+    root=Path(tempfile.mkdtemp(prefix='android-metadata-',dir=destination))
+    system=root/'system';vendor=root/'vendor';system.mkdir();vendor.mkdir();mounted=[]
     try:
+        try:
             for name,path in (('system.img',system),('vendor.img',vendor)):
                 shared.run('mount','-t','ext4','-o','loop,ro,noload',str(Path('/var/lib/waydroid/images')/name),str(path),timeout=30)
                 mounted.append(path)
@@ -224,66 +222,61 @@ mounted = [] try:
                 shared.run('umount',str(path),timeout=30)
                 mounted.remove(path)
     finally:
-#Never recursively clean a directory after an unmount failure.
+        # Never recursively clean a directory after an unmount failure.
         if not mounted:
-            system.rmdir();
-vendor.rmdir();
-root.rmdir() return True
+            system.rmdir();vendor.rmdir();root.rmdir()
+    return True
 
-    def system_receipt()
-    : receipt = Path("/var/lib/isolde/android-install.json") if not receipt.is_file()
-    : return None if receipt.is_symlink() or
-                receipt.stat().st_uid != 0 or
-                receipt.stat().st_size > 65536 : raise RuntimeError("Invalid Android installer receipt") return json
-                                                     .loads(receipt.read_text())
 
-                                                         def activate(source)
-    : ""
-      "Publish the verified Android app through the ordinary Isolde catalog."
-      "" if os.geteuid() ==
-                    0 : raise RuntimeError("Android app activation requires the regular Isolde user") receipt =
-                    system_receipt() if receipt is None
-    : return False expected =
-          hashlib.sha256((source / "config/android-runtime.json").read_bytes())
-              .hexdigest() if receipt.get("configurationSha256") != expected
-    : raise RuntimeError("Android system setup does not match this release") load(source) config =
-              Path(os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config"))) / "Isolde" data =
-                  Path(os.environ.get("XDG_DATA_HOME", str(Path.home() / ".local/share"))) / "Isolde" state_path =
-                      config / "installed-apps.json" if state_path.is_symlink() or
-                      (state_path.exists() and state_path.stat().st_size > 1024 * 1024)
-    : raise ValueError("Invalid installed app state; refusing overwrite") state =
-                          json.loads(state_path.read_text()) if state_path.exists() else {
-    "installed" : [], "packageStates" : {}
-}
-if not isinstance (state.get("installed"), list)
-or not isinstance(state.get("packageStates", {}), dict)
-    : raise ValueError("Invalid installed app state; refusing overwrite") manifest_path =
-    source / "config/packages/smarttube/manifest.json" manifest =
-        json.loads(manifest_path.read_text()) if manifest.get("packageId") != "smarttube" or
-        manifest.get("app", {}).get("type") !=
-            "android" : raise ValueError("Invalid bundled SmartTube manifest") shared
-                            .atomic(data / "packages/smarttube" / manifest["version"] / "manifest.json",
-                                    manifest_path.read_bytes()) if "smarttube" not in state["installed"]
-    : state["installed"]
-                            .append("smarttube") state.setdefault("packageStates", {})
-                            .setdefault("smarttube", "ready")
-                                shared.atomic(state_path, json.dumps(state, indent = 2).encode()) return True
+def system_receipt():
+    receipt = Path("/var/lib/isolde/android-install.json")
+    if not receipt.is_file(): return None
+    if receipt.is_symlink() or receipt.stat().st_uid != 0 or receipt.stat().st_size > 65536:
+        raise RuntimeError("Invalid Android installer receipt")
+    return json.loads(receipt.read_text())
 
-      if __name__ ==
-            "__main__"
-    : parser = argparse.ArgumentParser(description =
-                                           __doc__) parser.add_argument("--source", type = Path, required = True)
-                   parser.add_argument("--software-rendering", action = "store_true") parser
-                       .add_argument(
-                           "--activate-if-configured",
-                           action = "store_true",
-                           help = "Register SmartTube in All Apps as the regular user, if Android setup exists") parser
-                       .add_argument("--repair-runtime",
-                                     action = "store_true",
-                                     help = "Repair the pinned runtime selector leak and restart only its idle daemon")
-                           parser.add_argument('--refresh-store-metadata', action = 'store_true') args =
-            parser.parse_args() if args.refresh_store_metadata
-    : refresh_store_metadata(args.source.resolve())
-          elif args.repair_runtime : repair_runtime(args.source.resolve()) elif args.activate_if_configured
-    : print(json.dumps({"smartTubeRegistered" : activate(args.source.resolve())})) else
-    : system(args.source.resolve(), args.software_rendering)
+
+def activate(source):
+    """Publish the verified Android app through the ordinary Isolde catalog."""
+    if os.geteuid() == 0: raise RuntimeError("Android app activation requires the regular Isolde user")
+    receipt = system_receipt()
+    if receipt is None: return False
+    expected = hashlib.sha256((source/"config/android-runtime.json").read_bytes()).hexdigest()
+    if receipt.get("configurationSha256") != expected:
+        raise RuntimeError("Android system setup does not match this release")
+    load(source)
+    config = Path(os.environ.get("XDG_CONFIG_HOME", str(Path.home()/".config")))/"Isolde"
+    data = Path(os.environ.get("XDG_DATA_HOME", str(Path.home()/".local/share")))/"Isolde"
+    state_path = config/"installed-apps.json"
+    if state_path.is_symlink() or (state_path.exists() and state_path.stat().st_size > 1024*1024):
+        raise ValueError("Invalid installed app state; refusing overwrite")
+    state = json.loads(state_path.read_text()) if state_path.exists() else {"installed": [], "packageStates": {}}
+    if not isinstance(state.get("installed"), list) or not isinstance(state.get("packageStates", {}), dict):
+        raise ValueError("Invalid installed app state; refusing overwrite")
+    manifest_path = source/"config/packages/smarttube/manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    if manifest.get("packageId") != "smarttube" or manifest.get("app", {}).get("type") != "android":
+        raise ValueError("Invalid bundled SmartTube manifest")
+    shared.atomic(data/"packages/smarttube"/manifest["version"]/"manifest.json", manifest_path.read_bytes())
+    if "smarttube" not in state["installed"]: state["installed"].append("smarttube")
+    state.setdefault("packageStates", {}).setdefault("smarttube", "ready")
+    shared.atomic(state_path, json.dumps(state, indent=2).encode())
+    return True
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--source", type=Path, required=True)
+    parser.add_argument("--software-rendering", action="store_true")
+    parser.add_argument("--activate-if-configured", action="store_true", help="Register SmartTube in All Apps as the regular user, if Android setup exists")
+    parser.add_argument("--repair-runtime",action="store_true",help="Repair the pinned runtime selector leak and restart only its idle daemon")
+    parser.add_argument('--refresh-store-metadata',action='store_true')
+    args = parser.parse_args()
+    if args.refresh_store_metadata:
+        refresh_store_metadata(args.source.resolve())
+    elif args.repair_runtime:
+        repair_runtime(args.source.resolve())
+    elif args.activate_if_configured:
+        print(json.dumps({"smartTubeRegistered": activate(args.source.resolve())}))
+    else:
+        system(args.source.resolve(), args.software_rendering)

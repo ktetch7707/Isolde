@@ -16,44 +16,49 @@ Rectangle {
     readonly property var choice: entries[selected] || ({})
     readonly property var operations: ["Apply", "Edit", "Duplicate", "Delete"]
     color: "#101014"; visible: open
-    function begin() { selected = 0; operation = 0; confirming = false; message = ""; open = true }
+    // Clear transient choices whenever Settings opens the picker.
+    function begin() { selected = 0; operation = 0; confirming = false; namingVisible = false; message = ""; open = true }
+    // Route the add row before running commands that require an existing skin.
     function execute() {
         message = ""
+        if (selected === entries.length) { open = false; addSkin(); return }
         if (operation === 0) {
-            if (layoutModel.applySkin(choice.id)) { message = "Skin applied."; open = false; emit closed() }
+            if (layoutModel.applySkin(choice.id)) { message = "Skin applied."; open = false; closed() }
             else { message = layoutModel.errorString; return }
         } else if (operation === 1) {
-            emit editSkin(choice.id); open = false; emit closed()
+            open = false; editSkin(choice.id)
         } else if (operation === 2) {
-            naming = "duplicate"; namingVisible = true
+            keyboard.value = choice.name + " copy"; keyboard.selectedIndex = 0; namingVisible = true
         } else if (operation === 3) {
             if (choice.builtIn) { message = "Built-in skins cannot be deleted."; return }
             confirming = true
         }
     }
-    property string naming: ""
     property bool namingVisible: false
+    // Keep the keyboard available on failure so the name can be corrected.
     function confirmDuplicate(text) {
         if (!text.trim()) { message = "Give the skin a name."; return }
         const id = layoutModel.saveSkin(text.trim())
-        if (id) { message = "Skin saved as \"" + text.trim() + "\"."; namingVisible = false; naming = "" }
+        if (id) { message = "Skin saved as \"" + text.trim() + "\"."; namingVisible = false }
         else { message = layoutModel.errorString; return }
     }
+    // Delete only after explicit confirmation and keep errors visible in the picker.
     function confirmDelete() {
         const ok = layoutModel.deleteSkin(choice.id)
         confirming = false
         selected = Math.min(selected, Math.max(0, entries.length - 1))
         message = ok ? "Skin deleted." : layoutModel.errorString
-        if (ok) emit closed()
+        if (ok) { open = false; closed() }
     }
+    // Delegate to the active overlay so remote input cannot change the underlying selection.
     function handleCommand(command) {
-        if (namingVisible) { return }
+        if (namingVisible) { keyboard.handleCommand(command); return }
         if (confirming) {
             if (command === inputManager.back) confirming = false
             else if (command === inputManager.confirm) confirmDelete()
             return
         }
-        if (command === inputManager.back) { open = false; emit closed(); return }
+        if (command === inputManager.back) { open = false; closed(); return }
         else if (command === inputManager.navigateUp) selected = Math.max(0, selected - 1)
         else if (command === inputManager.navigateDown) {
             const last = entries.length > 0 ? entries.length : 0
@@ -100,9 +105,9 @@ Rectangle {
             }
         }
         Rectangle {
-            width: parent.width; height: 64; radius: 10; color: "#25242C"; border.width: 1; border.color: "#39353D"
+            width: parent.width; height: 64; radius: 10; color: "#25242C"; border.width: root.selected === root.entries.length ? 2 : 1; border.color: root.selected === root.entries.length ? "#D19AB1" : "#39353D"
             Text { anchors.centerIn: parent; text: "+ Add new skin"; color: "#F5F1F3"; font.pixelSize: 20 }
-            MouseArea { anchors.fill: parent; onClicked: { root.addSkin(); root.open = false; root.emit root.closed() } }
+            MouseArea { anchors.fill: parent; onClicked: { root.selected = root.entries.length; root.execute() } }
         }
         Text { text: root.message || "↑ ↓ choose a skin · ← → choose an action · OK continues · Back closes"; width: parent.width; wrapMode: Text.Wrap; color: "#E3ACC3"; font.pixelSize: 17 }
         Rectangle {
@@ -125,11 +130,18 @@ Rectangle {
                 Text { text: "Name the duplicate"; color: "#F5F1F3"; font.pixelSize: 28 }
                 Text { text: keyboard.value; color: "#BD8198"; font.pixelSize: 24 }
                 Row { spacing: 20
-                    Rectangle { width: 240; height: 56; radius: 10; color: "#06B6D4"; Text { anchors.centerIn: parent; text: "Save"; color: "#101014"; font.pixelSize: 20 } MouseArea { anchors.fill: parent; onClicked: { root.confirmDuplicate(keyboard.value); root.namingVisible = false } } }
+                    Rectangle { width: 240; height: 56; radius: 10; color: "#06B6D4"; Text { anchors.centerIn: parent; text: "Save"; color: "#101014"; font.pixelSize: 20 } MouseArea { anchors.fill: parent; onClicked: root.confirmDuplicate(keyboard.value) } }
                     Rectangle { width: 240; height: 56; radius: 10; color: "#25242C"; Text { anchors.centerIn: parent; text: "Cancel"; color: "white"; font.pixelSize: 20 } MouseArea { anchors.fill: parent; onClicked: root.namingVisible = false } }
                 }
             }
         }
     }
-    OnScreenKeyboard { id: keyboard; anchors.fill: parent; anchors.margins: 50; onAccepted: text => { if (root.namingVisible) root.confirmDuplicate(text); root.namingVisible = false }; onCanceled: root.namingVisible = false }
+    OnScreenKeyboard {
+        id: keyboard
+        anchors.fill: parent
+        anchors.margins: 50
+        visible: root.namingVisible
+        onAccepted: text => root.confirmDuplicate(text)
+        onCanceled: root.namingVisible = false
+    }
 }

@@ -1,12 +1,16 @@
-""
-    "Read-only acceptance against an explicit test-profile Kodi socket directory."
-    "" import json import os import socket import sys
+"""Read-only acceptance against an explicit test-profile Kodi socket directory."""
+import json
+import os
+import socket
+import sys
 
-        def
-        query(directory, field = None, operator= None, value = "")
-    : params = {"properties" : [ "title", "resume" ], "limits" : {"start" : 0, "end" : 50}} if field
-    : params["filter"] = {"field" : field, "operator" : operator, "value" : value} fd =
-          os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW) try : with socket.socket(socket.AF_UNIX) as client:
+def query(directory, field=None, operator=None, value=""):
+    params = {"properties": ["title", "resume"], "limits": {"start": 0, "end": 50}}
+    if field:
+        params["filter"] = {"field": field, "operator": operator, "value": value}
+    fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        with socket.socket(socket.AF_UNIX) as client:
             client.settimeout(5)
             client.connect(f"/proc/self/fd/{fd}/rpc.sock")
             client.sendall((json.dumps({"jsonrpc": "2.0", "id": 1, "method": "VideoLibrary.GetMovies", "params": params}) + "\n").encode())

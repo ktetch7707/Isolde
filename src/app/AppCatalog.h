@@ -40,6 +40,11 @@ class AppCatalog final : public QObject
 
   public:
     Q_PROPERTY(QString androidContainment READ androidContainment NOTIFY entriesChanged)
+    Q_PROPERTY(QVariantList browserApps READ browserApps NOTIFY entriesChanged)
+    Q_PROPERTY(QString defaultBrowser READ defaultBrowser NOTIFY entriesChanged)
+    QVariantList browserApps() const;
+    QString defaultBrowser() const;
+    Q_INVOKABLE bool setDefaultBrowser(const QString& id);
     QString
     androidContainment() const
     {
@@ -368,7 +373,7 @@ class AppCatalog final : public QObject
     validBeginDownloadArgs() const;
     bool
     validateArtifactUrl(const QUrl& artifactUrl) const;
-    bool
+    void
     setupDownloadState(const QVariantMap& result, const QString& storeId, bool update);
     bool
     validateDownloadResult(const QVariantMap& result);
@@ -388,6 +393,7 @@ class AppCatalog final : public QObject
     QHash<QString, QString> m_failureReasons;
     QString m_statePath;
     QString m_androidContainment;
+    QString m_defaultBrowser;
     QString m_installRoot;
     QString m_errorString;
     QString m_legacyInstallRoot;

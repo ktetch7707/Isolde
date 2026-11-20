@@ -44,6 +44,7 @@ Item {
     signal previewAmbientRequested()
     signal pageRequested(string id)
     signal storeRequested()
+    signal browserRequested(string appId)
 
     function revealCategoryRow() {
         const row = categoryItems.itemAt(selectedRow)
@@ -203,12 +204,15 @@ Item {
     SkinPicker {
         id: skinPicker
         anchors.fill: parent
-        visible: root.inPage && root.route === "skins"
+        visible: open && root.inPage && root.route === "skins"
         layoutModel: root.layoutModel
         z: 6
-        onClosed: { if (root.route === "skins") root.route = "" }
-        onEditSkin: id => { root.route = "studio"; Qt.callLater(() => homePage.studio.openDesign(id)) }
-        onAddSkin: { root.route = "studio"; Qt.callLater(() => homePage.studio.show()) }
+        onClosed: if (root.route === "skins") root.backToParent()
+        onEditSkin: id => {
+            root.route = "studio"
+            Qt.callLater(() => homePage.previewDesign(id))
+        }
+        onAddSkin: root.route = "studio"
     }
 
     Row {
@@ -296,7 +300,7 @@ Item {
                 }
                 NetworkSettingsView {id:networkPage;anchors.fill:parent;appearance:root.appearance;visible:root.inPage && root.route==="network"}
                 VpnSettingsView {id:vpnPage;anchors.fill:parent;appearance:root.appearance;visible:root.inPage && root.route==="vpn"}
-                StoreSettingsView {id:storePage;anchors.fill:parent;appearance:root.appearance;visible:root.inPage && root.route==="store-preferences"}
+                StoreSettingsView {id:storePage;anchors.fill:parent;appearance:root.appearance;visible:root.inPage && root.route==="store-preferences";onBrowserRequested: appId => root.browserRequested(appId)}
                 InterfaceSoundSettingsView {id:interfaceSoundPage;anchors.fill:parent;appearance:root.appearance;visible:root.inPage && root.route==="interface-sounds"}
                 KodiSettingsView {id:mediaPage;anchors.fill:parent;appearance:root.appearance;visible:root.inPage && root.route==="media"}
                 SourceSettingsView {id:sourcePage;anchors.fill:parent;appearance:root.appearance;visible:root.inPage && root.route==="sources"}

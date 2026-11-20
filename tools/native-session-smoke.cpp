@@ -55,7 +55,10 @@ main(int argc, char** argv)
         child.setProcessEnvironment(plan.environment);
         child.start(plan.program, launch);
         if (!child.waitForStarted(5000))
+        {
+            qCritical().noquote() << "Could not start the Chrome fixture:" << child.errorString();
             return 2;
+        }
         bool stopping = false, expectReturn = false;
         QByteArray input;
         QSocketNotifier reader(STDIN_FILENO, QSocketNotifier::Read);
@@ -90,6 +93,9 @@ main(int argc, char** argv)
                          &app,
                          [&](int code, QProcess::ExitStatus status)
                          {
+                             if (!stopping && !expectReturn)
+                                 qCritical() << "Chrome fixture exited before a return was requested:"
+                                             << code << status;
                              app.exit((stopping || expectReturn) && status == QProcess::NormalExit && code == 0 ? 0
                                                                                                                 : 1);
                          });

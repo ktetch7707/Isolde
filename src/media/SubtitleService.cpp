@@ -1076,7 +1076,8 @@ SubtitleService::importOnlineSubtitle(const QString& title,
     Job job;
     job.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
     job.mode = QStringLiteral("download");
-    job.source = QStringLiteral("OpenSubtitles.com file %1 · %2").arg(repositoryFileId).arg(language.trimmed().toLower());
+    // Keep the requested title in the source label. Language has its own metadata fields.
+    job.source = QStringLiteral("OpenSubtitles.com file %1 · %2").arg(repositoryFileId).arg(title.trimmed());
     job.sourceLanguage = language.trimmed().toLower();
     job.targetLanguage = language.trimmed().toLower();
     job.output = output;

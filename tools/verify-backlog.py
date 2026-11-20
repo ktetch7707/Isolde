@@ -1,14 +1,18 @@
-""
-    "Validate first-product backlog bookkeeping without a build or VM."
-    "" from pathlib import Path import argparse import json import re from fractions import Fraction
+"""Validate first-product backlog bookkeeping without a build or VM."""
+from pathlib import Path
+import argparse
+import json
+import re
+from fractions import Fraction
 
-        ROOT = Path(__file__).resolve().parents[1] parser =
-            argparse.ArgumentParser(description = __doc__) parser.add_argument(
-                '--evidence', action = 'store_true', help = 'Also inspect retained local VM checkpoint reports') args =
-                parser.parse_args() text = (ROOT / 'docs/agent-backlog.md').read_text(encoding = 'utf-8') active =
-                    text.split('## Hardware qualification',
-                               1)[0] excluded = {'T13', 'T31'} all_tasks = {'T01', 'T03', 'T04', 'T05'} | {f'T{i:02}' for i in range(9, 32)
-}
+ROOT = Path(__file__).resolve().parents[1]
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--evidence', action='store_true', help='Also inspect retained local VM checkpoint reports')
+args = parser.parse_args()
+text = (ROOT / 'docs/agent-backlog.md').read_text(encoding='utf-8')
+active = text.split('## Hardware qualification', 1)[0]
+excluded = {'T13', 'T31'}
+all_tasks = {'T01', 'T03', 'T04', 'T05'} | {f'T{i:02}' for i in range(9, 32)}
 expected = all_tasks - excluded
 parts = re.split(r'(?=^## T\d+ )', active, flags=re.M)
 tasks = {re.match(r'## (T\d+) ', p).group(1): p for p in parts if re.match(r'## (T\d+) ', p)}
@@ -69,10 +73,7 @@ for task, part in tasks.items():
     expanded = set()
     for m in re.finditer(r'T(\d+)(?:-T?(\d+))?', raw):
         expanded.update(f'T{i:02}' for i in range(int(m[1]), int(m[2] or m[1])+1))
-    deps[task] = all_tasks-{
-    task
-}
-if task == 'T31' else expanded
+    deps[task] = all_tasks-{task} if task == 'T31' else expanded
     assert deps[task] <= all_tasks and task not in deps[task], (task, deps[task])
 def visit(task, path=()):
     assert task not in path, ('Dependency cycle', path+(task,))

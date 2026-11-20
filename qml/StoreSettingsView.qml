@@ -7,26 +7,48 @@ Item {
     property var appearance:({})
     property var catalog:appCatalog
     property int selectedIndex:0
+    signal browserRequested(string appId)
+    readonly property var browserChoices: [{id:"", name:qsTr("None")}].concat(catalog.browserApps || [])
+    readonly property int browserIndex: Math.max(0, browserChoices.findIndex(choice => choice.id === catalog.defaultBrowser))
     readonly property color ink:shell.text
     readonly property color surface:shell.surface
     readonly property color focusColor:shell.focus
     readonly property real textScale:shell.textScale
+    onSelectedIndexChanged: {
+        const row = preferenceRows.itemAt(selectedIndex)
+        if (row && row.y < preferences.contentY)
+            preferences.contentY = row.y
+        else if (row && row.y + row.height > preferences.contentY + preferences.height)
+            preferences.contentY = row.y + row.height - preferences.height
+    }
+    // Keep the browser chooser and launcher reachable through the same remote list.
     function handleCommand(command) {
         if(command===inputManager.navigateUp)selectedIndex=Math.max(0,selectedIndex-1)
-        else if(command===inputManager.navigateDown)selectedIndex=Math.min(2,selectedIndex+1)
+        else if(command===inputManager.navigateDown)selectedIndex=Math.min(4,selectedIndex+1)
         else if(command===inputManager.confirm){
             if(selectedIndex===0)catalog.setOnlineStoreSearch(!catalog.onlineStoreSearch)
             else if(selectedIndex===1 && catalog.onlineStoreSearch)catalog.searchStore("")
             else if(selectedIndex===2)catalog.setAndroidContainment(catalog.androidContainment==="fullscreen"?"windowed":"fullscreen")
+            else if(selectedIndex===3 && browserChoices.length>1)
+                catalog.setDefaultBrowser(browserChoices[(browserIndex+1)%browserChoices.length].id)
+            else if(selectedIndex===4 && catalog.defaultBrowser)
+                browserRequested(catalog.defaultBrowser)
         }
     }
-    Column {
-        anchors.fill:parent;spacing:24*shell.gapScale
+    Flickable {
+        id: preferences
+        anchors.fill:parent
+        clip:true
+        contentHeight: rows.implicitHeight
+        Column {
+        id: rows
+        width:preferences.width;spacing:24*shell.gapScale
         Text {font.family:shell.fontFamily;textFormat:Text.PlainText;width:parent.width;text:qsTr("Store preferences");font.pixelSize:30*root.textScale;color:root.ink;font.weight:Font.DemiBold}
         Text {font.family:shell.fontFamily;textFormat:Text.PlainText;width:parent.width;text:qsTr("Account-free Android apps from verified repositories. Chromium apps use websites you choose.");wrapMode:Text.WordWrap;font.pixelSize:19*root.textScale;color:root.ink}
         Text {font.family:shell.fontFamily;textFormat:Text.PlainText;width:parent.width;text:root.catalog.storeSourceName;wrapMode:Text.WordWrap;font.pixelSize:18*root.textScale;color:shell.muted}
         Repeater {
-            model:[qsTr("Online search: ")+(root.catalog.onlineStoreSearch?qsTr("On"):qsTr("Off")),qsTr("Refresh online catalog"),qsTr("Android view: ")+(root.catalog.androidContainment==="windowed"?qsTr("Windowed"):qsTr("Fullscreen"))]
+            id: preferenceRows
+            model:[qsTr("Online search: ")+(root.catalog.onlineStoreSearch?qsTr("On"):qsTr("Off")),qsTr("Refresh online catalog"),qsTr("Android view: ")+(root.catalog.androidContainment==="windowed"?qsTr("Windowed"):qsTr("Fullscreen")),qsTr("Browser app: ")+root.browserChoices[root.browserIndex].name,qsTr("Open browser")]
             delegate:Rectangle {
                 required property int index;required property string modelData
                 objectName:"storePreferenceRow-"+index
@@ -37,5 +59,6 @@ Item {
             }
         }
         Text {font.family:shell.fontFamily;textFormat:Text.PlainText;width:parent.width;text:root.catalog.errorString || qsTr("Online search starts only when you turn it on. Your installed apps remain available with it off.");wrapMode:Text.WordWrap;font.pixelSize:18*root.textScale;color:root.ink}
+        }
     }
 }

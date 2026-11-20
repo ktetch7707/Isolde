@@ -406,18 +406,23 @@ HomeLayout::appendItem(const QJsonValue& value, QVariantList& result, const QSet
     const auto object = value.toObject();
     if (hidden.contains(object["id"].toString()))
         return false;
-    auto item = object.toVariantMap();
+    // Validate stored fields before attaching renderer-only metadata.
+    auto item = ComponentSchema::component(object.toVariantMap(), true);
+    if (item.isEmpty())
+        return false;
     item["presentation"] = componentPresentation(item.value("presentation").toMap());
     const auto actionList = normalizedActionForItem(object);
     if (!actionList.isEmpty())
     {
         item.insert("actionType", actionList.first().toMap().value(QStringLiteral("type")).toString());
+        // Keep the single-action view for older callers while dispatch uses the full list.
+        item.insert("action", actionList.first());
         item.insert("actions", actionList);
     }
     setItemKindFields(item);
     setItemLogo(item, actionList);
     setItemUnavailableReason(item, object, actionList);
-    result.append(ComponentSchema::component(item, true));
+    result.append(item);
     return true;
 }
 
@@ -1331,7 +1336,7 @@ HomeLayout::loadDocument(const QByteArray& data, bool userDocument)
                                         "categories", "pages", "homePageId", "studioAppearance"};
     const auto entriesKey = version == 1 ? QStringLiteral("items") : QStringLiteral("components");
     for (auto it = object.constBegin(); it != object.constEnd(); ++it)
-        if (!baseKeys.contains(it.key()) && it.key() != entriesKey)
+        if (!baseKeys.contains(it.key()) && it.key() != entriesKey && !(version == 1 && it.key() == "grid"))
         {
             setError(tr("Home layout contains unknown top-level keys."));
             return false;
@@ -1356,6 +1361,19 @@ HomeLayout::loadDocument(const QByteArray& data, bool userDocument)
     if (!validateHomePage(object, homePage, pageIds))
         return false;
     QVariantMap composition = object.value("composition").toObject().toVariantMap();
+    // Legacy documents carried grid dimensions at the root. Normalize them only in memory.
+    if (version == 1 && object.contains("grid"))
+    {
+        const auto grid = object.value("grid").toObject().toVariantMap();
+        if (!object.value("grid").isObject() || !ComponentSchema::validGrid(grid) || composition.contains("grid"))
+        {
+            setError(tr("Invalid or ambiguous legacy Home grid."));
+            return false;
+        }
+        if (composition.isEmpty())
+            composition = {{"schemaVersion", 1}, {"enabled", true}};
+        composition.insert("grid", grid);
+    }
     if (!validateComposition(object, composition))
         return false;
     const QJsonObject theme = object.value("theme").toObject();
@@ -1741,7 +1759,8 @@ HomeLayout::validateComponentItem(const QJsonObject& entry, int version, const Q
         !isValidComponentKind(kind) || !isValidComponentAction(kind, actionType, item) ||
         !isValidComponentCategoryRef(item, categoryIds) || !isValidComponentOpacity(item))
     {
-        componentError = tr("Home layout contains an invalid or duplicate item.");
+        if (componentError.isEmpty())
+            componentError = tr("Home layout contains an invalid or duplicate item.");
         return false;
     }
     return true;

@@ -19,6 +19,11 @@ Item {
     signal closed()
     signal pageRequested(string id)
     function start() { if (ready && visible && !editing) {studio.show(resumeDesignOrigin?designPageId:initialPageId, resumeDesignOrigin?designComponentId:initialComponentId);resumeDesignOrigin=false} }
+    // Reuse the Studio draft workflow so choosing a saved design never applies it immediately.
+    function previewDesign(id) {
+        start()
+        if (studio.open) studio.openDesign(id)
+    }
     function handleCommand(command) {
         // Home has the same cancel/dirty-draft contract as Back in the editor.
         if (command === inputManager.home) command = inputManager.back
@@ -52,7 +57,7 @@ Item {
         anchors.fill: parent
         layoutModel: root.layoutModel
         draftApplication: true
-        onPreviewRequested:id=>{open=false;root.start();studio.openDesign(id)}
+        onPreviewRequested: id => { open = false; root.previewDesign(id) }
         z: 101
         onOpenChanged: if (!open && root.visible) Qt.callLater(root.start)
     }
