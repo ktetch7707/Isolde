@@ -56,8 +56,8 @@ Before VM actions, read `docs/vm-oracle.md`. Use `tools/vm-test.ps1` for Test/Vi
     - No new dependencies, frameworks, or side services without task scope. Reuse `HomeLayout/ComponentSchema/HomePages/HomeSkins/PageData/ActionDispatcher`, `KodiMedia/KodiShelves/KodiService`, `InputManager`, `SessionManager`.
 12. Committing:
     - One logical change per commit, prefixed with the task ID: `T05: description`.
-    - Branch: always commit to `agent-backlog-progress` (not `main`).
-    - After committing, push to `origin agent-backlog-progress` and verify: `git log -1 --oneline && git status`.
+    - Branch: commit on the current or user-requested branch, except `main`.
+    - After committing, push that branch to `origin` and verify with `git log -1 --oneline` and `git status`.
     - Do not commit to `main`; it is the archived baseline.
     - Never include build artifacts, IDE files, or binary artwork in commits.
     - Keep commit messages short but descriptive; reference docs/task if relevant.
