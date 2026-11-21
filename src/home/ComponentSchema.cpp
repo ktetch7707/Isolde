@@ -583,6 +583,10 @@ ComponentSchema::validPresentationField(const QString& key, const QVariant& v, c
         {"guideLabels", [](const QVariantMap& m, bool s, bool c) { Q_UNUSED(s); Q_UNUSED(c); return validPresentationGuideBool(m); }},
         {"guideSourceBadges", [](const QVariantMap& m, bool s, bool c) { Q_UNUSED(s); Q_UNUSED(c); return validPresentationGuideBool(m); }},
         {"imageCrop", [](const QVariantMap& m, bool s, bool c) { Q_UNUSED(s); Q_UNUSED(c); return validPresentationImageCrop(m); }},
+        {"panelPageId", [](const QVariantMap& m, bool s, bool c) {
+            const auto pageId = m.value("panelPageId");
+            return !s && c && pageId.metaType().id() == QMetaType::QString && safeId(pageId.toString());
+        }},
         {"columns", [](const QVariantMap& m, bool s, bool c) { Q_UNUSED(c); return validPresentationNumericField(m, "columns", s); }},
         {"span", [](const QVariantMap& m, bool s, bool c) { Q_UNUSED(c); return validPresentationNumericField(m, "span", s); }},
         {"height", [](const QVariantMap& m, bool s, bool c) { Q_UNUSED(c); return validPresentationNumericField(m, "height", s); }},
@@ -2359,6 +2363,16 @@ ComponentSchema::action(const QVariantMap& input, QString* error)
     handlers.insert("play-movie", [](const QVariantMap& in, QString* err) { return actionCollection(in, "play-movie", err); });
     handlers.insert("open-show", [](const QVariantMap& in, QString* err) { return actionCollection(in, "open-show", err); });
     handlers.insert("open-page", [](const QVariantMap& in, QString* err) { return actionOpenPage(in, err); });
+    handlers.insert("show-page-in-panel", [](const QVariantMap& in, QString* err) {
+        // Only named pages and component IDs can be addressed by a local panel action.
+        auto result = actionOpenPage(in, err);
+        if (result.isEmpty()) return result;
+        const auto panel = in.value("panelId").toString();
+        if (!safeId(panel)) return reject(err, "Choose a valid page panel.");
+        result["type"] = "show-page-in-panel";
+        result["panelId"] = panel;
+        return result;
+    });
     handlers.insert("app-drawer", [](const QVariantMap& in, QString* err) { return actionShellRoute(in, "app-drawer", err); });
     handlers.insert("open-apps", [](const QVariantMap& in, QString* err) { return actionShellRoute(in, "open-apps", err); });
     handlers.insert("open-search", [](const QVariantMap& in, QString* err) { return actionShellRoute(in, "open-search", err); });
@@ -2561,6 +2575,12 @@ ComponentSchema::actions(const QVariantList& input, QString* error)
         const auto normalized = action(entry.toMap(), error);
         if (normalized.isEmpty())
             return {};
+        if (input.size() != 1 && normalized.value("type") == "show-page-in-panel")
+        {
+            if (error)
+                *error = "A page panel switch must be the only action on a component.";
+            return {};
+        }
         result.append(normalized);
     }
     return result;
@@ -2782,14 +2802,14 @@ ComponentSchema::editorActionAudioOutputSelect(const QVariantMap& input, QString
 }
 
 QVariantMap
-ComponentSchema::component(const QVariantMap& input, bool legacy, QString* error)
+ComponentSchema::component(const QVariantMap& input, bool deriveSource, QString* error)
 {
     if (error)
         error->clear();
     if (!versionOne(input) || !safeId(input.value("id").toString()))
         return reject(error, "Invalid component identity or version.");
     QVariantMap result = input;
-    const auto type = componentResolveLegacyType(input, legacy);
+    const auto type = input.value("componentType").toString();
     if (!componentValidateAll(input, type, error))
         return {};
     result["schemaVersion"] = 1;
@@ -2833,7 +2853,7 @@ ComponentSchema::component(const QVariantMap& input, bool legacy, QString* error
     }
     if (source.isEmpty())
         return {};
-    if (!legacy && input.value("source").toMap() != source)
+    if (!deriveSource && input.value("source").toMap() != source)
         return reject(error, "Source binding does not match its action.");
     // Reject unknown component keys; only documented fields may appear.
     static const QSet<QString> validComponentKeys{"schemaVersion", "id", "kind",
@@ -2912,20 +2932,6 @@ ComponentSchema::componentValidatePresentationSettings(const QVariantMap& input,
            componentValidateCustomLogo(input, error);
 }
 
-QString
-ComponentSchema::componentResolveLegacyType(const QVariantMap& input, bool legacy)
-{
-    const auto kind = input.value("kind").toString();
-    auto type = input.value("componentType").toString();
-    if (type.isEmpty() && legacy)
-        type = kind == "widget"
-                   ? (QStringList{"clock", "text", "container"}.contains(input.value("widgetType").toString())
-                          ? input.value("widgetType").toString()
-                          : "clock")
-                   : "launcher";
-    return type;
-}
-
 bool
 ComponentSchema::componentValidateTypeAndShape(const QVariantMap& input, const QString& type, QString* error)
 {
@@ -2972,7 +2978,7 @@ ComponentSchema::componentValidateFamily(const QVariantMap& input, const QString
 {
     if (input.contains("family") &&
         !((type == "container" &&
-           QStringList{"carousel", "app-bar", "page-menu", "detected-sources", "source-notice"}.contains(
+           QStringList{"carousel", "app-bar", "page-menu", "page-panel", "detected-sources", "source-notice"}.contains(
                input["family"].toString())) ||
           (type == "library" &&
            QStringList{"recently-viewed", "music-library", "tv-guide"}.contains(input["family"].toString()))))
@@ -3881,7 +3887,7 @@ ComponentSchema::hierarchyFitsValidateContainer(const QJsonObject& item,
     const auto kids = children.value(id);
     if (item.contains("appCollection") && !kids.isEmpty())
         return fail("An app collection uses registry membership, not placed children.");
-    if (item.value("family") == "page-menu" && !kids.isEmpty())
+    if (QStringList{"page-menu","page-panel"}.contains(item.value("family").toString()) && !kids.isEmpty())
         return fail("A page menu uses page membership, not placed children.");
     if (QStringList{"detected-sources", "source-notice"}.contains(item.value("family").toString()) &&
         !kids.isEmpty())

@@ -133,18 +133,21 @@ def main():
     evidence = Path(tempfile.mkdtemp(prefix="isolde-components-acceptance-"))
     config = evidence / "config" / "Isolde"
     config.mkdir(parents=True)
-    original = {"schemaVersion": 1, "theme": {"backgroundStart": "#111A32", "backgroundEnd": "#080C18"},
-                "items": [{"id": "personal-source", "kind": "app", "appId": "missing-source", "size": "wide", "opacity": 0.65}]}
+    original = {"schemaVersion": 2, "theme": {"backgroundStart": "#111A32", "backgroundEnd": "#080C18"},
+                "components": [dict(schemaVersion=1, componentType="launcher", id="personal-source", kind="app",
+                                    appId="missing-source", size="wide", opacity=0.65, source=dict(schemaVersion=1))]}
     layout = config / "home-layout.json"
     if args.designs_only:
         original["composition"]={"schemaVersion":1,"enabled":True,"grid":{"columns":4,"rows":3,"mode":"screen"}}
-        original["items"][0].update(name="Design source",placement={"x":0,"y":0,"width":1,"height":1},presentation={"labelColor":"#e89ab0","radius":16})
+        original["components"][0].update(name="Design source",placement={"x":0,"y":0,"width":1,"height":1},presentation={"labelColor":"#e89ab0","radius":16})
     original_bytes = json.dumps(original).encode()
     search_profile=None
     if args.search_only:
         import uuid
         search_profile=str(uuid.uuid4())
-        original["items"]=[dict(id="apps-origin",kind="action",name="All Apps",size="wide",action=dict(type="open-apps"))]
+        original["components"]=[dict(schemaVersion=1,componentType="button",widgetType="button",id="apps-origin",kind="widget",
+            name="All Apps",size="wide",actions=[dict(schemaVersion=1,type="open-apps")],
+            source=dict(schemaVersion=1,provider="shell",kind="button"))]
         original_bytes=json.dumps(original).encode()
         (config/"profiles.json").write_text(json.dumps(dict(active="default",profiles=[dict(id="default",name="Household"),dict(id=search_profile,name="Other")])) )
         other_layout=config/"profiles"/search_profile/"home-layout.json"
@@ -903,7 +906,6 @@ def main():
                 expect(lambda: len(json.loads(layout.read_text()).get("components", [])) == 2,
                        "Studio page menu/direct editing/history/Try interaction/Apply passed")
                 applied = layout.read_bytes()
-                assert Path(str(layout) + ".v1.backup.json").read_bytes() == original_bytes
                 assert all("placement" in item for item in json.loads(applied)["components"])
                 placed = {item["id"]: item["placement"] for item in json.loads(applied)["components"]}
                 assert placed["personal-source"] == {"x": 0, "y": 0, "width": 1, "height": 1}
@@ -990,8 +992,7 @@ def main():
             key("Escape")  # Cancel must preserve the original.
             assert layout.read_bytes() == original_bytes
             key("Return"); key("Return")  # Reopen, bind first compatible app (Movies).
-            expect(lambda: json.loads(layout.read_text())["components"][0]["appId"] == "movies", "Remote source repair and v2 migration passed")
-            assert Path(str(layout) + ".v1.backup.json").read_bytes() == original_bytes
+            expect(lambda: json.loads(layout.read_text())["components"][0]["appId"] == "movies", "Remote source repair passed")
             repaired = json.loads(layout.read_text())["components"][0]
             assert repaired["id"] == "personal-source" and repaired["opacity"] == 0.65 and repaired["size"] == "wide"
             key("Escape"); key("Escape")  # Editor → Settings → Home, no Home button.

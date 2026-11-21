@@ -303,13 +303,15 @@ provider.setSettingString("searchlanguage","en-US")
         managed_art=config/'profiles'/profile/'artwork';managed_art.mkdir(parents=True)
         managed_poster=managed_art/(hashlib.sha256(poster.read_bytes()).hexdigest()+'.png')
         managed_poster.write_bytes(poster.read_bytes())
-        (config/'profiles'/profile/'home-layout.json').write_text(json.dumps(dict(schemaVersion=1,rootPage=dict(name='Home',visible=True,position=0),categories=[dict(id='apps',name='Apps')],items=[dict(kind='app',id='movies',appId='movies',size='standard',categoryId='apps'),dict(kind='app',id='desktop-mode',appId='desktop-mode',size='standard',categoryId='apps')],composition=dict(schemaVersion=1,enabled=False,headerControls=['settings']))))
-    if args.music_transport:
-        # Use the same Home Movies card and library toolbar as the installed journey.
+    if args.movie_art or args.kodi_import or args.music_transport:
+        # Use ordinary launcher components so these journeys exercise the current Home schema.
         layout=config/'profiles'/profile/'home-layout.json'
         layout.parent.mkdir(parents=True)
-        layout.write_text(json.dumps(dict(schemaVersion=1,rootPage=dict(name='Home',visible=True,position=0),
-            categories=[dict(id='apps',name='Apps')],items=[dict(kind='app',id='movies',appId='movies',size='standard',categoryId='apps')],
+        app_ids=['movies','desktop-mode'] if args.movie_art or args.kodi_import else ['movies']
+        components=[dict(schemaVersion=1,componentType='launcher',kind='app',id=app_id,appId=app_id,
+            size='standard',categoryId='apps',source=dict(schemaVersion=1)) for app_id in app_ids]
+        layout.write_text(json.dumps(dict(schemaVersion=2,rootPage=dict(name='Home',visible=True,position=0),
+            categories=[dict(id='apps',name='Apps')],components=components,
             composition=dict(schemaVersion=1,enabled=False,headerControls=['settings']))))
     if args.history:
         import copy
@@ -327,14 +329,17 @@ provider.setSettingString("searchlanguage","en-US")
         history_layout.write_text(json.dumps(document));history_bytes=history_layout.read_bytes()
     if args.guide:
         guide_profile=config/'profiles'/profile;guide_profile.mkdir(parents=True)
-        guide_home={'schemaVersion':1,'categories':[{'id':'apps','name':'Apps'}],'items':[{'kind':'action','id':'guide-entry','name':'TV Guide','symbol':'TV','size':'standard','categoryId':'apps','action':{'schemaVersion':1,'type':'open-guide'}}]}
+        guide_entry=dict(schemaVersion=1,componentType='launcher',kind='action',id='guide-entry',
+            name='TV Guide',symbol='TV',size='standard',categoryId='apps',
+            actions=[dict(schemaVersion=1,type='open-guide')],source=dict(schemaVersion=1,provider='isolde',kind='guide'))
+        guide_home=dict(schemaVersion=2,categories=[dict(id='apps',name='Apps')],components=[guide_entry])
         if args.guide_surfaces:
             defaults=json.loads((Path(__file__).resolve().parents[1]/'config/studio-defaults.json').read_text())
             widget=defaults['componentPresets']['tv-guide']
             widget.update(id='guide-widget',categoryId='apps',placement={'x':0,'y':1,'width':6,'height':4})
             widget['presentation']['libraryLimit']=3
-            guide_home['items'][0]['placement']={'x':0,'y':0,'width':2,'height':1}
-            guide_home['items'].append(widget)
+            guide_entry['placement']={'x':0,'y':0,'width':2,'height':1}
+            guide_home['components'].append(widget)
             grid=dict(defaults['defaultGrid']);grid.update(columns=8,rows=6,mode='screen')
             guide_home['composition']={'schemaVersion':1,'enabled':True,'showClock':False,'grid':grid}
         (guide_profile/'home-layout.json').write_text(json.dumps(guide_home))

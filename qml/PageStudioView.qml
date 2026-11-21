@@ -75,7 +75,6 @@ Item {
     property string collisionStrategy:"shift"
     property string deletionReplacement:""
     property bool deletionRemaps:false
-    property var duplicateBefore:[]
     property var pageFocus:({})
     property var candidate: ({x:0,y:0,width:1,height:1})
     property string pointerBoundaryError:""
@@ -266,6 +265,14 @@ Item {
     readonly property real textScale: (palette.typographyScale || 1)*viewportScale
     readonly property real spacing: (palette.spacing || 20)*viewportScale
     readonly property var pageEntries:draftModel?draftModel.studioPages:[]
+    onPageEntriesChanged: {
+        // Undoing page creation can remove the selected page while its menu is open.
+        if (!open || !pageEntries.length || pageEntries.some(entry => entry.id === pageId)) return
+        const fallback = pageEntries.find(entry => entry.id === "") || pageEntries[0]
+        pageId = fallback.id
+        selectedId = ""
+        if (mode === "pageContext") { mode = "pages"; choice = 0 }
+    }
     readonly property var removalDestinations:pageEntries.filter(p=>p.id!==pageId)
     readonly property string breadcrumb:((pageEntries.find(p=>p.id===pageId)||{}).name || "Page")+(sectionMode?" / "+(scopeOverview?"All sections":selectedSection?selectedSection.name:"Uncategorized"):"")
         +groupBreadcrumb()
@@ -293,7 +300,7 @@ Item {
         else if(entry.action==="recovery")mode="recovery"
         else if(entry.action==="lock"){session.setEditorLocked(!session.editorLocked);mode="canvas"}
         else if(entry.action==="exit"){if(session.dirty)mode="dirty";else close()}
-        else if(entry.action==="new")beginKeyboard("newPage","")
+        else if(entry.action==="new")openPageStarters()
         else if(entry.action==="page"){pageFocus[pageId]=selectedId;pageId=entry.id;selectedId=pageFocus[pageId] || "";mode="pageContext"}
         else if(entry.action==="add")chooseTool(0)
         else if(entry.action==="appearance")openInspector(true)
@@ -569,6 +576,52 @@ Item {
         return origin[axis]/a
     }
     function beginKeyboard(action, value) { keyboardReturnMode=mode; keyboardAction=action; keyboard.value=value || ""; keyboard.selectedIndex=0; mode="keyboard" }
+    // Offer a useful draft name without making the remote user type before placing content.
+    function suggestedName(base, entries) {
+        const used = new Set(entries.map(entry => String(entry.name || "").toLowerCase()))
+        for (let suffix = 1; ; ++suffix) {
+            const ending = suffix === 1 ? "" : " " + suffix
+            const name = base.slice(0, 80 - ending.length) + ending
+            if (!used.has(name.toLowerCase())) return name
+        }
+    }
+    property var pageStarters: []
+    property string pageStarterReturnMode: "canvas"
+    property int pageStarterReturnChoice: 0
+    // Browse the packaged starters without changing the current draft.
+    function openPageStarters() {
+        pageStarters = [{id:"blank",name:qsTr("Blank page"),description:qsTr("Start with an empty page")}]
+            .concat(layoutModel.pageStarterChoices())
+        pageStarterReturnMode = mode
+        pageStarterReturnChoice = choice
+        mode = "pageStarters"
+        choice = 0
+        message = qsTr("Choose a starting layout. You can edit every component before saving.")
+    }
+    // Create or copy once through Studio's undoable command and select the newly added page.
+    function createNamedPage(copy, starter) {
+        const before = new Set(pageEntries.map(entry => entry.id))
+        const currentPage = pageEntries.find(entry => entry.id === pageId)
+        const base = copy && currentPage ? currentPage.name + " copy"
+            : starter && starter.id !== "blank" ? starter.name : qsTr("New page")
+        const name = suggestedName(base, pageEntries)
+        const args = copy ? {id:pageId,name:name} : {name:name,preset:starter.id}
+        if (!command(copy ? "duplicatePage" : "newPage", args)) return
+        const created = pageEntries.find(entry => !before.has(entry.id))
+        if (!created) return
+        pageId = created.id
+        selectedId = ""
+        toolbarFocus = false
+        mode = copy ? "pageContext" : "canvas"
+        choice = 0
+    }
+    // Keep creation and naming independent so a section or tab can be edited immediately.
+    function createNamedStructure(section) {
+        const entries = section ? page.categories || [] : page.composition.navigation || []
+        const name = suggestedName(section ? qsTr("New section") : qsTr("New tab"), entries)
+        if (command(section ? "section" : "navigation", {kind:"add",name:name}))
+            choice = 0
+    }
     function appGalleryPresentation() {
         const packaged = typeof appCatalog !== "undefined" ? appCatalog.galleryPresentation
             : {layout:"grid",columns:5,density:"standard",sort:"name",showArtwork:true,showLabels:true,filterEnabled:true,favoritesEnabled:true,title:"All Apps"}
@@ -653,6 +706,7 @@ Item {
         trialTimer.stop();restoreEditSnapshot(interactionOrigin);interactionOrigin=({});openSaveDialog(true);message="Trial ended. Your changes are still unsaved."
     }
     function interactionAction(action,originId) {
+        if(preview.routePanelAction(action))return
         if(action.type==="open-page" || action.type==="root-page") {
             const target=action.type==="root-page"?"":action.pageId
             if(!pageEntries.some(p=>p.id===target)){message="This draft destination is unavailable.";return}
@@ -747,6 +801,7 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
         if(mode==="arrange")return ["Align left","Center horizontally","Align right","Align top","Center vertically","Align bottom","Distribute horizontally","Distribute vertically"]
         if(mode==="navigationOrder")return scopedItems.map((item,index)=>(index+1)+" · "+componentName(item)+(item.placement?" · row "+(item.placement.y+1)+", column "+(item.placement.x+1):""))
         if(mode==="pages") return pageEntries.map(p=>(p.id===draftModel.homePageId?"⌂ ":"")+p.name).concat(["Add page…","Manage current page…"])
+        if(mode==="pageStarters")return pageStarters.map(starter=>starter.name+" · "+starter.description)
         if(mode==="library")return libraryEntries.map(e=>e.label)
         if(mode==="more")return moreEntries.map(e=>e.label)
         if(mode==="trialDuration")return trialDurations.map(d=>d.label)
@@ -853,8 +908,8 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
             else cancelGesture()
             return
         }
-        if(mode==="navigation"){if(choice===0)beginKeyboard("navAdd","");else{const tab=(page.composition.navigation || [])[choice-1];if(tab)openStructureInspector("navigation",tab.id)}return}
-        if(mode==="sections"){if(choice===0)beginKeyboard("sectionAdd","");else{const section=(page.categories || [])[choice-1];if(section)openStructureInspector("section",section.id)}return}
+        if(mode==="navigation"){if(choice===0)createNamedStructure(false);else{const tab=(page.composition.navigation || [])[choice-1];if(tab)openStructureInspector("navigation",tab.id)}return}
+        if(mode==="sections"){if(choice===0)createNamedStructure(true);else{const section=(page.categories || [])[choice-1];if(section)openStructureInspector("section",section.id)}return}
         if(mode==="structureRemove"){if(choice===1 && command(structureType==="section"?"section":"navigation",{kind:"remove",id:structureId})){mode=structureType==="section"?"sections":"navigation";choice=0}else if(choice===0)mode="inspector";return}
         if(mode==="moviePage" || mode==="showsPage"){const destinations=pageEntries.filter(p=>!!p.id),value=choice===0?null:destinations[choice-1].id;if(command("pagePatch",{scope:"composition",value:{[mode]:value}})){mode="inspector"}return}
         if(mode==="navSections"){
@@ -867,7 +922,7 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
             if(choice===0){mode="canvas";toolbarFocus=false;if(!current && scopedItems.length)selectedId=scopedItems[0].id}
             else if(choice===1){openInspector(true);choice=0}
             else if(choice===2)beginKeyboard("renamePage",(pageEntries.find(p=>p.id===pageId)||{}).name)
-            else if(choice===3){duplicateBefore=pageEntries.map(p=>p.id);beginKeyboard("duplicatePage",(pageEntries.find(p=>p.id===pageId)||{}).name+" copy")}
+            else if(choice===3)createNamedPage(true)
             else if(choice===4){mode="setHome";choice=0;message="Home navigation and Settings colors will follow this page after you save."}
             else if(choice===5 || choice===6)command("reorderPage",{id:pageId,offset:choice===5?-1:1})
             else if(pageId===draftModel.homePageId)message="Set another page as Home before deleting this page."
@@ -957,8 +1012,9 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
         }
         if(mode==="childLayout"){if(choice===6){mode="canvas";return}if(choice===5 && command("childLayout",{id:selectedId,value:childLayoutDraft})){mode="canvas";toolbarFocus=false}return}
         if(mode==="arrange"){if(choice<8)previewArrangement(choice);else finishArrangement(choice===8);return}
+        if(mode==="pageStarters"){const starter=pageStarters[choice];if(starter)createNamedPage(false,starter);return}
         if(mode==="pages") {
-            if(choice===pageEntries.length){beginKeyboard("newPage","");return}
+            if(choice===pageEntries.length){openPageStarters();return}
             if(choice===pageEntries.length+1){mode="pageContext";choice=0;return}
             pageFocus[pageId]=selectedId;pageId=pageEntries[choice].id;selectedId=pageFocus[pageId] || "";mode="canvas";toolbarFocus=false;return
         }
@@ -1088,6 +1144,7 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
         if(mode==="keyboard") {keyboard.handleCommand(c);return}
         if(mode==="preview") {if(c===inputManager.back)endInteraction();else preview.handleCommand(c);return}
         if(c===inputManager.back) {
+            if(mode==="pageStarters"){mode=pageStarterReturnMode;choice=pageStarterReturnChoice;message="";return}
             if(mode==="trialDuration"){mode="apply";choice=2;return}
             if(mode==="defaultsReview"){session.cancelPreview();restoreEditSnapshot(versionOrigin);mode="restoreDefaults";choice=2;return}
             if(mode==="conflictCompare"){session.cancelPreview();restoreEditSnapshot(versionOrigin);mode="applyFailed";choice=1;return}
@@ -1796,6 +1853,7 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
     StudioInspector {
         id:inspector;anchors.fill:parent;z:5;visible:studio.open && studio.mode==="inspector"
         provider:studio.provider;session:studio.session;page:studio.page;pageId:studio.pageId;options:studio.layoutModel?studio.layoutModel.studioOptions:({});appearance:studio.palette
+        guideChannels:typeof guideController !== "undefined" && guideController ? guideController.channels : []
         selectedIds:studio.multiSelection.length>1 && studio.multiSelection.indexOf(studio.selectedId)>=0?studio.multiSelection:studio.selectedId?[studio.selectedId]:[]
         selectionRect:{
             if(inspector.pageMode || inspector.structureType || !studio.current || !studio.current.placement)return null
@@ -1851,19 +1909,9 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
                 }else studio.message=studio.session.errorString
                 return
             }
-            if(studio.keyboardAction==="navAdd" || studio.keyboardAction==="sectionAdd"){
-                const section=studio.keyboardAction==="sectionAdd";if(studio.command(section?"section":"navigation",{kind:"add",name:text})){studio.mode=section?"sections":"navigation";studio.choice=0}return
-            }
             if(studio.keyboardAction.indexOf("studioColor:")===0) {
                 const key=studio.keyboardAction.slice(12),value=Object.assign({},studio.palette,{[key]:text})
                 if(studio.command("studioAppearance",{value:value}))studio.mode="editorAppearance"
-                return
-            }
-            if(studio.keyboardAction==="duplicatePage") {
-                if(studio.command("duplicatePage",{id:studio.pageId,name:text})){
-                    studio.pageId=studio.pageEntries.find(p=>studio.duplicateBefore.indexOf(p.id)<0).id
-                    studio.selectedId="";studio.mode="pageContext";studio.choice=0
-                }
                 return
             }
             if(studio.keyboardAction==="renamePage") {
@@ -1894,11 +1942,6 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
                 studio.candidate=p;preview.revealPlacement(p,studio.scopeId,studio.parentScopeId);studio.mode="geometry";return
             }
             if(studio.keyboardAction==="rename")studio.command("rename",{id:studio.selectedId,name:text})
-            else if(studio.keyboardAction==="newPage"){
-                if(!studio.command("newPage",{name:text}))return
-                studio.pageId=studio.draftModel.pages[studio.draftModel.pages.length-1].id
-                studio.selectedId="";studio.toolbarFocus=false
-            }
             else {
                 let p=Object.assign({},studio.current?studio.current.presentation || {}:{})
                 if(studio.keyboardAction==="text"){p.variant="text";p.subtitle=text}

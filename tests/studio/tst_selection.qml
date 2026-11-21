@@ -358,6 +358,25 @@ Item {
             inspector.handleCommand(inputManager.navigateDown);inspector.handleCommand(inputManager.confirm)
             compare(inspector.current.presentation.libraryView,"playlist");compare(inspector.current.presentation.libraryValue,"Family films.xsp")
             verify(editor.session.undo());compare(JSON.stringify(editor.session.document),before);compare(studioFixture.disk(),diskBaseline)
+            // A named source needs one undo for both its view and its value.
+            const nativeSession=editor.session
+            inspector.session={
+                availableActions:[{name:"Family collection",action:{type:"open-collection",collectionId:"family"}}],
+                execute:(op,args,page)=>nativeSession.execute(op,args,page),
+                document:nativeSession.document,errorString:""
+            }
+            inspector.activateField(source)
+            inspector.handleCommand(inputManager.back)
+            compare(JSON.stringify(nativeSession.document),before)
+            inspector.activateField(source)
+            inspector.selected=inspector.choices.findIndex(choice=>choice.name==="Family collection")
+            verify(inspector.selected>=0)
+            inspector.handleCommand(inputManager.confirm)
+            compare(inspector.current.presentation.libraryView,"collection")
+            compare(inspector.current.presentation.libraryValue,"family")
+            verify(nativeSession.undo())
+            compare(JSON.stringify(nativeSession.document),before)
+            compare(studioFixture.disk(),diskBaseline)
         }
         function test_screensaver_covers_gallery_and_restores_selection() {
             fakeRegistry.apps=[{id:"one",name:"One",type:"desktop"},{id:"two",name:"Two",type:"web"},{id:"three",name:"Three",type:"desktop"}]

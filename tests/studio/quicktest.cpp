@@ -184,6 +184,7 @@ class StudioTestSetup : public QObject
             const auto node = ComponentSchema::component({{"id", QString("cell-%1").arg(i)},
                                                           {"kind", "widget"},
                                                           {"widgetType", "text"},
+                                                          {"componentType", "text"},
                                                           {"name", QString("Item %1").arg(i)},
                                                           {"placement",
                                                            QVariantMap{{"x", arrangement ? i : i % columns},

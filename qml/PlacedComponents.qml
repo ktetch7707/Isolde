@@ -26,8 +26,9 @@ Item {
             readonly property bool apps:!!modelData.item.appCollection
             readonly property bool buttons:modelData.item.family==="carousel" && !surface.host.editMode
             readonly property bool pageMenu:modelData.item.family==="page-menu"
+            readonly property bool pagePanel:modelData.item.family==="page-panel"
             readonly property bool sources:modelData.item.family==="detected-sources" || modelData.item.family==="source-notice"
-            readonly property bool group:modelData.item.componentType==="container" && !apps && !pageMenu && !sources
+            readonly property bool group:modelData.item.componentType==="container" && !apps && !pageMenu && !pagePanel && !sources
             readonly property bool library:modelData.item.componentType==="library"
             readonly property bool selected:surface.host.editMode ? surface.editorSelectionId===modelData.item.id : surface.runtimeFocusEnabled && !surface.host.recoveryFocused && surface.host.focusedIndex===surface.host.itemIndex(modelData.item.id)
             readonly property var baseStyle:modelData.item.presentation || ({})
@@ -54,7 +55,7 @@ Item {
             HomeCard {
                 id:card
                 objectName:"placedCard-"+node.modelData.item.id
-                visible:!node.group && !node.library && !node.apps && !node.pageMenu && !node.sources
+                visible:!node.group && !node.library && !node.apps && !node.pageMenu && !node.pagePanel && !node.sources
                 anchors.fill:parent;item:modelData.item;appearance:surface.host.appearance;unit:surface.unit
                 artworkResolver:surface.host.artworkResolver;artworkMotionAllowed:surface.host.artworkMotionAllowed!==false && !surface.host.editMode && !surface.host.freezeData
                 selectMode:surface.host.selectMode;selectTrigger:surface.host.selectTrigger
@@ -142,6 +143,105 @@ Item {
                 }
                 onLoaded:if(!surface.previewOverlay)surface.host.registerMediaWidget(node.modelData.item.id,item,false)
                 Component.onDestruction:if(!surface.previewOverlay && node.pageMenu && surface.host)surface.host.registerMediaWidget(node.modelData.item.id,item,true)
+            }
+            Loader {
+                id:panelLoader
+                anchors.fill:parent
+                active:node.pagePanel && !surface.previewOverlay && !surface.host.embeddedPage
+                sourceComponent:Item {
+                    id:panel
+                    clip:true
+                    property string overridePageId:""
+                    readonly property string selectedPage:overridePageId || node.style.panelPageId || ""
+                    readonly property var resolver:surface.host.artworkResolver
+                    readonly property var model:selectedPage && selectedPage!==surface.host.menuActiveId &&
+                        resolver && resolver.pageAllowed(selectedPage) ? resolver.pageModel(selectedPage) : null
+                    // Only a permitted page on the active profile can be shown in this panel.
+                    function showPage(id) {
+                        if(!id || id===surface.host.menuActiveId || !resolver || !resolver.pageAllowed(id)
+                                || !resolver.pageModel(id))return false
+                        overridePageId=id
+                        return true
+                    }
+                    // A blank panel only offers its Studio placeholder.
+                    function canEngage(){return !!content.item && !surface.host.editMode}
+                    // The host owns entry and exit focus; the embedded renderer owns focus within the panel.
+                    function engage(){}
+                    function handleCommand(command){
+                        if(!content.item)return false
+                        if(command===inputManager.back && !content.item.widgetActive && !content.item.groupActive)return false
+                        content.item.handleCommand(command)
+                        return true
+                    }
+                    // Preserve the exact embedded focus when the shell opens a detail or app surface.
+                    function restoreFocusState(state){if(content.item)content.item.restoreFocus(state)}
+                    Loader {
+                        id:content
+                        anchors.fill:parent
+                        active:!!panel.model
+                        Component.onCompleted:setSource(Qt.resolvedUrl("HomeScreen.qml"),{
+                            objectName:"embeddedPage-"+node.modelData.item.id,
+                            embeddedPage:true,
+                            items:Qt.binding(()=>panel.model?panel.model.items:[]),
+                            sections:Qt.binding(()=>panel.model?panel.model.sections:[]),
+                            composition:Qt.binding(()=>panel.model?panel.model.composition:({})),
+                            grid:Qt.binding(()=>panel.model?panel.model.grid:({})),
+                            placements:Qt.binding(()=>panel.model?panel.model.placements:[]),
+                            appearance:Qt.binding(()=>panel.model?panel.model.appearance:({})),
+                            brandVisible:Qt.binding(()=>panel.model?panel.model.brandVisible:false),
+                            hasContextualSources:false,
+                            backgroundStart:Qt.binding(()=>panel.model?panel.model.backgroundStart:surface.host.backgroundStart),
+                            backgroundEnd:Qt.binding(()=>panel.model?panel.model.backgroundEnd:surface.host.backgroundEnd),
+                            tileRoundness:Qt.binding(()=>panel.model?panel.model.tileRoundness:surface.host.tileRoundness),
+                            artworkMotionAllowed:Qt.binding(()=>surface.host.artworkMotionAllowed),
+                            wallpaperSource:Qt.binding(()=>panel.model?panel.model.wallpaperSource:""),
+                            artworkResolver:Qt.binding(()=>panel.resolver),
+                            libraryProvider:Qt.binding(()=>surface.host.libraryProvider),
+                            internetAvailable:Qt.binding(()=>surface.host.internetAvailable),
+                            localNetworkAvailable:Qt.binding(()=>surface.host.localNetworkAvailable),
+                            previewOnly:Qt.binding(()=>surface.host.editMode || surface.host.previewOnly),
+                            pageKey:Qt.binding(()=>surface.host.pageKey+"."+node.modelData.item.id+"."+panel.selectedPage)
+                        })
+                    }
+                    Connections {
+                        target:content.item
+                        // Forward the real action using the panel as the shell's return destination.
+                        function onActionActivated(action, origin){
+                            if(surface.host.editMode)return
+                            surface.host.rememberAppFocus(node.modelData.item.id,origin)
+                            surface.host.actionActivated(action,node.modelData.item.id)
+                        }
+                        function onAllAppsRequested(origin){
+                            if(surface.host.editMode)return
+                            surface.host.rememberAppFocus(node.modelData.item.id,origin)
+                            surface.host.allAppsRequested(node.modelData.item.id)
+                        }
+                        function onSearchRequested(){
+                            if(surface.host.editMode)return
+                            surface.host.engageMediaWidget(node.modelData.item.id)
+                            surface.host.searchRequested()
+                        }
+                        function onSettingsRequested(section){
+                            if(surface.host.editMode)return
+                            surface.host.engageMediaWidget(node.modelData.item.id)
+                            surface.host.settingsRequested(section)
+                        }
+                    }
+                    Text {
+                        visible:!content.item;anchors.centerIn:parent;width:parent.width
+                        text:qsTr("Choose a starting page in Edit component")
+                        textFormat:Text.PlainText;wrapMode:Text.Wrap;horizontalAlignment:Text.AlignHCenter
+                        color:surface.host.appearance.textColor;font.pixelSize:18*surface.unit
+                    }
+                    Rectangle {
+                        anchors.fill:parent;color:"transparent";radius:node.style.radius || 0
+                        border.width:node.selected?(node.style.focusWidth || 3)*surface.unit:0
+                        border.color:surface.host.appearance.focusColor || "transparent"
+                    }
+                    MouseArea {anchors.fill:parent;enabled:surface.host.editMode || !content.item;onClicked:surface.activated(node.modelData.item)}
+                }
+                onLoaded:surface.host.registerMediaWidget(node.modelData.item.id,item,false)
+                Component.onDestruction:if(node.pagePanel && item && surface.host)surface.host.registerMediaWidget(node.modelData.item.id,item,true)
             }
             Loader {
                 id:sourcesLoader;anchors.fill:parent;active:node.sources

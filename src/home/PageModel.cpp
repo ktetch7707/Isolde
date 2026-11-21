@@ -741,7 +741,8 @@ PageModel::addWidget(const QString& widgetType)
     };
     while (idExists(id))
         id = widgetType + QString::number(suffix++);
-    QJsonObject item{{"kind", "widget"}, {"id", id}, {"widgetType", widgetType}, {"size", "standard"}};
+    QJsonObject item{{"kind", "widget"}, {"id", id}, {"widgetType", widgetType},
+                     {"componentType", widgetType}, {"size", "standard"}};
     if (widgetType == "text")
     {
         item.insert("name", QStringLiteral("Text"));

@@ -175,6 +175,8 @@ class HomeLayout final : public QObject
     resetToDefaults();
     [[nodiscard]] QVariantList
     skins() const;
+    // Expose asset-free starter designs for the new-page chooser.
+    Q_INVOKABLE QVariantList pageStarterChoices() const;
     Q_INVOKABLE QString
     saveSkin(const QString& name);
     Q_INVOKABLE bool
@@ -360,7 +362,7 @@ class HomeLayout final : public QObject
     bool
     loadDocument(const QByteArray& data, bool userDocument);
     bool
-    validateDocumentStructure(const QByteArray& data, bool userDocument, int& version, QJsonArray& entries);
+    validateDocumentStructure(const QByteArray& data, bool userDocument, QJsonArray& entries);
     bool
     loadAndValidatePages(const QJsonObject& object, QSet<QString>& pageIds, QJsonArray& pages);
     bool
@@ -387,13 +389,13 @@ class HomeLayout final : public QObject
     validateDocumentPrerequisites(const QJsonObject& object, const QJsonArray& pages,
                                   const QSet<QString>& pageIds, const QJsonValue& homePage);
     bool
-    validateCategoriesAndComponents(const QByteArray& data, int version,
+    validateCategoriesAndComponents(
                                     const QJsonArray& categoryArray, const QJsonArray& entries,
                                     QJsonArray& components);
     bool
     validateCategoryItem(const QJsonObject& category, QSet<QString>& categoryIds) const;
     bool
-    validateComponentItem(const QJsonObject& entry, int version, const QSet<QString>& categoryIds,
+    validateComponentItem(const QJsonObject& entry, const QSet<QString>& categoryIds,
                           QSet<QString>& ids, QJsonObject& item, QString& componentError) const;
     bool
     isValidComponentKind(const QString& kind) const;
@@ -405,9 +407,6 @@ class HomeLayout final : public QObject
     isValidComponentOpacity(const QJsonObject& item) const;
     bool
     validateCategories(const QJsonArray& categoryArray, QSet<QString>& categoryIds);
-    bool
-    validateComponents(const QJsonArray& entries, int version, const QSet<QString>& categoryIds,
-                       QSet<QString>& ids, QJsonArray& components);
     bool
     save();
     QByteArray
@@ -623,7 +622,6 @@ class HomeLayout final : public QObject
     QString m_errorString;
     QVariantList m_collections;
     bool m_captureInputsReady = false;
-    QByteArray m_legacyDocument;
     QString m_focusOrigin;
     bool m_draftOnly = false;
     QHash<QString, QString> m_assetPaths;

@@ -9,6 +9,8 @@ Item {
     required property var page
     required property var options
     property var provider:null
+    property var guideChannels: []
+    property var channelSelection: []
     readonly property var playlistClient:view==="playlistSource" && provider && provider.playlistCatalog ? provider.playlistCatalog() : null
     required property var appearance
     property string pageId:""
@@ -31,7 +33,7 @@ Item {
     readonly property var themeGroups:simpleSettings.themeGroups || []
     readonly property var themeGroup:themeGroups[themeGroupIndex] || ({roles:[]})
     readonly property var allFields:((options.inspector || {}).fields || []).filter(f=>(!f.types || current && f.types.indexOf(current.componentType)>=0) && (!f.excludeTypes || !current || f.excludeTypes.indexOf(current.componentType)<0) && (!f.families || current && f.families.indexOf(current.family)>=0) && (!f.excludeFamilies || !current || f.excludeFamilies.indexOf(current.family)<0))
-    readonly property var simpleFields:(simpleSettings.basicFields || []).map(key=>allFields.find(f=>f.key===key)).filter(f=>!!f && (f.key!=="customLogo" || current && ["button","image","launcher","action-tile","media-shelf"].indexOf(current.componentType)>=0) && (f.key!=="visibleLabel" || current && ["text","shape"].indexOf(current.componentType)<0) && (f.key!=="action" || current && ["button","image","action-tile","launcher"].indexOf(current.componentType)>=0))
+    readonly property var simpleFields:(current && current.family==="page-panel"?["panelPageId"]:[]).concat(simpleSettings.basicFields || []).map(key=>allFields.find(f=>f.key===key)).filter(f=>!!f && (f.key!=="customLogo" || current && ["button","image","launcher","action-tile","media-shelf"].indexOf(current.componentType)>=0) && (f.key!=="visibleLabel" || current && ["text","shape"].indexOf(current.componentType)<0) && (f.key!=="action" || current && ["button","image","action-tile","launcher"].indexOf(current.componentType)>=0))
     function themeColors(){
         const stored=((rawPage.theme || {}).colorTheme || {}).colors || (page.appearance.colorTheme || {}).colors || {}
         const result={}
@@ -96,6 +98,9 @@ Item {
     readonly property var targets:!page?[]:structureType?((structureType==="section"?page.categories:page.composition.navigation) || []).filter(i=>i.id===structureId).map(i=>Object.assign({},i,{componentType:structureType})):(page.items || []).filter(i=>selectedIds.indexOf(i.id)>=0)
     readonly property var current:targets[0] || null
     readonly property var actions:session?session.availableActions:[]
+    readonly property var panelPages:((session || {}).document || {}).pages
+        ? session.document.pages.filter(entry=>entry.id!==pageId) : []
+    readonly property var localPanels:(page && page.items || []).filter(item=>item.family==="page-panel")
     readonly property var allApps:actions.filter(a=>a.action && a.action.type==="launch-app" && (a.appType==="web" || a.appType==="desktop" || a.appType==="android"))
     readonly property var apps:allApps.filter(a=>!current || !current.appCollection || !current.appCollection.section || a.appSection===current.appCollection.section)
     readonly property var fields:((options.inspector || {})[editorMode?"studioFields":pageMode?"pageFields":"fields"] || []).filter(f=>f.tab===tabs[tab] && (advanced || !f.advanced && (pageMode?(f.tab!=="Header" || (simpleSettings.basicHeader || []).indexOf(f.key)>=0) && (f.tab!=="Layout" || (simpleSettings.basicPageLayout || []).indexOf(f.key)>=0):f.tab!=="Appearance" || (simpleSettings.basicAppearance || []).indexOf(f.key)>=0)) && (!f.needsNamedPage || !!pageId) && (!f.needsComposition || page && page.composition.enabled) && (structureType!=="navigation" || f.key==="name" || f.key==="action") && (editingState==="base" || tabs[tab]!=="Appearance" || f.scope==="presentation" && ["surfaceColor","surfaceOpacity","labelColor","iconColor","focusColor","borderColor","borderWidth","focusWidth","radius","labelSize","labelBold","labelSurfaceColor"].indexOf(f.key)>=0) && (editorMode || pageMode || targets.length && targets.every(i=>(!f.types || f.types.indexOf(i.componentType)>=0) && (!f.excludeTypes || f.excludeTypes.indexOf(i.componentType)<0 || (f.includeFamilies || []).indexOf(i.family)>=0) && (!f.families || f.families.indexOf(i.family)>=0) && (!f.excludeFamilies || f.excludeFamilies.indexOf(i.family)<0))))
@@ -145,6 +150,17 @@ Item {
     function summary(f){
         if(mixed(f))return "Mixed"
         const value=effective(current,f)
+        if(f.type==="panelPage"){const chosen=panelPages.find(entry=>entry.id===value);return chosen?chosen.name:qsTr("Choose a page")}
+        if(f.type==="action"){
+            const link=Array.isArray(value)?value[0]:value
+            if(link && link.type==="show-page-in-panel"){
+                const panel=localPanels.find(entry=>entry.id===link.panelId)
+                const page=panelPages.find(entry=>entry.id===link.pageId)
+                return panel && page ? qsTr("%1 in %2").arg(page.name).arg(panel.name) : qsTr("Choose a replacement page or panel")
+            }
+        }
+        if(f.type==="guideChannels")return value ? qsTr("%1 selected").arg(String(value).split(",").length) : qsTr("All channels")
+        if(f.type==="guideGroup")return value || qsTr("All groups")
         if(f.type==="historyApps")return value && value.length?"Local media + "+value.length+" selected app openings":"Local media only"
         if(f.type==="visibility")return current && current.hidden?"Hidden":"Visible"
         if(f.type==="lock")return current && current.locked?"Locked":"Unlocked"
@@ -278,6 +294,16 @@ Item {
         else if(f.type==="toggle")set(f,!effective(current,f),false)
     }
     function openChoices(entries){choices=entries;view="choices";selected=0;if(!entries.length)message="No configured choices are available. Add the corresponding page, tab or source first. Back returns without changes."}
+    // Change the shelf view and its source in one draft transaction so they cannot diverge.
+    function applyLibrarySource(kind, value) {
+        const source = {libraryView:kind, libraryValue:value}
+        const saved = structureType === "section"
+            ? run("section", {kind:"presentation", id:structureId, value:Object.assign({}, current.presentation || {}, source)})
+            : run("batch", {commands:targets.map(target=>({
+                operation:"patch", arguments:{id:target.id,value:{presentation:source}}, pageId:pageId
+            }))})
+        if (saved) { view = fieldReturnView; selected = returnSelection }
+    }
     function beginKeyboard(kind,value){keyboardKind=kind;returnView=view;keyboardSelection=selected;keyboard.value=String(value===undefined?"":value);keyboard.selectedIndex=0;view="keyboard"}
     function cancelFraming(){session.cancelPreview();framingTransactionActive=false;view=fieldReturnView;selected=returnSelection;message=""}
     function framingPreview(value){
@@ -289,6 +315,22 @@ Item {
     function activateField(f){
         if(targets.length>1 && ["geometry","layout","children","apps","order","grid","replaceComponent"].indexOf(f.type)>=0){message="Choose one component for this structural operation. Shared appearance and links can edit all selected items.";return}
         activeField=f;returnSelection=selected
+        if(f.type==="panelPage"){
+            openChoices(panelPages.map(entry=>({name:entry.name,value:entry.id})))
+            return
+        }
+        if(f.type==="guideGroup"){
+            const groups=Array.from(new Set(guideChannels.flatMap(channel=>channel.groups || []))).sort()
+            openChoices([{name:qsTr("All groups"),value:""}].concat(groups.map(group=>({name:group,value:group}))))
+            if(!groups.length)message=qsTr("No channel groups are available. Back keeps the current group.")
+            return
+        }
+        if(f.type==="guideChannels"){
+            channelSelection=String(effective(current,f) || "").split(",").map(id=>id.trim()).filter(Boolean)
+            view="guideChannels";selected=0
+            message=guideChannels.length ? qsTr("Choose channels, then confirm your selection.") : qsTr("No channels are available. Back keeps the current selection.")
+            return
+        }
         if(f.type==="sourcePolicy"){
             if(pageId!==(session.document.homePageId || "")){message="Display policy belongs to designated Home. Open Home's Header controls.";return}
             view="sourcePolicy";return
@@ -306,8 +348,20 @@ Item {
         if(f.type==="repair"){openChoices(session.sourceChoices(current.id,pageId).map(c=>({name:c.name || c.label || c.id,value:c.id,kind:"repair"})));return}
         if(f.type==="section"){openChoices([{name:"Uncategorized",value:""}].concat((page.categories || []).map(c=>({name:c.name,value:c.id}))));return}
         if(f.type==="source"){
-            if((current.presentation || {}).libraryView==="playlist"){view="playlistSource";selected=0;message="Choose a video playlist saved in Kodi. Refresh retries unavailable Kodi; Back keeps the draft unchanged.";return}
-            const collections=actions.filter(a=>a.action.type==="open-collection");openChoices([{name:"Kodi playlists…",kind:"playlist"}].concat(collections.map(a=>({name:a.name,value:a.action.collectionId}))).concat([{name:"Enter search / genre / tag text…",kind:"text"}]));return
+            const style=current.presentation || {}
+            if(style.libraryKind==="games"){
+                openChoices([{name:qsTr("Search games…"),kind:"libraryText",sourceView:"search"},
+                             {name:qsTr("Enter a platform name…"),kind:"libraryText",sourceView:"platform"}])
+                return
+            }
+            if(style.libraryView==="playlist"){view="playlistSource";selected=0;message="Choose a video playlist saved in Kodi. Refresh retries unavailable Kodi; Back keeps the draft unchanged.";return}
+            const collections=actions.filter(a=>a.action && a.action.type==="open-collection")
+            openChoices([{name:"Kodi playlists…",kind:"playlist"}]
+                .concat(collections.map(a=>({name:a.name,value:a.action.collectionId,kind:"collection"})))
+                .concat([{name:qsTr("Search titles…"),kind:"libraryText",sourceView:"search"},
+                         {name:qsTr("Enter a genre name…"),kind:"libraryText",sourceView:"genre"},
+                         {name:qsTr("Enter a tag name…"),kind:"libraryText",sourceView:"tag"}]))
+            return
         }
         if(f.type==="header"){openChoices((options.headerChoices || []).map(entry=>({name:entry.name,value:entry.value})));return}
         if(f.type==="appGroup"){
@@ -337,6 +391,9 @@ Item {
             return fields.map(f=>f.label+": "+summary(f)).concat([advanced?"Hide advanced controls":"Show advanced controls",...(tabs[tab]==="Appearance"?["Appearance state: "+editingState]:[]),"Back to property groups"])
         }
         if(view==="choices")return choices.map(c=>c.name)
+        if(view==="guideChannels")return [qsTr("All channels"),qsTr("Use %1 selected channels").arg(channelSelection.length)].concat(
+            guideChannels.map(channel=>(channelSelection.includes(channel.id)?"✓ ":"□ ")
+                +(channel.number ? channel.number+" · " : "")+(channel.name || channel.label || qsTr("Unnamed channel"))))
         if(view==="playlistSource")return ["Refresh Kodi playlists"].concat(playlistClient?(playlistClient.items || []).map(i=>i.title || i.playlistName):[])
 if(view==="colorWheel")return ["Back"]
         if(view==="artwork")return [pageMode?"Import local PNG / JPEG…":"Import local PNG / JPEG / GIF…","Clear image"].concat(assets.map(a=>a.name+" · "+a.width+" × "+a.height))
@@ -348,6 +405,19 @@ if(view==="colorWheel")return ["Back"]
         return []
     }
     function activate(){
+        if(view==="guideChannels"){
+            if(selected<2){
+                if(selected===1 && !channelSelection.length){message=qsTr("Select a channel or choose All channels.");return}
+                if(set(activeField,selected===0?"":channelSelection.join(","),false)){view=fieldReturnView;selected=returnSelection}
+                return
+            }
+            const channel=guideChannels[selected-2]
+            if(!channel)return
+            if(channelSelection.includes(channel.id))channelSelection=channelSelection.filter(id=>id!==channel.id)
+            else if(channelSelection.length<128)channelSelection=channelSelection.concat([channel.id])
+            else message=qsTr("Choose up to 128 channels.")
+            return
+        }
         if(view==="simple"){
             if(pageMode){if(selected===0){view="theme";selected=0}else if(selected===1)openBasicTab("Background");else if(selected===2)openBasicTab("Header");else if(selected===3)openBasicTab("Layout");else showDetails();return}
             if(selected<simpleFields.length){fieldReturnView="simple";activateField(simpleFields[selected]);return}
@@ -377,9 +447,7 @@ if(view==="colorWheel")return ["Back"]
             if(!playlistClient){message="Kodi unavailable. Back returns without changes.";return}
             if(selected===0){provider.refresh(playlistClient);message=playlistClient.status;return}
             const item=(playlistClient.items || [])[selected-1];if(!item)return
-            const source={libraryView:"playlist",libraryValue:item.playlistName}
-            const saved=structureType==="section"?run("section",{kind:"presentation",id:structureId,value:Object.assign({},current.presentation || {},source)}):run("batch",{commands:targets.map(target=>({operation:"patch",arguments:{id:target.id,value:{presentation:source}},pageId:pageId}))})
-            if(saved){view=fieldReturnView;selected=returnSelection}return
+            applyLibrarySource("playlist",item.playlistName);return
         }
         if(view==="tabs"){tab=selected;selected=0;fieldReturnView="fields";view="fields";return}
         if(view==="fields"){
@@ -398,6 +466,19 @@ if(view==="colorWheel"){view=fieldReturnView;selected=returnSelection;return}
             const entry=choices[selected];if(!entry)return
             if(entry.kind==="replacement"){operation("replace:"+entry.value);return}
             if(entry.kind==="playlist"){view="playlistSource";selected=0;message="Choose a video playlist saved in Kodi. Back keeps the source unchanged.";return}
+            if(entry.kind==="panelTarget"){
+                const panelId=entry.value
+                openChoices(panelPages.map(entry=>({name:entry.name,kind:"panelDestination",
+                    value:{type:"show-page-in-panel",panelId:panelId,pageId:entry.id}})))
+                message=qsTr("Choose the page to show in the panel.")
+                return
+            }
+            if(entry.kind==="collection"){applyLibrarySource("collection",entry.value);return}
+            if(entry.kind==="libraryText"){
+                const style=current.presentation || {}
+                beginKeyboard("library:"+entry.sourceView,style.libraryView===entry.sourceView?style.libraryValue:"")
+                return
+            }
             if(entry.needsMedia){media.libraryKind=entry.needsMedia;media.selected=0;view="mediaAction";return}
             if(entry.kind==="repair" || activeField.type==="section"){if(run(entry.kind==="repair"?"repairSource":"assignSection",Object.assign({id:current.id},entry.kind==="repair"?{sourceId:entry.value}:{categoryId:entry.value}))){view=fieldReturnView;selected=returnSelection}return}
             if(entry.kind==="custom" || entry.kind==="text"){beginKeyboard("text","");return}
@@ -437,6 +518,11 @@ if(view==="colorWheel"){view=fieldReturnView;selected=returnSelection;return}
         layoutDraft=next
     }
     function chooseAction(entry){
+        if(entry.localPanel){
+            openChoices(localPanels.map(panel=>({name:panel.name,value:panel.id,kind:"panelTarget"})))
+            message=qsTr("Choose the panel this button will change.")
+            return
+        }
         if(entry.needsMedia){media.libraryKind=entry.needsMedia;media.selected=0;view="mediaAction";return}
         if(entry.needsTarget){pendingAction=entry.action;beginKeyboard("target","");return}
         if(set(activeField,entry.action || {},false)){view=fieldReturnView;selected=returnSelection}
@@ -679,7 +765,9 @@ if(view==="colorWheel"){view=fieldReturnView;selected=returnSelection;return}
     Loader {
         id:actionLoader;anchors.fill:parent;visible:root.view==="actionPicker";active:root.visible && root.activeField.type==="action" && ["actionPicker","mediaAction","keyboard"].indexOf(root.view)>=0
         sourceComponent:Component {StudioActionPicker {
-            anchors.fill:parent;actions:[{name:"None · clear link",action:{}}].concat(root.actions,[{name:"Play a Kodi movie…",needsMedia:"movies"},{name:"Open a Kodi show…",needsMedia:"shows"}]);appearance:root.appearance;categories:root.options.actionCategories || [];intents:root.simpleSettings.actionIntents || []
+            anchors.fill:parent;actions:[{name:"None · clear link",action:{}}].concat(root.actions,[{name:"Play a Kodi movie…",needsMedia:"movies"},{name:"Open a Kodi show…",needsMedia:"shows"}]);appearance:root.appearance;categories:root.options.actionCategories || []
+            intents:(root.simpleSettings.actionIntents || []).concat(root.localPanels.length && root.panelPages.length
+                ? [{name:qsTr("Show page in panel"),localPanel:true}] : [])
             onCanceled:{root.view=root.fieldReturnView;root.selected=root.returnSelection}
             onPicked:entry=>root.chooseAction(entry)
         }}
@@ -730,6 +818,10 @@ if(view==="colorWheel"){view=fieldReturnView;selected=returnSelection;return}
                 root.view="colorWheel";colorPicker.choose(text);return
             }
             if(root.keyboardKind==="import"){root.pickArtwork(text);return}
+            if(root.keyboardKind.startsWith("library:")){
+                if(!text.trim()){root.message=qsTr("Enter a value, or press Back to keep the current source.");return}
+                root.applyLibrarySource(root.keyboardKind.slice(8),text.trim());return
+            }
             if(root.keyboardKind==="pixel"){const n=Number(text),key=["x","y","width","height"][root.keyboardSelection];if(!Number.isInteger(n) || n<(root.keyboardSelection<2?0:1) || n>16384){root.message="Enter a whole pixel value within the image bounds.";return}root.cropDraft=Object.assign({},root.cropDraft,{[key]:n});root.view="pixelCrop";root.selected=root.keyboardSelection;return}
             let f=root.activeField,value=text
             if(root.keyboardKind==="number" || root.keyboardKind==="cropNumber"){

@@ -37,7 +37,7 @@ Before VM actions, read `docs/vm-oracle.md`. Use `tools/vm-test.ps1` for Test/Vi
 9. Configurability commands (must obey):
    - NEVER hard-code a layout, destination, tab, color, or category into QML/C++. Add it as validated schema + editor control + default preset value.
    - NEVER special-case `tests/visual/home-reference` or `home-pastel-reference` — both must pass from the same generic renderer.
-   - NEVER rewrite or migrate a user's stored layout on read/startup. Load v1 compat, write v2 atomically, keep backup. Invalid stored docs fall back to packaged defaults without rewriting the file.
+   - Use component-based v2 layouts throughout. Save atomically. Invalid or obsolete layouts fall back to packaged defaults without rewriting the file at startup.
    - Every new visual component MUST expose its presentation choices through the shared appearance/composition model (size, art source/crop, labels, opacity, corners, focus, spacing). No scattered fixed values.
    - Validate at the boundary: `ComponentSchema` for data, `ActionDispatcher` for execution. Reject unknown versions/types, unsafe IDs/paths, overflow/collision, non-managed artwork. Surface failures via `errorString()` with atomic rollback.
    - Bound everything: layout 4 MiB / 1024 components / 128 categories; pages 64/profile; grid 4-16 x 3-10; artwork type/size limits. Warn and refuse invalid, never clamp silently or overwrite placement.

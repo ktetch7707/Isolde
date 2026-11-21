@@ -815,7 +815,7 @@ IsoldeTests::registryCompatibilityIdsPreserveLayoutsWithoutDuplicateApps()
     QCOMPARE(registry.find("old-reader"), registry.find("reader"));
     QTemporaryDir dir;
     const auto defaults = dir.filePath("default.json"), saved = dir.filePath("home.json");
-    const QByteArray layout = R"({"schemaVersion":1,"items":[{"id":"saved-tile","kind":"app","appId":"old-reader"}]})";
+    const QByteArray layout = R"({"schemaVersion":2,"components":[{"id":"saved-tile","kind":"app","appId":"old-reader","schemaVersion":1,"componentType":"launcher","source":{"schemaVersion":1}}]})";
     QFile file(defaults);
     QVERIFY(file.open(QIODevice::WriteOnly));
     file.write(layout);
@@ -909,7 +909,7 @@ IsoldeTests::registryAndHomeExposeNetworkRequirements()
     QFile defaults(directory.filePath("default.json"));
     QVERIFY(defaults.open(QIODevice::WriteOnly));
     defaults.write(
-        R"({"schemaVersion":1,"theme":{"brandVisible":false,"backgroundStart":"#111111","backgroundEnd":"#222222"},"items":[{"kind":"app","id":"netflix","appId":"netflix"},{"kind":"app","id":"nas","appId":"nas"},{"kind":"app","id":"kodi","appId":"kodi"}]})");
+        R"({"schemaVersion":2,"theme":{"brandVisible":false,"backgroundStart":"#111111","backgroundEnd":"#222222"},"components":[{"kind":"app","id":"netflix","appId":"netflix","schemaVersion":1,"componentType":"launcher","source":{"schemaVersion":1}},{"kind":"app","id":"nas","appId":"nas","schemaVersion":1,"componentType":"launcher","source":{"schemaVersion":1}},{"kind":"app","id":"kodi","appId":"kodi","schemaVersion":1,"componentType":"launcher","source":{"schemaVersion":1}}]})");
     defaults.close();
     HomeLayout layout(&registry);
     QVERIFY(layout.load(directory.filePath("default.json"), directory.filePath("user.json")));
@@ -928,7 +928,7 @@ IsoldeTests::homeLayoutSupportsTypedActionTiles()
     QFile defaults(directory.filePath("default.json"));
     QVERIFY(defaults.open(QIODevice::WriteOnly));
     defaults.write(
-        R"({"schemaVersion":1,"theme":{"brandVisible":false,"backgroundStart":"#111111","backgroundEnd":"#222222"},"categories":[{"id":"media","name":"Media"}],"items":[]})");
+        R"({"schemaVersion":2,"theme":{"brandVisible":false,"backgroundStart":"#111111","backgroundEnd":"#222222"},"categories":[{"id":"media","name":"Media"}],"components":[]})");
     defaults.close();
     HomeLayout layout(&registry);
     QVERIFY(layout.load(directory.filePath("default.json"), directory.filePath("user.json")));
@@ -1061,7 +1061,7 @@ IsoldeTests::sourcePolicyTransactionsAreIsolatedAndBounded()
     const auto defaults = dir.filePath("defaults.json"), saved = dir.filePath("home.json");
     QFile definition(defaults);
     QVERIFY(definition.open(QIODevice::WriteOnly));
-    definition.write(R"({"schemaVersion":1,"items":[]})");
+    definition.write(R"({"schemaVersion":2,"components":[]})");
     definition.close();
     AppRegistry registry;
     QVERIFY(registry.loadFromData(config));
@@ -1179,7 +1179,7 @@ IsoldeTests::artPackCatalogLoadsAndHomeAppliesArtwork()
     QFile defaults(directory.filePath("default.json"));
     QVERIFY(defaults.open(QIODevice::WriteOnly));
     defaults.write(
-        R"({"schemaVersion":1,"theme":{"brandVisible":false,"backgroundStart":"#111111","backgroundEnd":"#222222"},"items":[{"kind":"app","id":"switch","appId":"switch","size":"standard"},{"kind":"action","id":"ps5-input","name":"PS5","size":"standard","action":{"type":"open-folder","target":"/media/ps5","openWith":"movies"}}]})");
+        R"({"schemaVersion":2,"theme":{"brandVisible":false,"backgroundStart":"#111111","backgroundEnd":"#222222"},"components":[{"kind":"app","id":"switch","appId":"switch","size":"standard","schemaVersion":1,"componentType":"launcher","source":{"schemaVersion":1}},{"kind":"action","id":"ps5-input","name":"PS5","size":"standard","action":{"type":"open-folder","target":"/media/ps5","openWith":"movies"},"schemaVersion":1,"componentType":"launcher","source":{"schemaVersion":1,"provider":"handler","kind":"open-folder","id":"movies"}}]})");
     defaults.close();
 
     HomeLayout layout(&registry);
@@ -1585,7 +1585,7 @@ IsoldeTests::homeLayoutPersistsAndRecovers()
     QFile defaults(defaultPath);
     QVERIFY(defaults.open(QIODevice::WriteOnly));
     defaults.write(
-        R"({"schemaVersion":1,"theme":{"brandVisible":false,"backgroundStart":"#111111","backgroundEnd":"#222222"},"items":[{"kind":"widget","id":"clock","widgetType":"clock","size":"standard"},{"kind":"app","id":"youtube","appId":"youtube","size":"standard"}]})");
+        R"({"schemaVersion":2,"theme":{"brandVisible":false,"backgroundStart":"#111111","backgroundEnd":"#222222"},"components":[{"kind":"widget","id":"clock","widgetType":"clock","size":"standard","schemaVersion":1,"componentType":"clock","source":{"schemaVersion":1,"provider":"shell","kind":"clock"}},{"kind":"app","id":"youtube","appId":"youtube","size":"standard","schemaVersion":1,"componentType":"launcher","source":{"schemaVersion":1}}]})");
     defaults.close();
     AppRegistry registry;
     QVERIFY(registry.loadFromData(config));

@@ -33,7 +33,7 @@ class LayoutPersistenceTests : public QObject
     void
     universalGridValidatesAndPersists();
     void
-    migratesAndRepairsWithoutLosingPresentation();
+    repairsSourceWithoutLosingPresentation();
     void
     preservesMissingCollectionAndEmptyHome();
     void
@@ -559,8 +559,8 @@ LayoutPersistenceTests::sourcePoliciesRejectUnsafeDataWithoutRewritingLayouts()
     AppRegistry registry;
     QVERIFY(registry.loadFromData(apps));
     const auto defaults = dir.filePath("defaults.json"), saved = dir.filePath("home.json");
-    writeFile(defaults, R"({"schemaVersion":1,"items":[]})");
-    const QByteArray invalid = R"({"schemaVersion":1,"theme":{"sourcePolicy":{"mode":"execute"}},"items":[]})";
+    writeFile(defaults, R"({"schemaVersion":2,"components":[]})");
+    const QByteArray invalid = R"({"schemaVersion":2,"theme":{"sourcePolicy":{"mode":"execute"}},"components":[]})";
     writeFile(saved, invalid);
     HomeLayout home(&registry);
     QVERIFY(home.load(defaults, saved));
@@ -584,7 +584,7 @@ LayoutPersistenceTests::universalGridValidatesAndPersists()
     QTemporaryDir dir;
     AppRegistry registry;
     QVERIFY(registry.loadFromData(apps));
-    writeFile(dir.filePath("default.json"), legacy);
+    writeFile(dir.filePath("default.json"), personalLayout);
     HomeLayout layout(&registry);
     QVERIFY(layout.load(dir.filePath("default.json"), dir.filePath("user.json")));
     QCOMPARE(layout.grid().value("columns").toInt(), 8);
@@ -686,22 +686,21 @@ LayoutPersistenceTests::universalGridValidatesAndPersists()
 }
 
 void
-LayoutPersistenceTests::migratesAndRepairsWithoutLosingPresentation()
+LayoutPersistenceTests::repairsSourceWithoutLosingPresentation()
 {
     QTemporaryDir dir;
-    writeFile(dir.filePath("defaults.json"), legacy);
-    writeFile(dir.filePath("user.json"), legacy);
+    writeFile(dir.filePath("defaults.json"), personalLayout);
+    writeFile(dir.filePath("user.json"), personalLayout);
     AppRegistry registry;
     QVERIFY(registry.loadFromData(apps));
     HomeLayout home(&registry);
     QVERIFY(home.load(dir.filePath("defaults.json"), dir.filePath("user.json")));
-    QCOMPARE(readFile(dir.filePath("user.json")), legacy); // no migration write on read
+    QCOMPARE(readFile(dir.filePath("user.json")), personalLayout);
     QCOMPARE(home.components().size(), 3);                 // missing sources retained
     QVERIFY(home.components()[0].toMap()["unavailableReason"].toString().contains("missing"));
     QCOMPARE(home.sourceChoices("my-folder").size(), 2);
     QVERIFY(!home.rebindSource("my-folder", "settings"));
     QVERIFY(home.rebindSource("my-folder", "other"));
-    QCOMPARE(readFile(dir.filePath("user.json.v1.backup.json")), legacy);
     auto document = QJsonDocument::fromJson(readFile(dir.filePath("user.json"))).object();
     QCOMPARE(document["schemaVersion"].toInt(), 2);
     QVERIFY(!document.contains("items"));
@@ -725,7 +724,6 @@ LayoutPersistenceTests::migratesAndRepairsWithoutLosingPresentation()
     QVERIFY(restored.rebindSource("my-app", "other") == false);
     QVERIFY(restored.rebindSource("my-app", "settings"));
     QCOMPARE(restored.items()[1].toMap()["id"].toString(), QString("my-app"));
-    QCOMPARE(readFile(dir.filePath("user.json.v1.backup.json")), legacy); // immutable original
 }
 
 void
@@ -735,10 +733,11 @@ LayoutPersistenceTests::preservesMissingCollectionAndEmptyHome()
     auto component = ComponentSchema::component(
         {{"id", "curated"},
          {"kind", "action"},
+         {"componentType", "launcher"},
          {"name", "Curated"},
          {"actions", QVariantList{QVariantMap{{"type", "open-collection"}, {"collectionId", "missing"}}}}},
         true);
-    const QJsonValue theme = QJsonDocument::fromJson(legacy).object().value("theme");
+    const QJsonValue theme = QJsonDocument::fromJson(personalLayout).object().value("theme");
     writeFile(dir.filePath("defaults.json"),
               QJsonDocument(QJsonObject{{"schemaVersion", 2},
                                         {"theme", theme},
@@ -764,11 +763,12 @@ void
 LayoutPersistenceTests::rejectsConflictingVersionedLayout()
 {
     QTemporaryDir dir;
-    writeFile(dir.filePath("defaults.json"), legacy);
-    auto tile = ComponentSchema::component({{"id", "unsafe"}, {"kind", "app"}, {"appId", "movies"}}, true);
+    writeFile(dir.filePath("defaults.json"), personalLayout);
+    auto tile = ComponentSchema::component(
+        {{"id", "unsafe"}, {"kind", "app"}, {"componentType", "launcher"}, {"appId", "movies"}}, true);
     tile["source"] = QVariantMap{{"schemaVersion", 1}, {"provider", "apps"}, {"kind", "app"}, {"id", "settings"}};
     const auto bytes = QJsonDocument(QJsonObject{{"schemaVersion", 2},
-                                                 {"theme", QJsonDocument::fromJson(legacy).object()["theme"]},
+                                                 {"theme", QJsonDocument::fromJson(personalLayout).object()["theme"]},
                                                  {"components", QJsonArray{QJsonObject::fromVariantMap(tile)}}})
                            .toJson();
     writeFile(dir.filePath("user.json"), bytes);

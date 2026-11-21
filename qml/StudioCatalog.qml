@@ -44,7 +44,7 @@ Item {
     }
     function chooseFamily(index){
         const entry=families[index];if(!entry)return;if(entry.id==="more"){moreComponents=true;selected=0;return}family=entry.id;configuration=({});selected=0
-        if(family==="clock"){finish("clock");return}
+        if(family==="clock" || family==="page-panel"){finish(family);return}
         if(variants.length){view="variants";return}
         if(family==="button")view="links"
         else if(family==="shape")view="shapes"
@@ -62,7 +62,7 @@ Item {
         if(entry.needsMedia){media.libraryKind=entry.needsMedia;media.selected=0;view="mediaAction";return}
         configuration=Object.assign({},configuration,{action:entry.action || {}})
         if(entry.needsTarget){beginKeyboard("target","","links");return}
-        if(family==="image" && entry.action && entry.action.type){beginKeyboard("imageName","Image link","links");return}finish(family)
+        finish(family)
     }
     function activate(){
         if(view==="variants"){
@@ -98,7 +98,7 @@ Item {
             if(selected===0){configuration=Object.assign({},configuration,{action:{}});finish(family);return}
             const entry=actions[selected-1];if(entry.needsMedia){media.libraryKind=entry.needsMedia;media.selected=0;view="mediaAction";return}configuration=Object.assign({},configuration,{action:entry.action})
             if(entry.needsTarget){beginKeyboard("target","",view);return}
-            if(family==="image"){beginKeyboard("imageName","Image link",view);return}finish(family)
+            finish(family)
         }
     }
     function beginKeyboard(action,value,origin){keyboardAction=action;keyboardReturn=origin;keyboard.value=value;keyboard.selectedIndex=0;view="keyboard"}
@@ -172,7 +172,7 @@ Item {
             onPicked:entry=>root.chooseAction(entry)
         }}
     }
-    StudioMediaPicker {id:media;collections:root.actions.filter(a=>a.action && a.action.type==="open-collection");anchors.fill:parent;visible:root.view==="mediaAction";provider:root.provider;appearance:root.appearance;onCanceled:root.view="links";onPicked:action=>{root.configuration=Object.assign({},root.configuration,{action:action});if(root.family==="image")root.beginKeyboard("imageName","Image link","links");else root.finish(root.family)}}
+    StudioMediaPicker {id:media;collections:root.actions.filter(a=>a.action && a.action.type==="open-collection");anchors.fill:parent;visible:root.view==="mediaAction";provider:root.provider;appearance:root.appearance;onCanceled:root.view="links";onPicked:action=>{root.configuration=Object.assign({},root.configuration,{action:action});root.finish(root.family)}}
     Loader {
         id:appPickerLoader;anchors.fill:parent;active:root.visible && root.view==="apps"
         onLoaded:item.begin(root.selectedApps,((((root.options.componentPresets || {})["app-bar"] || {}).appCollection || {}).mode || "all"))
@@ -196,9 +196,8 @@ Item {
         onCanceled:root.view=root.keyboardReturn
         onAccepted:text=>{
             if(root.keyboardAction==="import"){root.importArtwork(text);return}
-            if(root.keyboardAction==="imageName"){root.configuration=Object.assign({},root.configuration,{name:text});root.finish("image");return}
             root.configuration=Object.assign({},root.configuration,{action:Object.assign({},root.configuration.action,{target:text})})
-            if(root.family==="image")root.beginKeyboard("imageName","Image link","links");else root.finish(root.family)
+            root.finish(root.family)
         }
     }
 }

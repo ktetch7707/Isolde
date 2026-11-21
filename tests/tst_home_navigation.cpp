@@ -386,10 +386,8 @@ HomeNavigationTests::customizeOpensStudioAndPreservesDirtyExit()
     command(InputManager::Confirm);
     command(InputManager::NavigateDown);
     command(InputManager::Confirm);
-    auto* keyboard = studio->findChild<QObject*>("studioKeyboard");
-    QVERIFY(keyboard);
-    QVERIFY(QMetaObject::invokeMethod(keyboard, "accepted", Q_ARG(QString, QString("Library"))));
-    QCoreApplication::processEvents();
+    QCOMPARE(studio->property("mode").toString(), QString("pageStarters"));
+    command(InputManager::Confirm); // Select Blank page.
     auto* session = qobject_cast<StudioSession*>(studio->property("session").value<QObject*>());
     QVERIFY(session);
     QVERIFY(session->isDirty());
@@ -1150,7 +1148,7 @@ HomeNavigationTests::repairsSourceWithRemoteAndCanCancel()
     QFile defaults(dir.filePath("default.json"));
     QVERIFY(defaults.open(QIODevice::WriteOnly));
     defaults.write(
-        R"({"schemaVersion":1,"theme":{"backgroundStart":"#111111","backgroundEnd":"#222222"},"items":[{"id":"personal","kind":"app","appId":"missing","size":"wide","opacity":0.4}]})");
+        R"({"schemaVersion":2,"theme":{"backgroundStart":"#111111","backgroundEnd":"#222222"},"components":[{"id":"personal","kind":"app","appId":"missing","size":"wide","opacity":0.4,"schemaVersion":1,"componentType":"launcher","source":{"schemaVersion":1}}]})");
     defaults.close();
     AppRegistry registry;
     QVERIFY(registry.loadFromData(
@@ -2001,7 +1999,7 @@ HomeNavigationTests::appearancePreviewCancelAndApply()
     QTemporaryDir dir;
     QFile defaults(dir.filePath("default.json"));
     QVERIFY(defaults.open(QIODevice::WriteOnly));
-    defaults.write(R"({"schemaVersion":1,"theme":{"backgroundStart":"#19191e","backgroundEnd":"#101014"},"items":[]})");
+    defaults.write(R"({"schemaVersion":2,"theme":{"backgroundStart":"#19191e","backgroundEnd":"#101014"},"components":[]})");
     defaults.close();
     AppRegistry registry;
     HomeLayout home(&registry);
@@ -2563,11 +2561,7 @@ HomeNavigationTests::gridEditorMoveResizeDuplicateRemove()
     QFile defaults(dir.filePath("default.json"));
     QVERIFY(defaults.open(QIODevice::WriteOnly));
     defaults.write(
-        R"({"schemaVersion":1,"theme":{"backgroundStart":"#111111","backgroundEnd":"#222222"},"grid":{"columns":8,"rows":5},"items":[
-        {"id":"alpha","kind":"app","appId":"app-a","name":"Alpha","placement":{"x":0,"y":0,"width":2,"height":1}},
-        {"id":"beta","kind":"app","appId":"app-b","name":"Beta","placement":{"x":2,"y":0,"width":2,"height":1}},
-        {"id":"gamma","kind":"app","appId":"app-c","name":"Gamma","placement":{"x":4,"y":0,"width":2,"height":1}}
-    ]})");
+        R"({"schemaVersion":2,"theme":{"backgroundStart":"#111111","backgroundEnd":"#222222"},"composition":{"schemaVersion":1,"enabled":true,"grid":{"columns":8,"rows":5}},"components":[{"id":"alpha","kind":"app","appId":"app-a","name":"Alpha","placement":{"x":0,"y":0,"width":2,"height":1},"schemaVersion":1,"componentType":"launcher","source":{"schemaVersion":1}},{"id":"beta","kind":"app","appId":"app-b","name":"Beta","placement":{"x":2,"y":0,"width":2,"height":1},"schemaVersion":1,"componentType":"launcher","source":{"schemaVersion":1}},{"id":"gamma","kind":"app","appId":"app-c","name":"Gamma","placement":{"x":4,"y":0,"width":2,"height":1},"schemaVersion":1,"componentType":"launcher","source":{"schemaVersion":1}}]})");
     defaults.close();
     AppRegistry registry;
     QVERIFY(registry.loadFromData(
@@ -2680,11 +2674,8 @@ HomeNavigationTests::studioPageMenuCreatesAndDesignatesHome()
     command(InputManager::Confirm);
     command(InputManager::NavigateDown);
     command(InputManager::Confirm);
-    QCOMPARE(root->property("mode").toString(), QString("keyboard"));
-    auto* keyboard = root->findChild<QObject*>("studioKeyboard");
-    QVERIFY(keyboard);
-    QVERIFY(QMetaObject::invokeMethod(keyboard, "accepted", Q_ARG(QString, QString("Library"))));
-    QCoreApplication::processEvents();
+    QCOMPARE(root->property("mode").toString(), QString("pageStarters"));
+    command(InputManager::Confirm); // Select Blank page.
     const auto id = root->property("pageId").toString();
     QVERIFY(!id.isEmpty());
     QCOMPARE(root->property("mode").toString(), QString("canvas"));
@@ -2724,13 +2715,14 @@ HomeNavigationTests::studioPageMenuCreatesAndDesignatesHome()
     command(InputManager::NavigateDown);
     command(InputManager::NavigateDown);
     command(InputManager::Confirm);
+    auto* keyboard = root->findChild<QObject*>("studioKeyboard");
+    QVERIFY(keyboard);
     QVERIFY(QMetaObject::invokeMethod(keyboard, "accepted", Q_ARG(QString, QString("Landing"))));
     QCoreApplication::processEvents();
     QCOMPARE(qobject_cast<HomeLayout*>(session->model())->rootPageName(), QString("Landing"));
     command(InputManager::NavigateDown);
     command(InputManager::Confirm); // Duplicate page.
-    QVERIFY(QMetaObject::invokeMethod(keyboard, "accepted", Q_ARG(QString, QString("Landing copy"))));
-    QCoreApplication::processEvents();
+    QCOMPARE(root->property("mode").toString(), QString("pageContext"));
     QVERIFY(root->property("pageId").toString() != id);
     QVERIFY(!root->property("pageId").toString().isEmpty());
     QVERIFY(QMetaObject::invokeMethod(root.get(), "activateMenu", Q_ARG(QVariant, 0)));
@@ -2890,10 +2882,12 @@ HomeNavigationTests::studioRemoteGesturesCollisionsAndAnchors()
         QJsonArray{QJsonObject{{"id", "clock"},
                                {"kind", "widget"},
                                {"widgetType", "clock"},
+                               {"componentType", "clock"},
                                {"placement", QJsonObject{{"x", 0}, {"y", 0}, {"width", 1}, {"height", 1}}}},
                    QJsonObject{{"id", "text"},
                                {"kind", "widget"},
                                {"widgetType", "text"},
+                               {"componentType", "text"},
                                {"placement", QJsonObject{{"x", 1}, {"y", 0}, {"width", 1}, {"height", 1}}}}};
     auto entries = document["components"].toArray();
     for (int i = 0; i < entries.size(); ++i)

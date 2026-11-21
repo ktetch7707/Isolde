@@ -75,6 +75,12 @@ using HomeDesignData::artwork;
 using HomeDesignData::safeArtwork;
 } // namespace
 
+// Read the same starter catalog used by the design library so page choices stay in sync.
+QVariantList HomeLayout::pageStarterChoices() const
+{
+    return starterTemplates(m_defaultPath);
+}
+
 QString
 HomeLayout::skinDirectory() const
 {
@@ -172,7 +178,6 @@ HomeLayout::applySkinDocument(QJsonObject document, const QJsonObject& assets, b
         return false;
     }
     const auto previous = documentData();
-    const auto legacy = m_legacyDocument;
     QJsonArray mergedPages = m_pages;
     if (addMissingPages && !applySkinAddMissingPages(document, mergedPages))
         return false;
@@ -180,7 +185,6 @@ HomeLayout::applySkinDocument(QJsonObject document, const QJsonObject& assets, b
     if (!loadDocument(QJsonDocument(applySkinWrapSinglePage(document, mergedPages, previous)).toJson(), false))
         return false;
     loadDocument(previous, false);
-    m_legacyDocument = legacy;
     if (!applySkinValidateArtwork(document, assets))
     {
         setError(tr("This skin has missing or invalid artwork. Your Home has not changed."));
@@ -191,7 +195,6 @@ HomeLayout::applySkinDocument(QJsonObject document, const QJsonObject& assets, b
     {
         const auto error = m_errorString;
         loadDocument(previous, false);
-        m_legacyDocument = legacy;
         setError(error);
         return false;
     }

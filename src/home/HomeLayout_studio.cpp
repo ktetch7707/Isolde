@@ -202,6 +202,7 @@ HomeLayout::validateStudioPresets(const QJsonObject& presets) const
                          "carousel",
                          "app-bar",
                          "page-menu",
+                         "page-panel",
                          "detected-sources",
                          "source-notice"}
                  .contains(it.key()) ||

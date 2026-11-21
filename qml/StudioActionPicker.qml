@@ -29,7 +29,7 @@ Item {
     }
     onEntriesChanged:selected=Math.max(0,Math.min(selected,entries.length-1))
     function activate(){
-        if(!toolsFocused){if(intentMenu){if(entries[selected].noAction){picked({name:"No action",action:{}});return}category=Math.max(0,categories.findIndex(c=>c.name===entries[selected].categoryName));intentMenu=false;selected=0}else if(entries[selected])picked(entries[selected]);return}
+        if(!toolsFocused){if(intentMenu){const entry=entries[selected];if(!entry)return;if(entry.noAction){picked({name:"No action",action:{}});return}if(entry.localPanel){picked(entry);return}category=Math.max(0,categories.findIndex(c=>c.name===entry.categoryName));intentMenu=false;selected=0}else if(entries[selected])picked(entries[selected]);return}
         if(tool===0){intentMenu=false;keyboard.value=query;keyboard.selectedIndex=0;searching=true}
         else if(tool===1){intentMenu=false;category=(category+1)%categories.length;selected=0}
         else if(tool===2){query="";category=0;selected=0}

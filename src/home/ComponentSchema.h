@@ -1040,23 +1040,11 @@ QVariantMap componentGrid(const QJsonArray& items,
                           const QString& parentId,
                           const QString& categoryId);
 
-/** Normalizes and validates a component map; legacy mode accepts v1 documents. Returns an empty map and sets error on rejection.
- * @brief Normalizes and validates a component map; legacy mode accepts v1 documents. Returns an empty map and sets error on rejection.
- * @details Normalizes and validates a component map according to the component schema.
- * @param input The component map to validate.
- * @param legacy Whether legacy mode is enabled (accepts v1 documents).
- * @param error Output error message on failure.
- * @return A valid component map if validation succeeds, empty map otherwise.
+/** Validates a typed component and normalizes its actions.
+ * Editor commands can derive the source after an action changes. Stored designs
+ * must supply the matching source explicitly.
  */
-QVariantMap component(const QVariantMap& input, bool legacy, QString* error = nullptr);
-
-/** Resolves the component type from legacy widget mapping.
- * @brief Resolves the component type from legacy widget mapping.
- * @param input The component map.
- * @param legacy Whether legacy mode is enabled.
- * @return The resolved component type.
- */
-QString componentResolveLegacyType(const QVariantMap& input, bool legacy);
+QVariantMap component(const QVariantMap& input, bool deriveSource, QString* error = nullptr);
 
 /** Validates component type and shape fields.
  * @brief Validates component type and shape fields.

@@ -123,7 +123,7 @@ Item {
         backgroundStart:root.model?root.model.backgroundStart:"#101014";backgroundEnd:root.model?root.model.backgroundEnd:"#101014";tileRoundness:root.model?root.model.tileRoundness:0.18
         wallpaperSource:root.model?root.model.wallpaperSource:"";wallpaperItem:wallpaper
         internetAvailable:root.internetAvailable;localNetworkAvailable:root.localNetworkAvailable;hasContextualSources:false
-        onActionActivated:(action,origin)=>actionDispatcher.dispatch(action,origin)
+        onActionActivated:(action,origin)=>{if(!content.routePanelAction(action))actionDispatcher.dispatch(action,origin)}
         onSearchRequested:root.searchRequested()
         onAllAppsRequested:origin=>root.allAppsRequested(origin)
         onSettingsRequested:section=>{if(section===1)root.beginEditing();else root.settingsRequested(section)}
