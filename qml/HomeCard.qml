@@ -54,6 +54,7 @@ Item {
     Accessible.description:(item.accessibility || {}).hint || item.unavailableReason || ""
     signal activated()
     signal selectionChanged(bool selected)
+    SettingsUpdateBadge { anchors.top: parent.top; anchors.right: parent.right; anchors.margins: 4 * root.unit; z: 50; item: root.item; unit: root.unit }
     onSelectedChanged: root.selectionChanged(root.selected)
     Rectangle {
         id: surface

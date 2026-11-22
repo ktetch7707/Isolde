@@ -449,6 +449,7 @@ Item {
                     border.width: !root.editMode && (root.recoveryFocused || !root.items.length) && root.recoveryIndex === index ? 3 : 0
                     border.color: root.appearance.focusColor || "#C994A5"
                     Text { anchors.centerIn: parent; width:parent.width-12;text:root.headerControlLabel(modelData);elide:Text.ElideRight;horizontalAlignment:Text.AlignHCenter;color: root.appearance.textColor || "#F5F1F3"; font.pixelSize: 19 * root.textScale }
+                    SettingsUpdateBadge { anchors.top: parent.top; anchors.right: parent.right; z: 5; settingsTarget: modelData === "settings" }
                     MouseArea { anchors.fill: parent; onClicked: { root.recoveryFocused = true; root.recoveryIndex = index; root.activateHeaderControl(modelData) } }
                 }
             }

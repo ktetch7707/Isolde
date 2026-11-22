@@ -12,10 +12,16 @@ Item {
         { page: 5, name: "Setup guide", detail: "Repeat network, display, sound, remote and profile setup", status: "Open guide" },
         { page: 7, name: "Diagnostics", detail: "Installed media components and capture readiness", status: "Inspect" },
         { page: 4, name: "About Isolde", detail: "Version and acknowledgements", status: "Isolde " + isoldeVersion },
-        { page: 3, name: "Power", detail: "Suspend, restart or shut down with confirmation", status: "Review actions" }
+        { page: 3, name: "Power", detail: "Suspend, restart or shut down with confirmation", status: "Review actions" },
+        { page: 9, name: "Software Updates", detail: "Check for Isolde updates", status: typeof softwareUpdates !== "undefined" && softwareUpdates.available ? "Update available" : "Open" }
     ]
 
     function handleCommand(command) {
+        if (activePage === 9) {
+            if (command === inputManager.back) activePage = -1
+            else updatesPage.handleCommand(command)
+            return
+        }
         if(activePage===3){
             if(command===inputManager.back){if(!powerPage.back())activePage=-1}
             else powerPage.handleCommand(command)
@@ -111,6 +117,7 @@ Item {
     }
     CaptureSettingsView { appearance: root.appearance; id: capturePage; anchors.fill: parent; visible: root.activePage === 8 }
     PowerSettingsView { appearance:root.appearance;id:powerPage;anchors.fill:parent;visible:root.activePage===3 }
+    SoftwareUpdatesView { id: updatesPage; anchors.fill: parent; appearance: root.appearance; visible: root.activePage === 9 }
     TMDBAttributionView {
         id: tmdbAttribution
         anchors.fill: parent
@@ -171,6 +178,7 @@ Item {
                 color: root.selectedIndex === index ? shell.selected : shell.surface
                 border.width: root.selectedIndex === index ? 3 : 1
                 border.color: root.selectedIndex === index ? shell.selectedFocus : shell.outline
+                SettingsUpdateBadge { anchors.top: parent.top; anchors.right: parent.right; z: 5; settingsTarget: modelData.page === 9 }
 
                 Column {
                     id:rowLabels

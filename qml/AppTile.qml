@@ -20,6 +20,7 @@ Rectangle {
     readonly property bool compact: height < 180
     signal activated()
     signal selectionChanged(bool selected)
+    SettingsUpdateBadge { anchors.top: parent.top; anchors.right: parent.right; anchors.margins: 4; z: 50; item: root.app }
     onSelectedChanged: root.selectionChanged(root.selected)
     readonly property color selColor: root.selectionColor !== "" ? root.selectionColor : (appearance.focusColor || "#C994A5")
     radius: Math.min(width, height) * 0.5 * roundness

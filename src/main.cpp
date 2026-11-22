@@ -31,6 +31,7 @@
 #include "settings/RemoteSettings.h"
 #include "settings/SearchSettings.h"
 #include "settings/SetupState.h"
+#include "settings/SoftwareUpdates.h"
 #include "settings/VpnSettings.h"
 #include "sources/SourceManager.h"
 #include "theme/ArtPackCatalog.h"
@@ -81,6 +82,7 @@ struct ProfileRuntime
     VpnSettings vpnSettings{qApp->property("isoldeProfile").toString()};
     AppVpn appVpn;
     SearchSettings searchSettings;
+    SoftwareUpdates softwareUpdates{&searchSettings, QCoreApplication::applicationVersion()};
     OnlineDiscovery onlineDiscovery{&searchSettings,
                                     nullptr,
                                     QUrl(QStringLiteral("https://api.themoviedb.org/3")),
@@ -243,6 +245,7 @@ setupQmlContextProperties()
     engine.rootContext()->setContextProperty(QStringLiteral("setupState"), &setup);
     engine.rootContext()->setContextProperty(QStringLiteral("componentHealth"), &componentHealth);
     engine.rootContext()->setContextProperty(QStringLiteral("searchPreferences"), &searchSettings);
+    engine.rootContext()->setContextProperty(QStringLiteral("softwareUpdates"), &softwareUpdates);
     engine.rootContext()->setContextProperty(QStringLiteral("discoveryProvider"), &onlineDiscovery);
     engine.rootContext()->setContextProperty(QStringLiteral("onlineSubtitleRepository"), &onlineSubtitleRepository);
     engine.rootContext()->setContextProperty(QStringLiteral("subtitleService"), &subtitleService);
