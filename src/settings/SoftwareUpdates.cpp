@@ -93,8 +93,8 @@ SoftwareUpdates::SoftwareUpdates(SearchSettings* settings, const QString& instal
     : QObject(parent), m_settings(settings), m_network(network ? network : new QNetworkAccessManager(this)),
       m_timer(new QTimer(this)), m_endpoint(endpoint),
       m_stateFile(stateFile.isEmpty() ? statePath() : stateFile),
-      m_publicKeyPath(publicKeyPath),
       m_platform(platform.isNull() ? installationPlatform() : platform),
+      m_publicKeyPath(publicKeyPath),
       m_installed(stableVersion(QStringLiteral("v") + installedVersion))
 {
     if (!m_stateFile.isEmpty())
