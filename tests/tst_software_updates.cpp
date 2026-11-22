@@ -69,6 +69,9 @@ class SoftwareUpdatesTests : public QObject
     void rateLimitsManualRetry();
     void failedDismissalKeepsNotification();
     void desktopPackagesMatchArchitecture();
+    void installFailsWhenNoUpdate();
+    void installFailsWithoutPublicKey();
+    void publicKeyPathIsReported();
 };
 
 void SoftwareUpdatesTests::webGateAndDismissal()
@@ -226,6 +229,60 @@ void SoftwareUpdatesTests::desktopPackagesMatchArchitecture()
     QVERIFY(updates.available());
     updates.dismiss();
     QVERIFY(!updates.available());
+}
+
+// install() must refuse when no update is available.
+void SoftwareUpdatesTests::installFailsWhenNoUpdate()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    SearchSettings web(nullptr, directory.filePath("search.ini"), "default");
+    web.setWebEnabled(true);
+    SoftwareUpdates updates(&web, "0.0.1.2", nullptr, nullptr, QUrl(),
+                            directory.filePath("updates.ini"), "linux-amd64");
+    QVERIFY(!updates.available());
+    // install() is a slot; calling it directly tests the precondition guard.
+    QMetaObject::invokeMethod(&updates, "install");
+    QVERIFY(!updates.installing());
+    QVERIFY(updates.status().contains("No update is available"));
+}
+
+// install() must refuse when no trusted public key is installed.
+void SoftwareUpdatesTests::installFailsWithoutPublicKey()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    ReleaseServer server;
+    QVERIFY(server.server.listen(QHostAddress::LocalHost));
+    server.release("0.0.1.3");
+    SearchSettings web(nullptr, directory.filePath("search.ini"), "default");
+    web.setWebEnabled(true);
+    SoftwareUpdates updates(&web, "0.0.1.2", nullptr, nullptr, server.url(),
+                            directory.filePath("updates.ini"), "linux-amd64", {});
+    QTRY_COMPARE(server.requests, 1);
+    QTRY_VERIFY(!updates.checking());
+    QVERIFY(updates.available());
+    QVERIFY(updates.publicKeyPath().isEmpty());
+    QMetaObject::invokeMethod(&updates, "install");
+    QVERIFY(!updates.installing());
+    QVERIFY(updates.status().contains("No trusted signing key"));
+}
+
+// The public key path set at construction is reported through the property.
+void SoftwareUpdatesTests::publicKeyPathIsReported()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString keyPath = directory.filePath("isolde-signing-key.pub");
+    QFile keyFile(keyPath);
+    QVERIFY(keyFile.open(QIODevice::WriteOnly));
+    keyFile.write("-----BEGIN PUBLIC KEY-----\ndummy\n-----END PUBLIC KEY-----\n");
+    keyFile.close();
+    SearchSettings web(nullptr, directory.filePath("search.ini"), "default");
+    web.setWebEnabled(true);
+    SoftwareUpdates updates(&web, "0.0.1.2", nullptr, nullptr, QUrl(),
+                            directory.filePath("updates.ini"), "linux-amd64", keyPath);
+    QCOMPARE(updates.publicKeyPath(), keyPath);
 }
 
 QTEST_GUILESS_MAIN(SoftwareUpdatesTests)
