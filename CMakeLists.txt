@@ -133,6 +133,8 @@ add_library(isolde_core STATIC
     src/settings/AmbientSettings.h
     src/settings/SearchSettings.cpp
     src/settings/SearchSettings.h
+    src/settings/SoftwareUpdates.cpp
+    src/settings/SoftwareUpdates.h
     src/sources/SourceManager.cpp
     src/sources/SourceManager.h
     src/theme/ArtPackCatalog.cpp
@@ -200,6 +202,8 @@ qt_add_qml_module(isolde
         qml/Main.qml
         qml/DesktopReturnWindow.qml
         qml/ComponentSettingsView.qml
+        qml/SoftwareUpdatesView.qml
+        qml/SettingsUpdateBadge.qml
         qml/CaptureSettingsView.qml
         qml/CaptureSessionView.qml
         qml/KodiLibraryView.qml
@@ -585,6 +589,14 @@ if(BUILD_TESTING)
     qt_add_executable(isolde_studio_session_tests tests/tst_studio_session.cpp)
     qt_add_executable(isolde_game_library_tests tests/tst_game_library.cpp)
     qt_add_executable(isolde_settings_power_tests tests/tst_settings_power.cpp)
+    qt_add_executable(isolde_software_updates_tests tests/tst_software_updates.cpp)
+    target_link_libraries(isolde_software_updates_tests PRIVATE isolde_core Qt6::Test Qt6::Network)
+    add_test(NAME software_updates COMMAND isolde_software_updates_tests)
+    qt_add_executable(isolde_software_updates_qml_tests tests/tst_software_updates_qml.cpp)
+    target_link_libraries(isolde_software_updates_qml_tests PRIVATE Qt6::Test Qt6::Qml Qt6::Quick)
+    target_compile_definitions(isolde_software_updates_qml_tests PRIVATE UPDATES_QML_DIR="${CMAKE_CURRENT_SOURCE_DIR}/qml")
+    add_test(NAME software_updates_qml COMMAND isolde_software_updates_qml_tests)
+    set_tests_properties(software_updates_qml PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
     qt_add_executable(isolde_guide_tests tests/tst_guide.cpp)
     target_link_libraries(isolde_guide_tests PRIVATE isolde_core Qt6::Test)
     qt_add_resources(isolde_guide_tests "guide_test_defaults" PREFIX "/" FILES config/studio-defaults.json)
@@ -678,6 +690,7 @@ if(BUILD_TESTING)
         add_test(NAME interface_sounds COMMAND isolde_interface_sound_tests)
         set_tests_properties(interface_sounds PROPERTIES TIMEOUT 30)
         add_test(NAME appliance_installation COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_appliance_install.py)
+        add_test(NAME desktop_deb_packaging COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_desktop_deb.py)
         add_test(NAME default_app_provisioning COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_default_apps.py)
         add_test(NAME android_provisioning COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_android_provisioning.py)
         add_test(NAME fdroid_store COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_fdroid_store.py)

@@ -244,6 +244,7 @@ Item {
                     color: selected ? shell.selected : shell.surface
                     border.width: selected && !root.inPage ? 3 : 1
                     border.color: selected && !root.inPage ? shell.selectedFocus : shell.outline
+                    SettingsUpdateBadge { anchors.top: parent.top; anchors.right: parent.right; z: 5; settingsTarget: modelData.id === "system" }
                     Column {
                         id: sectionLabels
                         anchors.left:parent.left; anchors.right:parent.right; anchors.verticalCenter:parent.verticalCenter; anchors.margins:14

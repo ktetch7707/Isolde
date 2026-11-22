@@ -2,15 +2,34 @@
 
 ## Required beginner guide — completion gate, 2026-10-25
 
-This document describes the existing developer/pilot tooling; it is not yet a complete layperson installation guide. First-product 100% completion now requires T13.4/T31.7 in [the backlog](agent-backlog.md): a version-matched illustrated guide for the actual test computer, tested with an unassisted nontechnical reader. The required download/USB/boot/disk-selection, first-run/setup/local-playback and troubleshooting/recovery coverage is defined in [the documentation contract](first-product-software-scope.md#beginner-installation-guide--mandatory-for-100). The planned canonical guide is `docs/user-setup.md`, shipped with the installer and readable offline. This requirement is open; the developer commands below do not satisfy it.
+This document describes developer/pilot tooling; it is not yet a complete
+layperson installation guide. The older [documentation contract](first-product-software-scope.md#beginner-installation-guide--mandatory-for-100)
+describes the appliance USB journey. The desktop package needs its own
+version-matched guide covering download, installation, first run, local
+playback, troubleshooting and removal. The planned canonical guide is
+`docs/user-setup.md`, shipped with the installer and readable offline. This
+remains open; the developer commands below do not satisfy it.
 
 For the existing Oracle VirtualBox test machine, follow the [VM oracle runbook](vm-oracle.md) for isolation, release selection and restoration.
 
-Isolde should eventually be installable by a normal user without touching a Linux desktop after the initial OS image or installer boots.
+The first easy-install target is an app on an existing **Ubuntu 26.04 desktop**,
+not a disk-replacing image. The intended experience is to download a trusted
+Isolde package, open it in Ubuntu's package installer, approve the administrator
+prompt, then launch Isolde from the applications menu. It must not replace the
+operating system, change login settings, or start automatically without consent.
+An appliance image remains a separate future option.
 
-## Dedicated-machine requirement and current installer foundation
+**This experience is not ready to ship.** There is no published, verified
+desktop package yet, and the package builder below has not been validated on a
+clean Ubuntu 26.04 desktop. The existing commands are for developers/pilots,
+not instructions for a nontechnical user.
 
-The consumer target is a computer dedicated to Isolde, not a general desktop with an extra app. Users should eventually download one image, explicitly choose the target disk, install, and complete the TV setup guide. No Linux knowledge should be required. Disk replacement must always be explicit; the current tooling never formats disks.
+## Existing appliance installer foundation
+
+The original appliance target is a computer dedicated to Isolde. Users should
+eventually be able to download one image, explicitly choose the target disk,
+install, and complete the TV setup guide without Linux knowledge. Disk
+replacement must always be explicit; the current tooling never formats disks.
 
 Implemented foundation (0.0.1.2): `tools/install-appliance.py`, currently targeting **Ubuntu 26.04 only**. This is developer/pilot installation tooling, not a finished consumer installer or signed distribution.
 
@@ -55,11 +74,39 @@ Installer regression tests cover repeat deployment, previous-release selection, 
 
 ## Target install experiences
 
-The professional install path should have three tiers:
+The planned install paths are:
 
-1. **Appliance image**: a bootable USB/image for a small PC, mini PC, or dedicated box. This is the preferred consumer path.
-2. **Linux package**: a signed `.deb`/repository install for Ubuntu/Debian users who already manage a Linux host.
+1. **Ubuntu desktop package**: the first easy-install priority for an existing Ubuntu 26.04 computer.
+2. **Appliance image**: a future bootable USB/image for a dedicated box.
 3. **Developer/VM setup**: a reproducible path for testing, screenshots, and safe experiments without endangering the host computer.
+
+## Experimental desktop package for maintainers
+
+On Ubuntu 26.04, after installing the development dependencies, building and
+passing the relevant tests, maintainers can create an **experimental**, local
+`.deb` from the same configured build:
+
+```sh
+python3 tools/build-desktop-deb.py --build-dir build --output-dir dist
+```
+
+The package installs Isolde under `/opt/isolde` and adds a windowed
+**Isolde (Desktop)** applications menu entry, separate from an existing
+per-user appliance entry; it does not configure autostart, login or appliance
+recovery.
+Installing a package requires administrator authorization and its declared
+Ubuntu runtime dependencies. The builder does not build or run the tests and
+does not sign or publish the package. Packaging a build is not release
+qualification. Before distributing it, complete trusted release delivery,
+verify all dependencies and desktop behavior on a clean Ubuntu 26.04 VM, test
+installation/removal and preservation of user data, and write and test the
+beginner guide. Test each architecture before claiming support.
+
+In-app discovery can recognize a matching desktop package, but cannot yet
+download or install it. The intended update replaces the Isolde package
+without reinstalling Ubuntu or deleting home files. Package updates need a
+trusted, package-manager-compatible design and real upgrade/migration testing
+before users can update from Settings; keep backups in the meantime.
 
 ## First-run onboarding
 
