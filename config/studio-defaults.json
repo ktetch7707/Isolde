@@ -465,7 +465,7 @@
         "radius": 16
       }
     },
-    "carousel": {"id":"carousel","name":"Button carousel","kind":"widget","widgetType":"container","componentType":"container","placement":{"x":0,"y":0,"width":6,"height":2},"presentation":{"showHeading":true,"surfaceOpacity":0.35,"radius":18,"layout":{"schemaVersion":1,"mode":"row","columns":16,"rows":1,"gap":14,"padding":12,"visibleColumns":4,"wrap":false},"headingSize":24,"moreLabel":"More buttons","galleryTitle":"Buttons"},"family":"carousel"},
+    "carousel": {"id":"carousel","name":"Button shelf","kind":"widget","widgetType":"container","componentType":"container","placement":{"x":0,"y":0,"width":4,"height":2},"presentation":{"showHeading":true,"surfaceOpacity":0.58,"radius":24,"layout":{"schemaVersion":1,"mode":"row","columns":16,"rows":1,"gap":16,"padding":14,"visibleColumns":4,"wrap":false},"headingSize":20,"headingBold":true,"variant":"orb","diameter":70,"labelSize":13,"labelPill":false,"moreLabel":"More buttons"},"family":"carousel"},
     "page-menu": {
       "id":"page-menu", "name":"Pages", "kind":"widget", "widgetType":"container", "componentType":"container", "family":"page-menu",
       "placement":{"x":0,"y":0,"width":4,"height":1},
@@ -531,8 +531,8 @@
     },
     {
       "id": "carousel",
-      "name": "Button carousel",
-      "description": "An editable scrolling row of buttons",
+      "name": "Button shelf",
+      "description": "Arrange apps, HDMI inputs, page links, and other shortcuts in one row",
       "icon": "carousel"
     },
     {
@@ -652,7 +652,8 @@
       {"tab":"Appearance","scope":"presentation","key":"iconGlow","label":"Glow spread","type":"number","control":"slider","min":0,"max":32,"step":1,"fallback":8,"advanced":true,"families":["app-bar"]},
       {"tab":"Appearance","scope":"presentation","key":"iconGlowOpacity","label":"Glow intensity","type":"number","control":"slider","min":0,"max":1,"step":0.05,"fallback":0.65,"advanced":true,"families":["app-bar"]},
       {"tab":"Appearance","scope":"presentation","key":"iconPadding","label":"Logo padding","type":"number","control":"slider","min":0,"max":40,"step":1,"fallback":0,"advanced":true,"families":["app-bar"]},
-      {"tab":"Content","scope":"component","key":"addChild","label":"Add a child component","type":"children","excludeFamilies":["app-bar","page-menu","source-notice","detected-sources"],"types":["container"],"excludeTypes":["section","navigation"]},
+      {"tab":"Content","scope":"component","key":"addChild","label":"Add a child component","type":"children","excludeFamilies":["app-bar","carousel","page-menu","source-notice","detected-sources"],"types":["container"],"excludeTypes":["section","navigation"]},
+      {"tab":"Content","scope":"component","key":"addChild","label":"Add a button","type":"children","families":["carousel"],"types":["container"]},
       {"tab":"Appearance","scope":"presentation","key":"variant","label":"Card style","type":"choice","choices":["source","summary","banner","orb","media","recent","text","image"],"excludeTypes":["library","container","section"]},
       {"tab":"Appearance","scope":"presentation","key":"surfaceColor","label":"Surface","type":"color","advanced":false},
       {"tab":"Appearance","scope":"presentation","key":"labelColor","label":"Text","type":"color","advanced":false},
@@ -904,14 +905,7 @@
       "width": 1,
       "height": 1
     },
-    "presentation": {
-      "variant": "source",
-      "labelSize": 20,
-      "radius": 18,
-      "surfaceOpacity": 1,
-      "icon": "arrow-right",
-      "labelPosition": "inside"
-    }
+    "presentation": {}
   },
   "carouselStart": [
     {

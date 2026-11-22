@@ -11,6 +11,7 @@ Item {
     // geometry or provider clients in the underlying page.
     property bool previewOverlay:false
     property bool runtimeFocusEnabled:true
+    property var shelfStyle:null
     property string editorSelectionId:host.editSelection || ""
     signal activated(var item)
     signal focused(var card)
@@ -31,7 +32,7 @@ Item {
             readonly property bool group:modelData.item.componentType==="container" && !apps && !pageMenu && !pagePanel && !sources
             readonly property bool library:modelData.item.componentType==="library"
             readonly property bool selected:surface.host.editMode ? surface.editorSelectionId===modelData.item.id : surface.runtimeFocusEnabled && !surface.host.recoveryFocused && surface.host.focusedIndex===surface.host.itemIndex(modelData.item.id)
-            readonly property var baseStyle:modelData.item.presentation || ({})
+            readonly property var baseStyle:surface.shelfStyle?Object.assign({},surface.shelfStyle,modelData.item.presentation || {}):modelData.item.presentation || ({})
             readonly property var style:Object.assign({},baseStyle,(baseStyle.states || {}).normal || {},(baseStyle.states || {})[modelData.item.designState || (modelData.item.unavailableReason?"unavailable":node.selected?"focused":"normal")] || {})
             readonly property var layout:style.layout || ({})
             readonly property real padding:(layout.padding || 0)*surface.unit
@@ -105,6 +106,7 @@ Item {
                 Component.onCompleted:if(node.group)setSource(Qt.resolvedUrl("PlacedComponents.qml"),{
                     items:Qt.binding(()=>node.childEntries),metrics:Qt.binding(()=>node.localMetrics),host:surface.host,
                     unit:Qt.binding(()=>surface.unit),catalog:Qt.binding(()=>surface.catalog),previewOverlay:surface.previewOverlay,
+                    shelfStyle:Qt.binding(()=>node.modelData.item.family==="carousel"?node.style:null),
                     editorSelectionId:Qt.binding(()=>surface.editorSelectionId),runtimeFocusEnabled:Qt.binding(()=>surface.runtimeFocusEnabled)
                 })
                 onLoaded:if(!surface.previewOverlay && surface.host.registerGroupSurface)surface.host.registerGroupSurface(node.modelData.item.id,contents,false)
@@ -120,9 +122,9 @@ Item {
                 id:appsLoader;x:node.padding;y:node.padding+node.headingHeight;width:parent.width-2*node.padding;height:parent.height-2*node.padding-node.headingHeight;active:node.apps || node.buttons
                 sourceComponent:PageAppCarousel {
                     buttonItems:node.buttons?node.childEntries.filter(e=>!e.item.hidden).sort((a,b)=>a.placement.y-b.placement.y || a.placement.x-b.placement.x).map(e=>e.item):null
-                    registry:surface.host.appProvider;collection:node.modelData.item.appCollection || ({mode:"selected",ids:[]});originId:node.modelData.item.id;globalGalleryRoute:!node.buttons;style:Object.assign({},node.buttons?((surface.host.collectionDefaults || {}).carousel || {}).presentation || {}:{},node.style);appearance:surface.host.appearance;unit:surface.unit
+                    registry:surface.host.appProvider;collection:node.modelData.item.appCollection || ({mode:"selected",ids:[]});originId:node.modelData.item.id;globalGalleryRoute:!node.buttons;style:node.buttons?Object.assign({moreLabel:qsTr("More buttons"),galleryTitle:node.modelData.item.name},node.style):node.style;appearance:surface.host.appearance;unit:surface.unit
                     galleryAppearance:surface.host.shellAppsAppearance || surface.host.appearance
-                    readOnly:surface.host.editMode || surface.host.previewOnly
+                    readOnly:surface.host.editMode || (surface.host.previewOnly && !node.buttons)
                     engaged:surface.host.activeMediaWidgetId===node.modelData.item.id;highlighted:node.selected
                     onEngage:if(!readOnly)surface.host.engageMediaWidget(node.modelData.item.id)
                     onLaunch:action=>{if(surface.host.rememberAppFocus)surface.host.rememberAppFocus(node.modelData.item.id,focusState());surface.host.actionActivated(action,node.modelData.item.id)}

@@ -705,8 +705,11 @@ Item {
     function endInteraction() {
         trialTimer.stop();restoreEditSnapshot(interactionOrigin);interactionOrigin=({});openSaveDialog(true);message="Trial ended. Your changes are still unsaved."
     }
+    // Preview local navigation while describing actions that would leave Studio.
     function interactionAction(action,originId) {
         if(preview.routePanelAction(action))return
+        if(action.actions && action.actions.length>1){message="Would run "+action.actions.length+" actions. No external action was performed.";return}
+        if(action.actions && action.actions.length===1)action=action.actions[0]
         if(action.type==="open-page" || action.type==="root-page") {
             const target=action.type==="root-page"?"":action.pageId
             if(!pageEntries.some(p=>p.id===target)){message="This draft destination is unavailable.";return}
@@ -1846,6 +1849,7 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
     }
     StudioCatalog {
         id:catalog;anchors.fill:parent;z:5;visible:studio.open && studio.mode==="catalog"
+        buttonsOnly:!!studio.parentGroup && studio.parentGroup.family==="carousel"
         provider:studio.provider;session:studio.session;options:visible && studio.layoutModel?studio.layoutModel.studioOptions:({});appearance:studio.palette
         onCanceled:{studio.mode="canvas";studio.addingType="";studio.pendingScrollEnable=false}
         onPicked:(type,configuration)=>studio.startAddition(type,configuration)

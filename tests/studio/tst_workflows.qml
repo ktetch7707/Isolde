@@ -206,6 +206,62 @@ Item {
             compare(copiedButton.actions[0].pageId,secondPageId)
             compare(studioFixture.disk(), diskBaseline)
         }
+        // Author a shelf in the catalog, add a named HDMI shortcut, and exercise runtime focus and action routing.
+        function test_button_shelf_authoring_and_runtime() {
+            givenPage(false,false)
+            editor.activateMenu(2)
+            const catalog=findChild(editor,"studioCatalog")
+            tryVerify(()=>catalog.visible)
+            catalog.chooseFamily(catalog.families.findIndex(entry=>entry.id==="more"))
+            catalog.chooseFamily(catalog.families.findIndex(entry=>entry.id==="carousel"))
+            compare(catalog.view,"carousel")
+            catalog.selected=1
+            command(inputManager.confirm)
+            compare(editor.mode,"move")
+            command(inputManager.confirm)
+            compare(editor.mode,"canvas")
+            const shelf=editor.items.find(item=>item.family==="carousel")
+            verify(!!shelf)
+            compare(shelf.presentation.variant,"orb")
+            editor.selectedId=shelf.id
+            editor.context(14)
+            editor.activateMenu(2)
+            tryCompare(catalog,"view","variants")
+            catalog.selected=catalog.variants.findIndex(entry=>entry.id==="round")
+            command(inputManager.confirm)
+            compare(catalog.view,"links")
+            catalog.chooseAction(catalog.actions.find(entry=>entry.action && entry.action.type==="switch-input" && entry.action.input===1))
+            compare(editor.mode,"move")
+            command(inputManager.confirm)
+            compare(editor.mode,"canvas")
+            const hdmi=editor.items.find(item=>item.parentId===shelf.id)
+            compare(hdmi.name,"HDMI 1")
+            compare(hdmi.actions[0].input,1)
+            verify(editor.command("addResolved",{type:"button",parentId:shelf.id,placement:{x:1,y:0,width:1,height:1},
+                configuration:{name:"Games and apps",actions:[{type:"open-apps"},{type:"open-search"}]}}),editor.session.errorString)
+            editor.mode="preview"
+            const host=findChild(editor,"studioPreview")
+            tryVerify(()=>!!findChild(host,"pageAppCarousel"))
+            const widget=findChild(host,"pageAppCarousel")
+            tryCompare(widget,"selectedId",hdmi.id)
+            let invoked
+            host.actionActivated.connect((action,origin)=>{invoked={action:action,origin:origin}})
+            host.restoreFocus(shelf.id)
+            host.handleCommand(inputManager.confirm)
+            verify(host.widgetActive)
+            host.handleCommand(inputManager.navigateRight)
+            host.handleCommand(inputManager.confirm)
+            verify(!!invoked)
+            compare(invoked.origin,shelf.id)
+            compare(invoked.action.actions.map(action=>action.type),["open-apps","open-search"])
+            const selected=widget.selectedId
+            host.handleCommand(inputManager.back)
+            verify(!host.widgetActive)
+            host.restoreFocus(shelf.id)
+            tryVerify(()=>host.widgetActive)
+            compare(widget.selectedId,selected)
+            compare(studioFixture.disk(),diskBaseline)
+        }
         function test_editable_page_menu_add_cancel_accept_and_reopen() {
             givenPage(false,false)
             verify(editor.command("newPage",{name:"Menu page"}))

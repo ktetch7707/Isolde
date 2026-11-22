@@ -20,8 +20,9 @@ Item {
     property string playlistKind:""
     readonly property var playlistClient:view==="playlists" && provider && provider.playlistCatalog ? provider.playlistCatalog() : null
     property bool moreComponents:false
+    property bool buttonsOnly:false
     readonly property var primaryFamilies:((options.simpleStudio || {}).basicFamilies || []).map(id=>id==="clock"?{id:"clock",name:"Clock",description:"Time and date"}:(options.catalog || []).find(f=>f.id===id)).filter(f=>!!f).map(f=>Object.assign({},f,{name:((options.simpleStudio || {}).primaryLabels || {})[f.id] || f.name}))
-    readonly property var families:moreComponents?(options.catalog || []).filter(f=>!primaryFamilies.some(p=>p.id===f.id)):primaryFamilies.concat([{id:"more",name:"More components",description:"Shapes, groups, sources and other building blocks"}])
+    readonly property var families:buttonsOnly?(options.catalog || []).filter(f=>f.id==="button"):moreComponents?(options.catalog || []).filter(f=>!primaryFamilies.some(p=>p.id===f.id)):primaryFamilies.concat([{id:"more",name:"More components",description:"Shapes, groups, sources and other building blocks"}])
     readonly property var variants:(options.componentVariants || {})[family] || []
     readonly property var actions:(session?session.availableActions:[]).concat([{name:"Play a Kodi movie…",needsMedia:"movies"},{name:"Open a Kodi show…",needsMedia:"shows"}])
     readonly property var apps:actions.filter(a=>a.action && a.action.type==="launch-app" && (a.appType==="web" || a.appType==="desktop" || a.appType==="android"))
@@ -30,7 +31,8 @@ Item {
     signal picked(string type,var configuration)
     signal canceled()
     function variantItem(entry){const base=(options.componentPresets || {})[family] || {};return Object.assign({},base,{name:entry.name,presentation:Object.assign({},base.presentation || {},entry.presentation || {})})}
-    function begin(){moreComponents=false;view="families";selected=0;configuration=({});message="Choose what to add. Content comes first; placement follows on the full page."}
+    // Inside a button shelf, open its supported component picker directly.
+    function begin(){moreComponents=false;view="families";selected=0;configuration=({});message="Choose what to add. Content comes first; placement follows on the full page.";if(buttonsOnly)chooseFamily(0)}
     function labels(){
         if(view==="shapes")return (options.shapeChoices || []).map(choice=>choice.name)
         if(view==="widgets")return ["Clock","Text / heading","Section / Group","Input slots · eight editable positions, capture availability required"]
@@ -38,7 +40,7 @@ Item {
         if(view==="media")return mediaChoices.map(m=>m.name).concat((options.playlistShelfChoices || []).map(m=>m.name))
         if(view==="playlists")return [qsTr("Refresh Kodi playlists")].concat(playlistClient?(playlistClient.items || []).map(i=>i.title || i.playlistName):[])
         if(view==="apps")return ["All installed apps","Use "+selectedApps.length+" selected apps"].concat(apps.map(a=>(selectedApps.indexOf(a.action.appId)>=0?"✓ ":"□ ")+a.name))
-        if(view==="carousel")return ["Start with three editable buttons · links are unassigned","Start with an empty carousel"]
+        if(view==="carousel")return ["Start with three editable buttons","Start with an empty shelf"]
         if(view==="artwork")return ["Import a local PNG / JPEG / GIF…"].concat(assets.map(a=>a.name+" · "+a.width+" × "+a.height))
         return []
     }
@@ -61,6 +63,7 @@ Item {
     function chooseAction(entry){
         if(entry.needsMedia){media.libraryKind=entry.needsMedia;media.selected=0;view="mediaAction";return}
         configuration=Object.assign({},configuration,{action:entry.action || {}})
+        if(buttonsOnly && entry.action && entry.action.type && entry.name)configuration.name=entry.name
         if(entry.needsTarget){beginKeyboard("target","","links");return}
         finish(family)
     }

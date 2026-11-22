@@ -44,9 +44,18 @@ Item {
     signal engage()
     signal launch(var action)
     signal allAppsRequested(string originId)
+    // Use the first assigned action for artwork and preserve the complete sequence when activated.
+    function buttonActions(button) {return button.actions && button.actions.length?button.actions:button.action && button.action.type?[button.action]:[]}
+    // Borrow installed app artwork when a shortcut uses that app and has no custom image.
+    function buttonArtwork(button) {
+        const action=buttonActions(button)[0]
+        const app=action && action.type==="launch-app" && registry?(registry.apps || []).find(entry=>entry.id===action.appId):null
+        if(!app || button.logoSource)return button
+        return Object.assign({},app,button,{logoSource:app.logoSource,cutoutLogoSource:app.cutoutLogoSource,inkLogoSource:app.inkLogoSource,symbol:button.symbol || app.symbol})
+    }
     function logoSource(app){const mode=(app.presentation || {}).logoMode || style.logoMode || "cutout";return mode==="monochrome"?app.inkLogoSource || app.cutoutLogoSource || app.logoSource || "":mode==="cutout"?app.cutoutLogoSource || app.logoSource || "":app.logoSource || ""}
     function cardStyle(gallery){const options=typeof homeLayout!=="undefined"?homeLayout.studioOptions:{};const preset=(options.appIconStyles || {})[style.appIconStyle] || {};const result=Object.assign({},preset,style);delete result.visibleLabel;delete result.showHeading;delete result.headingSize;if(result.cardGap===undefined)result.cardGap=(style.layout || {}).gap || 0;if(gallery){if(result.labelSurfaceColor===undefined)result.labelSurfaceColor=galleryTheme.surface;if(result.labelColor===undefined)result.labelColor=galleryTheme.text;}return Object.assign(result,gallery?{variant:"orb",diameter:result.diameter || 78}:{},{icon:style.icon || "grid",logoMode:style.logoMode || "cutout",artFit:style.artFit || "contain"})}
-    function artworkItem(app,gallery){const mode=(app.presentation || {}).logoMode || style.logoMode || "cutout";return {name:app.name+(mode==="monochrome" && !app.inkLogoSource && app.logoSource?" · Brand":""),unavailableReason:app.unavailableReason || "",logoSource:logoSource(app),inkAvailable:!!app.inkLogoSource,iconOpticalScale:app.iconOpticalScale || 1,iconContrastBackdrop:app.iconContrastBackdrop || "",appSymbol:app.id==="__more__"?"":app.symbol || (app.name || "").slice(0,1),presentation:Object.assign({},cardStyle(gallery),app.presentation || {})}}
+    function artworkItem(item,gallery){const app=buttons?buttonArtwork(item):item;const mode=(app.presentation || {}).logoMode || style.logoMode || "cutout";return {name:app.name+(mode==="monochrome" && !app.inkLogoSource && app.logoSource?" · Brand":""),unavailableReason:app.unavailableReason || "",logoSource:logoSource(app),inkAvailable:!!app.inkLogoSource,iconOpticalScale:app.iconOpticalScale || 1,iconContrastBackdrop:app.iconContrastBackdrop || "",appSymbol:app.id==="__more__" || buttons && (app.presentation || {}).icon?"":app.symbol || (app.name || "").slice(0,1),presentation:Object.assign({},cardStyle(gallery),app.presentation || {})}}
     function focusState(){return {selectedId:selectedId,galleryId:galleryId,galleryOpen:gallery.opened || pendingGalleryRestore}}
     function restoreFocusState(state){
         if(!state)return
@@ -65,10 +74,11 @@ Item {
         const app=galleryApps.find(a=>a.id===id)
         if(app && app.unavailableReason){message=app.unavailableReason;return}
         if(app){
-            if(buttons && (!app.action || !app.action.type)){message="This button has no link. Choose a link in Edit component.";return}
+            const actions=buttons?buttonActions(app):[]
+            if(buttons && !actions.length){message="This button has no link. Choose a link in Edit component.";return}
             pendingGalleryRestore=gallery.opened
             if(gallery.opened)gallery.close()
-            if(buttons)launch(app.action)
+            if(buttons)launch(actions.length===1?actions[0]:{actions:actions})
             else launch({type:"launch-app",appId:id})
         }
     }
