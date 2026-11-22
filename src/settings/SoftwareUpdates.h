@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QObject>
+#include <QProcess>
 #include <QUrl>
 #include <QVersionNumber>
 #include <QDateTime>

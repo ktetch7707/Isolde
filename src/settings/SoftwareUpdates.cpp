@@ -11,6 +11,7 @@
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QProcess>
+#include <QTimeZone>
 #include <QRandomGenerator>
 #include <QRegularExpression>
 #include <QSettings>
@@ -112,7 +113,7 @@ bool SoftwareUpdates::available() const
 {
     return !m_latest.isEmpty() &&
         QVersionNumber::compare(stableVersion(QStringLiteral("v") + m_latest),
-                                stableVersion(QStringLiteral("v" + m_dismissed))) > 0;
+                                stableVersion(QStringLiteral("v") + m_dismissed)) > 0;
 }
 bool SoftwareUpdates::checking() const { return m_reply != nullptr; }
 QString SoftwareUpdates::latestVersion() const { return m_latest; }
@@ -196,12 +197,12 @@ void SoftwareUpdates::finished()
         const auto seconds = retryAfter.toLongLong(&ok);
         auto until = ok ? now.addSecs(qBound(qint64(1), seconds, qint64(86400)))
                         : QDateTime::fromString(QString::fromLatin1(retryAfter), Qt::RFC2822Date).toUTC();
-        if (!until.isValid())
-        {
-            const auto epoch = reset.toLongLong(&ok);
-            if (ok)
-                until = QDateTime::fromSecsSinceEpoch(epoch, Qt::UTC);
-        }
+            if (!until.isValid())
+            {
+                const auto epoch = reset.toLongLong(&ok);
+                if (ok)
+                    until = QDateTime::fromSecsSinceEpoch(epoch, QTimeZone::UTC);
+            }
         if (!until.isValid() || until <= now)
             until = now.addSecs(3600);
         m_retryAfter = qMin(until, now.addSecs(86400));
