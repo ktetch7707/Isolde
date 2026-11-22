@@ -101,7 +101,11 @@ HomeLayout::skins() const
         QVariantMap{{"id", "builtin-pastel"},
                     {"name", tr("Pastel sky")},
                     {"builtIn", true},
-                    {"description", tr("Cloud wallpaper, glass panels, installed apps and Kodi viewing history")}}};
+                    {"description", tr("Cloud wallpaper, glass panels, installed apps and Kodi viewing history")}},
+        QVariantMap{{"id", "builtin-arctic"},
+                    {"name", tr("Arctic")},
+                    {"builtIn", true},
+                    {"description", tr("Artwork-led dark default skin with poster reflections and light/dark appearances")}}};
     result.append(starterTemplates(m_defaultPath));
     const QDir directory(skinDirectory());
     for (const auto& file : directory.entryList({"*.json"}, QDir::Files, QDir::Name))
@@ -330,7 +334,7 @@ HomeLayout::skinSnapshot(const QString& id) const
     for (const auto& entry : starterTemplates(m_defaultPath))
         if (entry.toMap()["id"].toString() == id)
             starter = true;
-    if (id == "builtin-lounge" || id == "builtin-pastel" || starter)
+    if (id == "builtin-lounge" || id == "builtin-pastel" || id == "builtin-arctic" || starter)
     {
         const auto relative = "skins/" + id.mid(8) + ".json";
         skin = readObject(QDir(QFileInfo(m_defaultPath).absolutePath()).filePath(relative));

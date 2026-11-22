@@ -602,7 +602,10 @@ ComponentSchema::validPresentationField(const QString& key, const QVariant& v, c
         {"iconSize", [](const QVariantMap& m, bool s, bool c) { Q_UNUSED(s); Q_UNUSED(c); return validPresentationNumericField(m, "iconSize", s); }},
         {"surfaceOpacity", [](const QVariantMap& m, bool s, bool c) { Q_UNUSED(s); Q_UNUSED(c); return validPresentationNumericField(m, "surfaceOpacity", s); }},
         {"cardGap", [](const QVariantMap& m, bool s, bool c) { Q_UNUSED(s); Q_UNUSED(c); return validPresentationNumericField(m, "cardGap", s); }},
-        {"artHeight", [](const QVariantMap& m, bool s, bool c) { Q_UNUSED(s); Q_UNUSED(c); return validPresentationNumericField(m, "artHeight", s); }}};
+        {"artHeight", [](const QVariantMap& m, bool s, bool c) { Q_UNUSED(s); Q_UNUSED(c); return validPresentationNumericField(m, "artHeight", s); }},
+        {"reflection", [](const QVariantMap& m, bool s, bool c) { Q_UNUSED(s); Q_UNUSED(c); return validPresentationBoolFlag(m, "reflection"); }},
+        {"reflectionHeight", [](const QVariantMap& m, bool s, bool c) { Q_UNUSED(s); Q_UNUSED(c); return validPresentationNumericField(m, "reflectionHeight", s); }},
+        {"reflectionOpacity", [](const QVariantMap& m, bool s, bool c) { Q_UNUSED(s); Q_UNUSED(c); return validPresentationNumericField(m, "reflectionOpacity", s); }}};
     auto it = handlers.find(key);
     if (it != handlers.cend())
         return it.value()(presentationMap, section, container);
@@ -1261,6 +1264,10 @@ ComponentSchema::validPresentationNumericField(const QVariantMap& v, const QStri
     if (QStringList{"padding", "radius", "headingSize", "diameter", "labelSize", "iconSize", "cardGap",
                     "artHeight"}.contains(key))
         return validPresentationNumericSize(number);
+    if (key == "reflectionHeight")
+        return number >= 0 && number <= 400;
+    if (key == "reflectionOpacity")
+        return number >= 0 && number <= 1;
     if (key == "contentWidth")
         return validPresentationNumericContentWidth(number, section);
     return false;
@@ -2381,6 +2388,7 @@ ComponentSchema::action(const QVariantMap& input, QString* error)
     handlers.insert("switch-input", [](const QVariantMap& in, QString* err) { return actionSwitchInput(in, err); });
     handlers.insert("desktop-mode", [](const QVariantMap& in, QString* err) { return actionDesktopMode(in, err); });
     handlers.insert("wait", [](const QVariantMap& in, QString* err) { return actionWait(in, err); });
+    handlers.insert("run-script", [](const QVariantMap& in, QString* err) { return actionRunScript(in, err); });
     handlers.insert("open-folder", [](const QVariantMap& in, QString* err) { return actionOpenTarget(in, "open-folder", err); });
     handlers.insert("open-file", [](const QVariantMap& in, QString* err) { return actionOpenTarget(in, "open-file", err); });
     handlers.insert("open-disc", [](const QVariantMap& in, QString* err) { return actionOpenTarget(in, "open-disc", err); });
@@ -2533,6 +2541,42 @@ ComponentSchema::actionWait(const QVariantMap& input, QString* error)
     if (!std::isfinite(duration) || duration < 50 || duration > 30000 || std::floor(duration) != duration)
         return reject(error, "Wait duration must be 50-30000 ms.");
     QVariantMap result{{"schemaVersion", 1}, {"type", "wait"}, {"duration", static_cast<int>(duration)}};
+    return result;
+}
+
+QVariantMap
+ComponentSchema::actionRunScript(const QVariantMap& input, QString* error)
+{
+    for (auto it = input.cbegin(); it != input.cend(); ++it)
+        if (!QStringList{"schemaVersion", "type", "target", "args", "timeoutMs"}.contains(it.key()))
+            return reject(error, "Script actions contain only script target, arguments and optional timeout.");
+    const auto script = input.value("target").toString().trimmed();
+    if (script.isEmpty() || script.size() > MaxActionTargetSize || script.contains(QChar::Null) ||
+        !QDir::isAbsolutePath(script))
+        return reject(error, "Use an absolute script path without control characters.");
+    QVariantMap result{{"schemaVersion", 1}, {"type", "run-script"}, {"target", script}};
+    if (input.contains("args"))
+    {
+        const auto args = input.value("args");
+        if (args.metaType().id() != QMetaType::QVariantList)
+            return reject(error, "Script arguments must be a list.");
+        QStringList argList;
+        for (const auto& arg : args.toList())
+        {
+            const auto s = arg.toString();
+            if (s.contains(QChar::Null) || s.size() > 1024)
+                return reject(error, "Script arguments must be short strings without control characters.");
+            argList.append(s);
+        }
+        result["args"] = argList;
+    }
+    if (input.contains("timeoutMs"))
+    {
+        const double timeout = input.value("timeoutMs").toDouble();
+        if (!std::isfinite(timeout) || timeout < 1000 || timeout > 300000 || std::floor(timeout) != timeout)
+            return reject(error, "Script timeout must be 1000-300000 ms.");
+        result["timeoutMs"] = static_cast<int>(timeout);
+    }
     return result;
 }
 
