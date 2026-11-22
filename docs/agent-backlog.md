@@ -1,6 +1,20 @@
 # Isolde Agent Backlog — first-product software completion
 Location: `docs/agent-backlog.md`. Persistent entrypoint: `AGENTS.md`.
 
+November 20 Arctic merge review: Isolde-Test run `arctic-merge-edb2df4` built directly from `origin/main` at `edb2df4`. Compilation stopped at `ComponentSchema.cpp` because `actionRunScript` has no namespace declaration. CTest and visual checks did not run. Source review also found an undefined `poster` ID and inline GLSL in Qt 6 `ShaderEffect`, alongside v1 `items` in the merged layouts and a layout action that executes arbitrary programs. Evidence: `build/vm-oracle/arctic-merge-edb2df4/report/build.log`.
+
+November 20 Studio Button shelf: reuse the app row renderer for individually authored shortcuts, with Pastel-inspired round cards and a shelf-specific overflow menu. Isolde-Test `studio-button-shelf-b` verified HDMI shortcut authoring, sequential action routing, focus return, and unchanged profile bytes during Try. `studio-button-shelf-final` passed 67/67 CTests, including existing overflow and ordered placement checks. The staged Lounge/Pastel visual run was blocked at guest accessibility preflight before capture.
+
+November 20 Studio Page panel: place a named page inside a component and assign a host button to switch that panel to another named page. Focused Isolde-Test run `studio-page-panel-e` passed 16 workflow cases, including remote authoring, switching, activating an embedded control, and restoring focus. `studio-page-panel-full-c/report/ctest.log` records 67/67 passing CTests after updating the Studio navigation tests for layout starters and suggested names. The staged visual runner exited during Lounge startup on both attempts, with no captures to review and no Pastel run.
+
+November 20 Studio page starters: New page offers Blank page plus the four packaged starter layouts as editable named pages. Isolde-Test `studio-page-starters-b` passed 15 focused workflow cases, including remote selection of all four layouts, cancel, undo, and save/reopen with the starter components preserved.
+
+November 20 Studio shelf source correction: named Kodi collections and playlists now set the shelf view and source together. Text search, genre, tag, and game platform choices set the matching view in the same draft command. Focused Isolde-Test run `studio-library-source-a` passed 36 cases, including selection, cancellation, one-step undo, and unchanged saved bytes.
+
+November 20 Studio input simplification: create or duplicate pages and add sections and tabs with suggested names, place linked images without a naming prompt, choose Guide groups and channels by name, and use labelled section arrangements and text line counts. Isolde-Test `studio-input-simplification-c` passed all 14 focused Studio workflow cases, including remote creation, channel selection, cancellation, undo, and unchanged saved bytes. The wider source-picker, layout starter, precision-control, and blank-page recreation work remains open.
+
+November 20 Home layout cutover: shipped skins, Studio presets, and active Home fixtures now use typed components. Removed v1 item loading, type inference, and migration backups. Cinema lounge retains a two-column top row and full-width sections below, with named width choices in Studio. Isolde-Test run `component-layout-cutover-f` passed all 67 CTests and staged Lounge and Pastel apply, save, reapply, and reset journeys. Home captures were reviewed and both normal profile layout hashes matched. Rebuilding the two skins from an empty page through Studio remains unverified.
+
 ## Current acceptance reconciliation — 2026-11-12
 
 November15 T12 input review: acceptance is **90% (2256/25)**, 212/243 milestones; T12 is 57% after narrow installed remapping, native return, Store keyboard and timed-wake evidence. T04 is complete at100%, with all seven Scope groups verified.

@@ -392,7 +392,7 @@ Window {
                 localNetworkAvailable: networkSettings.localNetworkAvailable
                 hasContextualSources: sourceManager.items.length > 0
                 sourceWorkflow:({playback:sessionManager.active,setup:!setupState.complete,editing:home.editMode})
-                onActionActivated: (action, originId) => { if (setupState.complete) actionDispatcher.dispatch(action, originId) }
+                onActionActivated: (action, originId) => { if (setupState.complete && !home.routePanelAction(action)) actionDispatcher.dispatch(action, originId) }
                 onSettingsRequested: section => actionDispatcher.dispatch({ type: "settings", section: section }, "")
                 onSearchRequested: window.openSearchFromPage()
                 onAllAppsRequested: origin => window.openAllAppsFromOrigin(origin)

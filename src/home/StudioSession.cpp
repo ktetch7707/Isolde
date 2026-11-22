@@ -251,7 +251,7 @@ StudioSession::allocateId(const QString& baseId)
     {
         const auto collect = [&taken](const QJsonObject& object)
         {
-            for (const auto& key : {"components", "items", "pages", "categories"})
+            for (const auto& key : {"components", "pages", "categories"})
                 for (const auto& entry : object.value(key).toArray())
                     taken.insert(entry.toObject().value("id").toString());
         };
@@ -373,19 +373,12 @@ StudioSession::validDraft(const QByteArray& data)
         return false;
     }
     const QJsonObject object = doc.object();
-    const int version = object.value(QStringLiteral("schemaVersion")).toInt(-1);
-    if (version != 1 && version != 2)
+    if (object.value(QStringLiteral("schemaVersion")).toDouble(-1) != 2)
     {
         setError(QStringLiteral("Unknown layout version — draft refused."));
         return false;
     }
-    if (object.contains(version == 1 ? QStringLiteral("components") : QStringLiteral("items")))
-    {
-        setError(QStringLiteral("The draft mixes incompatible layout versions."));
-        return false;
-    }
-    const QJsonArray components =
-        object.value(version == 1 ? QStringLiteral("items") : QStringLiteral("components")).toArray();
+    const QJsonArray components = object.value(QStringLiteral("components")).toArray();
     if (components.size() > kMaxComponents)
     {
         setError(QStringLiteral("The draft exceeds 1024 components and was refused."));

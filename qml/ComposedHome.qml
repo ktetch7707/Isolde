@@ -351,7 +351,7 @@ Item {
             if (current.widget) { activeWidget=current.id; sectionActionId=current.id; return }
             if (current.sectionAction) { const section = visibleSections.find(s => "section-"+s.id === current.id); if (section) root.activateSection(section); return }
             const item = host.items[host.itemIndex(current.id)]
-            if(item && (item.componentType==="library" || item.appCollection || item.family==="page-menu" || item.family==="carousel")){const widget=widgets[item.id];if(widget){activeWidget=item.id;widget.engage()}return}
+            if(item && (item.componentType==="library" || item.appCollection || ["page-menu","carousel","page-panel"].includes(item.family))){const widget=widgets[item.id];if(widget && (!widget.canEngage || widget.canEngage())){activeWidget=item.id;widget.engage()}return}
             if(item && item.componentType==="container"){
                 const children=(host.items || []).filter(i=>(i.parentId || "")===item.id && host.focusable(i))
                 if(children.length){activeGroup=item.id;host.focusedIndex=host.itemIndex(children[0].id)}

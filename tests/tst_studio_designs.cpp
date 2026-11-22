@@ -538,6 +538,7 @@ StudioDesignTests::responsiveRulesRemainDeclarativeAndBounded()
                                                                              {"name", "Clock"},
                                                                              {"kind", "widget"},
                                                                              {"widgetType", "clock"},
+                                                                             {"componentType", "clock"},
                                                                              {"categoryId", "flow"}},
                                                                             true)));
     document["components"] = nodes;

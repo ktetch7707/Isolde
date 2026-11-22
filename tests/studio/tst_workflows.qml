@@ -45,6 +45,223 @@ Item {
                 throw error
             }
         }
+        // Protect the remote-only create and duplicate flow from opening a naming keyboard.
+        function test_page_creation_suggests_unique_names_and_keeps_edits_private() {
+            givenPage(false, false)
+            const before = document()
+            editor.activateEntry({action:"new"})
+            compare(editor.mode, "pageStarters")
+            command(inputManager.confirm)
+            compare(editor.mode, "canvas")
+            const first = editor.pageEntries.find(entry => entry.id === editor.pageId)
+            compare(first.name, "New page")
+            editor.activateEntry({action:"new"})
+            command(inputManager.confirm)
+            const second = editor.pageEntries.find(entry => entry.id === editor.pageId)
+            compare(second.name, "New page 2")
+            editor.mode = "pageContext"
+            editor.choice = 3
+            command(inputManager.confirm)
+            compare(editor.mode, "pageContext")
+            const copy = editor.pageEntries.find(entry => entry.id === editor.pageId)
+            compare(copy.name, "New page 2 copy")
+            compare(studioFixture.disk(), diskBaseline)
+            verify(editor.session.undo())
+            verify(editor.session.undo())
+            verify(editor.session.undo())
+            compare(document(), before)
+        }
+        // Each starter must be usable from the remote and remain private until Apply.
+        function test_page_starters_cancel_create_and_undo() {
+            givenPage(false, false)
+            const before = document()
+            editor.mode = "pages"
+            editor.choice = editor.pageEntries.length
+            command(inputManager.confirm)
+            compare(editor.mode, "pageStarters")
+            const starters = editor.pageStarters.slice(1)
+            verify(starters.length >= 4)
+            command(inputManager.back)
+            compare(editor.mode, "pages")
+            compare(document(), before)
+            for (const starter of starters) {
+                editor.activateEntry({action:"new"})
+                const index = editor.pageStarters.findIndex(entry=>entry.id===starter.id)
+                for (let step = 0; step < index; ++step) command(inputManager.navigateDown)
+                command(inputManager.confirm)
+                compare(editor.mode, "canvas", editor.message)
+                const page = editor.session.document.pages.find(entry=>entry.id===editor.pageId)
+                compare(page.name, starter.name)
+                verify(page.layout.components.length > 0)
+                compare(studioFixture.disk(), diskBaseline)
+                verify(editor.session.undo())
+                compare(document(), before)
+            }
+            editor.activateEntry({action:"new"})
+            command(inputManager.navigateDown)
+            command(inputManager.confirm)
+            const id = editor.pageId
+            const created = editor.session.document.pages.find(entry=>entry.id===id)
+            verify(editor.session.execute("renamePage", {id:id,name:"Living Room"}))
+            verify(editor.session.apply(), editor.session.errorString)
+            verify(studioFixture.disk() !== diskBaseline)
+            editor.close()
+            editor.show(id, "")
+            const reopened = editor.session.document.pages.find(entry=>entry.id===id)
+            compare(reopened.name, "Living Room")
+            compare(JSON.stringify(reopened.layout.components), JSON.stringify(created.layout.components))
+        }
+        // Verify channel names can be selected by remote while their stable IDs stay in the draft only.
+        function test_guide_channel_picker_accepts_once_and_back_discards() {
+            givenPage(false, false)
+            verify(editor.command("addResolved", {type:"tv-guide",placement:{x:0,y:1,width:4,height:2}}), editor.session.errorString)
+            editor.selectedId = editor.items.find(item => item.family === "tv-guide").id
+            editor.openInspector(false)
+            const inspector = findChild(editor, "studioInspector")
+            inspector.guideChannels = [{id:"news",number:2,name:"News",groups:["Local"]},
+                                       {id:"sports",number:8,name:"Sports",groups:["Live"]}]
+            const field = homeLayout.studioOptions.inspector.fields.find(entry => entry.type === "guideChannels")
+            const before = document()
+            inspector.activateField(field)
+            compare(inspector.labels()[2], "□ 2 · News")
+            inspector.selected = 2
+            command(inputManager.confirm)
+            compare(document(), before)
+            command(inputManager.back)
+            compare(document(), before)
+            inspector.activateField(field)
+            inspector.selected = 3
+            command(inputManager.confirm)
+            inspector.selected = 1
+            command(inputManager.confirm)
+            compare(editor.current.presentation.guideChannels, "sports")
+            compare(studioFixture.disk(), diskBaseline)
+            verify(editor.session.undo())
+            compare(document(), before)
+        }
+        // Exercise the live renderer with two draft pages and verify that an embedded shortcut still dispatches.
+        function test_page_panel_switches_and_dispatches_embedded_action() {
+            givenPage(false, false)
+            for (const name of ["First panel page", "Second panel page"]) {
+                verify(editor.session.execute("newPage", {name:name}), editor.session.errorString)
+                const id = editor.session.document.pages.slice(-1)[0].id
+                verify(editor.session.execute("addResolved", {type:"button", placement:{x:0,y:0,width:1,height:1},
+                    configuration:{name:name,action:{type:"open-apps"}}}, id), editor.session.errorString)
+            }
+            const pages = editor.session.document.pages
+            const secondPageId = pages.find(page=>page.name==="Second panel page").id
+            verify(editor.command("addResolved", {type:"page-panel",placement:{x:1,y:0,width:3,height:3}}), editor.session.errorString)
+            const panel = editor.items.find(item=>item.family==="page-panel")
+            verify(!!panel)
+            editor.selectedId=panel.id
+            editor.openInspector(false)
+            const inspector=findChild(editor,"studioInspector")
+            const field=inspector.simpleFields.find(entry=>entry.type==="panelPage")
+            verify(!!field)
+            inspector.activateField(field)
+            compare(inspector.choices[0].name,"First panel page")
+            inspector.activate()
+            verify(editor.command("addResolved", {type:"button",placement:{x:0,y:1,width:1,height:1},
+                configuration:{name:"Switch panel"}}), editor.session.errorString)
+            const button=editor.items.find(item=>item.name==="Switch panel")
+            editor.selectedId=button.id
+            editor.openInspector(false)
+            inspector.activateField(inspector.simpleFields.find(entry=>entry.type==="action"))
+            inspector.chooseAction({localPanel:true})
+            compare(inspector.choices[0].name,panel.name)
+            inspector.activate()
+            inspector.selected=1
+            inspector.activate()
+            editor.mode = "preview"
+            const host = findChild(editor,"studioPreview")
+            tryVerify(()=>!!findChild(host,"embeddedPage-"+panel.id))
+            const child = findChild(host,"embeddedPage-"+panel.id)
+            compare(child.items[0].name, "First panel page")
+            host.restoreFocus(button.id)
+            host.handleCommand(inputManager.confirm)
+            tryVerify(()=>child.items.length && child.items[0].name==="Second panel page")
+            let invoked
+            host.actionActivated.connect((action,origin)=>{invoked={action:action,origin:origin}})
+            host.restoreFocus(panel.id)
+            host.handleCommand(inputManager.confirm)
+            verify(host.widgetActive)
+            child.restoreFocus(child.items[0].id)
+            host.handleCommand(inputManager.confirm)
+            verify(!!invoked)
+            compare(invoked.origin, panel.id)
+            compare(invoked.action.actions[0].type, "open-apps")
+            host.handleCommand(inputManager.back)
+            verify(!host.widgetActive)
+            host.restoreFocus(panel.id)
+            tryVerify(()=>host.widgetActive)
+            compare(child.focusedItemId,child.items[0].id)
+            verify(!editor.session.execute("removePage",{id:pages[0].id}))
+            verify(editor.session.errorString.includes("incoming links"))
+            verify(editor.session.execute("duplicatePage",{id:"",name:"Panel host copy"}),editor.session.errorString)
+            const copy=editor.session.document.pages.find(page=>page.name==="Panel host copy")
+            const copiedPanel=copy.layout.components.find(item=>item.family==="page-panel")
+            const copiedButton=copy.layout.components.find(item=>item.name==="Switch panel")
+            verify(copiedPanel.id!==panel.id)
+            compare(copiedButton.actions[0].panelId,copiedPanel.id)
+            compare(copiedButton.actions[0].pageId,secondPageId)
+            compare(studioFixture.disk(), diskBaseline)
+        }
+        // Author a shelf in the catalog, add a named HDMI shortcut, and exercise runtime focus and action routing.
+        function test_button_shelf_authoring_and_runtime() {
+            givenPage(false,false)
+            editor.activateMenu(2)
+            const catalog=findChild(editor,"studioCatalog")
+            tryVerify(()=>catalog.visible)
+            catalog.chooseFamily(catalog.families.findIndex(entry=>entry.id==="more"))
+            catalog.chooseFamily(catalog.families.findIndex(entry=>entry.id==="carousel"))
+            compare(catalog.view,"carousel")
+            catalog.selected=1
+            command(inputManager.confirm)
+            compare(editor.mode,"move")
+            command(inputManager.confirm)
+            compare(editor.mode,"canvas")
+            const shelf=editor.items.find(item=>item.family==="carousel")
+            verify(!!shelf)
+            compare(shelf.presentation.variant,"orb")
+            editor.selectedId=shelf.id
+            editor.context(14)
+            editor.activateMenu(2)
+            tryCompare(catalog,"view","variants")
+            catalog.selected=catalog.variants.findIndex(entry=>entry.id==="round")
+            command(inputManager.confirm)
+            compare(catalog.view,"links")
+            catalog.chooseAction(catalog.actions.find(entry=>entry.action && entry.action.type==="switch-input" && entry.action.input===1))
+            compare(editor.mode,"move")
+            command(inputManager.confirm)
+            compare(editor.mode,"canvas")
+            const hdmi=editor.items.find(item=>item.parentId===shelf.id)
+            compare(hdmi.name,"HDMI 1")
+            compare(hdmi.actions[0].input,1)
+            verify(editor.command("addResolved",{type:"button",parentId:shelf.id,placement:{x:1,y:0,width:1,height:1},
+                configuration:{name:"Games and apps",actions:[{type:"open-apps"},{type:"open-search"}]}}),editor.session.errorString)
+            editor.mode="preview"
+            const host=findChild(editor,"studioPreview")
+            tryVerify(()=>!!findChild(host,"pageAppCarousel"))
+            const widget=findChild(host,"pageAppCarousel")
+            tryCompare(widget,"selectedId",hdmi.id)
+            let invoked
+            host.actionActivated.connect((action,origin)=>{invoked={action:action,origin:origin}})
+            host.restoreFocus(shelf.id)
+            host.handleCommand(inputManager.confirm)
+            verify(host.widgetActive)
+            host.handleCommand(inputManager.navigateRight)
+            host.handleCommand(inputManager.confirm)
+            verify(!!invoked)
+            compare(invoked.origin,shelf.id)
+            compare(invoked.action.actions.map(action=>action.type),["open-apps","open-search"])
+            const selected=widget.selectedId
+            host.handleCommand(inputManager.back)
+            verify(!host.widgetActive)
+            host.restoreFocus(shelf.id)
+            tryVerify(()=>host.widgetActive)
+            compare(widget.selectedId,selected)
+            compare(studioFixture.disk(),diskBaseline)
+        }
         function test_editable_page_menu_add_cancel_accept_and_reopen() {
             givenPage(false,false)
             verify(editor.command("newPage",{name:"Menu page"}))

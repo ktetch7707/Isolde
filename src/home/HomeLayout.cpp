@@ -1285,7 +1285,6 @@ HomeLayout::load(const QString& defaultPath, const QString& userPath)
     m_gifStills.clear();
     if (m_studio)
         m_studio->invalidate();
-    m_legacyDocument.clear();
     m_defaultPath = defaultPath;
     if (m_defaultPath.isEmpty())
     {
@@ -1328,16 +1327,14 @@ HomeLayout::load(const QString& defaultPath, const QString& userPath)
 bool
 HomeLayout::loadDocument(const QByteArray& data, bool userDocument)
 {
-    int version = 0;
     QJsonArray entries;
-    if (!validateDocumentStructure(data, userDocument, version, entries))
+    if (!validateDocumentStructure(data, userDocument, entries))
         return false;
     QJsonObject object = QJsonDocument::fromJson(data).object();
     static const QSet<QString> baseKeys{"schemaVersion", "composition", "rootPage", "theme",
                                         "categories", "pages", "homePageId", "studioAppearance"};
-    const auto entriesKey = version == 1 ? QStringLiteral("items") : QStringLiteral("components");
     for (auto it = object.constBegin(); it != object.constEnd(); ++it)
-        if (!baseKeys.contains(it.key()) && it.key() != entriesKey && !(version == 1 && it.key() == "grid"))
+        if (!baseKeys.contains(it.key()) && it.key() != "components")
         {
             setError(tr("Home layout contains unknown top-level keys."));
             return false;
@@ -1362,19 +1359,6 @@ HomeLayout::loadDocument(const QByteArray& data, bool userDocument)
     if (!validateHomePage(object, homePage, pageIds))
         return false;
     QVariantMap composition = object.value("composition").toObject().toVariantMap();
-    // Legacy documents carried grid dimensions at the root. Normalize them only in memory.
-    if (version == 1 && object.contains("grid"))
-    {
-        const auto grid = object.value("grid").toObject().toVariantMap();
-        if (!object.value("grid").isObject() || !ComponentSchema::validGrid(grid) || composition.contains("grid"))
-        {
-            setError(tr("Invalid or ambiguous legacy Home grid."));
-            return false;
-        }
-        if (composition.isEmpty())
-            composition = {{"schemaVersion", 1}, {"enabled", true}};
-        composition.insert("grid", grid);
-    }
     if (!validateComposition(object, composition))
         return false;
     const QJsonObject theme = object.value("theme").toObject();
@@ -1394,7 +1378,7 @@ HomeLayout::loadDocument(const QByteArray& data, bool userDocument)
     }
     const auto categoryArray = object.value("categories").toArray();
     QJsonArray components;
-    if (!validateCategoriesAndComponents(data, version, categoryArray, entries, components))
+    if (!validateCategoriesAndComponents(categoryArray, entries, components))
         return false;
     QString hierarchyError;
     if (!ComponentSchema::hierarchyFits(components, composition, categoryArray, &hierarchyError))
@@ -1412,8 +1396,6 @@ HomeLayout::loadDocument(const QByteArray& data, bool userDocument)
     m_themeKeys.clear();
     for (const auto& key : theme.keys())
         m_themeKeys.insert(key);
-    if (userDocument && version == 1)
-        m_legacyDocument = data;
     m_categories = categoryArray;
     m_brandVisible = theme.value("brandVisible").toBool(false);
     m_backgroundStart = start.name();
@@ -1547,7 +1529,7 @@ HomeLayout::validateRootPageCondition(const QJsonObject& object, const QJsonObje
 }
 
 bool
-HomeLayout::validateDocumentStructure(const QByteArray& data, bool userDocument, int& version, QJsonArray& entries)
+HomeLayout::validateDocumentStructure(const QByteArray& data, bool userDocument, QJsonArray& entries)
 {
     if (data.size() > 4 * 1024 * 1024)
     {
@@ -1556,10 +1538,9 @@ HomeLayout::validateDocumentStructure(const QByteArray& data, bool userDocument,
     }
     QJsonParseError error;
     const auto document = QJsonDocument::fromJson(data, &error);
-    version = document.object().value("schemaVersion").toInt();
-    const auto entriesValue = document.object().value(version == 1 ? "items" : "components");
+    const auto entriesValue = document.object().value("components");
     entries = entriesValue.toArray();
-    if (error.error != QJsonParseError::NoError || !document.isObject() || (version != 1 && version != 2) ||
+    if (error.error != QJsonParseError::NoError || !document.isObject() || document.object().value("schemaVersion").toDouble(-1) != 2 ||
         !entriesValue.isArray() || entries.size() > 1024)
     {
         setError(userDocument ? tr("User Home layout is invalid; defaults were restored.")
@@ -1692,11 +1673,10 @@ HomeLayout::validateCategories(const QJsonArray& categoryArray, QSet<QString>& c
 }
 
 bool
-HomeLayout::validateCategoriesAndComponents(const QByteArray& data, int version,
+HomeLayout::validateCategoriesAndComponents(
                                             const QJsonArray& categoryArray, const QJsonArray& entries,
                                             QJsonArray& components)
 {
-    Q_UNUSED(data);
     QSet<QString> categoryIds;
     if (categoryArray.size() > HomeLayout::MaxLayoutCategories)
     {
@@ -1716,7 +1696,7 @@ HomeLayout::validateCategoriesAndComponents(const QByteArray& data, int version,
     {
         QJsonObject item;
         QString componentError;
-        if (!validateComponentItem(value.toObject(), version, categoryIds, ids, item, componentError))
+        if (!validateComponentItem(value.toObject(), categoryIds, ids, item, componentError))
         {
             setError(componentError.isEmpty() ? tr("Home layout contains an invalid or duplicate item.")
                                               : componentError);
@@ -1742,11 +1722,11 @@ HomeLayout::validateCategoryItem(const QJsonObject& category, QSet<QString>& cat
 }
 
 bool
-HomeLayout::validateComponentItem(const QJsonObject& entry, int version, const QSet<QString>& categoryIds,
+HomeLayout::validateComponentItem(const QJsonObject& entry, const QSet<QString>& categoryIds,
                                   QSet<QString>& ids, QJsonObject& item, QString& componentError) const
 {
     const auto normalized =
-        ComponentSchema::component(entry.toVariantMap(), version == 1, &componentError);
+        ComponentSchema::component(entry.toVariantMap(), false, &componentError);
     item = QJsonObject::fromVariantMap(normalized);
     const auto kind = item.value("kind").toString();
     const auto id = item.value("id").toString();
@@ -1803,26 +1783,6 @@ HomeLayout::isValidComponentOpacity(const QJsonObject& item) const
 }
 
 bool
-HomeLayout::validateComponents(const QJsonArray& entries, int version, const QSet<QString>& categoryIds,
-                               QSet<QString>& ids, QJsonArray& components)
-{
-    for (const auto& value : entries)
-    {
-        QJsonObject item;
-        QString componentError;
-        if (!validateComponentItem(value.toObject(), version, categoryIds, ids, item, componentError))
-        {
-            setError(componentError.isEmpty() ? tr("Home layout contains an invalid or duplicate item.")
-                                              : componentError);
-            return false;
-        }
-        ids.insert(item.value("id").toString());
-        components.append(item);
-    }
-    return true;
-}
-
-bool
 HomeLayout::addAppTile(const QString& appId)
 {
     const auto* definition = m_registry->find(appId);
@@ -1848,6 +1808,7 @@ HomeLayout::addAppTile(const QString& appId)
     while (idExists(id))
         id = appId + '-' + QString::number(suffix++);
     QJsonObject tile{{"kind", "app"},
+                     {"componentType", "launcher"},
                      {"id", id},
                      {"appId", appId},
                      {"actions", QJsonArray{QJsonObject{{"type", "launch-app"}, {"appId", appId}}}},
@@ -1987,7 +1948,7 @@ HomeLayout::buildActionTile(const QString& name, const QString& actionType, cons
     while (idExists(resultId))
         resultId = resultBase + QStringLiteral("-") + QString::number(suffix++);
     QJsonObject tile{
-        {"kind", "action"}, {"id", resultId}, {"name", cleanName}, {"size", "standard"},
+        {"kind", "action"}, {"componentType", "launcher"}, {"id", resultId}, {"name", cleanName}, {"size", "standard"},
         {"actions", QJsonArray{normalizedAction}}};
     if (!categoryId.isEmpty())
         tile.insert(QStringLiteral("categoryId"), categoryId);
@@ -2071,7 +2032,8 @@ HomeLayout::addWidget(const QString& widgetType)
     };
     while (idExists(id))
         id = widgetType + QString::number(suffix++);
-    m_items.append(QJsonObject{{"kind", "widget"}, {"id", id}, {"widgetType", widgetType}, {"size", "standard"}});
+    m_items.append(QJsonObject{{"kind", "widget"}, {"id", id}, {"widgetType", widgetType},
+                               {"componentType", widgetType}, {"size", "standard"}});
     if (widgetType == "text")
     {
         auto item = m_items.last().toObject();
@@ -2552,23 +2514,12 @@ HomeLayout::save()
         setError(tr("The design is invalid or exceeds 4 MiB."));
         return false;
     }
-    if (!m_legacyDocument.isEmpty() && !QFile::exists(m_userPath + ".v1.backup.json"))
-    {
-        QSaveFile backup(m_userPath + ".v1.backup.json");
-        if (!backup.open(QIODevice::WriteOnly) || backup.write(m_legacyDocument) != m_legacyDocument.size() ||
-            !backup.commit())
-        {
-            setError(tr("Unable to back up the previous Home layout."));
-            return false;
-        }
-    }
     QSaveFile file(m_userPath);
     if (!file.open(QIODevice::WriteOnly) || file.write(data) != data.size() || !file.commit())
     {
         setError(tr("Unable to save Home layout."));
         return false;
     }
-    m_legacyDocument.clear();
     setError({});
     return true;
 }
@@ -2590,7 +2541,7 @@ HomeLayout::validateStudioDocument(const QByteArray& data, QString* error, const
 {
     const auto count = [](const QJsonObject& document)
     {
-        return document[document["schemaVersion"].toInt() == 1 ? "items" : "components"].toArray().size();
+        return document["components"].toArray().size();
     };
     const auto document = QJsonDocument::fromJson(data).object();
     qsizetype nodes = count(document);

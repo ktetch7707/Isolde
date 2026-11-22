@@ -26,12 +26,8 @@ static const QByteArray apps = R"([
  {"id":"app-store","name":"Store","type":"store","section":"System","accent":"#556677"}
 ])";
 
-static const QByteArray legacy =
-    R"({"schemaVersion":1,"theme":{"backgroundStart":"#123456","backgroundEnd":"#010203","tileRoundness":0.73},
- "categories":[{"id":"personal","name":"Personal"}],"items":[
- {"id":"my-folder","kind":"action","name":"My films","categoryId":"personal","size":"wide","opacity":0.42,"showTitle":false,"customLogo":"artwork/my-folder.png","actions":[{"type":"open-folder","target":"/media/films","openWith":"gone"}]},
- {"id":"my-app","kind":"app","appId":"absent","size":"compact"},
- {"id":"clock","kind":"widget","widgetType":"clock"}]})";
+static const QByteArray personalLayout =
+    R"({"schemaVersion":2,"theme":{"backgroundStart":"#123456","backgroundEnd":"#010203","tileRoundness":0.73},"categories":[{"id":"personal","name":"Personal"}],"components":[{"id":"my-folder","kind":"action","name":"My films","categoryId":"personal","size":"wide","opacity":0.42,"showTitle":false,"customLogo":"artwork/my-folder.png","actions":[{"type":"open-folder","target":"/media/films","openWith":"gone"}],"schemaVersion":1,"componentType":"launcher","source":{"schemaVersion":1,"provider":"handler","kind":"open-folder","id":"gone"}},{"id":"my-app","kind":"app","appId":"absent","size":"compact","schemaVersion":1,"componentType":"launcher","source":{"schemaVersion":1}},{"id":"clock","kind":"widget","widgetType":"clock","schemaVersion":1,"componentType":"clock","source":{"schemaVersion":1,"provider":"shell","kind":"clock"}}]})";
 
 static void
 writeFile(const QString& path, const QByteArray& data)

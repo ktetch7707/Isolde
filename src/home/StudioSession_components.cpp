@@ -126,7 +126,7 @@ StudioSession::validNewAction(const QVariantMap& value)
         return false;
     }
     const auto type = action.value("type").toString();
-    if (type == "open-page")
+    if (type == "open-page" || type == "show-page-in-panel")
     {
         bool exists = false;
         for (const auto& entry : m_model->studioPages())

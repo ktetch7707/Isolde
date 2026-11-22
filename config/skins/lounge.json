@@ -1,7 +1,7 @@
 {
   "name": "Cinema lounge",
   "layout": {
-    "schemaVersion": 1,
+    "schemaVersion": 2,
     "theme": {
       "backgroundStart": "#0e1018",
       "backgroundEnd": "#0e1018",
@@ -99,8 +99,7 @@
         "presentation": {
           "variant": "source",
           "columns": 4,
-          "height": 170,
-          "span": 2
+          "height": 170
         }
       },
       {
@@ -109,12 +108,11 @@
         "presentation": {
           "variant": "summary",
           "columns": 1,
-          "height": 135,
-          "span": 2
+          "height": 135
         }
       }
     ],
-    "items": [
+    "components": [
       {
         "id": "hero",
         "kind": "action",
@@ -133,6 +131,14 @@
             "width": 400,
             "height": 219
           }
+        },
+        "schemaVersion": 1,
+        "componentType": "launcher",
+        "source": {
+          "schemaVersion": 1,
+          "provider": "apps",
+          "kind": "app",
+          "id": "shows"
         }
       },
       {
@@ -153,6 +159,14 @@
             "width": 146,
             "height": 94
           }
+        },
+        "schemaVersion": 1,
+        "componentType": "launcher",
+        "source": {
+          "schemaVersion": 1,
+          "provider": "apps",
+          "kind": "app",
+          "id": "shows"
         }
       },
       {
@@ -172,6 +186,14 @@
             "width": 158,
             "height": 104
           }
+        },
+        "schemaVersion": 1,
+        "componentType": "launcher",
+        "source": {
+          "schemaVersion": 1,
+          "provider": "apps",
+          "kind": "app",
+          "id": "shows"
         }
       },
       {
@@ -191,6 +213,14 @@
             "width": 158,
             "height": 104
           }
+        },
+        "schemaVersion": 1,
+        "componentType": "launcher",
+        "source": {
+          "schemaVersion": 1,
+          "provider": "apps",
+          "kind": "app",
+          "id": "movies"
         }
       },
       {
@@ -204,6 +234,14 @@
         },
         "presentation": {
           "icon": "gamepad"
+        },
+        "schemaVersion": 1,
+        "componentType": "launcher",
+        "source": {
+          "schemaVersion": 1,
+          "provider": "apps",
+          "kind": "app",
+          "id": "switch"
         }
       },
       {
@@ -218,6 +256,14 @@
         "presentation": {
           "icon": "gamepad",
           "surfaceColor": "#693b50"
+        },
+        "schemaVersion": 1,
+        "componentType": "launcher",
+        "source": {
+          "schemaVersion": 1,
+          "provider": "apps",
+          "kind": "app",
+          "id": "switch2"
         }
       },
       {
@@ -231,6 +277,14 @@
         },
         "presentation": {
           "icon": "display"
+        },
+        "schemaVersion": 1,
+        "componentType": "launcher",
+        "source": {
+          "schemaVersion": 1,
+          "provider": "apps",
+          "kind": "app",
+          "id": "steam-machine"
         }
       },
       {
@@ -244,6 +298,13 @@
         },
         "presentation": {
           "icon": "hdmi"
+        },
+        "schemaVersion": 1,
+        "componentType": "launcher",
+        "source": {
+          "schemaVersion": 1,
+          "provider": "shell",
+          "kind": "settings"
         }
       },
       {
@@ -258,6 +319,13 @@
         "presentation": {
           "icon": "tv",
           "subtitle": "Browse channels and tonight's lineup"
+        },
+        "schemaVersion": 1,
+        "componentType": "launcher",
+        "source": {
+          "schemaVersion": 1,
+          "provider": "shell",
+          "kind": "settings"
         }
       }
     ]

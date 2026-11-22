@@ -43,7 +43,7 @@ def collection_review(document):
     layouts = [document]
     while layouts:
         layout = layouts.pop()
-        for item in layout.get("components", layout.get("items", [])):
+        for item in layout.get("components", []):
             if "appCollection" in item:
                 kinds.add("apps")
             if item.get("componentType", item.get("widgetType")) == "library":
@@ -525,7 +525,7 @@ def main():
                     and restored.get("rootPage")==current_document.get("rootPage")
                     and restored.get("studioAppearance")==current_document.get("studioAppearance")
                     and restored.get("composition", {})==defaults.get("composition", {})
-                    and {i["id"] for i in restored["components"]}=={i["id"] for i in defaults["items"]}
+                    and {i["id"] for i in restored["components"]}=={i["id"] for i in defaults["components"]}
                     and restored["categories"]==defaults["categories"]
                     and default_theme_matches(restored["theme"],defaults["theme"]))
             expect(reset_verified, "Reset Home to packaged defaults with other pages preserved passed")

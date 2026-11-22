@@ -4,6 +4,15 @@ import QtQuick.Layouts
 Item {
     id: root
     required property var items
+    property bool embeddedPage: false
+    // Panel actions are local to the current host page and never navigate the shell.
+    function routePanelAction(action) {
+        const link = action && action.actions ? (action.actions.length === 1 ? action.actions[0] : null) : action
+        if (!link || link.type !== "show-page-in-panel") return false
+        const panel = composed.widgets[link.panelId]
+        if (!embeddedPage && panel && panel.showPage) panel.showPage(link.pageId)
+        return true
+    }
     // Profile-authored components are distinct from transient provider notices.
     property var authoredItems: items
     property var authoredSections: sections

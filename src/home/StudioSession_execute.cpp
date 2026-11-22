@@ -695,6 +695,13 @@ void
 StudioSession::remapComponentReferences(QJsonArray& components,
                                         const QHash<QString, QString>& copiedIds)
 {
+    // A copied switch must address its copied panel while retaining the original embedded page.
+    const auto remapPanelAction = [&copiedIds](QJsonObject action) {
+        const auto panel = action.value("panelId").toString();
+        if (action.value("type") == "show-page-in-panel" && copiedIds.contains(panel))
+            action["panelId"] = copiedIds.value(panel);
+        return action;
+    };
     for (int i = 0; i < components.size(); ++i)
     {
         auto item = components[i].toObject();
@@ -703,6 +710,15 @@ StudioSession::remapComponentReferences(QJsonArray& components,
             const auto reference = item.value(key).toString();
             if (copiedIds.contains(reference))
                 item[key] = copiedIds[reference];
+        }
+        if (item.contains("action"))
+            item["action"] = remapPanelAction(item["action"].toObject());
+        if (item.contains("actions"))
+        {
+            auto actions = item["actions"].toArray();
+            for (int index = 0; index < actions.size(); ++index)
+                actions[index] = remapPanelAction(actions[index].toObject());
+            item["actions"] = actions;
         }
         components[i] = item;
     }
@@ -815,8 +831,7 @@ StudioSession::executeRemovePage(const QVariantMap& a, QJsonObject document, QJs
     if (id.isEmpty())
     {
         rootMetaLocal["visible"] = false;
-        const auto key = document.value("schemaVersion").toInt() == 1 ? "items" : "components";
-        document[key] = QJsonArray{};
+        document["components"] = QJsonArray{};
     }
     else
         pages.removeAt(index);
@@ -898,6 +913,16 @@ QJsonObject
 StudioSession::repairPageObject(QJsonObject object, const QString& id, bool remap, const QString& replacement,
                                 int& links, bool& invalidOverride)
 {
+    // Panel switches require a named replacement because Root is not an embedded destination.
+    if (!id.isEmpty() && object.value("type") == "show-page-in-panel" && object.value("pageId") == id)
+    {
+        ++links;
+        if (remap && replacement.isEmpty())
+            invalidOverride = true;
+        else if (remap)
+            object["pageId"] = replacement;
+        return object;
+    }
     if ((!id.isEmpty() && object.value("type") == "open-page" && object.value("pageId") == id) ||
         (id.isEmpty() && object.value("type") == "root-page"))
     {
@@ -914,7 +939,7 @@ StudioSession::repairPageObject(QJsonObject object, const QString& id, bool rema
     }
     for (auto it = object.begin(); it != object.end(); ++it)
     {
-        if (!id.isEmpty() && QStringList{"moviePage", "showsPage"}.contains(it.key()) && it.value() == id)
+        if (!id.isEmpty() && QStringList{"moviePage", "showsPage", "panelPageId"}.contains(it.key()) && it.value() == id)
         {
             ++links;
             if (remap)
@@ -936,13 +961,11 @@ StudioSession::normalizePageLayouts(QJsonObject& document, QJsonArray& pages)
 {
     const auto normalizeComponents = [](QJsonObject layout)
     {
-        const auto key =
-            layout.value("schemaVersion").toInt() == 1 ? QStringLiteral("items") : QStringLiteral("components");
-        auto components = layout.value(key).toArray();
+        auto components = layout.value("components").toArray();
         for (int i = 0; i < components.size(); ++i)
             components[i] = QJsonObject::fromVariantMap(
                 ComponentSchema::component(components[i].toObject().toVariantMap(), true));
-        layout[key] = components;
+        layout["components"] = components;
         return layout;
     };
     document = normalizeComponents(document);

@@ -56,6 +56,7 @@ ComponentContractTests::validatesContracts()
     auto tile = ComponentSchema::component(
         {{"id", "movie-tile"},
          {"kind", "app"},
+         {"componentType", "launcher"},
          {"appId", "movies"},
          {"actions", QVariantList{QVariantMap{{"type", "launch-app"}, {"appId", "movies"}}}}},
         true);
@@ -70,12 +71,14 @@ ComponentContractTests::validatesContracts()
     const auto show = ComponentSchema::action({{"type", "open-show"}, {"collectionId", "shows"}, {"tvShowId", 12}});
     QCOMPARE(show["tvShowId"].toInt(), 12);
     const auto showTile = ComponentSchema::component(
-        {{"id", "show-card"}, {"kind", "action"}, {"name", "Fixture show"}, {"actions", QVariantList{show}}}, true);
+        {{"id", "show-card"}, {"kind", "action"}, {"componentType", "launcher"},
+         {"name", "Fixture show"}, {"actions", QVariantList{show}}}, true);
     QCOMPARE(showTile["source"].toMap()["kind"].toString(), QString("collection"));
     const auto inputAction = ComponentSchema::action({{"type", "switch-input"}, {"input", 4}});
     QCOMPARE(inputAction["input"].toInt(), 4);
     const auto inputTile = ComponentSchema::component(
-        {{"id", "hdmi-four"}, {"kind", "action"}, {"name", "Console"}, {"actions", QVariantList{inputAction}}}, true);
+        {{"id", "hdmi-four"}, {"kind", "action"}, {"componentType", "launcher"},
+         {"name", "Console"}, {"actions", QVariantList{inputAction}}}, true);
     QCOMPARE(inputTile["source"].toMap()["provider"].toString(), QString("isolde"));
     QCOMPARE(inputTile["source"].toMap()["id"].toString(), QString("4"));
 }

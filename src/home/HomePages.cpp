@@ -1,5 +1,6 @@
 #include <QJsonDocument>
 #include <QUuid>
+#include <algorithm>
 #include <functional>
 #include "ComponentSchema.h"
 #include "HomeLayout.h"
@@ -169,9 +170,14 @@ HomeLayout::createPage(const QString& name, const QString& preset)
 {
     if (m_owner)
         return m_owner->createPage(name, preset);
+    const auto starters = preset.startsWith("builtin-") ? pageStarterChoices() : QVariantList{};
+    const bool isStarter = std::any_of(starters.cbegin(), starters.cend(), [&preset](const QVariant& choice)
+    {
+        return choice.toMap().value("id").toString() == preset;
+    });
     if (name.trimmed().isEmpty() || name.trimmed().size() > MaxPageNameLength ||
         m_pages.size() + (rootPageVisible() ? 1 : 0) >= MaxPages ||
-        !QStringList{"blank", "movies", "shows", "standalone", "home"}.contains(preset))
+        (!isStarter && !QStringList{"blank", "movies", "shows", "standalone", "home"}.contains(preset)))
     {
         setError(tr("Choose a page name and template. Up to %1 pages are supported.").arg(MaxPages));
         return {};
@@ -188,7 +194,7 @@ HomeLayout::createPage(const QString& name, const QString& preset)
                        {"headerControls", QJsonArray{"settings", "edit"}},
                        {"pageNavigation", "none"}};
     QJsonArray sections;
-    if (preset != "blank")
+    if (!isStarter && preset != "blank")
         sections.append(QJsonObject{{"id", "library"},
                                     {"name", preset == "shows" ? "Shows" : "Movies"},
                                     {"presentation",
@@ -206,7 +212,28 @@ HomeLayout::createPage(const QString& name, const QString& preset)
                          {"composition", config},
                          {"categories", sections},
                          {"components", QJsonArray{}}};
-    if (preset == "home")
+    if (isStarter)
+    {
+        const auto skin = skinSnapshot(preset);
+        document = skin["layout"].toObject();
+        if (!isValidSkin(skin) || !skin["assets"].toObject().isEmpty() ||
+            document.contains("pages") || document.contains("homePageId"))
+        {
+            setError(tr("This starter must contain one page without bundled artwork."));
+            return {};
+        }
+        auto composition = document["composition"].toObject();
+        if (composition["headerMode"] == "identity")
+            composition["identity"] = name.trimmed();
+        document["composition"] = composition;
+        QString error;
+        if (!validateStudioDocument(QJsonDocument(document).toJson(), &error, m_defaultTheme))
+        {
+            setError(error);
+            return {};
+        }
+    }
+    else if (preset == "home")
     {
         document = QJsonDocument::fromJson(documentData()).object();
         document.remove("pages");
@@ -369,6 +396,7 @@ HomeLayout::linkPage(const QString& id, bool asTab)
     const auto previous = m_items;
     m_items.append(QJsonObject{{"id", linkId},
                                {"kind", "action"},
+                               {"componentType", "launcher"},
                                {"name", name},
                                {"actions", QJsonArray{QJsonObject{{"type", "open-page"}, {"pageId", id}}}}});
     if (!save())

@@ -126,6 +126,7 @@ sourceTileForPath(const QFileInfo& info, const QString& openWith)
     auto tile = ComponentSchema::component(
         QVariantMap{
             {QStringLiteral("kind"), QStringLiteral("action")},
+            {QStringLiteral("componentType"), QStringLiteral("launcher")},
             {QStringLiteral("id"), stableSourceId(path)},
             {QStringLiteral("name"), name},
             {QStringLiteral("symbol"), symbolForPath(info)},

@@ -122,6 +122,7 @@ KodiShelves::sections() const
             const auto symbol = actionType == "play-movie" ? "▶" : actionType == "open-show" ? "TV" : "≡";
             auto item = ComponentSchema::component({{"id", prefix + '-' + key},
                                                     {"kind", "action"},
+                                                    {"componentType", "launcher"},
                                                     {"name", name},
                                                     {"symbol", QString::fromUtf8(symbol)},
                                                     {"accent", "#5B8DEF"},

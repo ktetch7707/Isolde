@@ -88,7 +88,7 @@ StudioSessionTests::studioSessionDraftUndoBoundsAndNoWrite()
 {
     QTemporaryDir dir;
     const auto user = dir.filePath("profile.json");
-    writeFile(user, legacy);
+    writeFile(user, personalLayout);
     AppRegistry registry;
     QVERIFY(registry.loadFromData(apps));
     HomeLayout home(&registry);
@@ -186,7 +186,7 @@ StudioSessionTests::studioSessionCanonicalIdsAndRevisionConflict()
 {
     QTemporaryDir dir;
     const auto user = dir.filePath("profile.json");
-    writeFile(user, legacy);
+    writeFile(user, personalLayout);
     AppRegistry registry;
     QVERIFY(registry.loadFromData(apps));
     HomeLayout home(&registry);
@@ -226,7 +226,7 @@ StudioSessionTests::studioSessionCanonicalIdsAndRevisionConflict()
     QVERIFY(session.isStaleAgainst({}));
 
     const auto user2 = dir.filePath("profile2.json");
-    writeFile(user2, legacy);
+    writeFile(user2, personalLayout);
     const QByteArray committed2 = readFile(user2);
     StudioSession other2;
     QVERIFY(other2.open(committed2));
@@ -247,7 +247,7 @@ StudioSessionTests::studioApplyAtomicFailureAndFocusPreserved()
 {
     QTemporaryDir dir;
     const auto user = dir.filePath("profile.json");
-    writeFile(user, legacy);
+    writeFile(user, personalLayout);
     AppRegistry registry;
     QVERIFY(registry.loadFromData(apps));
     HomeLayout home(&registry);
@@ -264,16 +264,11 @@ StudioSessionTests::studioApplyAtomicFailureAndFocusPreserved()
     QJsonDocument doc = QJsonDocument::fromJson(committed);
     auto object = doc.object();
     auto entries = object.value(QStringLiteral("components")).toArray();
-    if (entries.isEmpty())
-        entries = object.value(QStringLiteral("items")).toArray();
     QVERIFY(!entries.isEmpty());
     auto first = entries.first().toObject();
     first[QStringLiteral("name")] = QStringLiteral("Studio clock");
     entries[0] = first;
-    if (object.contains(QStringLiteral("components")))
-        object[QStringLiteral("components")] = entries;
-    else
-        object[QStringLiteral("items")] = entries;
+    object[QStringLiteral("components")] = entries;
     const QByteArray edited = QJsonDocument(object).toJson();
     QVERIFY(session.pushEdit(edited));
 
@@ -310,7 +305,7 @@ StudioSessionTests::studioCommandsAreAtomicAndProfileScoped()
     QVERIFY(registry.loadFromData(apps));
     const auto defaults = QFINDTESTDATA("../config/default-home-layout.json");
     const auto user = dir.filePath("one.json");
-    writeFile(user, legacy);
+    writeFile(user, personalLayout);
     HomeLayout home(&registry);
     QVERIFY(home.load(defaults, user));
     auto* session = qobject_cast<StudioSession*>(home.beginStudio());
@@ -352,7 +347,7 @@ StudioSessionTests::studioCommandsAreAtomicAndProfileScoped()
     QVERIFY(!session->apply());
     QVERIFY(session->errorString().contains("changed"));
     const auto second = dir.filePath("two.json");
-    writeFile(second, legacy);
+    writeFile(second, personalLayout);
     bool teardownAttempted = false, teardownAccepted = true;
     connect(session,
             &StudioSession::changed,
@@ -370,7 +365,7 @@ StudioSessionTests::studioCommandsAreAtomicAndProfileScoped()
     QVERIFY(!session->active());
     QVERIFY(!session->apply());
     QVERIFY(!session->execute("remove", {{"id", "clock"}}));
-    QCOMPARE(readFile(second), legacy);
+    QCOMPARE(readFile(second), personalLayout);
 }
 
 void
@@ -527,7 +522,7 @@ StudioSessionTests::studioArtworkUsesActiveProfileAndExpires()
 {
     QTemporaryDir dir;
     AppRegistry registry;
-    auto document = QJsonDocument::fromJson(legacy).object();
+    auto document = QJsonDocument::fromJson(personalLayout).object();
     document["composition"] = QJsonObject{{"schemaVersion", 1}, {"enabled", true}, {"wallpaper", "artwork/scene.png"}};
     writeFile(dir.filePath("default.json"), QJsonDocument(document).toJson());
     HomeLayout home(&registry);
@@ -787,6 +782,7 @@ StudioSessionTests::studioScrollingPagesAreBoundedAndAtomic()
         ComponentSchema::component({{"id", "clock"},
                                     {"kind", "widget"},
                                     {"widgetType", "clock"},
+                                    {"componentType", "clock"},
                                     {"placement", QVariantMap{{"x", 0}, {"y", 0}, {"width", 1}, {"height", 1}}}},
                                    true))};
     writeFile(user, QJsonDocument(document).toJson());
@@ -868,6 +864,7 @@ StudioSessionTests::studioShiftCascadesAreBoundedAndAtomic()
             QVariantMap{{"id", id},
                         {"kind", "widget"},
                         {"widgetType", "text"},
+                        {"componentType", "text"},
                         {"name", id},
                         {"placement", QVariantMap{{"x", x}, {"y", y}, {"width", width}, {"height", 1}}}},
             true));
@@ -1497,6 +1494,7 @@ void StudioSessionTests::studioCatalogLinksInspectorAndStagedArtwork() {
                             ComponentSchema::component({{"id", QString("ordered-%1").arg(i)},
                                                         {"kind", "widget"},
                                                         {"widgetType", "text"},
+                                                        {"componentType", "text"},
                                                         {"name", QString("Child %1").arg(i)},
                                                         {"parentId", "ordered"},
                                                         {"placement",
@@ -1515,6 +1513,7 @@ void StudioSessionTests::studioCatalogLinksInspectorAndStagedArtwork() {
                         {{"id", "outside"},
                          {"kind", "widget"},
                          {"widgetType", "text"},
+                         {"componentType", "text"},
                          {"name", "Outside"},
                          {"placement", QVariantMap{{"x", 0}, {"y", 2}, {"width", 1}, {"height", 1}}}},
                         true));
