@@ -73,6 +73,14 @@ QString statePath()
     return root.isEmpty() ? QString{} : QDir(root).filePath(QStringLiteral("software-updates.ini"));
 }
 
+// Resolve only the key shipped alongside the running executable by default.
+QString packagedPublicKey()
+{
+    const QDir executable(QCoreApplication::applicationDirPath());
+    const QFileInfo key(executable.filePath(QStringLiteral("../share/isolde/isolde-signing-key.pub")));
+    return key.isFile() && key.isReadable() ? key.canonicalFilePath() : QString{};
+}
+
 // Extract the "owner/repo" part from a GitHub API endpoint such as
 // https://api.github.com/repos/ktetch7707/Isolde/releases/latest.
 QString githubRepoFromEndpoint(const QUrl& endpoint)
@@ -94,7 +102,7 @@ SoftwareUpdates::SoftwareUpdates(SearchSettings* settings, const QString& instal
       m_timer(new QTimer(this)), m_endpoint(endpoint),
       m_stateFile(stateFile.isEmpty() ? statePath() : stateFile),
       m_platform(platform.isNull() ? installationPlatform() : platform),
-      m_publicKeyPath(publicKeyPath),
+      m_publicKeyPath(publicKeyPath.isNull() ? packagedPublicKey() : publicKeyPath),
       m_installed(stableVersion(QStringLiteral("v") + installedVersion))
 {
     if (!m_stateFile.isEmpty())
@@ -342,8 +350,12 @@ void SoftwareUpdates::install()
 
     // Locate the update-appliance.py script next to this module's install dir.
     QString scriptPath = QCoreApplication::applicationDirPath() + QStringLiteral("/../share/isolde/update-appliance.py");
-    if (!QFileInfo::exists(scriptPath))
-        scriptPath = QStringLiteral("tools/update-appliance.py");
+    if (!QFileInfo(scriptPath).isFile())
+    {
+        m_installing = false;
+        fail(QStringLiteral("The packaged update installer is missing."));
+        return;
+    }
 
     m_installProcess = new QProcess(this);
     connect(m_installProcess, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
@@ -383,8 +395,12 @@ void SoftwareUpdates::rollback()
     emit changed();
 
     QString scriptPath = QCoreApplication::applicationDirPath() + QStringLiteral("/../share/isolde/update-appliance.py");
-    if (!QFileInfo::exists(scriptPath))
-        scriptPath = QStringLiteral("tools/update-appliance.py");
+    if (!QFileInfo(scriptPath).isFile())
+    {
+        m_installing = false;
+        fail(QStringLiteral("The packaged update installer is missing."));
+        return;
+    }
 
     m_installProcess = new QProcess(this);
     connect(m_installProcess, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),

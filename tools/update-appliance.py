@@ -146,22 +146,22 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=["install", "rollback"])
     parser.add_argument("--prefix", type=Path, default=Path.home() / ".local/share/isolde-appliance")
-    parser.add_argument("--release-url", required=True,
+    parser.add_argument("--release-url",
                         help="GitHub release download URL base (e.g. https://github.com/ktetch7707/Isolde/releases/download/v0.0.1.3)")
-    parser.add_argument("--version", required=True, help="Release version (e.g. 0.0.1.3)")
-    parser.add_argument("--arch", choices=["amd64", "arm64"], required=True, help="Target architecture")
+    parser.add_argument("--version", help="Release version (e.g. 0.0.1.3)")
+    parser.add_argument("--arch", choices=["amd64", "arm64"], help="Target architecture")
     parser.add_argument("--type", choices=["appliance", "desktop"], default="appliance",
                         help="Package type: appliance (per-user tarball) or desktop (system .deb)")
     parser.add_argument("--startup", action="store_true",
                         help="Enable graphical-login startup for the installed release")
     parser.add_argument("--public-key", type=Path, help="Trusted signing public key (default: shipped key)")
     args = parser.parse_args()
+    if args.action == "install" and not all((args.release_url, args.version, args.arch)):
+        parser.error("install requires --release-url, --version and --arch")
 
     if sys.platform != "linux":
         raise RuntimeError("This tool supports Linux only.")
     prefix = args.prefix.expanduser().absolute()
-    public_key = args.public_key or find_public_key(prefix)
-
     if args.action == "rollback":
         if args.type != "appliance":
             raise RuntimeError("Rollback is only supported for appliance installs.")
@@ -176,6 +176,7 @@ def main():
         print(f"Rolled back to {previous}. Restart Isolde to use it; profile data is unchanged.")
         return
 
+    public_key = args.public_key or find_public_key(prefix)
     import fcntl
     prefix.mkdir(parents=True, exist_ok=True)
     lock = (prefix / ".install.lock").open("a")

@@ -9,26 +9,27 @@ Item {
     readonly property var actions: (function () {
         const list = [];
         if (updater && !updater.checking)
-            list.push({ name: qsTr("Check for updates"), enabled: true });
+            list.push({ id: "check", name: qsTr("Check for updates"), enabled: !updater.installing });
         if (updater && updater.available) {
-            list.push({ name: qsTr("Install update"), enabled: updater.available && !updater.installing });
-            list.push({ name: qsTr("Dismiss notification"), enabled: true });
+            list.push({ id: "install", name: qsTr("Install update"), enabled: !updater.checking && !updater.installing });
+            list.push({ id: "dismiss", name: qsTr("Dismiss notification"), enabled: !updater.installing });
         }
         if (updater && updater.installing)
             list.push({ name: qsTr("Installing…"), enabled: false });
         return list;
     })()
 
+    // Dispatch by stable action identity even when availability changes the row order.
     function activate(index) {
-        if (!updater || !actions[index].enabled) return
-        if (index === 0) updater.check()
-        else if (actions[index].name === qsTr("Install update")) updater.install()
-        else if (actions[index].name === qsTr("Dismiss notification")) updater.dismiss()
-        else if (actions[index].name === qsTr("Roll back")) updater.rollback()
+        const action = actions[index]
+        if (!updater || !action || !action.enabled) return
+        if (action.id === "check") updater.check()
+        else if (action.id === "install") updater.install()
+        else if (action.id === "dismiss") updater.dismiss()
     }
     function handleCommand(command) {
         if (command === inputManager.navigateUp) selectedIndex = Math.max(0, selectedIndex - 1)
-        else if (command === inputManager.navigateDown) selectedIndex = Math.min(actions.length - 1, selectedIndex + 1)
+        else if (command === inputManager.navigateDown) selectedIndex = Math.min(Math.max(0, actions.length - 1), selectedIndex + 1)
         else if (command === inputManager.confirm) activate(selectedIndex)
     }
     function revealSelection() {
@@ -39,14 +40,12 @@ Item {
             scroll.contentY = Math.max(0, row.y + row.height - scroll.height)
     }
     onSelectedIndexChanged: Qt.callLater(revealSelection)
-    onActionsChanged: selectedIndex = Math.min(selectedIndex, actions.length - 1)
+    onActionsChanged: selectedIndex = Math.max(0, Math.min(selectedIndex, actions.length - 1))
 
     Connections {
         target: updater
-        onInstallFinished: {
-            if (success) {
-                selectedIndex = 0
-            }
+        function onInstallFinished(success) {
+            if (success) root.selectedIndex = 0
         }
     }
 

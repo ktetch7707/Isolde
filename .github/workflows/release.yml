@@ -15,6 +15,8 @@ jobs:
     # labeled ubuntu-26.04 until GitHub-hosted runners are available.
     runs-on: [self-hosted, ubuntu-26.04]
     timeout-minutes: 60
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout repository
@@ -30,6 +32,22 @@ jobs:
             exit 1
           fi
           echo "ARCH=$(dpkg --print-architecture)" >> $GITHUB_ENV
+
+      - name: Verify release signing identity
+        env:
+          ISOLDE_SIGNING_KEY: ${{ secrets.ISOLDE_SIGNING_KEY }}
+        shell: bash
+        run: |
+          if [[ -z "$ISOLDE_SIGNING_KEY" ]]; then
+            echo "::error::The ISOLDE_SIGNING_KEY secret is required."
+            exit 1
+          fi
+          actual=$(printf '%s\n' "$ISOLDE_SIGNING_KEY" | openssl pkey -pubout -outform DER | sha256sum)
+          expected=$(openssl pkey -pubin -in tools/isolde-signing-key.pub -outform DER | sha256sum)
+          if [[ "$actual" != "$expected" ]]; then
+            echo "::error::The signing secret does not match the public key shipped with Isolde."
+            exit 1
+          fi
 
       - name: Install build dependencies
         run: |
@@ -82,31 +100,23 @@ jobs:
           python3 tools/build-desktop-deb.py --build-dir build --output-dir dist
           ls -la dist/
 
-      - name: Generate signing key pair (if missing)
+      - name: Sign appliance payload and update manifest
+        env:
+          ISOLDE_SIGNING_KEY: ${{ secrets.ISOLDE_SIGNING_KEY }}
+        shell: bash
         run: |
-          if [ ! -f tools/isolde-signing-key.pem ]; then
-            echo "::warning::Private signing key not found in repo. Generating ephemeral key for this run."
-            echo "For production, provide ISOLDE_SIGNING_KEY as a secret and write it to tools/isolde-signing-key.pem before signing."
-            openssl genpkey -algorithm ED25519 -out tools/isolde-signing-key.pem
-            openssl pkey -in tools/isolde-signing-key.pem -pubout -out tools/isolde-signing-key.pub
-          fi
-
-      - name: Sign appliance payload
-        id: sign-appliance
-        run: |
+          umask 077
+          key_file=$(mktemp "$RUNNER_TEMP/isolde-signing-key.XXXXXXXX")
+          trap 'rm -f -- "$key_file"' EXIT
+          printf '%s\n' "$ISOLDE_SIGNING_KEY" > "$key_file"
+          unset ISOLDE_SIGNING_KEY
           VERSION="${{ steps.appliance.outputs.version }}"
           ARCH="${{ env.ARCH }}"
           python3 tools/sign-release.py \
             --payload appliance-stage \
-            --private-key tools/isolde-signing-key.pem \
+            --private-key "$key_file" \
+            --public-key appliance-stage/share/isolde/isolde-signing-key.pub \
             --output-signature "isolde-${VERSION}-linux-${ARCH}.tar.gz.sig"
-          echo "signature=isolde-${VERSION}-linux-${ARCH}.tar.gz.sig" >> $GITHUB_OUTPUT
-
-      - name: Build and sign update manifest
-        id: manifest
-        run: |
-          VERSION="${{ steps.appliance.outputs.version }}"
-          ARCH="${{ env.ARCH }}"
           SIZE="${{ steps.appliance.outputs.size }}"
           SHA256="${{ steps.appliance.outputs.sha256 }}"
           FILENAME="isolde-${VERSION}-linux-${ARCH}.tar.gz"
@@ -117,7 +127,8 @@ jobs:
             --size "${SIZE}" \
             --sha256 "${SHA256}" \
             --type appliance \
-            --private-key tools/isolde-signing-key.pem \
+            --private-key "$key_file" \
+            --public-key appliance-stage/share/isolde/isolde-signing-key.pub \
             --output-manifest update-manifest.json \
             --output-signature update-manifest.sig
 
