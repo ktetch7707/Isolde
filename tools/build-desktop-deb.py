@@ -132,6 +132,10 @@ def build_package(build_dir, output_dir):
             " A windowed desktop entry for the Isolde media interface.\n"
         )
         (control / "control").chmod(0o644)
+        postinst = ROOT / "debian" / "postinst"
+        if postinst.is_file():
+            (control / "postinst").write_bytes(postinst.read_bytes())
+            (control / "postinst").chmod(0o755)
         temporary_package = work / "isolde.deb"
         subprocess.run(
             ["dpkg-deb", "--root-owner-group", "--build", str(stage), str(temporary_package)],

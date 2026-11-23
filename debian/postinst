@@ -1,0 +1,120 @@
+#!/bin/sh
+# postinst script for isolde
+#
+# Sets up autostart and crash recovery for the installed user.
+# Runs as root during dpkg --install / apt install.
+
+set -e
+
+PREFIX="/opt/isolde"
+ISOLDE_BIN="$PREFIX/bin/isolde"
+WAIT_FOR_DISPLAY="$PREFIX/share/isolde/wait-for-display.py"
+RECOVERY_UI="$PREFIX/bin/isolde-recovery"
+
+# Figure out which user installed the package (if any).
+INSTALL_USER="${SUDO_USER:-}"
+if [ -z "$INSTALL_USER" ] && [ -n "$USER" ] && [ "$(id -u)" -ne 0 ]; then
+    INSTALL_USER="$USER"
+fi
+
+# Install systemd user service units system-wide so every user can enable them.
+install_systemd_units() {
+    mkdir -p /etc/systemd/user
+
+    # Isolde main service: waits for display, then launches Isolde, restarts on crash.
+    cat > /etc/systemd/user/isolde.service <<EOF
+[Unit]
+Description=Isolde living-room interface
+PartOf=graphical-session.target
+StartLimitIntervalSec=60
+StartLimitBurst=3
+OnFailure=isolde-recovery.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 "$WAIT_FOR_DISPLAY" --executable "$ISOLDE_BIN"
+Restart=always
+RestartSec=5
+TimeoutStopSec=10
+KillMode=control-group
+
+[Install]
+WantedBy=graphical-session.target
+EOF
+
+    # Recovery service: on-screen recovery UI when Isolde crashes.
+    cat > /etc/systemd/user/isolde-recovery.service <<EOF
+[Unit]
+Description=Isolde on-screen recovery
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 "$PREFIX/share/isolde/recovery-controller.py" --prefix "$PREFIX" --ui "$RECOVERY_UI"
+Restart=no
+TimeoutStopSec=5
+KillMode=control-group
+EOF
+
+    chmod 0644 /etc/systemd/user/isolde.service /etc/systemd/user/isolde-recovery.service
+}
+
+# Install a system-wide autostart entry so Isolde starts at graphical login.
+install_autostart() {
+    mkdir -p /etc/xdg/autostart
+    cat > /etc/xdg/autostart/isolde.desktop <<EOF
+[Desktop Entry]
+Type=Application
+Name=Isolde
+Comment=Media and home interface
+Exec=$ISOLDE_BIN
+Terminal=false
+X-GNOME-Autostart-enabled=true
+OnlyShowIn=GNOME;Unity;XFCE;
+EOF
+    chmod 0644 /etc/xdg/autostart/isolde.desktop
+}
+
+# Install desktop application menu entry.
+install_desktop_entry() {
+    mkdir -p /usr/share/applications
+    cat > /usr/share/applications/org.isolde.Isolde.desktop <<EOF
+[Desktop Entry]
+Type=Application
+Name=Isolde
+Comment=Media and home interface
+Exec=$ISOLDE_BIN --windowed
+TryExec=$ISOLDE_BIN
+Terminal=false
+Categories=AudioVideo;Player;
+EOF
+    chmod 0644 /usr/share/applications/org.isolde.Isolde.desktop
+}
+
+# Enable the systemd user service for the installing user, if possible.
+enable_user_service() {
+    if [ -z "$INSTALL_USER" ]; then
+        return 0
+    fi
+    # systemctl --user must run as the target user, not root.
+    if [ -n "$SUDO_USER" ]; then
+        su -s /bin/sh "$INSTALL_USER" -c "systemctl --user daemon-reload 2>/dev/null || true" 2>/dev/null || true
+        su -s /bin/sh "$INSTALL_USER" -c "systemctl --user enable isolde.service 2>/dev/null || true" 2>/dev/null || true
+    fi
+}
+
+install_systemd_units
+install_autostart
+install_desktop_entry
+enable_user_service
+
+# Reload systemd manager configuration so units are available.
+systemctl daemon-reload 2>/dev/null || true
+
+echo "Isolde installed."
+echo "  Application menu: Isolde"
+echo "  Autostart: enabled at graphical login (system-wide via /etc/xdg/autostart)"
+echo "  First launch runs the setup wizard automatically."
+echo "  Disable autostart: Settings -> System -> Startup, or remove /etc/xdg/autostart/isolde.desktop"
+
+exit 0
