@@ -172,7 +172,6 @@ def main():
             finally:
                 vsig_path.unlink(missing_ok=True)
         digest_file.unlink(missing_ok=True)
-            print("Payload signature verified against public key.")
 
     if args.build_manifest:
         missing = [n for n, v in (

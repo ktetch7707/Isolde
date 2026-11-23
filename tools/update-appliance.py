@@ -97,13 +97,16 @@ def install_payload(payload, prefix, signature, public_key):
     files = sorted(payload.rglob("*"))
     if any(path.is_symlink() for path in files):
         raise RuntimeError("Release payload must not contain symlinks")
-    verify_signature(public_key, payload, signature)
+    digest = payload_digest(payload)
+    with tempfile.TemporaryDirectory(dir=payload.parent, prefix=".digest-") as scratch:
+        digest_file = Path(scratch) / "digest.txt"
+        digest_file.write_text(digest)
+        verify_signature(public_key, digest_file, signature)
     prefix.mkdir(parents=True, exist_ok=True)
     current = checked_release(prefix, "current")
     previous = checked_release(prefix, "previous")
     releases = prefix / "releases"
     releases.mkdir(exist_ok=True)
-    digest = payload_digest(payload)
     release = releases / digest[:24]
     if not release.exists():
         with tempfile.TemporaryDirectory(dir=releases, prefix=".staging-") as scratch:
