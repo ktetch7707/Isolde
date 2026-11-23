@@ -36,6 +36,45 @@ Item {
     readonly property int selectedIndex: visibleEntries.findIndex(app => app.id === selectedId)
     SurfacePalette { id: theme; appearance: root.appearance }
 
+    // Intercept remote/keyboard arrow keys at grid edges and from controls,
+    // so focus never leaks to Settings or other off-grid elements. GridView's
+    // native Up/Down/Left/Right within the grid is left untouched.
+    Keys.handle: Keys.Left | Keys.Right | Keys.Up | Keys.Down | Keys.Select | Keys.Back
+    Keys.onPressed: {
+        // From any control: arrow keys go through handleCommand (to grid, or between controls)
+        if (focusArea !== "grid") {
+            if (key === Qt.Key_Up) { root.handleCommand(inputManager.navigateUp); event.accepted = true; return }
+            if (key === Qt.Key_Down) { root.handleCommand(inputManager.navigateDown); event.accepted = true; return }
+            if (key === Qt.Key_Left) { root.handleCommand(inputManager.navigateLeft); event.accepted = true; return }
+            if (key === Qt.Key_Right) { root.handleCommand(inputManager.navigateRight); event.accepted = true; return }
+        }
+        // From grid edges: prevent focus leak to Settings/controls
+        if (focusArea === "grid" && visibleEntries.length > 0) {
+            const idx = visibleEntries.findIndex(app => app.id === selectedId)
+            const step = layoutMode === "list" ? 1 : columns
+            const lastIdx = visibleEntries.length - 1
+            if (key === Qt.Key_Right && idx === lastIdx) {
+                root.handleCommand(inputManager.navigateRight); event.accepted = true; return
+            }
+            if (key === Qt.Key_Left && idx === 0) {
+                root.handleCommand(inputManager.navigateLeft); event.accepted = true; return
+            }
+            if (key === Qt.Key_Down && idx >= visibleEntries.length - step) {
+                root.handleCommand(inputManager.navigateDown); event.accepted = true; return
+            }
+            if (key === Qt.Key_Up && idx < step) {
+                root.handleCommand(inputManager.navigateUp); event.accepted = true; return
+            }
+        }
+        // Confirm/Back from anywhere
+        if (key === Qt.Key_Select || key === Qt.Key_Return || key === Qt.Key_Enter) {
+            root.handleCommand(inputManager.confirm); event.accepted = true
+        }
+        else if (key === Qt.Key_Back) {
+            root.handleCommand(inputManager.back); event.accepted = true
+        }
+    }
+
     signal launchRequested(string appId)
     signal storeRequested()
     signal settingsRequested()
