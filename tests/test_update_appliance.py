@@ -127,6 +127,8 @@ class UpdateApplianceTests(unittest.TestCase):
             release1 = mod.install_payload(payload1, prefix, prefix / "payload.sig", public)
 
             payload2 = make_payload(tmp_path / "payload2")
+            # Make payload2 different so it gets a different content-addressed digest.
+            (payload2 / "bin" / "extra-file").write_text("extra-content-42")
             stage_signed_payload(mod, payload2, prefix, private)
             release2 = mod.install_payload(payload2, prefix, prefix / "payload.sig", public)
 
