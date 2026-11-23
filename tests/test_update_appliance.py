@@ -102,6 +102,33 @@ class UpdateApplianceTests(unittest.TestCase):
             self.assertEqual((prefix / "current").resolve(), release)
             self.assertTrue((release / "bin" / "isolde").is_file())
 
+    def test_cli_installs_signed_release_fixture(self):
+        """Run the install command against a local signed manifest and archive."""
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            prefix, private, public = setup_prefix_with_key(root)
+            payload = make_payload(root)
+            stage_signed_payload(load_update_appliance(), payload, prefix, private)
+            assets = root / "release-assets"
+            assets.mkdir()
+            name = "isolde-0.0.1.3-linux-amd64"
+            archive = Path(shutil.make_archive(str(assets / name), "gztar", payload))
+            shutil.copy2(prefix / "payload.sig", assets / (archive.name + ".sig"))
+            manifest = assets / "update-manifest.json"
+            manifest.write_text(json.dumps({
+                "schema": 1, "version": "0.0.1.3", "architecture": "amd64", "type": "appliance",
+                "filename": archive.name, "size": archive.stat().st_size,
+                "sha256": hashlib.sha256(archive.read_bytes()).hexdigest(),
+            }))
+            shutil.move(sign_digest(private, manifest), assets / "update-manifest.sig")
+            result = subprocess.run(
+                [sys.executable, str(TOOLS_DIR / "update-appliance.py"), "install", "--prefix", str(prefix),
+                 "--release-url", assets.as_uri(), "--version", "0.0.1.3", "--arch", "amd64",
+                 "--public-key", str(public)], capture_output=True, text=True, timeout=30)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertTrue((prefix / "current").is_symlink())
+            self.assertEqual((prefix / "current/bin/isolde").read_text(), "fake-isolde-binary")
+
     def test_install_payload_rejects_unsigned(self):
         """A payload without a valid signature is rejected."""
         with tempfile.TemporaryDirectory() as td:
@@ -135,7 +162,10 @@ class UpdateApplianceTests(unittest.TestCase):
             self.assertEqual((prefix / "current").resolve(), release2)
             self.assertEqual((prefix / "previous").resolve(), release1)
 
-            mod.rollback(prefix)
+            result = subprocess.run(
+                [sys.executable, str(TOOLS_DIR / "update-appliance.py"), "rollback", "--prefix", str(prefix)],
+                capture_output=True, text=True, timeout=30)
+            self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual((prefix / "current").resolve(), release1)
             self.assertEqual((prefix / "previous").resolve(), release2)
 

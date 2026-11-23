@@ -33,6 +33,10 @@ Canvas {
     property real contentScale:1
     property real glowWidth:0
     property real glowOpacity:0.65
+    property real reflectionHeight: 0
+    property real reflectionOpacity: 0
+    onReflectionHeightChanged: requestPaint()
+    onReflectionOpacityChanged: requestPaint()
     readonly property int status: probe.status
     onSourceChanged:clearAnimation()
     onManagedAssetChanged:clearAnimation()
@@ -91,7 +95,8 @@ Canvas {
         c.reset()
         let x = crop ? crop.x : 0, y = crop ? crop.y : 0
         let w = crop ? crop.width : probe.sourceSize.width, h = crop ? crop.height : probe.sourceSize.height
-        const innerWidth=Math.max(1,width-2*contentInset),innerHeight=Math.max(1,height-2*contentInset),ratio=innerWidth/innerHeight
+        const imageHeight=height-reflectionHeight
+        const innerWidth=Math.max(1,width-2*contentInset),innerHeight=Math.max(1,imageHeight-2*contentInset),ratio=innerWidth/innerHeight
         let dx=contentInset,dy=contentInset,dw=innerWidth,dh=innerHeight
         if(fit==="contain") {const factor=Math.min(innerWidth/w,innerHeight/h)*contentScale;dw=w*factor;dh=h*factor;dx=contentInset+(innerWidth-dw)*focalX;dy=contentInset+(innerHeight-dh)*focalY}
         else {
@@ -99,7 +104,7 @@ Canvas {
             else { const cut = w/ratio; y += (h-cut)*focalY; h = cut }
             const zw=w/zoom,zh=h/zoom;x+=(w-zw)*focalX;y+=(h-zh)*focalY;w=zw;h=zh
         }
-        c.save(); c.beginPath(); c.roundedRect(0,0,width,height,Math.min(radius,width/2),Math.min(radius,height/2)); c.clip()
+        c.save(); c.beginPath(); c.roundedRect(0,0,width,imageHeight,Math.min(radius,width/2),Math.min(radius,imageHeight/2)); c.clip()
         // Qt's raster Canvas rounds a source crop below one pixel to an empty
         // QImage. Transform the whole image instead, with the same output clip.
         // The transform avoids preparing an oversized intermediate bitmap.
@@ -133,5 +138,22 @@ Canvas {
             c.putImageData(foreground,0,0,0,0,foreground.width,foreground.height)
         } else draw(0,0)
         c.restore()
+        // Reuse the loaded artwork and crop so software-rendered previews show the same reflection.
+        if (reflectionHeight > 0 && reflectionOpacity > 0) {
+            c.save()
+            c.beginPath(); c.rect(0,imageHeight,width,reflectionHeight); c.clip()
+            c.save()
+            c.translate(0,2*imageHeight); c.scale(1,-1)
+            c.beginPath(); c.roundedRect(0,0,width,imageHeight,Math.min(radius,width/2),Math.min(radius,imageHeight/2)); c.clip()
+            draw(0,0)
+            c.restore()
+            const fade = c.createLinearGradient(0,imageHeight,0,height)
+            fade.addColorStop(0,Qt.rgba(0,0,0,reflectionOpacity))
+            fade.addColorStop(1,"transparent")
+            c.globalCompositeOperation="destination-in"
+            c.fillStyle=fade
+            c.fillRect(0,imageHeight,width,reflectionHeight)
+            c.restore()
+        }
     }
 }

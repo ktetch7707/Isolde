@@ -8,8 +8,10 @@
 #include <QRegularExpression>
 #include <QSaveFile>
 #include <QSet>
+#include <QTemporaryDir>
 #include <QUuid>
 #include <functional>
+#include <memory>
 #include "ComponentSchema.h"
 #include "HomeDesignData.h"
 #include "HomeLayout.h"
@@ -345,6 +347,57 @@ HomeLayout::skinSnapshot(const QString& id) const
         skin = readObject(QDir(skinDirectory()).filePath(id + ".json"));
     return skin;
 }
+// Resolve a skin with the normal layout validator, with artwork isolated from the active profile.
+QObject* HomeLayout::openSkinPreview(const QString& id)
+{
+    closeSkinPreview();
+    const auto snapshot = skinSnapshot(id);
+    if (!isValidSkin(snapshot))
+    {
+        setError(tr("This skin is missing or invalid."));
+        return nullptr;
+    }
+    auto scratch = std::make_shared<QTemporaryDir>();
+    if (!scratch->isValid())
+    {
+        setError(tr("Could not create a temporary skin preview."));
+        return nullptr;
+    }
+    auto preview = std::make_unique<HomeLayout>(m_registry, this);
+    preview->m_defaultPath = m_defaultPath;
+    preview->m_defaultTheme = m_defaultTheme;
+    preview->m_userPath = scratch->filePath("preview.json");
+    auto layout = snapshot["layout"].toObject();
+    if (!preview->loadDocument(QJsonDocument(layout).toJson(), false))
+    {
+        setError(preview->errorString());
+        return nullptr;
+    }
+    if (!preview->applySkinValidateArtwork(layout, snapshot["assets"].toObject()))
+    {
+        setError(tr("This skin has missing or invalid artwork."));
+        return nullptr;
+    }
+    if (!preview->loadDocument(QJsonDocument(layout).toJson(), false))
+    {
+        setError(preview->errorString());
+        return nullptr;
+    }
+    // Keep scratch artwork readable until the preview model and its bindings are retired.
+    connect(preview.get(), &QObject::destroyed, [scratch] {});
+    m_skinPreview = preview.release();
+    setError({});
+    return m_skinPreview;
+}
+
+// Retire the model after the view has released its bindings and stopped rendering.
+void HomeLayout::closeSkinPreview()
+{
+    if (m_skinPreview)
+        m_skinPreview->deleteLater();
+    m_skinPreview = nullptr;
+}
+
 bool
 HomeLayout::applySkin(const QString& id)
 {

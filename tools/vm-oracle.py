@@ -180,6 +180,7 @@ SUITES = {"all": None, "remote_bindings":("isolde_remote_binding_tests","isolde_
           "store_remote_ui": "isolde_studio_quick_tests",
           "media_controls": ("isolde_home_navigation_tests","isolde_kodi_media_tests","isolde_native_sandbox_tests","isolde"),
           "audio_backend": "isolde_audio_tests",
+          "software_updates": ("isolde_software_updates_tests", "isolde_software_updates_qml_tests"),
           "profile_browser_isolation": "isolde_profile_browser_tests",
           "home_component_navigation": "isolde_home_navigation_tests",
           "studio_navigation": "isolde_home_navigation_tests",
@@ -260,6 +261,8 @@ def suite_selection(suite):
         pattern = "^(home_component_navigation|studio_navigation)$"
     if suite == "kodi_media_client":
         pattern = "^(kodi_media_client|kodi_import_contracts|kodi_local_bridge)$"
+    if suite == "software_updates":
+        pattern = "^(software_updates|software_updates_qml|signing_keys|update_appliance)$"
     return targets, pattern
 CASES = {"sources": ("home-components-acceptance.py", ["--studio", "--sources-only", "--inspect"]), "themecontrols": ("home-components-acceptance.py", ["--studio", "--themes-controls-only", "--inspect"]), "themecustom": ("home-components-acceptance.py", ["--studio", "--themes-custom-only", "--inspect"]), "themefaults": ("home-components-acceptance.py", ["--studio", "--themes-faults-only", "--inspect"]), "themes": ("home-components-acceptance.py", ["--studio", "--themes-only", "--inspect"]),
          "catalog": ("home-components-acceptance.py", ["--studio", "--catalog", "--inspect"]),
@@ -1579,6 +1582,8 @@ class Oracle:
                 expected = {"studio_grid", "studio_grid_controls"}
             if suite == "home_component_navigation":
                 expected = {"home_component_navigation", "studio_navigation"}
+            if suite == "software_updates":
+                expected = {"software_updates", "software_updates_qml", "signing_keys", "update_appliance"}
             if suite == "vpn":
                 expected = {"vpn_setup", "vpn_launch"}
             if suite == "sources":
@@ -2335,6 +2340,8 @@ class Oracle:
             raise RuntimeError("The incremental build belongs to a different source snapshot")
         verify_tree(self.run / "source", entries)
         verify_tree(work / "source", entries)
+        self.stage("build-manual-payload", ["cmake", "--build", str(work / "build"), "--parallel", "2",
+                                            "--target", "isolde", "isolde-recovery", "isolde-native-host"], 1200)
         payload = Path(tempfile.mkdtemp(prefix="manual-payload-", dir=self.run))
         self.stage("stage-manual-payload", ["cmake", "--install", str(work / "build"), "--prefix", str(payload)], 120)
         return payload

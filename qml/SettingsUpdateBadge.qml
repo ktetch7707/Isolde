@@ -6,10 +6,17 @@ Rectangle {
     property var item: ({})
     property real unit: 1
     readonly property var actions: item.actions && item.actions.length ? item.actions : item.action ? [item.action] : []
-    readonly property bool targetsSettings: settingsTarget || item.appId === "settings" ||
-        actions.some(action => action && (action.type === "settings" ||
-            (action.type === "launch-app" && action.appId === "settings")))
-    visible: targetsSettings && typeof softwareUpdates !== "undefined" && softwareUpdates.available
+    readonly property bool targetsSettings: {
+        if (settingsTarget || item.appId === "settings") return true
+        for (let index = 0; index < actions.length; ++index) {
+            const action = actions[index]
+            if (action && (action.type === "settings" ||
+                           (action.type === "launch-app" && action.appId === "settings"))) return true
+        }
+        return false
+    }
+    readonly property var updater: typeof softwareUpdates !== "undefined" ? softwareUpdates : null
+    visible: root.targetsSettings && !!root.updater && root.updater.available
     objectName: "settingsUpdateBadge"
     width: 18 * unit; height: width; radius: width / 2
     color: "#b9273c"; border.color: "white"; border.width: Math.max(1, unit)

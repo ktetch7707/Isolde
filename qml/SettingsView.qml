@@ -206,6 +206,7 @@ Item {
         anchors.fill: parent
         visible: open && root.inPage && root.route === "skins"
         layoutModel: root.layoutModel
+        appearance: root.appearance
         z: 6
         onClosed: if (root.route === "skins") root.backToParent()
         onEditSkin: id => {

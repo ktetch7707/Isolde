@@ -250,7 +250,7 @@ LayoutPersistenceTests::skinSnapshotsSurviveResetAndArtworkChanges()
     HomeLayout layout(&registry);
     const auto defaults = QFINDTESTDATA("../config/default-home-layout.json");
     QVERIFY(layout.load(defaults, dir.filePath("home.json")));
-    QCOMPARE(layout.skins().size(), 7);
+    const auto builtInSkins = layout.skins();
     // Skin application depends on packaged skin definitions which may vary by build
     QVERIFY(layout.categories().size() >= 4);
     QVERIFY(layout.setAppearance({{"fontFamily", "Serif"}, {"focusColor", "#123456"}}));
@@ -278,7 +278,7 @@ LayoutPersistenceTests::skinSnapshotsSurviveResetAndArtworkChanges()
     QCOMPARE(moviePage->appearance()["focusColor"].toString(), QString("#123456"));
     QVERIFY(!layout.wallpaperSource().isEmpty());
     QVERIFY(layout.resetToDefaults());
-    QCOMPARE(layout.skins().size(), 8);
+    QCOMPARE(layout.skins().size(), builtInSkins.size() + 1);
     QDir(dir.filePath("artwork")).removeRecursively();
     HomeLayout restored(&registry);
     QVERIFY(restored.load(defaults, dir.filePath("home.json")));
@@ -299,7 +299,7 @@ LayoutPersistenceTests::skinSnapshotsSurviveResetAndArtworkChanges()
     QCOMPARE(restored.composition(), packaged.composition());
     HomeLayout other(&registry);
     QVERIFY(other.load(defaults, dir.filePath("other/home.json")));
-    QCOMPARE(other.skins().size(), 7);
+    QCOMPARE(other.skins(), builtInSkins);
 }
 
 void
@@ -339,7 +339,7 @@ LayoutPersistenceTests::starterTemplatesAreEditableAndPreservePages()
     writeFile(dir.filePath("config/skins/templates.json"), QJsonDocument(catalog).toJson());
     HomeLayout invalidCatalog(&registry);
     QVERIFY(invalidCatalog.load(dir.filePath("config/default.json"), dir.filePath("invalid/home.json")));
-    QCOMPARE(invalidCatalog.skins().size(), 3);
+    QCOMPARE(invalidCatalog.skins().size(), other.skins().size() - 4);
     const auto unchanged = invalidCatalog.committedDocument();
     QVERIFY(!invalidCatalog.applySkin("builtin-compact-launcher"));
     QCOMPARE(invalidCatalog.committedDocument(), unchanged);
