@@ -6,6 +6,7 @@ param(
     [switch]$Installed,
     [switch]$FrozenReferenceHelpers,
     [switch]$Diagnostic,
+    [switch]$ManualTest,
     [switch]$StopOnVisualFailure,
     [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$')][string]$ResumeRunId,
     [string]$GuideReplayPlan,
@@ -24,6 +25,7 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 if ($Diagnostic -and ($Action -ne 'Visual' -or $Installed)) { throw 'Diagnostic visuals are staged-only; installation/deployment is prohibited.' }
+if ($ManualTest -and ($Action -ne 'Deploy' -or -not $RunId)) { throw 'ManualTest requires Deploy and an existing build RunId.' }
 if ($ApplyStorageRetention -and ($Action -ne 'Configure' -or $ConfigureTarget -ne 'storage-capacity')) { throw 'ApplyStorageRetention requires Configure storage-capacity.' }
 if ($ResumeRunId -and ($Action -ne 'Test' -or $Suite -ne 'all' -or $ReuseFullRun)) { throw 'Campaign resumption requires Test -Suite all, without coverage reuse.' }
 if ($OrphanVisualPid -and $Action -ne 'Recover') { throw 'OrphanVisualPid is Recover-only.' }
@@ -160,6 +162,7 @@ try {
     } else {
         $remoteAction = $Action.ToLowerInvariant()
         $command = "python3 $guestDriver $remoteAction --run-id $RunId"
+        if ($ManualTest) { $command += ' --manual-test' }
         if ($Storage) { $command += ' --storage' }
         if ($OrphanVisualPid) { $command += " --orphan-visual-pid $OrphanVisualPid" }
         if ($ApplyStorageRetention) { $command += " --apply-storage-retention" }
