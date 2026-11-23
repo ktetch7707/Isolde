@@ -202,7 +202,7 @@ try {
             $command += " --maintenance-tests-digest $maintenanceHash"
         }
         if ($WaitSeconds) { $command += " --wait-seconds $WaitSeconds" }
-        $seconds = if ($Action -eq 'Provision') { 2400 } elseif ($Action -eq 'Test') { 1800 } elseif ($Action -eq 'Deploy') { 180 } elseif ($Action -eq 'Configure' -and $ConfigureTarget -eq 'android') { 3900 } elseif ($Action -eq 'Configure' -and $ConfigureTarget -in @('kodi-managed','kodi-managed-audit')) { 7500 } elseif ($Action -eq 'Configure' -and $ConfigureTarget -eq 'games') { 2500 } elseif ($Action -eq 'Configure') { 1100 } elseif ($Action -eq 'Diagnose') { 90 } else { 45 }
+        $seconds = if ($Action -eq 'Provision') { 2400 } elseif ($Action -eq 'Test') { 1800 } elseif ($ManualTest) { 1440 } elseif ($Action -eq 'Deploy') { 180 } elseif ($Action -eq 'Configure' -and $ConfigureTarget -eq 'android') { 3900 } elseif ($Action -eq 'Configure' -and $ConfigureTarget -in @('kodi-managed','kodi-managed-audit')) { 7500 } elseif ($Action -eq 'Configure' -and $ConfigureTarget -eq 'games') { 2500 } elseif ($Action -eq 'Configure') { 1100 } elseif ($Action -eq 'Diagnose') { 90 } else { 45 }
         $launched = $Action -in @('Test','Deploy')
         $seconds += $WaitSeconds
         $desktopPreparation = {

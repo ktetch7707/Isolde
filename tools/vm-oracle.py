@@ -2335,6 +2335,8 @@ class Oracle:
             raise RuntimeError("The incremental build belongs to a different source snapshot")
         verify_tree(self.run / "source", entries)
         verify_tree(work / "source", entries)
+        self.stage("build-manual-payload", ["cmake", "--build", str(work / "build"), "--parallel", "2",
+                                            "--target", "isolde", "isolde-recovery", "isolde-native-host"], 1200)
         payload = Path(tempfile.mkdtemp(prefix="manual-payload-", dir=self.run))
         self.stage("stage-manual-payload", ["cmake", "--install", str(work / "build"), "--prefix", str(payload)], 120)
         return payload
