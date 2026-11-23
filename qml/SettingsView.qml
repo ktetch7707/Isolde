@@ -297,7 +297,41 @@ Item {
                             MouseArea { anchors.fill:parent; enabled:!root.arranging; onClicked:{root.inPage=true;root.selectRow(index);root.openRoute(modelData.route)} }
                         }
                     }
-                    Text { visible:!root.categoryRows.length; width:parent.width; wrapMode:Text.Wrap; text:qsTr("Confirm to open"); font.family:shell.fontFamily; font.pixelSize:20*shell.textScale; color:shell.elevatedMuted }
+                    Repeater {
+                        model: !root.inPage && root.category.route === "skins" ? root.layoutModel.skins : []
+                        delegate: Rectangle {
+                            required property int index
+                            required property var modelData
+                            objectName: "settingsSkin-" + modelData.id
+                            width: parent.width
+                            height: Math.max(54 * shell.textScale, skinName.implicitHeight + 20)
+                            radius: shell.radius
+                            color: shell.surface
+                            Text {
+                                id: skinName
+                                anchors.fill: parent
+                                anchors.margins: 12
+                                verticalAlignment: Text.AlignVCenter
+                                text: modelData.name
+                                textFormat: Text.PlainText
+                                elide: Text.ElideRight
+                                font.family: shell.fontFamily
+                                font.pixelSize: 20 * shell.textScale
+                                color: shell.text
+                            }
+                            MouseArea {
+                                anchors.fill: parent
+                                enabled: !root.arranging
+                                onClicked: {
+                                    const skinIndex = index
+                                    root.openCategory(root.category.id, "")
+                                    skinPicker.selected = skinIndex
+                                    skinPicker.selectSkin()
+                                }
+                            }
+                        }
+                    }
+                    Text { visible:!root.categoryRows.length && root.category.route !== "skins"; width:parent.width; wrapMode:Text.Wrap; text:qsTr("Confirm to open"); font.family:shell.fontFamily; font.pixelSize:20*shell.textScale; color:shell.elevatedMuted }
                 }
                 }
                 NetworkSettingsView {id:networkPage;anchors.fill:parent;appearance:root.appearance;visible:root.inPage && root.route==="network"}
