@@ -14,18 +14,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
-
-def run_update_appliance(*args):
-    return subprocess.run(
-        [sys.executable, "tools/update-appliance.py", *map(str, args)],
-        capture_output=True, text=True,
-    )
+TOOLS_DIR = Path(__file__).resolve().parent.parent / "tools"
 
 
 def load_update_appliance():
     """Load tools/update-appliance.py as a module despite the hyphen in the filename."""
     spec = importlib.util.spec_from_file_location(
-        "update_appliance", Path(__file__).resolve().parent.parent / "tools" / "update-appliance.py")
+        "update_appliance", TOOLS_DIR / "update-appliance.py")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -65,20 +60,41 @@ def make_keypair(tmp_path):
     return private, public
 
 
+def setup_prefix_with_key(tmp_path):
+    """Create an install prefix with the public key shipped, and return (prefix, private, public)."""
+    prefix = tmp_path / "isolde-appliance"
+    prefix.mkdir(parents=True)
+    (prefix / "share" / "isolde").mkdir(parents=True)
+    private, public = make_keypair(tmp_path)
+    shutil.copy2(public, prefix / "share" / "isolde" / "isolde-signing-key.pub")
+    return prefix, private, public
+
+
+def stage_signed_payload(mod, payload, prefix, private):
+    """Compute payload digest, sign it, and copy the signature into the prefix."""
+    digest = hashlib.sha256()
+    for path in sorted(payload.rglob("*")):
+        if path.is_file():
+            digest.update(str(path.relative_to(payload)).encode() + b"\0")
+            digest.update(path.read_bytes())
+    digest_file = prefix / "digest.txt"
+    digest_file.write_text(digest.hexdigest())
+    sig = sign_digest(private, digest_file)
+    shutil.copy2(sig, prefix / "payload.sig")
+    digest_file.unlink()
+
+
 class UpdateApplianceTests(unittest.TestCase):
 
     def test_install_payload_stages_and_activates(self):
         """A signed payload is installed as a content-addressed release."""
         with tempfile.TemporaryDirectory() as td:
             tmp_path = Path(td)
-            prefix = tmp_path / "isolde-appliance"
-            prefix.mkdir(parents=True)
-            (prefix / "share" / "isolde").mkdir(parents=True)
-            private, public = make_keypair(tmp_path)
-            shutil.copy2(public, prefix / "share" / "isolde" / "isolde-signing-key.pub")
+            mod = load_update_appliance()
+            prefix, private, public = setup_prefix_with_key(tmp_path)
 
             payload = make_payload(tmp_path)
-            mod = load_update_appliance()
+            stage_signed_payload(mod, payload, prefix, private)
 
             release = mod.install_payload(payload, prefix, prefix / "payload.sig", public)
             self.assertTrue(release.is_dir())
@@ -90,15 +106,10 @@ class UpdateApplianceTests(unittest.TestCase):
         """A payload without a valid signature is rejected."""
         with tempfile.TemporaryDirectory() as td:
             tmp_path = Path(td)
-            prefix = tmp_path / "isolde-appliance"
-            prefix.mkdir(parents=True)
-            (prefix / "share" / "isolde").mkdir(parents=True)
-            private, public = make_keypair(tmp_path)
-            shutil.copy2(public, prefix / "share" / "isolde" / "isolde-signing-key.pub")
+            mod = load_update_appliance()
+            prefix, private, public = setup_prefix_with_key(tmp_path)
 
             payload = make_payload(tmp_path / "unsigned-payload")
-            mod = load_update_appliance()
-
             bad_sig = tmp_path / "bad.sig"
             bad_sig.write_bytes(b"\x00" * 64)
             with self.assertRaises(RuntimeError):
@@ -108,17 +119,15 @@ class UpdateApplianceTests(unittest.TestCase):
         """Rollback exchanges current and previous release links."""
         with tempfile.TemporaryDirectory() as td:
             tmp_path = Path(td)
-            prefix = tmp_path / "isolde-appliance"
-            prefix.mkdir(parents=True)
-            (prefix / "share" / "isolde").mkdir(parents=True)
-            private, public = make_keypair(tmp_path)
-            shutil.copy2(public, prefix / "share" / "isolde" / "isolde-signing-key.pub")
-
             mod = load_update_appliance()
-            payload1 = make_payload(tmp_path / "payload1")
-            payload2 = make_payload(tmp_path / "payload2")
+            prefix, private, public = setup_prefix_with_key(tmp_path)
 
+            payload1 = make_payload(tmp_path / "payload1")
+            stage_signed_payload(mod, payload1, prefix, private)
             release1 = mod.install_payload(payload1, prefix, prefix / "payload.sig", public)
+
+            payload2 = make_payload(tmp_path / "payload2")
+            stage_signed_payload(mod, payload2, prefix, private)
             release2 = mod.install_payload(payload2, prefix, prefix / "payload.sig", public)
 
             self.assertEqual((prefix / "current").resolve(), release2)

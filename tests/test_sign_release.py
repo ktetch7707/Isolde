@@ -13,10 +13,12 @@ import tempfile
 import unittest
 from pathlib import Path
 
+TOOLS_DIR = Path(__file__).resolve().parent.parent / "tools"
+
 
 def run_sign_release(*args):
     return subprocess.run(
-        [sys.executable, "tools/sign-release.py", *map(str, args)],
+        [sys.executable, str(TOOLS_DIR / "sign-release.py"), *map(str, args)],
         capture_output=True, text=True,
     )
 
