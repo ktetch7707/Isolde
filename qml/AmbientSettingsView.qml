@@ -5,31 +5,35 @@ Item {
     SurfacePalette { id: shell; appearance: root.appearance }
     Rectangle {anchors.fill:parent;z:-1;color:shell.surface}
     property var appearance: ({})
+    property var settingsModel: ambientSettings
+    property var layoutModel: homeLayout
+    property bool canPreview: true
     property int selectedIndex: 0
     property bool pagePickerOpen: false
     property int pagePickerIndex: 0
     property var draftPageIds: []
-    readonly property var pageEntries: homeLayout.pages
+    readonly property var pageEntries: layoutModel.pages
     readonly property var pageChoices: pageEntries.map(page => (draftPageIds.indexOf(page.id)>=0 ? "✓ " : "○ ")+page.name).concat(["Save selection", "Cancel"])
     property bool sourcePanelOpen: false
+    readonly property bool editing:pagePickerOpen || sourcePanelOpen || pathKeyboardOpen
     property bool pathKeyboardOpen: false
     property int sourceActionIndex: 0
     readonly property var sourceActions: ["Use managed folder", "Import sample photos", "Enter folder path", "Rescan photos", "Close"]
     readonly property var rows: [
-        { name: "Ambient Mode", value: ambientSettings.enabled ? "On" : "Off", help: "Shows a TV screensaver after the shell is idle." },
-        { name: "Idle Timeout", value: ambientSettings.timeoutMinutes + " min", help: "How long to wait before Ambient Mode starts." },
-        { name: "Visual Mode", value: ambientSettings.mode, help: "Slideshow, gradient, or dim screen." },
-        { name: "Slideshow Rate", value: ambientSettings.slideshowSeconds + " sec", help: "How often slideshow visuals change." },
-        { name: "Photo Source", value: ambientSettings.photoCount + " photos", help: ambientSettings.photoDirectory },
-        { name: "Image Fit", value: ambientSettings.imageFit, help: "Fill, fit, or stretch slideshow photos." },
-        { name: "Shuffle", value: ambientSettings.shuffle ? "On" : "Off", help: "Randomize slideshow photo order." },
+        { name: "Ambient Mode", value: root.settingsModel.enabled ? "On" : "Off", help: "Shows a TV screensaver after the shell is idle." },
+        { name: "Idle Timeout", value: root.settingsModel.timeoutMinutes + " min", help: "How long to wait before Ambient Mode starts." },
+        { name: "Visual Mode", value: root.settingsModel.mode, help: "Slideshow, gradient, or dim screen." },
+        { name: "Slideshow Rate", value: root.settingsModel.slideshowSeconds + " sec", help: "How often slideshow visuals change." },
+        { name: "Photo Source", value: root.settingsModel.photoCount + " photos", help: root.settingsModel.photoDirectory },
+        { name: "Image Fit", value: root.settingsModel.imageFit, help: "Fill, fit, or stretch slideshow photos." },
+        { name: "Shuffle", value: root.settingsModel.shuffle ? "On" : "Off", help: "Randomize slideshow photo order." },
         { name: "Rescan Photos", value: "Scan", help: "Refresh the managed photo folder." },
-        { name: "Clock Widget", value: ambientSettings.showClock ? "Shown" : "Hidden", help: "Adds a large clock to Ambient Mode." },
-        { name: "Date Widget", value: ambientSettings.showDate ? "Shown" : "Hidden", help: "Adds the date under the clock." },
-        { name: "System Hint", value: ambientSettings.showSystemHint ? "Shown" : "Hidden", help: "Shows mode/rate and wake hint." },
-        { name: "Preview Now", value: "Open", help: "Immediately preview the screensaver." },
+        { name: "Clock Widget", value: root.settingsModel.showClock ? "Shown" : "Hidden", help: "Adds a large clock to Ambient Mode." },
+        { name: "Date Widget", value: root.settingsModel.showDate ? "Shown" : "Hidden", help: "Adds the date under the clock." },
+        { name: "System Hint", value: root.settingsModel.showSystemHint ? "Shown" : "Hidden", help: "Shows mode/rate and wake hint." },
+        { name: "Preview Now", value: canPreview ? "Open" : "Inactive skin", help: canPreview ? "Immediately preview the screensaver." : "Activate this skin to preview its screensaver." },
         { name: "Reset Ambient", value: "Defaults", help: "Restore default screensaver settings." },
-        { name: "Screensaver Pages", value: (ambientSettings.pageIds || []).length + " selected", help: "Create pages with Skin Studio, then choose their rotation here. Select Pages as Visual Mode." }
+        { name: "Screensaver Pages", value: (root.settingsModel.pageIds || []).length + " selected", help: "Create pages with Skin Studio, then choose their rotation here. Select Pages as Visual Mode." }
     ]
     signal previewRequested()
 
@@ -44,7 +48,7 @@ Item {
                     if(at>=0)next.splice(at,1);else next.push(id)
                     draftPageIds=next
                 } else if(pagePickerIndex===pageEntries.length) {
-                    if(ambientSettings.setPageIds(draftPageIds))pagePickerOpen=false
+                    if(root.settingsModel.setPageIds(draftPageIds))pagePickerOpen=false
                 } else pagePickerOpen=false
             }
             return
@@ -61,13 +65,13 @@ Item {
             else if (command === inputManager.back)
                 sourcePanelOpen = false
             else if (command === inputManager.confirm) {
-                if (sourceActionIndex === 0) ambientSettings.useManagedPhotoDirectory()
-                else if (sourceActionIndex === 1) ambientSettings.importSamplePhotos()
+                if (sourceActionIndex === 0) root.settingsModel.useManagedPhotoDirectory()
+                else if (sourceActionIndex === 1) root.settingsModel.importSamplePhotos()
                 else if (sourceActionIndex === 2) {
-                    pathKeyboard.value = ambientSettings.photoDirectory
+                    pathKeyboard.value = root.settingsModel.photoDirectory
                     pathKeyboard.selectedIndex = 0
                     pathKeyboardOpen = true
-                } else if (sourceActionIndex === 3) ambientSettings.rescanPhotos()
+                } else if (sourceActionIndex === 3) root.settingsModel.rescanPhotos()
                 else if (sourceActionIndex === 4) sourcePanelOpen = false
             }
             return
@@ -77,28 +81,28 @@ Item {
         else if (command === inputManager.navigateDown)
             selectedIndex = Math.min(rows.length - 1, selectedIndex + 1)
         else if (command === inputManager.navigateLeft) {
-            if (selectedIndex === 1) ambientSettings.adjustTimeout(-1)
-            else if (selectedIndex === 3) ambientSettings.adjustSlideshowSeconds(-5)
+            if (selectedIndex === 1) root.settingsModel.adjustTimeout(-1)
+            else if (selectedIndex === 3) root.settingsModel.adjustSlideshowSeconds(-5)
         } else if (command === inputManager.navigateRight) {
-            if (selectedIndex === 1) ambientSettings.adjustTimeout(1)
-            else if (selectedIndex === 3) ambientSettings.adjustSlideshowSeconds(5)
+            if (selectedIndex === 1) root.settingsModel.adjustTimeout(1)
+            else if (selectedIndex === 3) root.settingsModel.adjustSlideshowSeconds(5)
         } else if (command === inputManager.confirm) {
-            if (selectedIndex === 0) ambientSettings.toggleEnabled()
-            else if (selectedIndex === 2) ambientSettings.nextMode()
+            if (selectedIndex === 0) root.settingsModel.toggleEnabled()
+            else if (selectedIndex === 2) root.settingsModel.nextMode()
             else if (selectedIndex === 4) {
                 sourcePanelOpen = true
                 sourceActionIndex = 0
             }
-            else if (selectedIndex === 5) ambientSettings.nextImageFit()
-            else if (selectedIndex === 6) ambientSettings.toggleShuffle()
-            else if (selectedIndex === 7) ambientSettings.rescanPhotos()
-            else if (selectedIndex === 8) ambientSettings.toggleClock()
-            else if (selectedIndex === 9) ambientSettings.toggleDate()
-            else if (selectedIndex === 10) ambientSettings.toggleSystemHint()
-            else if (selectedIndex === 11) previewRequested()
-            else if (selectedIndex === 12) ambientSettings.reset()
+            else if (selectedIndex === 5) root.settingsModel.nextImageFit()
+            else if (selectedIndex === 6) root.settingsModel.toggleShuffle()
+            else if (selectedIndex === 7) root.settingsModel.rescanPhotos()
+            else if (selectedIndex === 8) root.settingsModel.toggleClock()
+            else if (selectedIndex === 9) root.settingsModel.toggleDate()
+            else if (selectedIndex === 10) root.settingsModel.toggleSystemHint()
+            else if (selectedIndex === 11 && canPreview) previewRequested()
+            else if (selectedIndex === 12) root.settingsModel.reset()
             else if (selectedIndex === 13) {
-                draftPageIds=(ambientSettings.pageIds || []).slice();pagePickerIndex=0;pagePickerOpen=true
+                draftPageIds=(root.settingsModel.pageIds || []).slice();pagePickerIndex=0;pagePickerOpen=true
             }
         }
     }
@@ -122,7 +126,7 @@ Item {
                         Text {anchors.fill:parent;anchors.margins:12;verticalAlignment:Text.AlignVCenter;text:modelData;color:root.pagePickerIndex===index?shell.selectedText:shell.text;font.pixelSize:22*shell.textScale;elide:Text.ElideRight}
                     }
                 }
-                Text {width:parent.width;wrapMode:Text.Wrap;text:ambientSettings.errorString;color:shell.error}
+                Text {width:parent.width;wrapMode:Text.Wrap;text:root.settingsModel.errorString;color:shell.error}
             }
         }
     }
@@ -181,8 +185,8 @@ Item {
             font.pixelSize: 15 * shell.textScale
         }
         Text { font.family: shell.fontFamily;
-            visible: ambientSettings.errorString.length > 0
-            text: ambientSettings.errorString
+            visible: root.settingsModel.errorString.length > 0
+            text: root.settingsModel.errorString
             color: shell.error
             font.pixelSize: 15 * shell.textScale
             wrapMode: Text.WordWrap
@@ -209,7 +213,7 @@ Item {
                 anchors.margins: 24
                 spacing: 14 * shell.gapScale
                 Text { font.family: shell.fontFamily; text: "PHOTO SOURCE"; color: shell.elevatedText; font.pixelSize: 28 * shell.textScale; font.weight: Font.DemiBold; font.letterSpacing: 3 }
-                Text { font.family: shell.fontFamily; text: ambientSettings.photoCount + " photos · " + ambientSettings.photoDirectory; color: shell.elevatedMuted; font.pixelSize: 15 * shell.textScale; elide: Text.ElideMiddle; width: parent.width }
+                Text { font.family: shell.fontFamily; text: root.settingsModel.photoCount + " photos · " + root.settingsModel.photoDirectory; color: shell.elevatedMuted; font.pixelSize: 15 * shell.textScale; elide: Text.ElideMiddle; width: parent.width }
                 Repeater {
                     model: root.sourceActions
                     delegate: Rectangle {
@@ -240,7 +244,7 @@ Item {
         height: Math.min(400, parent.height - 56)
         passwordMode: false
         onAccepted: text => {
-            ambientSettings.setPhotoDirectory(text)
+            root.settingsModel.setPhotoDirectory(text)
             root.pathKeyboardOpen = false
         }
         onCanceled: root.pathKeyboardOpen = false

@@ -1055,6 +1055,7 @@ function settingsNavigationScope() {
     const scope = vm.createContext({
         selectedSection: 0, inPage: false, route: '', rowSelections: {}, pendingCategoryOrder: [], navigationError: '',
         remoteEditing: false,
+        editingSkinId: '',
         qsTr: text => text,
         sections: defaults.settingsNavigation.categories,
         inputManager: {navigateUp: 'up', navigateDown: 'down', navigateLeft: 'left', navigateRight: 'right', confirm: 'ok', back: 'back', menu: 'menu'},

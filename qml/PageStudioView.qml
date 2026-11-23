@@ -22,6 +22,7 @@ Item {
     property real sectionHeightDraft:0
     property string selectedId: ""
     property string headerSelection:""
+    readonly property bool headerAtBottom:page && (page.composition.header || {}).position==="bottom"
     readonly property var headerParts:["title"].concat(page && page.composition.showClock?["clock"]:[]).concat(page?page.composition.headerControls || (page.composition.headerMode==="identity"?["search","settings"]:["settings","edit"]):[])
     property string mode: "canvas"
     property bool toolbarFocus: true
@@ -345,12 +346,20 @@ Item {
         message = "Draft updated. Nothing applied yet."
         return true
     }
-    function openInspector(asPage){mode="inspector";toolbarFocus=false;inspector.begin(asPage)}
+    // Keep library controls reachable even when the shelf fills the canvas.
+    function openInspector(asPage){
+        mode="inspector";toolbarFocus=false;inspector.begin(asPage)
+        if(!asPage && current && current.componentType==="library")inspector.controlsShown=true
+    }
+    // Jump directly to the relevant group when the user selects a header element on the canvas.
     function openHeader(part) {
         headerSelection=part || "title"
-        openInspector(true);inspector.tab=inspector.tabs.indexOf("Header");inspector.fieldReturnView="fields";inspector.view="fields";inspector.controlsShown=true
-        const key=headerSelection==="title"?"identity":headerSelection==="clock"?"showClock":["sources","search","settings","edit"].indexOf(headerSelection)>=0?"headerControls":"headerMode"
-        inspector.selected=Math.max(0,inspector.fields.findIndex(field=>field.key===key))
+        openInspector(true);inspector.openBasicTab("Header");inspector.controlsShown=true
+        const key=({title:"showTitle",clock:"showClock",search:"searchVisible",settings:"settingsVisible",edit:"editVisible",sources:"sourcesVisible"})[headerSelection] || "headerMode"
+        inspector.headerGroup=inspector.headerGroups.findIndex(group=>group.keys.includes(key))
+        if(inspector.headerGroup<0)return
+        inspector.view="headerFields";inspector.fieldReturnView="headerFields"
+        inspector.selected=Math.max(0,inspector.headerFields().findIndex(field=>field.key===key))
     }
     function openStructureInspector(type,id){openInspector(false);inspector.showDetails();inspector.structureType=type;inspector.structureId=id;structureType=type;structureId=id}
     function projected(item){
@@ -1236,8 +1245,8 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
         if(mode==="canvas" && !toolbarFocus && headerSelection){
             if(c===inputManager.confirm || c===inputManager.menu){mode="headerContext";choice=0}
             else if(c===inputManager.navigateLeft || c===inputManager.navigateRight){const index=headerParts.indexOf(headerSelection);headerSelection=headerParts[Math.max(0,Math.min(headerParts.length-1,index+(c===inputManager.navigateRight?1:-1)))]}
-            else if(c===inputManager.navigateDown)headerSelection=""
-            else if(c===inputManager.navigateUp)toolbarFocus=true
+            else if(c===(headerAtBottom?inputManager.navigateUp:inputManager.navigateDown))headerSelection=""
+            else if(c===(headerAtBottom?inputManager.navigateDown:inputManager.navigateUp)){headerSelection="";toolbarFocus=true}
             return
         }
         if(c===inputManager.menu){if(current){mode="context";choice=0}else toolbarFocus=true;return}
@@ -1264,10 +1273,11 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
                     if(distance<score){score=distance;best=item}
                 }
                 if(best)selectedId=best.id
-                else if(dy<0 && page.composition.enabled)headerSelection="title"
+                else if(dy===(headerAtBottom?1:-1) && page.composition.enabled)headerSelection="title"
                 else if(dy<0)toolbarFocus=true
                 else message="Canvas boundary. Menu opens editing tools."
-            } else if(c===inputManager.navigateUp)toolbarFocus=true
+            } else if(page && page.composition.enabled && c===(headerAtBottom?inputManager.navigateDown:inputManager.navigateUp))headerSelection="title"
+            else if(c===inputManager.navigateUp)toolbarFocus=true
             else if(items.length)selectedId=items[Math.max(0,Math.min(items.length-1,index+(c===inputManager.navigateLeft?-1:1)))].id
         }
     }

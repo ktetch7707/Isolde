@@ -26,6 +26,9 @@ Item {
     property int selected:0
     property bool advanced:false
     property string fieldReturnView:"fields"
+    property int headerGroup:-1
+    readonly property var headerGroups:options.headerGroups || []
+    readonly property var activeHeaderGroup:headerGroups[headerGroup] || ({keys:[]})
     property bool detailsOpen:false
     property bool simpleSwatch:false
     property int themeGroupIndex:0
@@ -33,7 +36,12 @@ Item {
     readonly property var themeGroups:simpleSettings.themeGroups || []
     readonly property var themeGroup:themeGroups[themeGroupIndex] || ({roles:[]})
     readonly property var allFields:((options.inspector || {}).fields || []).filter(f=>(!f.types || current && f.types.indexOf(current.componentType)>=0) && (!f.excludeTypes || !current || f.excludeTypes.indexOf(current.componentType)<0) && (!f.families || current && f.families.indexOf(current.family)>=0) && (!f.excludeFamilies || !current || f.excludeFamilies.indexOf(current.family)<0))
-    readonly property var simpleFields:(current && current.family==="page-panel"?["panelPageId"]:[]).concat(simpleSettings.basicFields || []).map(key=>allFields.find(f=>f.key===key)).filter(f=>!!f && (f.key!=="customLogo" || current && ["button","image","launcher","action-tile","media-shelf"].indexOf(current.componentType)>=0) && (f.key!=="visibleLabel" || current && ["text","shape"].indexOf(current.componentType)<0) && (f.key!=="action" || current && ["button","image","action-tile","launcher"].indexOf(current.componentType)>=0))
+    // Only offer shelf label text when the shelf displays a label.
+    function shelfFieldVisible(item, field) {
+        if(!item || !["library","section"].includes(item.componentType))return field.key!=="libraryShowLabel"
+        return field.key!=="visibleLabel" || effective(item,{scope:"presentation",key:"libraryShowLabel",type:"toggle"})
+    }
+    readonly property var simpleFields:(current && current.family==="page-panel" ? ["panelPageId"] : []).concat(simpleSettings.basicFields || []).map(key=>allFields.find(f=>f.key===key)).filter(f=>!!f && (!f.types || current && f.types.includes(current.componentType)) && shelfFieldVisible(current,f) && (f.key!=="customLogo" || current && ["button","image","launcher","action-tile","media-shelf"].indexOf(current.componentType)>=0) && (f.key!=="visibleLabel" || current && ["text","shape"].indexOf(current.componentType)<0) && (f.key!=="action" || current && ["button","image","action-tile","launcher"].indexOf(current.componentType)>=0))
     function themeColors(){
         const stored=((rawPage.theme || {}).colorTheme || {}).colors || (page.appearance.colorTheme || {}).colors || {}
         const result={}
@@ -43,7 +51,17 @@ Item {
     function themeOverrides(group){return group.roles.filter(role=>(rawPage.theme || {})[role.key]!==undefined).length}
     function groupField(group){return {scope:"themeGroup",key:group.id,label:group.label,type:"color"}}
     function showDetails(){detailsOpen=true;view="tabs";fieldReturnView="fields";selected=0;advanced=false;simpleSwatch=false}
-    function openBasicTab(name){detailsOpen=false;tab=tabs.indexOf(name);advanced=false;fieldReturnView="fields";view="fields";selected=0}
+    function openBasicTab(name){detailsOpen=false;tab=tabs.indexOf(name);advanced=false;fieldReturnView="fields";view=name==="Header"?"headerGroups":"fields";headerGroup=-1;selected=0}
+    // Resolve each submenu in its declared order so header settings stay grouped in both editor modes.
+    function headerFields() {
+        const available=((options.inspector || {}).pageFields || []).filter(field=>field.tab==="Header" && (!field.needsComposition || page && page.composition.enabled))
+        return activeHeaderGroup.keys.map(key=>available.find(field=>field.key===key)).filter(field=>!!field)
+    }
+    // Match the renderer's fallback before toggling an individual control.
+    function headerControlIds() {
+        const composition=page.composition || {}
+        return composition.headerControls || (composition.headerMode==="identity"?["search","settings"]:["settings","edit"])
+    }
     function applyScheme(index){
         const scheme=(simpleSettings.schemes || [])[index];if(!scheme)return
         const value={colorTheme:{schemaVersion:1,colors:scheme.colors}}
@@ -94,7 +112,7 @@ Item {
         const revision = session.document
         return model.surfaceAppearance(shellSurface, pageId)
     }
-    readonly property var tabs:editorMode?["Colors"]:pageMode?["Colors","Background","Layout","More","Header","Shell"]:structureType==="navigation"?["Content","Actions","More"]:structureType==="section"?["Content","Appearance","Layout","Actions","More"]:["Content","Appearance","Layout","Accessibility","More"]
+    readonly property var tabs:editorMode?["Colors"]:pageMode?["Colors","Background","Layout","More","Header","Shell","Folder"]:structureType==="navigation"?["Content","Actions","More"]:structureType==="section"?["Content","Appearance","Layout","Actions","More"]:["Content","Appearance","Layout","Accessibility","More"].concat(current && current.appCollection?["Folder"]:[])
     readonly property var targets:!page?[]:structureType?((structureType==="section"?page.categories:page.composition.navigation) || []).filter(i=>i.id===structureId).map(i=>Object.assign({},i,{componentType:structureType})):(page.items || []).filter(i=>selectedIds.indexOf(i.id)>=0)
     readonly property var current:targets[0] || null
     readonly property var actions:session?session.availableActions:[]
@@ -103,7 +121,7 @@ Item {
     readonly property var localPanels:(page && page.items || []).filter(item=>item.family==="page-panel")
     readonly property var allApps:actions.filter(a=>a.action && a.action.type==="launch-app" && (a.appType==="web" || a.appType==="desktop" || a.appType==="android"))
     readonly property var apps:allApps.filter(a=>!current || !current.appCollection || !current.appCollection.section || a.appSection===current.appCollection.section)
-    readonly property var fields:((options.inspector || {})[editorMode?"studioFields":pageMode?"pageFields":"fields"] || []).filter(f=>f.tab===tabs[tab] && (advanced || !f.advanced && (pageMode?(f.tab!=="Header" || (simpleSettings.basicHeader || []).indexOf(f.key)>=0) && (f.tab!=="Layout" || (simpleSettings.basicPageLayout || []).indexOf(f.key)>=0):f.tab!=="Appearance" || (simpleSettings.basicAppearance || []).indexOf(f.key)>=0)) && (!f.needsNamedPage || !!pageId) && (!f.needsComposition || page && page.composition.enabled) && (structureType!=="navigation" || f.key==="name" || f.key==="action") && (editingState==="base" || tabs[tab]!=="Appearance" || f.scope==="presentation" && ["surfaceColor","surfaceOpacity","labelColor","iconColor","focusColor","borderColor","borderWidth","focusWidth","radius","labelSize","labelBold","labelSurfaceColor"].indexOf(f.key)>=0) && (editorMode || pageMode || targets.length && targets.every(i=>(!f.types || f.types.indexOf(i.componentType)>=0) && (!f.excludeTypes || f.excludeTypes.indexOf(i.componentType)<0 || (f.includeFamilies || []).indexOf(i.family)>=0) && (!f.families || f.families.indexOf(i.family)>=0) && (!f.excludeFamilies || f.excludeFamilies.indexOf(i.family)<0))))
+    readonly property var fields:((options.inspector || {})[editorMode?"studioFields":pageMode?"pageFields":"fields"] || []).filter(f=>f.tab===tabs[tab] && (advanced || !pageMode && current && current.componentType==="library" && ["borderWidth","borderColor"].includes(f.key) || !f.advanced && (pageMode?(f.tab!=="Header" || (simpleSettings.basicHeader || []).indexOf(f.key)>=0) && (f.tab!=="Layout" || (simpleSettings.basicPageLayout || []).indexOf(f.key)>=0):f.tab!=="Appearance" || (simpleSettings.basicAppearance || []).indexOf(f.key)>=0)) && (!f.needsNamedPage || !!pageId) && (!f.needsComposition || page && page.composition.enabled) && (structureType!=="navigation" || f.key==="name" || f.key==="action") && (editingState==="base" || tabs[tab]!=="Appearance" || f.scope==="presentation" && ["surfaceColor","surfaceOpacity","labelColor","iconColor","focusColor","borderColor","borderWidth","focusWidth","radius","labelSize","labelBold","labelSurfaceColor"].indexOf(f.key)>=0) && (editorMode || pageMode || targets.length && targets.every(i=>shelfFieldVisible(i,f) && (!f.types || f.types.indexOf(i.componentType)>=0) && (!f.excludeTypes || f.excludeTypes.indexOf(i.componentType)<0 || (f.includeFamilies || []).indexOf(i.family)>=0) && (!f.families || f.families.indexOf(i.family)>=0) && (!f.excludeFamilies || f.excludeFamilies.indexOf(i.family)<0))))
     readonly property real unit:(appearance.typographyScale || 1)*Math.min(width/1280,height/720)
     readonly property real panelWidth:Math.min(width-48*unit,540*unit)
     readonly property real panelHeight:Math.min(height-48*unit,650*unit)
@@ -121,19 +139,28 @@ Item {
         if(pageMode && f.type==="sourcePolicy")return (rawPage.theme || {}).sourcePolicy
         if(editorMode)return ((session?session.document:{}).studioAppearance || {})[f.key]
         if(pageMode && f.scope==="surfaceTheme")return f.key==="surface"?shellSurface:f.key==="mode"?shellPolicy.mode:(shellPolicy.tokens || {})[f.key]
-        if(pageMode){if(f.scope==="theme")return (rawPage.theme || {})[f.key];if(f.scope==="background")return ((rawPage.composition || {}).background || {})[f.key];if(f.scope==="headerStyle")return ((rawPage.composition || {}).header || {})[f.key];return (rawPage.composition || {})[f.key]}
+        if(pageMode){if(f.scope==="theme")return (rawPage.theme || {})[f.key];if(f.scope==="background")return ((rawPage.composition || {}).background || {})[f.key];if(f.scope==="headerStyle")return ((rawPage.composition || {}).header || {})[f.key];if(f.scope==="appGallery")return ((rawPage.composition || {}).appGallery || {})[f.key];return (rawPage.composition || {})[f.key]}
+        if(f.scope==="folderGallery")return ((item.presentation || {}).appGallery || {})[f.key]
         if(f.scope==="presentation"){const p=item.presentation || {};return editingState==="base" || f.tab!=="Appearance"?p[f.key]:((p.states || {})[editingState] || {})[f.key]}
         if(f.scope==="appCollection")return (item.appCollection || {})[f.key]
         return f.scope==="accessibility"?(item.accessibility || {})[f.key]:item[f.key]
     }
     function effective(item,f){
+        if(f.scope==="headerVisibility" && page)return headerControlIds().includes(f.controlId)
         if(f.scope==="themeGroup")return themeColors()[f.key]
         item=item || {}
         if(!page)return f.fallback!==undefined?f.fallback:""
         const value=local(item,f);if(value!==undefined)return value
+        if((f.scope==="folderGallery" || f.scope==="appGallery") && f.type==="color")return page.appearance[f.key]
+        if(f.scope==="folderGallery" && f.key==="title"){
+            const style=item.presentation || {}, collection=item.appCollection || {}
+            const pageGallery=(rawPage.composition || {}).appGallery || {}
+            return style.galleryTitle || (style.folderOnly || collection.mode==="selected" || collection.section
+                ? item.name || f.fallback : pageGallery.title || qsTr("More"))
+        }
         if(pageMode && f.scope==="surfaceTheme")return f.key==="mode"?(shellSurface==="settings"?"home":"origin"):shellPreview[f.key]
         if(editorMode)return (options.appearance || {})[f.key]
-        if(pageMode){if(f.scope==="theme"){const group=themeGroups.find(g=>g.roles.some(r=>r.key===f.key));return page.appearance[f.key] || (group?themeColors()[group.id]:undefined)}if(f.scope==="background")return (options.backgroundDefaults || {})[f.key];if(f.scope==="headerStyle"){const defaults=(options.headerDefaults || {})[page.composition.headerMode==="identity"?"identity":"navigation"] || {};if(defaults[f.key]!==undefined)return defaults[f.key];if(f.key==="textColor")return page.appearance.textColor;if(f.key==="focusColor")return page.appearance.focusColor;if(f.key==="backgroundColor")return page.appearance.surfaceColor}}
+        if(pageMode){if(f.scope==="theme"){const group=themeGroups.find(g=>g.roles.some(r=>r.key===f.key));return page.appearance[f.key] || (group?themeColors()[group.id]:undefined)}if(f.scope==="background")return (options.backgroundDefaults || {})[f.key];if(f.scope==="headerStyle"){const defaults=(options.headerDefaults || {})[page.composition.headerMode==="identity"?"identity":"navigation"] || {};if(defaults[f.key]!==undefined)return defaults[f.key];if(f.key==="clockColor")return effective(item,{scope:"headerStyle",key:"textColor"});if(f.key==="textColor")return page.appearance.textColor;if(f.key==="focusColor")return page.appearance.focusColor;if(f.key==="backgroundColor")return page.appearance.surfaceColor}}
         else if(f.scope==="presentation"){
             const p=item.presentation || {};if(editingState!=="base" && p[f.key]!==undefined)return p[f.key]
             const section=!item.parentId?(page.categories || []).find(s=>s.id===item.categoryId):null
@@ -232,6 +259,13 @@ Item {
         colorTransactionActive=false;view=fieldReturnView;selected=returnSelection;message="Draft updated · nothing applied.";colorLoader.active=false
     }
     function set(f,value,reset){
+        if(f.scope==="headerVisibility"){
+            const controls=headerControlIds().filter(id=>id!==f.controlId)
+            const visible=reset?(page.composition.headerMode==="identity"?["search","settings"]:["settings","edit"]).includes(f.controlId):value
+            if(visible)controls.push(f.controlId)
+            if(!controls.includes("settings") && !controls.includes("edit")){message="Keep Settings or Edit Home in the header.";return false}
+            return run("pagePatch",{scope:"composition",value:{headerControls:controls}})
+        }
         if(f.scope==="themeGroup"){
             const colors=themeColors(),previous=colors[f.key];colors[f.key]=reset?(simpleSettings.schemes || [])[0].colors[f.key]:value
             const group=themeGroups.find(g=>g.id===f.key),patch={colorTheme:{schemaVersion:1,colors:colors}}
@@ -243,6 +277,11 @@ Item {
             if(structureType==="section")return run("section",{kind:"presentation",id:structureId,value:Object.assign({},current.presentation || {},{libraryView:reset?"all":value,libraryValue:""})})
             return run("batch",{commands:targets.map(item=>({operation:"patch",arguments:{id:item.id,value:{presentation:{libraryView:reset?"all":value,libraryValue:""}}},pageId:pageId}))})
         }
+        if(f.scope==="folderGallery")return run("batch",{commands:targets.map(item=>{
+            const gallery=Object.assign({},(item.presentation || {}).appGallery || {})
+            if(reset)delete gallery[f.key];else gallery[f.key]=value
+            return {operation:"patch",arguments:{id:item.id,value:{presentation:{appGallery:gallery}}},pageId:pageId}
+        })})
         if(f.scope==="appCollection")return run("batch",{commands:targets.map(item=>{
             const collection=Object.assign({},item.appCollection || {mode:"all",ids:[]});
             if(reset || value===undefined || value===null || value==="")delete collection[f.key];else collection[f.key]=value;
@@ -275,9 +314,10 @@ Item {
         }
         if(pageMode && f.scope==="theme" && fieldReturnView==="themeRoles" && reset){return run("pagePatch",{scope:"theme",value:{colorTheme:{schemaVersion:1,colors:themeColors()},[f.key]:null}})}
         if(pageMode){let scope=f.scope,key=f.key,change=value
+            if(scope==="appGallery"){scope="composition";key="appGallery";change=Object.assign({},(rawPage.composition || {}).appGallery || {});if(reset)delete change[f.key];else change[f.key]=value}
             if(scope==="headerStyle"){scope="composition";key="header";change=Object.assign({},(rawPage.composition || {}).header || {});if(reset)delete change[f.key];else change[f.key]=value}
             if(scope==="background"){scope="composition";key="background";change=Object.assign({},options.backgroundDefaults || {},page.composition.background || {});if(reset)delete change[f.key];else change[f.key]=value}
-            if(run("pagePatch",{scope:scope==="theme"?"theme":"composition",value:{[key]:reset && f.scope!=="headerStyle" && (f.scope!=="background" || f.key==="mode")?null:change}}))return true
+            if(run("pagePatch",{scope:scope==="theme"?"theme":"composition",value:{[key]:reset && f.scope!=="appGallery" && f.scope!=="headerStyle" && (f.scope!=="background" || f.key==="mode")?null:change}}))return true
             return false
         }
         let patch={}
@@ -379,7 +419,9 @@ Item {
         operation(f.type)
     }
     function labels(){
-        if(view==="simple")return pageMode?["Theme colors","Background","Header","Page layout","Advanced page settings"]:simpleFields.map(f=>f.label+": "+summary(f)).concat(["Style","Size & layout","Advanced component settings"])
+        if(view==="headerGroups")return headerGroups.map(group=>group.label)
+        if(view==="headerFields")return headerFields().map(field=>field.label+": "+summary(field)).concat(["Back to header groups"])
+        if(view==="simple")return pageMode?["Theme colors","Background","Header","Page layout","Advanced page settings","More folder"]:simpleFields.map(f=>f.label+": "+summary(f)).concat(["Style","Size & layout","Advanced component settings"],current && current.appCollection?["Folder appearance"]:[])
         if(view==="theme")return themeGroups.map(g=>g.label+(themeOverrides(g)?" · "+themeOverrides(g)+" custom colors":" · Linked")).concat(["Color schemes","Advanced colors","Back"])
         if(view==="themeRoles")return themeGroup.roles.map(r=>r.label+" · "+((rawPage.theme || {})[r.key]===undefined?"Uses "+themeGroup.label:"Custom")).concat(["Use theme color for this group","Back"])
         if(view==="schemes")return (simpleSettings.schemes || []).map(s=>s.name).concat(["Cancel"])
@@ -418,11 +460,19 @@ if(view==="colorWheel")return ["Back"]
             else message=qsTr("Choose up to 128 channels.")
             return
         }
+        if(view==="headerGroups"){headerGroup=selected;view="headerFields";selected=0;return}
+        if(view==="headerFields"){
+            const field=headerFields()[selected]
+            if(field){fieldReturnView="headerFields";activateField(field)}
+            else {view="headerGroups";selected=headerGroup}
+            return
+        }
         if(view==="simple"){
-            if(pageMode){if(selected===0){view="theme";selected=0}else if(selected===1)openBasicTab("Background");else if(selected===2)openBasicTab("Header");else if(selected===3)openBasicTab("Layout");else showDetails();return}
+            if(pageMode){if(selected===0){view="theme";selected=0}else if(selected===1)openBasicTab("Background");else if(selected===2)openBasicTab("Header");else if(selected===3)openBasicTab("Layout");else if(selected===5)openBasicTab("Folder");else showDetails();return}
             if(selected<simpleFields.length){fieldReturnView="simple";activateField(simpleFields[selected]);return}
             if(selected===simpleFields.length){view="stylePresets";selected=0;return}
             if(selected===simpleFields.length+1){operation("geometry");return}
+            if(selected===simpleFields.length+3 && current && current.appCollection){openBasicTab("Folder");return}
             showDetails();return
         }
         if(view==="theme"){
@@ -449,7 +499,7 @@ if(view==="colorWheel")return ["Back"]
             const item=(playlistClient.items || [])[selected-1];if(!item)return
             applyLibrarySource("playlist",item.playlistName);return
         }
-        if(view==="tabs"){tab=selected;selected=0;fieldReturnView="fields";view="fields";return}
+        if(view==="tabs"){tab=selected;selected=0;fieldReturnView="fields";view=tabs[tab]==="Header"?"headerGroups":"fields";headerGroup=-1;return}
         if(view==="fields"){
             if(tabs[tab]==="More"){
                 const operations=pageMode?["navigation","sections","moviePage","showsPage","close"]:structureType?["structureEarlier","structureLater","structureRemove",...(structureType==="navigation"?["navSections"]:[]),"close"]:["duplicate","remove","orderBefore","orderAfter","destination","groupDestination","selectGroup","contents","samples","close"]
@@ -539,6 +589,8 @@ if(view==="colorWheel"){view=fieldReturnView;selected=returnSelection;return}
         if(view==="keyboard"){keyboard.handleCommand(command);return}
         if(collapsed){if(command===inputManager.back)closed();else if(command===inputManager.confirm){controlsShown=true;hiddenControls=false;}return}
         if(command===inputManager.back){
+            if(view==="headerFields"){view="headerGroups";selected=headerGroup;return}
+            if(view==="headerGroups"){view=detailsOpen?"tabs":"simple";selected=detailsOpen?tab:2;return}
             if(view==="simple"){closed();return}
             if(view==="themeRoles"){view="theme";selected=themeGroupIndex;simpleSwatch=false;return}
             if(view==="theme" || view==="stylePresets"){view="simple";selected=0;return}
@@ -546,6 +598,7 @@ if(view==="colorWheel"){view=fieldReturnView;selected=returnSelection;return}
             if(view==="tabs"){view="simple";selected=0;return}if(view==="fields"){view=detailsOpen?"tabs":"simple";selected=detailsOpen?tab:0}else if(view==="pixelCrop"){view="crop";selected=4}else{view=fieldReturnView;selected=returnSelection}return}
         if(command===inputManager.search){hiddenControls=!hiddenControls;return}
         if(command===inputManager.menu && view==="fields" && fields[selected]){reset(fields[selected]);return}
+        if(command===inputManager.menu && view==="headerFields" && headerFields()[selected]){reset(headerFields()[selected]);return}
         if(view==="theme" && selected<themeGroups.length && (command===inputManager.navigateLeft || command===inputManager.navigateRight)){simpleSwatch=command===inputManager.navigateRight;return}
         if(command===inputManager.confirm){activate();return}
         const direction=command===inputManager.navigateRight?1:command===inputManager.navigateLeft?-1:0
@@ -829,7 +882,10 @@ if(view==="colorWheel"){view=fieldReturnView;selected=returnSelection;return}
                 value=Number(text);if(!text.trim() || !Number.isFinite(value) || value<f.min || value>f.max || f.step>=1 && !Number.isInteger(value)){root.message="Enter "+f.min+"–"+f.max+" for "+f.label+".";return}
             }
             if(root.keyboardKind==="target")value=Object.assign({},root.pendingAction,{target:text})
-            if(root.set(f,value,false)){root.view=root.keyboardKind==="cropNumber"?"crop":"fields";root.selected=root.keyboardKind==="cropNumber"?root.keyboardSelection:root.returnSelection}
+            if(root.set(f,value,false)){
+                root.view=root.keyboardKind==="cropNumber"?"crop":root.returnView==="headerFields"?"headerFields":"fields"
+                root.selected=root.keyboardKind==="cropNumber"?root.keyboardSelection:root.returnSelection
+            }
         }
     }
     Loader {

@@ -133,6 +133,7 @@ HomeNavigationTests::allAppsGalleryUsesLocalFilterAndRestoresOrigin()
     QSignalSpy closed(gallery.get(), SIGNAL(closeRequested(QString)));
     QSignalSpy search(gallery.get(), SIGNAL(searchRequested()));
     QSignalSpy favorite(gallery.get(), SIGNAL(favoriteChanged(QString, bool)));
+    QSignalSpy folderChanged(gallery.get(), SIGNAL(folderEdited(QVariant)));
     gallery->setProperty("galleryPresentation",
                          QVariantMap{{"favoritesEnabled", true}, {"favoriteIds", QVariantList{}}, {"sort", "name"}});
     QVERIFY(QMetaObject::invokeMethod(gallery.get(), "showForOrigin", Q_ARG(QVariant, QString("home-card"))));
@@ -156,16 +157,32 @@ HomeNavigationTests::allAppsGalleryUsesLocalFilterAndRestoresOrigin()
     gallery->setProperty("filterText", QString());
     QCoreApplication::processEvents();
     QVERIFY(command(InputManager::Menu));
+    QCOMPARE(favorite.size(), 0);
+    QVERIFY(command(InputManager::Confirm));
     QCOMPARE(favorite.size(), 1);
     QCOMPARE(favorite.last().at(0).toString(), QString("alpha"));
     QCOMPARE(favorite.last().at(1).toBool(), true);
     gallery->setProperty(
         "galleryPresentation",
         QVariantMap{{"favoritesEnabled", true}, {"favoriteIds", QVariantList{"alpha"}}, {"sort", "name"}});
-    gallery->setProperty("focusArea", QString("favorites"));
+    QVERIFY(command(InputManager::Menu));
+    QVERIFY(command(InputManager::NavigateDown));
+    QVERIFY(command(InputManager::NavigateDown));
     QVERIFY(command(InputManager::Confirm));
+    QCOMPARE(folderChanged.size(), 1);
+    QCOMPARE(folderChanged.last().at(0).toMap().value("orderIds").toList(), QVariantList({"beta", "alpha"}));
+    QVERIFY(command(InputManager::Menu));
+    QVERIFY(QMetaObject::invokeMethod(gallery.get(), "chooseMenu", Q_ARG(QVariant, 7)));
     QVERIFY(gallery->property("favoritesOnly").toBool());
     QCOMPARE(gallery->property("visibleEntries").toList().size(), 1);
+    QVERIFY(command(InputManager::Menu));
+    QVERIFY(QMetaObject::invokeMethod(gallery.get(), "chooseMenu", Q_ARG(QVariant, 5)));
+    QCOMPARE(gallery->property("menuMode").toString(), QString("manage"));
+    QVERIFY(command(InputManager::Confirm));
+    QCOMPARE(folderChanged.size(), 2);
+    QCOMPARE(folderChanged.last().at(0).toMap().value("hiddenIds").toList(), QVariantList({"alpha"}));
+    QVERIFY(command(InputManager::Back));
+    QVERIFY(command(InputManager::Back));
     QVERIFY(command(InputManager::Search));
     QCOMPARE(search.size(), 1);
     QVERIFY(!gallery->property("keyboardOpen").toBool());
@@ -206,7 +223,7 @@ HomeNavigationTests::allAppsListNavigationUsesSingleRowStep()
     QVERIFY(command(InputManager::NavigateUp));
     QCOMPARE(gallery->property("selectedId").toString(), QString("alpha"));
     QVERIFY(command(InputManager::NavigateUp));
-    QCOMPARE(gallery->property("focusArea").toString(), QString("filter"));
+    QCOMPARE(gallery->property("focusArea").toString(), QString("grid"));
     auto* rows = gallery->findChild<QObject*>("allAppsGrid");
     QVERIFY(rows);
     const auto standardHeight = rows->property("cellHeight").toReal();
@@ -347,7 +364,12 @@ HomeNavigationTests::allAppsGridColumnsMatchRemoteNavigationStep()
     QTest::qWait(100);
     auto* gridItem = qobject_cast<QQuickItem*>(grid);
     QVERIFY(gridItem);
-    QVERIFY(gridItem->mapToItem(surface, QPointF()).y() > 120);
+    auto* title = find(surface, named("appFolderTitle"));
+    QVERIFY(title);
+    QCOMPARE(title->property("text").toString(), QString("More"));
+    const auto titleBottom = title->mapToItem(surface, QPointF(0, title->height())).y();
+    const auto gridTop = gridItem->mapToItem(surface, QPointF()).y();
+    QVERIFY(gridTop >= titleBottom && gridTop - titleBottom <= 32);
     QVERIFY(list->mapToItem(surface, QPointF()).y() >= gridItem->mapToItem(surface, QPointF()).y() - 4);
     if (!artifacts.isEmpty())
         QVERIFY(window.grabWindow().save(artifacts + "/studio-test-app-gallery-list.png"));
@@ -1217,7 +1239,7 @@ void HomeNavigationTests::skinPickerPreviewsWithoutApplying()
     window.resize(1280, 720);
     qobject_cast<QQuickItem*>(picker.get())->setParentItem(window.contentItem());
     window.show();
-    QVERIFY(QMetaObject::invokeMethod(picker.get(), "begin"));
+    QVERIFY(QMetaObject::invokeMethod(picker.get(), "begin", Q_ARG(QVariant, QVariant())));
     const auto skins = home.skins();
     // Cover a populated Pastel preview and Arctic's typed packaged preset.
     for (const auto& id : {QString("builtin-pastel"), QString("builtin-arctic")})
@@ -1243,7 +1265,7 @@ void HomeNavigationTests::skinPickerPreviewsWithoutApplying()
         QCOMPARE(QFile::exists(userLayout), hadUserFile);
         QVERIFY(QMetaObject::invokeMethod(picker.get(), "handleCommand", Q_ARG(QVariant, int(InputManager::Back))));
         QVERIFY(!frame->isVisible());
-        QVERIFY(!picker->property("detailsOpen").toBool());
+        QVERIFY(!picker->property("detailsVisible").toBool());
     }
 }
 
@@ -2015,7 +2037,12 @@ HomeNavigationTests::kodiSettingsFollowUserTheme()
             property string playbackStatus: "playing"
             property string playbackOptionsStatus: ""
             property var playbackOptions: ({})
+            property var playbackTimeline: ({title:"Fixture", state:"paused", position:25, duration:100})
+            property bool playbackCanSeek: true
+            property int committedPosition: -1
             signal changed()
+            // Record the commit separately from the simulated Kodi sample.
+            function seekPlayback(position) { committedPosition = position }
             function refreshPlaybackOptions() {}
             function requestVideoPresentation() {}
         })",
@@ -2026,7 +2053,7 @@ HomeNavigationTests::kodiSettingsFollowUserTheme()
         {{"kodiClient", QVariant::fromValue(busyClient.get())}, {"appearance", custom}}));
     QVERIFY(busyPopup);
     busyPopup->setProperty("visible", true);
-    busyPopup->setProperty("selectedIndex", 3);
+    busyPopup->setProperty("selectedIndex", audioIndex);
     QVERIFY(QMetaObject::invokeMethod(
         busyPopup.get(), "handleCommand", Q_ARG(QVariant, QVariant(int(InputManager::Confirm)))));
     QVERIFY(busyPopup->property("pendingConfirm").toBool());
@@ -2048,6 +2075,31 @@ HomeNavigationTests::kodiSettingsFollowUserTheme()
     QCoreApplication::processEvents();
     QCOMPARE(busyPopup->property("mode").toString(), QString("controls"));
     QVERIFY(!busyPopup->property("pendingConfirm").toBool());
+    // Preview and cancel without moving playback, then confirm exactly one target.
+    QVERIFY(QMetaObject::invokeMethod(
+        busyPopup.get(), "handleCommand", Q_ARG(QVariant, QVariant(int(InputManager::NavigateRight)))));
+    QCOMPARE(busyPopup->property("seekTarget").toInt(), 35);
+    QCOMPARE(busyClient->property("committedPosition").toInt(), -1);
+    QVERIFY(QMetaObject::invokeMethod(
+        busyPopup.get(), "handleCommand", Q_ARG(QVariant, QVariant(int(InputManager::Back)))));
+    QCOMPARE(busyPopup->property("seekTarget").toInt(), -1);
+    QVERIFY(QMetaObject::invokeMethod(
+        busyPopup.get(), "handleCommand", Q_ARG(QVariant, QVariant(int(InputManager::NavigateLeft)))));
+    QCOMPARE(busyPopup->property("seekTarget").toInt(), 15);
+    QVERIFY(QMetaObject::invokeMethod(
+        busyPopup.get(), "handleCommand", Q_ARG(QVariant, QVariant(int(InputManager::Confirm)))));
+    QCOMPARE(busyClient->property("committedPosition").toInt(), 15);
+    // Opening information leaves the timeline intact and returns focus to its symbol.
+    const int infoIndex = audioIndex - 1;
+    busyPopup->setProperty("selectedIndex", infoIndex);
+    QVERIFY(QMetaObject::invokeMethod(
+        busyPopup.get(), "handleCommand", Q_ARG(QVariant, QVariant(int(InputManager::Confirm)))));
+    QCOMPARE(busyPopup->property("mode").toString(), QString("info"));
+    QCOMPARE(busyPopup->property("position").toInt(), 25);
+    QVERIFY(QMetaObject::invokeMethod(
+        busyPopup.get(), "handleCommand", Q_ARG(QVariant, QVariant(int(InputManager::Back)))));
+    QCOMPARE(busyPopup->property("mode").toString(), QString("controls"));
+    QCOMPARE(busyPopup->property("selectedIndex").toInt(), infoIndex);
     busyPopup->setProperty("visible", false);
 }
 void
@@ -2284,8 +2336,8 @@ HomeNavigationTests::pastelReferenceNavigationAndGeometry()
     QCOMPARE(root->property("focusedItemId").toString(), QString("favorite-apps"));
     QVERIFY(QMetaObject::invokeMethod(root.get(), "restoreFocus", Q_ARG(QVariant, QString("hdmi1"))));
     QVERIFY(command(InputManager::NavigateUp));
-    QVERIFY(composed->property("navigationFocused").toBool());
-    QVERIFY(command(InputManager::NavigateUp));
+    // Pastel hides the tab strip. One Up must reach the visible Settings control.
+    QVERIFY(!composed->property("navigationFocused").toBool());
     QVERIFY(root->property("recoveryFocused").toBool());
     QVERIFY(command(InputManager::Confirm));
     QCOMPARE(settings.last()[0].toInt(), -1);

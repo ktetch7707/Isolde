@@ -35,6 +35,7 @@ class PageData final : public QObject
     // bound would be exceeded.
     Q_INVOKABLE QObject*
     artwork(const QString& kind, int id);
+    Q_INVOKABLE QObject* backdrop(const QString& kind, int id);
     // Activates the item at index on client (tvshow/season deep-link, other
     // kinds resume playback on m_player). No-op when invalid, unowned, busy
     // or out of range.

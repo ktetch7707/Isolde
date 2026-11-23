@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the existing Kodi dependency with one managed-only source builtin.
+"""Build the Kodi dependency with Isolde's managed playback and source integration.
 
 Guest-only, called by vm-test Configure. Source authenticity is supplied by the
 installed distribution's signed APT source index. No host tools or policy changes.
@@ -61,6 +61,7 @@ def repair_package_modes(work,source,receipt):
     atomic(receipt,dict(passed=True,kind='dependency-package-permission-repair',binarySha256=sha(installed),package=str(deb),packageSha256=sha(deb)))
 
 def overlay(source,repository,version):
+    """Apply the managed-only changes to the authenticated Kodi source tree."""
     native=repository/'native/kodi';target=source/'xbmc/interfaces/builtins'
     for name in ('IsoldeSources.cpp','IsoldeSources.h'):shutil.copyfile(native/name,target/name)
     edits=[(target/'CMakeLists.txt','            LibraryBuiltins.cpp','            IsoldeSources.cpp\n            LibraryBuiltins.cpp'),
@@ -71,6 +72,29 @@ def overlay(source,repository,version):
         if after in text:continue
         if text.count(before)!=1:raise RuntimeError('Kodi source builtin layout changed; inspect before building')
         path.write_text(text.replace(before,after))
+    # The skin automatically opens this modeless dialog on pause and seek.
+    # Gate opening it in Kodi itself so all skins retain the same behavior when
+    # Kodi is launched directly, and subtitles keep their own rendering path.
+    path=source/'xbmc/guilib/GUIDialog.cpp'
+    text=path.read_text()
+    before='void CGUIDialog::Open_Internal(bool bProcessRenderLoop, const std::string &param /* = "" */)\n{'
+    after=before+'''
+  const char* managedByIsolde = std::getenv("ISOLDE_MANAGED_KODI");
+  if ((GetID() == WINDOW_DIALOG_SEEK_BAR || GetID() == WINDOW_DIALOG_VIDEO_OSD) &&
+      managedByIsolde &&
+      managedByIsolde[0] == '1' && managedByIsolde[1] == '\\0')
+    return;
+'''
+    if after not in text:
+        if text.count(before)!=1:raise RuntimeError('Kodi dialog opening layout changed')
+        # Upgrade the earlier seek-bar-only form in the incremental Kodi cache.
+        previous=after.replace('(GetID() == WINDOW_DIALOG_SEEK_BAR || GetID() == WINDOW_DIALOG_VIDEO_OSD) &&\n      managedByIsolde &&',
+                               'GetID() == WINDOW_DIALOG_SEEK_BAR && managedByIsolde &&')
+        marker=previous if previous in text else before
+        text=text.replace(marker,after,1)
+        if '#include <cstdlib>' not in text:text='#include <cstdlib>\n'+text
+        if '#include "WindowIDs.h"' not in text:text=text.replace('#include "GUIWindowManager.h"','#include "GUIWindowManager.h"\n#include "WindowIDs.h"')
+        path.write_text(text)
     # Bounded managed-backend diagnostics for native playback publication.
     # They observe Kodi's real message path without changing its ownership.
     traces=[('xbmc/guilib/GUIWindowManager.cpp','  bool handled = false;',
@@ -222,11 +246,11 @@ def main():
     package=work/'package';prefix=package/'opt/isolde-managed-kodi';(prefix/'bin').mkdir(parents=True,exist_ok=True)
     shutil.copyfile(binary,prefix/'kodi.bin');(prefix/'kodi.bin').chmod(0o755)
     (prefix/'bin/kodi').write_text('#!/bin/sh\nexport KODI_HOME=/usr/share/kodi\nexec /opt/isolde-managed-kodi/kodi.bin "$@"\n');(prefix/'bin/kodi').chmod(0o755)
-    metadata=dict(feature=pin['feature'],sourceApiBaseline=pin['release'],upstreamCommit=pin['commit'],distributionSource=record,binarySha256=binary_hash,extensionSha256=extension_hash)
+    metadata=dict(feature=pin['feature'],sourceApiBaseline=pin['release'],upstreamCommit=pin['commit'],distributionSource=record,binarySha256=binary_hash,extensionSha256=extension_hash,managedVideoOsdSuppressed=True)
     atomic(prefix/'manifest.json',metadata);(prefix/'manifest.json').chmod(0o644)
     control=package/'DEBIAN';control.mkdir(exist_ok=True)
     architecture=subprocess.check_output(['dpkg','--print-architecture'],text=True).strip()
-    package_version=re.search(r'21\.[0-9]+',version)[0]+'+isolde.'+extension_hash[:12]
+    package_version=re.search(r'21\.[0-9]+',version)[0]+'+isolde.'+extension_hash[:12]+'.'+binary_hash[:12]
     (control/'control').write_text('Package: isolde-managed-kodi\nVersion: '+package_version+'\nArchitecture: '+architecture+'\nMaintainer: Isolde project\nDepends: kodi-bin (= '+version+')\nDescription: Kodi managed source interface for Isolde\n Built from authenticated distribution source with its compatibility patches.\n')
     licenses=prefix/'licenses';licenses.mkdir(exist_ok=True)
     for name in ('LICENSE.md','LICENSES/README.md'):

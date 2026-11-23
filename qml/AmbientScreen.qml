@@ -7,6 +7,7 @@ Item {
     property int slideIndex: 0
     property date now: new Date()
     property var layoutModel: homeLayout
+    property bool staticPreview: false
     SurfacePalette { id: pagePalette; appearance: root.layoutModel.homeAppearance }
     readonly property var selectedPages: {
         const available = layoutModel.pages
@@ -34,7 +35,7 @@ Item {
     z: 90
 
     Timer {
-        running: root.active && (root.settings.mode === "slideshow" || root.settings.mode === "pages")
+        running: root.active && !root.staticPreview && (root.settings.mode === "slideshow" || root.settings.mode === "pages")
         repeat: true
         interval: root.settings.slideshowSeconds * 1000
         onTriggered: root.slideIndex = root.settings.shuffle
@@ -43,7 +44,7 @@ Item {
     }
 
     Timer {
-        running: root.active
+        running: root.active && !root.staticPreview
         repeat: true
         interval: 1000
         onTriggered: root.now = new Date()
@@ -98,6 +99,9 @@ Item {
             anchors.horizontalCenter: parent.horizontalCenter
             anchors.bottom: parent.bottom
             anchors.bottomMargin: 26
+            width: Math.max(0,parent.width-40)
+            horizontalAlignment: Text.AlignHCenter
+            elide: Text.ElideMiddle
             text: "Add PNG/JPG/WebP files to " + root.settings.photoDirectory
             color: "#91A0BC"
             font.pixelSize: 15
@@ -108,7 +112,8 @@ Item {
         anchors.fill: parent
         visible: root.settings.mode === "pages" && !!root.currentPage
         pageModel: root.currentPage
-        reducedMotion: typeof displaySettings !== "undefined" && displaySettings.reduceMotion
+        artworkResolver:root.layoutModel
+        reducedMotion: root.staticPreview || (typeof displaySettings !== "undefined" && displaySettings.reduceMotion)
     }
     Text {
         anchors.centerIn: parent
@@ -125,8 +130,9 @@ Item {
         visible: root.settings.mode !== "pages"
         anchors.left: parent.left
         anchors.bottom: parent.bottom
-        anchors.leftMargin: 64
-        anchors.bottomMargin: 54
+        anchors.leftMargin: Math.min(64,parent.width*0.05)
+        anchors.bottomMargin: Math.min(54,parent.height*0.07)
+        width: Math.max(0,parent.width-2*anchors.leftMargin)
         spacing: 4
         Text {
             visible: root.settings.showClock
@@ -143,6 +149,8 @@ Item {
         }
         Text {
             visible: root.settings.showSystemHint
+            width: parent.width
+            elide: Text.ElideRight
             text: root.settings.mode.toUpperCase() + " · " + (root.photoCount > 0 ? root.photoCount + " photos · " + root.settings.imageFit : "built-in placeholders") + " · changes every " + root.settings.slideshowSeconds + "s · any key wakes"
             color: "#71809F"
             font.pixelSize: 15

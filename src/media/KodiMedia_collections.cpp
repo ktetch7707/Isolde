@@ -3,6 +3,69 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QSettings>
+#include "settings/ProfileManager.h"
+
+// Read the selected playlist before editing so the existing rules are preserved in the draft.
+void KodiMedia::loadSmartPlaylist(const QString& name)
+{
+    if (m_busy || m_playbackActive || !validPlaylistName(name))
+        return;
+    m_smartPlaylist.clear();
+    m_smartPlaylistRevision.clear();
+    m_smartPlaylistName = name;
+    ++m_generation;
+    m_busy = true;
+    m_stage = 25;
+    m_playlistStatus = "Loading playlist rules…";
+    emit changed();
+    request("Isolde.PreviewPlaylistRule", {{"name", name}, {"load", true}});
+}
+
+// Read a bounded preview from Kodi without writing a playlist file.
+void KodiMedia::previewSmartPlaylist(const QVariantMap& draft)
+{
+    if (m_busy || m_playbackActive)
+        return;
+    ++m_generation;
+    m_busy = true;
+    m_stage = 17;
+    m_playlistPreview.clear();
+    m_playlistPreviewReady = false;
+    m_playlistRuleName.clear();
+    m_playlistRuleRevision.clear();
+    m_playlistStatus = "Previewing the first 50 matching Kodi items…";
+    emit changed();
+    request("Isolde.PreviewPlaylistRule", {{"draft", QJsonObject::fromVariantMap(draft)}});
+}
+
+// Keep the existing file identity on edits so shelves continue following the playlist.
+void KodiMedia::saveSmartPlaylist(const QString& name, const QVariantMap& draft)
+{
+    if (m_busy || m_playbackActive)
+        return;
+    if (!ProfileManager::allows("edit"))
+    {
+        m_playlistStatus = "Smart playlist editing is restricted in this profile.";
+        emit changed();
+        return;
+    }
+    if (!name.isEmpty() && (m_smartPlaylistName != name || m_smartPlaylistRevision.size() != 64))
+    {
+        m_playlistStatus = "Reload this playlist before saving.";
+        emit changed();
+        return;
+    }
+    ++m_generation;
+    m_busy = true;
+    m_stage = name.isEmpty() ? 9 : 26;
+    m_playlistStatus = "Saving smart playlist…";
+    emit changed();
+    const auto data = QJsonObject::fromVariantMap(draft);
+    if (name.isEmpty())
+        request("Isolde.CreatePlaylist", {{"draft", data}});
+    else
+        request("Isolde.EditPlaylist", {{"name", name}, {"draft", data}, {"revision", m_smartPlaylistRevision}});
+}
 
 void
 KodiMedia::savePlaylist(const QString& name)

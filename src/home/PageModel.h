@@ -60,7 +60,7 @@ class PageModel final : public QObject
 
     [[nodiscard]] QVariantMap
     composition() const;
-    bool
+    Q_INVOKABLE bool
     setComposition(const QVariantMap& value);
     [[nodiscard]] QVariantMap
     grid() const;

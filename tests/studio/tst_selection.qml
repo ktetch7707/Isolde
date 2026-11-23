@@ -238,6 +238,39 @@ Item {
             carousel.activate("__more__")
             compare(carousel.requestedOrigin,"page-apps")
             verify(!findChild(carousel,"appCarouselGallery").opened)
+            const prototype=editor.session.componentPrototype("app-folder")
+            verify(!!prototype.root)
+            compare(prototype.root.placement.width,1)
+            compare(prototype.root.placement.height,1)
+            verify(editor.session.execute("addResolved",{type:"app-folder",placement:{x:1,y:0,width:1,height:1}}),editor.session.errorString)
+            const folder=editor.items.find(item=>item.presentation && item.presentation.folderOnly)
+            verify(!!folder)
+            editor.selectedId=folder.id;editor.openInspector(false)
+            const inspector=findChild(editor,"studioInspector")
+            inspector.openBasicTab("Folder")
+            const title=inspector.fields.find(field=>field.scope==="folderGallery" && field.key==="title")
+            verify(!!title)
+            verify(inspector.set(title,"Weekend apps",false),editor.session.errorString)
+            carousel.style=editor.current.presentation
+            carousel.collection={mode:"selected",ids:["two"],showStore:false}
+            compare(carousel.cards.length,1)
+            compare(carousel.cards[0].name,"Weekend apps")
+            compare(carousel.eligible.map(app=>app.id),["two"])
+            const logo="data:image/svg+xml,"+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"><rect width="24" height="24" fill="red"/></svg>')
+            carousel.registry={apps:[{id:"one",name:"One",type:"web",logoSource:logo},{id:"two",name:"Two",type:"web",logoSource:logo}]}
+            tryVerify(()=>!!findChild(carousel,"folderPreviewIcon-two"))
+            const icon=findChild(carousel,"folderPreviewIcon-two")
+            tryCompare(icon,"status",Image.Ready)
+            compare(decodeURIComponent(String(icon.source)),decodeURIComponent(logo))
+            verify(!findChild(carousel,"folderPreviewIcon-one"))
+            verify(findChild(carousel,"appFolderIconPanel").width>0)
+            if(studioFixture.artifacts)grabImage(carousel).save(studioFixture.artifacts+"/studio-test-app-folder-cover.png")
+            carousel.requestedOrigin=""
+            carousel.selectedId="__more__"
+            verify(carousel.handleCommand(inputManager.confirm))
+            compare(carousel.requestedOrigin,"page-apps")
+            verify(!findChild(carousel,"appCarouselGallery").opened)
+            compare(studioFixture.disk(),diskBaseline)
         }
         QtObject {
             id:storeCatalog

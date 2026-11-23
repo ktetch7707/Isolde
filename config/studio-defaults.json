@@ -28,7 +28,16 @@
   ],
   "sourcePolicyDefaults": {"schemaVersion":1,"discoveryEnabled":true,"mode":"compact","pages":["home"],"slots":[],"events":["movie-disc","game-disc","media-folder","file-source"],"types":["movie-disc","game-disc","media-folder","file-source"],"duration":8,"reconnect":true,"suppressPlayback":true,"suppressSetup":true,"suppressEditing":true},
   "responsiveDefaults": {"schemaVersion": 1, "policy": "wrap", "minimumWidth": 80, "minimumHeight": 48, "aspect": 1.7777777777777777},
-  "simpleStudio": {"themeGroups":[{"id":"background","label":"Background","roles":[{"key":"backgroundStart","label":"Page background"},{"key":"backgroundEnd","label":"Gradient end"}]},{"id":"cards","label":"Cards","roles":[{"key":"surfaceColor","label":"Cards and panels"},{"key":"selectedColor","label":"Selected cards"}]},{"id":"text","label":"Text","roles":[{"key":"textColor","label":"Default text"},{"key":"headingColor","label":"Page and section titles"},{"key":"labelColor","label":"Labels"},{"key":"bodyColor","label":"Body text"},{"key":"mutedColor","label":"Supporting text"}]},{"id":"highlight","label":"Highlight","roles":[{"key":"focusColor","label":"Focus ring"},{"key":"borderColor","label":"Borders"}]},{"id":"accent","label":"Accent","roles":[{"key":"accentColor","label":"Buttons and details"},{"key":"iconColor","label":"Icons"}]}],"schemes":[{"name":"Midnight","colors":{"background":"#19191e","cards":"#202126","text":"#f5f1f3","highlight":"#c994a5","accent":"#c994a5"}},{"name":"Soft rose","colors":{"background":"#e8ced8","cards":"#f8eaf0","text":"#352b3a","highlight":"#71475f","accent":"#80526e"}},{"name":"Ocean","colors":{"background":"#101e2c","cards":"#20384a","text":"#f0f7ff","highlight":"#89d6ff","accent":"#76bddd"}}],"primaryLabels":{"button":"App shortcut","app-bar":"App row","library":"Media shelf","text":"Text","image":"Image","clock":"Clock"},"actionIntents":[{"name":"Open an app","categoryName":"Apps"},{"name":"Go to a page","categoryName":"Pages"},{"name":"Open media","categoryName":"Media"},{"name":"More actions","categoryName":"All links"},{"name":"No action","noAction":true}],"basicFamilies":["button","app-bar","library","text","image","clock"],"basicPageLayout":["verticalScrolling","grid","pageNavigation","editableMenu","margin","gap"],"basicFields":["bodySize","bodyColor","apps","libraryKind","libraryView","bodyText","visibleLabel","customLogo","action","historyApps","addChild","guideFilter"],"basicAppearance":["surfaceColor","labelColor","bodyColor","bodySize","radius","artFit","crop","typography","shape","iconColor","logoMode","appIconStyle","iconFocus"],"basicHeader":["headerMode","identity","showTitle","customLogo","showClock","showDate","headerControls"],"stylePresets":[{"name":"Use page style","presentation":{}},{"name":"Soft corners","presentation":{"radius":16,"surfaceOpacity":1}},{"name":"Square","presentation":{"radius":0,"surfaceOpacity":1}},{"name":"Transparent","presentation":{"surfaceOpacity":0}}]},
+  "simpleStudio": {"themeGroups":[{"id":"background","label":"Background","roles":[{"key":"backgroundStart","label":"Page background"},{"key":"backgroundEnd","label":"Gradient end"}]},{"id":"cards","label":"Cards","roles":[{"key":"surfaceColor","label":"Cards and panels"},{"key":"selectedColor","label":"Selected cards"}]},{"id":"text","label":"Text","roles":[{"key":"textColor","label":"Default text"},{"key":"headingColor","label":"Page and section titles"},{"key":"labelColor","label":"Labels"},{"key":"bodyColor","label":"Body text"},{"key":"mutedColor","label":"Supporting text"}]},{"id":"highlight","label":"Highlight","roles":[{"key":"focusColor","label":"Focus ring"},{"key":"borderColor","label":"Borders"}]},{"id":"accent","label":"Accent","roles":[{"key":"accentColor","label":"Buttons and details"},{"key":"iconColor","label":"Icons"}]}],"schemes":[{"name":"Midnight","colors":{"background":"#19191e","cards":"#202126","text":"#f5f1f3","highlight":"#c994a5","accent":"#c994a5"}},{"name":"Soft rose","colors":{"background":"#e8ced8","cards":"#f8eaf0","text":"#352b3a","highlight":"#71475f","accent":"#80526e"}},{"name":"Ocean","colors":{"background":"#101e2c","cards":"#20384a","text":"#f0f7ff","highlight":"#89d6ff","accent":"#76bddd"}}],"primaryLabels":{"button":"App shortcut","app-bar":"App row","library":"Media shelf","text":"Text","image":"Image","clock":"Clock"},"actionIntents":[{"name":"Open an app","categoryName":"Apps"},{"name":"Go to a page","categoryName":"Pages"},{"name":"Open media","categoryName":"Media"},{"name":"More actions","categoryName":"All links"},{"name":"No action","noAction":true}],"basicFamilies":["button","app-bar","library","text","image","clock"],"basicPageLayout":["verticalScrolling","grid","pageNavigation","editableMenu","margin","gap"],"basicFields":["bodySize","bodyColor","apps","libraryKind","libraryView","bodyText","libraryShowLabel","visibleLabel","libraryPosterWidth","libraryPosterHeight","libraryShelfHeight","customLogo","action","historyApps","addChild","guideFilter"],"basicAppearance":["surfaceColor","labelColor","bodyColor","bodySize","radius","artFit","crop","typography","shape","iconColor","logoMode","appIconStyle","iconFocus","libraryHero","libraryHeroWidth","libraryHeroHeight","libraryHeroBackground","libraryHeroColor"],"basicHeader":["headerMode","identity","showTitle","customLogo","showClock","showDate","headerControls"],"stylePresets":[{"name":"Use page style","presentation":{}},{"name":"Soft corners","presentation":{"radius":16,"surfaceOpacity":1}},{"name":"Square","presentation":{"radius":0,"surfaceOpacity":1}},{"name":"Transparent","presentation":{"surfaceOpacity":0}}]},
+  "headerGroups": [
+    {"label":"Logo","keys":["customLogo"]},
+    {"label":"Title","keys":["headerMode","showTitle","titleAlignment","titleSize"]},
+    {"label":"Text","keys":["identity","textColor","controlDisplay","controlSize","controlWidth","iconSize","position","order","height","padding","gap","radius","opacity","backgroundColor","focusColor","focusWidth"]},
+    {"label":"Search","keys":["searchVisible"]},
+    {"label":"Settings","keys":["settingsVisible","editVisible","sourcesVisible","sourcePolicy"]},
+    {"label":"Time","keys":["showClock","timeFormat","clockSize","clockColor","clockWidth"]},
+    {"label":"Date","keys":["showDate","dateFormat","dateSize"]}
+  ],
   "schemaVersion": 1,
   "appIconStyles": {
     "signature":{"variant":"orb","diameter":96,"labelSize":20,"labelPill":false,"artFit":"contain","iconFocus":"glow","iconGlow":8,"iconGlowOpacity":0.65,"focusWidth":2,"iconPadding":0},
@@ -471,6 +480,12 @@
       "placement":{"x":0,"y":0,"width":4,"height":1},
       "presentation":{"radius":12,"surfaceOpacity":1,"labelSize":20,"focusWidth":3,"layout":{"schemaVersion":1,"mode":"row","columns":6,"rows":1,"visibleColumns":4,"gap":8,"padding":8,"wrap":false}}
     },
+    "app-folder": {
+      "id":"app-folder","name":"App folder","kind":"widget","widgetType":"container","componentType":"container","family":"app-bar",
+      "placement":{"x":0,"y":0,"width":1,"height":1},
+      "presentation":{"folderOnly":true,"icon":"grid","radius":16,"layout":{"schemaVersion":1,"mode":"row","columns":1,"rows":1,"gap":0,"padding":4}},
+      "appCollection":{"mode":"all","ids":[],"showStore":false}
+    },
     "app-bar": {
       "id": "app-bar",
       "name": "App carousel",
@@ -548,6 +563,12 @@
       "icon": "grid"
     },
     {
+      "id": "app-folder",
+      "name": "App folder",
+      "description": "One tile opens a folder of apps",
+      "icon": "grid"
+    },
+    {
       "id": "image",
       "name": "Image",
       "description": "Managed artwork, decorative or linked",
@@ -597,7 +618,7 @@
     }
   ],
   "actionCategories": [{"name":"All links","types":[]},{"name":"Pages","types":["root-page","open-page"]},{"name":"Apps","types":["launch-app","open-apps","app-drawer"]},{"name":"Search","types":["open-search"]},{"name":"Media","types":["media-picker","open-collection","open-guide","play-movie","open-show"]},{"name":"Files and addresses","types":["open-file","open-folder","open-url","open-disc"]},{"name":"Inputs","types":["switch-input"]},{"name":"Settings and system","types":["settings","desktop-mode"]}],
-  "actions": [{"name":"Open TV Guide","action":{"type":"open-guide"},"aliases":["television","channels","schedule"]},{"name":"Open All Apps","action":{"type":"open-apps"},"aliases":["applications","gallery","installed apps"]},{"name":"Open Search","action":{"type":"open-search"},"aliases":["universal search","find"]},{"name":"Open Settings","action":{"type":"settings","section":-1},"aliases":["preferences","configuration"]},{"name":"Desktop mode","action":{"type":"desktop-mode"},"aliases":["computer","desktop"]},{"name":"HDMI 1","action":{"type":"switch-input","input":1},"aliases":["hdmi","source","capture"]},{"name":"HDMI 2","action":{"type":"switch-input","input":2},"aliases":["hdmi","source","capture"]},{"name":"HDMI 3","action":{"type":"switch-input","input":3},"aliases":["hdmi","source","capture"]},{"name":"HDMI 4","action":{"type":"switch-input","input":4},"aliases":["hdmi","source","capture"]},{"name":"HDMI 5","action":{"type":"switch-input","input":5},"aliases":["hdmi","source","capture"]},{"name":"HDMI 6","action":{"type":"switch-input","input":6},"aliases":["hdmi","source","capture"]},{"name":"HDMI 7","action":{"type":"switch-input","input":7},"aliases":["hdmi","source","capture"]},{"name":"HDMI 8","action":{"type":"switch-input","input":8},"aliases":["hdmi","source","capture"]},{"name":"Settings · Network","action":{"type":"settings","section":0},"aliases":["preferences","configuration"]},{"name":"Settings · Home","action":{"type":"settings","section":1},"aliases":["preferences","configuration"]},{"name":"Settings · Sources","action":{"type":"settings","section":2},"aliases":["preferences","configuration"]},{"name":"Settings · Remotes","action":{"type":"settings","section":3},"aliases":["preferences","configuration"]},{"name":"Settings · System","action":{"type":"settings","section":4},"aliases":["preferences","configuration"]},{"name":"Settings · Profiles","action":{"type":"settings","section":5},"aliases":["preferences","configuration"]}],
+  "actions": [{"name":"Open TV Guide","action":{"type":"open-guide"},"aliases":["television","channels","schedule"]},{"name":"Manage TV channels","action":{"type":"open-guide","presentation":{"guideStart":"manage"}},"aliases":["channel settings","local channels","TV sources"]},{"name":"Open More","action":{"type":"open-apps"},"aliases":["applications","gallery","installed apps"]},{"name":"Open Search","action":{"type":"open-search"},"aliases":["universal search","find"]},{"name":"Open Settings","action":{"type":"settings","section":-1},"aliases":["preferences","configuration"]},{"name":"Desktop mode","action":{"type":"desktop-mode"},"aliases":["computer","desktop"]},{"name":"HDMI 1","action":{"type":"switch-input","input":1},"aliases":["hdmi","source","capture"]},{"name":"HDMI 2","action":{"type":"switch-input","input":2},"aliases":["hdmi","source","capture"]},{"name":"HDMI 3","action":{"type":"switch-input","input":3},"aliases":["hdmi","source","capture"]},{"name":"HDMI 4","action":{"type":"switch-input","input":4},"aliases":["hdmi","source","capture"]},{"name":"HDMI 5","action":{"type":"switch-input","input":5},"aliases":["hdmi","source","capture"]},{"name":"HDMI 6","action":{"type":"switch-input","input":6},"aliases":["hdmi","source","capture"]},{"name":"HDMI 7","action":{"type":"switch-input","input":7},"aliases":["hdmi","source","capture"]},{"name":"HDMI 8","action":{"type":"switch-input","input":8},"aliases":["hdmi","source","capture"]},{"name":"Settings · Network","action":{"type":"settings","section":0},"aliases":["preferences","configuration"]},{"name":"Settings · Home","action":{"type":"settings","section":1},"aliases":["preferences","configuration"]},{"name":"Settings · Sources","action":{"type":"settings","section":2},"aliases":["preferences","configuration"]},{"name":"Settings · Remotes","action":{"type":"settings","section":3},"aliases":["preferences","configuration"]},{"name":"Settings · System","action":{"type":"settings","section":4},"aliases":["preferences","configuration"]},{"name":"Settings · Profiles","action":{"type":"settings","section":5},"aliases":["preferences","configuration"]}],
   "inspector": {
     "size": {"proportionalTypes":["button","image","shape","launcher"],"proportionsLabel":"Keep proportions","minZoom":0.5,"maxZoom":2,"zoomStep":0.1},
     "colors": [
@@ -644,7 +665,7 @@
       {"tab":"Content","scope":"presentation","key":"libraryValue","excludeFamilies":["recently-viewed","music-library","tv-guide"],"label":"Source / search","type":"source","types":["library","section"]},
       {"tab":"Content","scope":"component","key":"apps","label":"Choose installed apps","type":"apps","families":["app-bar"],"excludeTypes":["section","navigation"]},
       {"tab":"Content","scope":"appCollection","key":"section","label":"App group","type":"appGroup","families":["app-bar"],"fallback":"All app groups"},
-      {"tab":"Content","scope":"appCollection","key":"showStore","label":"App Store in More apps","type":"toggle","families":["app-bar"],"fallback":true},
+      {"tab":"Content","scope":"appCollection","key":"showStore","label":"App Store in folder","type":"toggle","families":["app-bar"],"fallback":true},
       {"tab":"Appearance","scope":"presentation","key":"logoMode","label":"App logo treatment","type":"choice","choices":["cutout","original","tile","monochrome"],"families":["app-bar"],"fallback":"cutout"},
       {"tab":"Appearance","scope":"presentation","key":"appIconStyle","label":"App icon style","type":"choice","choices":[{"name":"Signature","value":"signature"},{"name":"Quiet tiles","value":"tiles"},{"name":"Compact rail","value":"rail"}],"families":["app-bar"],"fallback":"signature"},
       {"tab":"Appearance","scope":"presentation","key":"iconFocus","label":"Icon selection","type":"choice","choices":[{"name":"Icon-shaped glow","value":"glow"},{"name":"Frame","value":"frame"}],"families":["app-bar"],"fallback":"glow"},
@@ -673,6 +694,11 @@
       {"tab":"Appearance","scope":"presentation","key":"cardGap","label":"Card spacing","type":"number","control":"slider","min":0,"max":400,"step":1,"fallback":14,"advanced":true,"excludeTypes":["container"]},
       {"tab":"Appearance","scope":"presentation","key":"artHeight","label":"Artwork height","type":"number","control":"slider","min":0,"max":400,"step":2,"fallback":180,"advanced":true,"excludeTypes":["container"]},
       {"tab":"Appearance","scope":"presentation","key":"reflection","label":"Poster reflection","type":"toggle","types":["library","section"],"fallback":false},
+      {"tab":"Appearance","scope":"presentation","key":"libraryHero","label":"Show focused movie artwork and details","type":"toggle","types":["library","section"],"fallback":false},
+      {"tab":"Appearance","scope":"presentation","key":"libraryHeroWidth","label":"Featured artwork width","type":"number","control":"slider","min":40,"max":100,"step":1,"displayUnit":"%","types":["library","section"],"fallback":68},
+      {"tab":"Appearance","scope":"presentation","key":"libraryHeroHeight","label":"Featured artwork height","type":"number","control":"slider","min":24,"max":100,"step":1,"displayUnit":"%","types":["library","section"],"fallback":37},
+      {"tab":"Appearance","scope":"presentation","key":"libraryHeroBackground","label":"Featured background","type":"choice","choices":[{"name":"Page theme","value":"theme"},{"name":"Pick a color","value":"fixed"},{"name":"Match the artwork","value":"artwork"}],"types":["library","section"],"fallback":"theme"},
+      {"tab":"Appearance","scope":"presentation","key":"libraryHeroColor","label":"Featured background color","type":"color","types":["library","section"]},
       {"tab":"Appearance","scope":"presentation","key":"reflectionHeight","label":"Reflection height","type":"number","control":"slider","min":0,"max":200,"step":2,"fallback":30,"types":["library","section"]},
       {"tab":"Appearance","scope":"presentation","key":"reflectionOpacity","label":"Reflection opacity","type":"number","control":"slider","displayScale":100,"displayUnit":"%","min":0,"max":1,"step":0.05,"fallback":0.45,"types":["library","section"]},
       {"tab":"Appearance","scope":"presentation","key":"labelPosition","label":"Label position","type":"choice","choices":["inside","below","overlay","hidden"],"excludeTypes":["container"]},
@@ -696,6 +722,9 @@
       {"tab":"Layout","scope":"component","key":"position","label":"Outer size","type":"geometry","excludeTypes":["section","navigation","text"]},
       {"tab":"Layout","scope":"component","key":"layout","label":"Internal layout","type":"layout","types":["container"],"excludeTypes":["section","navigation"]},
       {"tab":"Layout","scope":"presentation","key":"libraryColumns","control":"stepper","label":"Visible cards","type":"number","types":["library","section"],"min":1,"max":12,"step":1,"fallback":4},
+      {"tab":"Layout","scope":"presentation","key":"libraryPosterWidth","label":"Poster width","type":"number","control":"slider","min":64,"max":480,"step":4,"types":["library","section"],"fallback":160},
+      {"tab":"Layout","scope":"presentation","key":"libraryPosterHeight","label":"Poster height","type":"number","control":"slider","min":80,"max":600,"step":4,"types":["library","section"],"fallback":232},
+      {"tab":"Layout","scope":"presentation","key":"libraryShelfHeight","label":"Shelf height","type":"number","control":"slider","min":96,"max":720,"step":8,"types":["library","section"],"fallback":352},
       {"tab":"Layout","scope":"presentation","key":"guideRows","control":"slider","label":"Guide visible rows","type":"number","types":["library"],"families":["tv-guide"],"min":3,"max":12,"step":1,"fallback":5},
       {"tab":"Appearance","scope":"presentation","key":"guideArtSource","label":"Channel artwork","type":"choice","types":["library"],"families":["tv-guide"],"choices":["program","station","none"],"fallback":"program"},
       {"tab":"Layout","scope":"presentation","key":"guideVariant","label":"Channel widget","type":"choice","types":["library"],"families":["tv-guide"],"choices":["mini","now-playing","on-now","favorites","preview","upcoming","guide"],"fallback":"mini"},
@@ -742,6 +771,7 @@
       {"tab":"Layout","scope":"component","key":"categoryId","label":"Section","type":"section","advanced":true},
       {"tab":"Appearance","scope":"presentation","key":"selectedLabelColor","label":"Selected label color","type":"color","advanced":true,"excludeTypes":["container"]},
       {"tab":"Appearance","scope":"presentation","key":"progress","label":"Decorative progress (not Kodi history)","type":"number","min":0,"max":1,"step":0.01,"fallback":0,"advanced":true,"excludeTypes":["library","section","navigation","container"]},
+      {"tab":"Content","scope":"presentation","key":"libraryShowLabel","label":"Show shelf label","type":"toggle","types":["library","section"],"fallback":false},
       {"tab":"Content","scope":"presentation","key":"visibleLabel","label":"Visible label","type":"text"},
       {"tab":"Content","scope":"presentation","key":"bodyText","label":"Text body","type":"text","types":["text"]},
       {"tab":"Appearance","scope":"presentation","key":"bodySize","label":"Body text size","type":"number","control":"slider","min":8,"max":160,"step":1,"fallback":20,"types":["text"]},
@@ -757,7 +787,18 @@
       {"tab":"Content","scope":"component","key":"replacement","label":"Replace in place","type":"replaceComponent","types":["button","image","text","shape","container"]},
       {"tab":"Appearance","scope":"presentation","key":"fillMode","label":"Fill","type":"choice","choices":["solid","gradient"],"fallback":"solid","types":["shape","container"]},
       {"tab":"Appearance","scope":"presentation","key":"fillEndColor","label":"Gradient end","type":"color","types":["shape","container"]},
-      {"tab":"Appearance","scope":"presentation","key":"fillDirection","label":"Gradient direction","type":"choice","choices":["vertical","horizontal"],"fallback":"vertical","types":["shape","container"]}
+      {"tab":"Appearance","scope":"presentation","key":"fillDirection","label":"Gradient direction","type":"choice","choices":["vertical","horizontal"],"fallback":"vertical","types":["shape","container"]},
+      {"tab":"Folder","scope":"folderGallery","key":"title","label":"Folder title","type":"text","families":["app-bar"],"fallback":"App folder"},
+      {"tab":"Folder","scope":"folderGallery","key":"layout","label":"Arrangement","type":"choice","choices":["grid","list"],"families":["app-bar"],"fallback":"grid"},
+      {"tab":"Folder","scope":"folderGallery","key":"columns","label":"Columns","type":"number","control":"stepper","min":2,"max":8,"step":1,"families":["app-bar"],"fallback":5},
+      {"tab":"Folder","scope":"folderGallery","key":"tileHeight","label":"Tile height","type":"number","control":"slider","min":56,"max":320,"step":4,"families":["app-bar"],"fallback":172},
+      {"tab":"Folder","scope":"folderGallery","key":"tileGap","label":"Tile spacing","type":"number","control":"slider","min":0,"max":48,"step":1,"families":["app-bar"],"fallback":12},
+      {"tab":"Folder","scope":"folderGallery","key":"surfaceOpacity","label":"Tile opacity","type":"number","control":"slider","min":0,"max":1,"step":0.05,"displayScale":100,"displayUnit":"%","families":["app-bar"],"fallback":1},
+      {"tab":"Folder","scope":"folderGallery","key":"radius","label":"Tile corners","type":"number","control":"slider","min":0,"max":48,"step":1,"families":["app-bar"],"fallback":16},
+      {"tab":"Folder","scope":"folderGallery","key":"surfaceColor","label":"Tile color","type":"color","families":["app-bar"]},
+      {"tab":"Folder","scope":"folderGallery","key":"focusColor","label":"Focus color","type":"color","families":["app-bar"]},
+      {"tab":"Folder","scope":"folderGallery","key":"showArtwork","label":"Show app icons","type":"toggle","families":["app-bar"],"fallback":true},
+      {"tab":"Folder","scope":"folderGallery","key":"showLabels","label":"Show app names","type":"toggle","families":["app-bar"],"fallback":true}
     ],
     "typePresets": [
       {
@@ -861,6 +902,10 @@
       {"tab":"Header","scope":"headerStyle","key":"timeFormat","label":"Clock format","type":"choice","needsComposition":true,"choices":[{"name":"12 hour","value":"h:mm AP"},{"name":"24 hour","value":"HH:mm"},{"name":"12 hour with seconds","value":"h:mm:ss AP"},{"name":"24 hour with seconds","value":"HH:mm:ss"}],"fallback":"h:mm AP"},
       {"tab":"Header","scope":"headerStyle","key":"dateFormat","label":"Date format","type":"choice","needsComposition":true,"choices":[{"name":"Short date","value":"ddd, MMM d"},{"name":"Long date","value":"dddd, MMMM d"},{"name":"Year-month-day","value":"yyyy-MM-dd"},{"name":"Day/month/year","value":"dd/MM/yyyy"},{"name":"Month/day/year","value":"MM/dd/yyyy"}],"fallback":"ddd, MMM d"},
       {"tab":"Header","scope":"composition","key":"headerControls","label":"Search and Settings","type":"header","needsComposition":true},
+      {"tab":"Header","scope":"headerVisibility","key":"searchVisible","controlId":"search","label":"Show Search","type":"toggle","needsComposition":true},
+      {"tab":"Header","scope":"headerVisibility","key":"settingsVisible","controlId":"settings","label":"Show Settings","type":"toggle","needsComposition":true},
+      {"tab":"Header","scope":"headerVisibility","key":"editVisible","controlId":"edit","label":"Show Edit Home","type":"toggle","needsComposition":true},
+      {"tab":"Header","scope":"headerVisibility","key":"sourcesVisible","controlId":"sources","label":"Show Sources","type":"toggle","needsComposition":true},
       {"tab":"Header","scope":"headerStyle","key":"controlDisplay","label":"Control appearance","type":"choice","needsComposition":true,"choices":[{"name":"Icon and label","value":"both"},{"name":"Icon","value":"icon"},{"name":"Label","value":"label"}]},
       {"tab":"Header","scope":"headerStyle","key":"order","label":"Header order","type":"choice","needsComposition":true,"choices":[{"name":"Title, controls, clock","value":["title","controls","clock"]},{"name":"Title, clock, controls","value":["title","clock","controls"]},{"name":"Controls, title, clock","value":["controls","title","clock"]},{"name":"Clock, title, controls","value":["clock","title","controls"]},{"name":"Controls, clock, title","value":["controls","clock","title"]},{"name":"Clock, controls, title","value":["clock","controls","title"]}]},
       {"tab":"Header","scope":"headerStyle","key":"height","label":"Header height","type":"number","needsComposition":true,"control":"slider","min":42,"max":180,"fallback":42,"step":1},
@@ -871,15 +916,27 @@
       {"tab":"Header","scope":"headerStyle","key":"controlWidth","label":"Control width","type":"number","needsComposition":true,"control":"slider","min":64,"max":240,"fallback":120,"step":1},
       {"tab":"Header","scope":"headerStyle","key":"iconSize","label":"Icon size","type":"number","needsComposition":true,"control":"slider","min":12,"max":64,"fallback":23,"step":1},
       {"tab":"Header","scope":"headerStyle","key":"clockSize","label":"Clock text size","type":"number","needsComposition":true,"control":"slider","min":12,"max":48,"fallback":18,"step":1},
+      {"tab":"Header","scope":"headerStyle","key":"clockColor","label":"Clock color","type":"color","needsComposition":true},
       {"tab":"Header","scope":"headerStyle","key":"dateSize","label":"Date text size","type":"number","needsComposition":true,"control":"slider","min":10,"max":32,"fallback":12,"step":1},
-      {"tab":"Header","scope":"headerStyle","key":"clockWidth","label":"Clock width","type":"number","needsComposition":true,"control":"slider","min":100,"max":320,"fallback":100,"step":1},
+      {"tab":"Header","scope":"headerStyle","key":"clockWidth","label":"Minimum time and date width","type":"number","needsComposition":true,"control":"slider","min":100,"max":320,"fallback":100,"step":1},
       {"tab":"Header","scope":"headerStyle","key":"radius","label":"Corners","type":"number","needsComposition":true,"control":"slider","min":0,"max":80,"fallback":26,"step":1},
       {"tab":"Header","scope":"headerStyle","key":"focusWidth","label":"Focus outline","type":"number","needsComposition":true,"control":"slider","min":1,"max":8,"fallback":2,"step":1},
       {"tab":"Header","scope":"headerStyle","key":"opacity","label":"Background opacity","type":"number","needsComposition":true,"control":"slider","min":0,"max":1,"fallback":0,"step":0.05,"displayScale":100,"displayUnit":"%"},
       {"tab":"Header","scope":"headerStyle","key":"backgroundColor","label":"Background","type":"color","needsComposition":true},
       {"tab":"Header","scope":"headerStyle","key":"textColor","label":"Text","type":"color","needsComposition":true},
       {"tab":"Header","scope":"headerStyle","key":"focusColor","label":"Focus","type":"color","needsComposition":true},
-      {"tab":"Header","scope":"headerStyle","key":"position","label":"Header position","type":"choice","needsComposition":true,"choices":[{"name":"Top","value":"top"},{"name":"Bottom","value":"bottom"}],"fallback":"top"}
+      {"tab":"Header","scope":"headerStyle","key":"position","label":"Header position","type":"choice","needsComposition":true,"choices":[{"name":"Top","value":"top"},{"name":"Bottom","value":"bottom"}],"fallback":"top"},
+      {"tab":"Folder","scope":"appGallery","key":"title","label":"Folder title","type":"text","fallback":"More"},
+      {"tab":"Folder","scope":"appGallery","key":"layout","label":"Arrangement","type":"choice","choices":["grid","list"],"fallback":"grid"},
+      {"tab":"Folder","scope":"appGallery","key":"columns","label":"Columns","type":"number","control":"stepper","min":2,"max":8,"step":1,"fallback":5},
+      {"tab":"Folder","scope":"appGallery","key":"tileHeight","label":"Tile height","type":"number","control":"slider","min":56,"max":320,"step":4,"fallback":172},
+      {"tab":"Folder","scope":"appGallery","key":"tileGap","label":"Tile spacing","type":"number","control":"slider","min":0,"max":48,"step":1,"fallback":12},
+      {"tab":"Folder","scope":"appGallery","key":"surfaceOpacity","label":"Tile opacity","type":"number","control":"slider","min":0,"max":1,"step":0.05,"displayScale":100,"displayUnit":"%","fallback":1},
+      {"tab":"Folder","scope":"appGallery","key":"radius","label":"Tile corners","type":"number","control":"slider","min":0,"max":48,"step":1,"fallback":16},
+      {"tab":"Folder","scope":"appGallery","key":"surfaceColor","label":"Tile color","type":"color"},
+      {"tab":"Folder","scope":"appGallery","key":"focusColor","label":"Focus color","type":"color"},
+      {"tab":"Folder","scope":"appGallery","key":"showArtwork","label":"Show app icons","type":"toggle","fallback":true},
+      {"tab":"Folder","scope":"appGallery","key":"showLabels","label":"Show app names","type":"toggle","fallback":true}
     ]
   },
   "designSamples": [

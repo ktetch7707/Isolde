@@ -70,6 +70,8 @@ class KodiService final : public QObject
     {
         return !switching() && !m_folderEditing && m_process.state() == QProcess::NotRunning;
     }
+    // Reserve exclusive use of the profile's Kodi home after an orderly shutdown.
+    bool prepareApplication();
     bool
     canEditFolders() const
     {
@@ -121,6 +123,8 @@ class KodiService final : public QObject
     void
     markReady();
   signals:
+    void applicationPrepared();
+    void applicationPreparationFailed(const QString& reason);
     void
     alwaysPlayLocallyChanged();
     void

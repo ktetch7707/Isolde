@@ -268,7 +268,7 @@ KodiMedia::failSubtitle(const QString& message, bool forceDisconnect)
 void
 KodiMedia::failPlaylist(const QString& message)
 {
-    if (((m_stage >= 9 && m_stage <= 12) || (m_stage >= 16 && m_stage <= 19)) && m_busy)
+    if (((m_stage >= 9 && m_stage <= 12) || (m_stage >= 16 && m_stage <= 19) || m_stage == 25 || m_stage == 26) && m_busy)
         m_playlistStatus =
             "Playlist operation could not be confirmed. Refresh the saved-playlist list before retrying. " + message;
 }
@@ -1835,6 +1835,17 @@ KodiMedia::playbackControl(const QString& action)
     m_stage = 7;
     request("Isolde.PlaybackControl", {{"action", action}});
 }
+// Send one absolute seek after confirmation through the existing control lifecycle.
+void
+KodiMedia::seekPlayback(int position)
+{
+    if (!playbackCanSeek() || m_busy || position < 0 || position >= m_playbackTimeline.value("duration").toInt())
+        return;
+    m_busy = true;
+    m_stage = 7;
+    request("Isolde.PlaybackControl", {{"action", "seek"}, {"position", position}});
+}
+
 /** Checks if adjacent scope is active.
  * @brief Checks if adjacent scope is active.
  * @details Checks if adjacent scope conditions are met for playback control.

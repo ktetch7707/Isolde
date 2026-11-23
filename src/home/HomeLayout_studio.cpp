@@ -201,6 +201,7 @@ HomeLayout::validateStudioPresets(const QJsonObject& presets) const
                          "tv-guide",
                          "carousel",
                          "app-bar",
+                         "app-folder",
                          "page-menu",
                          "page-panel",
                          "detected-sources",

@@ -18,6 +18,7 @@ Item {
     property string selectedId:""
     property string galleryId:""
     property string originId:""
+    property string folderName:""
     property bool globalGalleryRoute:false
     property bool pendingGalleryRestore:false
     property string message:""
@@ -32,13 +33,26 @@ Item {
         return buttons?buttonItems:collection.mode==="selected"?(collection.ids || []).map(id=>all.find(a=>a.id===id) || {id:id,name:"Unavailable app",symbol:"?",unavailableReason:"This app is no longer available in this collection. Choose apps in Edit component to repair it."}):collectionTooLarge?[]:all
     }
     readonly property bool multipleRows:buttons && (style.layout || {}).mode==="grid"
+    readonly property bool folderOnly:!buttons && style.folderOnly===true
     readonly property int capacity:Math.max(1,multipleRows?(style.layout.columns*style.layout.rows):(style.layout || {}).visibleColumns || 4)
     readonly property int cardColumns:multipleRows?style.layout.columns:Math.max(1,Math.min(capacity,cards.length))
     readonly property int cardRows:multipleRows?Math.max(1,Math.ceil(cards.length/cardColumns)):1
     readonly property bool overflow:eligible.length>capacity
     readonly property var storeApp:buttons || collection.showStore===false?null:(registry?registry.apps:[]).find(a=>a.type==="store") || null
     readonly property var galleryApps:eligible.concat(storeApp?[storeApp]:[])
-    readonly property var cards:eligible.slice(0,overflow?capacity-1:capacity).concat(overflow?[{id:"__more__",name:style.moreLabel || "More apps"}]:[])
+    // Preview the first visible members in the folder's saved order.
+    readonly property var previewApps: {
+        if(!folderOnly)return []
+        const view=style.appGallery || {}, hidden=view.hiddenIds || []
+        const ids=(collection.ids || []).concat(view.addedIds || [])
+        const order=view.orderIds || ids
+        const positions=new Map(order.map((id,index)=>[id,index]))
+        return allApps.filter(app=>!hidden.includes(app.id) && (collection.mode!=="selected" || ids.includes(app.id)))
+            .sort((a,b)=>(positions.get(a.id) ?? order.length)-(positions.get(b.id) ?? order.length)
+                || a.name.localeCompare(b.name) || a.id.localeCompare(b.id)).slice(0,9)
+    }
+    readonly property var cards:folderOnly?[{id:"__more__",name:style.moreLabel || (style.appGallery || {}).title || style.galleryTitle || folderName || "Folder"}]
+        :eligible.slice(0,overflow?capacity-1:capacity).concat(overflow?[{id:"__more__",name:style.moreLabel || "More"}]:[])
     onCardsChanged:if(!cards.some(a=>a.id===selectedId))selectedId=cards.length?cards[Math.min(previousCardIndex,cards.length-1)].id:""
     onGalleryAppsChanged:if(!galleryApps.some(a=>a.id===galleryId))galleryId=galleryApps.length?galleryApps[Math.min(previousGalleryIndex,galleryApps.length-1)].id:""
     signal engage()
@@ -100,6 +114,7 @@ Item {
         return false
     }
     Grid {
+        visible:!root.folderOnly
         columns:root.cardColumns
         anchors.fill:parent;spacing:(root.style.cardGap===undefined?(root.style.layout || {}).gap || 0:root.style.cardGap)*root.unit
         Repeater {
@@ -113,6 +128,78 @@ Item {
                 selected:(root.engaged || root.highlighted) && root.selectedId===modelData.id
                 onActivated:{root.engage();root.selectedId=modelData.id;root.activate(modelData.id)}
             }
+        }
+    }
+    Item {
+        id:folderCover
+        anchors.fill:parent
+        visible:root.folderOnly
+        readonly property bool focused:(root.engaged || root.highlighted) && root.selectedId==="__more__"
+        readonly property real inset:Math.min(6*root.unit,height*.08)
+        Accessible.role:Accessible.Button
+        Accessible.name:folderTitle.text
+        Accessible.onPressAction:if(!root.readOnly){root.engage();root.activate("__more__")}
+        Rectangle {
+            id:folderPanel
+            objectName:"appFolderIconPanel"
+            anchors.horizontalCenter:parent.horizontalCenter
+            y:folderCover.inset
+            width:Math.max(0,Math.min(parent.width-2*folderCover.inset,folderTitle.y-y-folderCover.inset))
+            height:width
+            radius:Math.min(width*.22,(root.style.radius ?? 16)*root.unit)
+            readonly property color fill:root.style.surfaceColor || galleryTheme.surface
+            color:Qt.rgba(fill.r,fill.g,fill.b,fill.a*(root.style.surfaceOpacity ?? 1))
+            border.width:folderCover.focused?(root.style.focusWidth ?? 3)*root.unit:(root.style.borderWidth ?? 0)*root.unit
+            border.color:folderCover.focused?(root.style.focusColor || galleryTheme.focus):(root.style.borderColor || galleryTheme.outline)
+
+            Grid {
+                anchors.centerIn:parent
+                columns:3
+                spacing:folderPanel.width*.045
+                Repeater {
+                    model:root.previewApps
+                    delegate:Rectangle {
+                        required property var modelData
+                        width:folderPanel.width*.24;height:width
+                        radius:width*.23
+                        color:galleryTheme.selected
+                        ArtworkImage {
+                            id:miniature
+                            objectName:"folderPreviewIcon-"+modelData.id
+                            anchors.fill:parent;anchors.margins:parent.width*.08
+                            radius:parent.radius;fit:"contain"
+                            source:modelData.logoSource || root.logoSource(modelData)
+                        }
+                        Text {
+                            anchors.centerIn:parent
+                            visible:miniature.status!==Image.Ready
+                            text:modelData.symbol || modelData.name.slice(0,1)
+                            textFormat:Text.PlainText;color:galleryTheme.selectedText
+                            font.pixelSize:Math.max(1,parent.width*.62);font.bold:true
+                        }
+                    }
+                }
+            }
+            LineIcon {
+                visible:!root.previewApps.length
+                anchors.centerIn:parent
+                width:parent.width*.38;height:width
+                name:root.style.icon || "grid";ink:galleryTheme.text
+            }
+        }
+        Text {
+            id:folderTitle
+            anchors.left:parent.left;anchors.right:parent.right;anchors.bottom:parent.bottom
+            anchors.bottomMargin:folderCover.inset
+            text:root.cards.length && root.folderOnly?root.cards[0].name:""
+            textFormat:Text.PlainText;elide:Text.ElideRight;horizontalAlignment:Text.AlignHCenter
+            font.family:galleryTheme.fontFamily;font.weight:Font.DemiBold
+            font.pixelSize:Math.max(1,Math.min((root.style.labelSize || 18)*root.unit,parent.height*.25))
+            color:root.style.labelColor || root.appearance.textColor || galleryTheme.text
+        }
+        MouseArea {
+            anchors.fill:parent;enabled:folderCover.visible && !root.readOnly
+            onClicked:{root.engage();root.selectedId="__more__";root.activate("__more__")}
         }
     }
     Text {anchors.centerIn:parent;width:parent.width;wrapMode:Text.WordWrap;horizontalAlignment:Text.AlignHCenter;visible:!root.cards.length;text:root.collectionTooLarge?"Choose up to 128 apps":root.style.subtitle || (root.buttons?"Add buttons in Edit contents":root.collection.mode==="selected"?"Choose apps":"No installed apps");color:root.appearance.textColor || galleryTheme.text;font.pixelSize:18*root.unit}

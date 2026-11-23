@@ -85,15 +85,18 @@ class Artwork:
         return {"updated": True}
 
     def get(self, params):
+        """Read a Kodi poster or a landscape image selected from its art metadata."""
         kinds = {"movie": "Movie", "tvshow": "TVShow", "season": "Season", "episode": "Episode", "album": "Album", "song": "Song", "channel":"Channel"}
         kind, ident = params.get("kind"), params.get("id")
-        if set(params) != {"kind", "id"} or kind not in kinds or type(ident) is not int or ident < 1:
+        role = params.get("role", "poster")
+        if set(params) - {"kind", "id", "role"} or role not in ("poster", "backdrop") or kind not in kinds or type(ident) is not int or ident < 1:
             raise ValueError("A library identity is required")
         namespace = "AudioLibrary." if kind in {"album", "song"} else "PVR." if kind == "channel" else "VideoLibrary."
         details = self.query(namespace + "Get" + kinds[kind] + "Details", {kind + "id": ident, "properties": ["icon"] if kind == "channel" else ["art"]})
         art = details.get(kind + "details", {}).get("art", {})
         if kind == "channel": art = {"thumb":details.get("channeldetails",{}).get("icon","")}
-        for name in ("poster", "tvshow.poster", "thumb", "fanart"):
+        names = ("fanart", "tvshow.fanart", "landscape") if role == "backdrop" else ("poster", "tvshow.poster", "thumb", "fanart")
+        for name in names:
             url = art.get(name, "")
             if not isinstance(url, str) or not url or len(url) > 8192:
                 continue

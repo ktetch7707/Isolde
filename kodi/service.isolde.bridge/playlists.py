@@ -5,6 +5,7 @@ import json
 import stat
 import fcntl
 import hashlib
+import re
 from pathlib import Path
 import uuid
 import xml.etree.ElementTree as ET
@@ -16,6 +17,42 @@ def playlist_name(value):
 
 MAX_PLAYLIST=1024*1024
 JOURNAL='.isolde-playlist-recovery.json'
+SMART_FIELDS={
+    'year': ('is','greaterthan','lessthan'), 'title': ('contains','is','startswith'),
+    'genre': ('is','isnot'), 'tag': ('is','isnot'), 'playcount': ('is','greaterthan','lessthan'),
+    'inprogress': ('true','false'), 'lastplayed': ('after','before'),
+}
+SMART_SORTS=('title','year','dateadded','lastplayed')
+
+
+def smart_definition(draft):
+    """Compile only library metadata rules so a draft cannot reference files or other playlists."""
+    if not isinstance(draft,dict) or set(draft)!={'title','kind','match','rules','sort','direction'}:
+        raise ValueError('Invalid smart playlist draft')
+    title,kind,match,rules,sort,direction=(draft[k] for k in ('title','kind','match','rules','sort','direction'))
+    if (not isinstance(title,str) or not 1<=len(title.strip())<=80 or any(ord(c)<32 for c in title)
+        or kind not in ('movies','shows') or match not in ('all','one') or sort not in SMART_SORTS
+        or direction not in ('ascending','descending') or not isinstance(rules,list) or len(rules)>16):
+        raise ValueError('Choose a name and up to 16 supported rules')
+    root=ET.Element('smartplaylist',{'type':'movies' if kind=='movies' else 'tvshows'})
+    ET.SubElement(root,'name').text=title.strip()
+    ET.SubElement(root,'match').text=match
+    for rule in rules:
+        if not isinstance(rule,dict) or set(rule)!={'field','operator','value'}:
+            raise ValueError('Invalid smart playlist rule')
+        field,operator,value=(rule[k] for k in ('field','operator','value'))
+        if (not isinstance(field,str) or operator not in SMART_FIELDS.get(field,()) or not isinstance(value,str)
+            or len(value.strip())>160 or field!='inprogress' and not value.strip() or any(ord(c)<32 for c in value)):
+            raise ValueError('Invalid rule field, operator or value')
+        if field in ('year','playcount') and (not value.isascii() or not value.isdecimal() or len(value)>4
+            or field=='year' and not 1800<=int(value)<=2200):
+            raise ValueError('Enter a valid whole number for the rule')
+        node=ET.SubElement(root,'rule',{'field':field,'operator':operator})
+        if field=='lastplayed' and not re.fullmatch(r'\d{4}-\d{2}-\d{2}',value):
+            raise ValueError('Use YYYY-MM-DD for dates')
+        if field!='inprogress':ET.SubElement(node,'value').text=value.strip()
+    ET.SubElement(root,'order',{'direction':direction}).text=sort
+    return root
 
 
 class Playlists:
@@ -109,6 +146,9 @@ class Playlists:
             raise
 
     def create(self, params):
+        if self.managed and set(params)=={'draft'}:
+            root=smart_definition(params['draft'])
+            return self._publish_new(root,params['draft']['kind'])
         if not self.managed or set(params) != {"name", "kind", "view", "value"}:
             raise ValueError("Managed Kodi playlist creation required")
         name, kind, view, value = (params[key] for key in ("name", "kind", "view", "value"))
@@ -128,6 +168,10 @@ class Playlists:
             rule=ET.SubElement(root,"rule",{"field":"lastplayed","operator":"after"})
             ET.SubElement(rule,"value").text="1970-01-01"
         ET.SubElement(root,"order",{"direction":"descending" if view in ("recent","continue","watched") else "ascending"}).text="dateadded" if view=="recent" else "lastplayed" if view in ("continue","watched") else "title"
+        return self._publish_new(root,kind)
+
+    def _publish_new(self,root,kind):
+        """Publish a new definition without replacing a Kodi playlist or breaking shelf identities."""
         data=ET.tostring(root,encoding="utf-8",xml_declaration=True)
         filename="Isolde-"+str(uuid.uuid4())+".xsp"
         temporary=".isolde-playlist-"+str(uuid.uuid4())
@@ -155,7 +199,7 @@ class Playlists:
                 if temporary_created:os.unlink(temporary,dir_fd=directory)
             except FileNotFoundError:pass
             finally:os.close(directory)
-        return {"saved":True,"name":name.strip(),"playlistName":filename,"kind":kind}
+        return {"saved":True,"name":root.findtext('name'),"playlistName":filename,"kind":kind}
 
     def _xml(self,raw):
         if b'<!DOCTYPE' in raw.upper() or b'<!ENTITY' in raw.upper():raise ValueError('Playlist entities are unsupported')
@@ -228,16 +272,24 @@ class Playlists:
         return root
 
     def preview(self,params,execute):
+        if self.managed and set(params)=={'name','load'} and params['load'] is True:
+            return self.load_smart(params['name'])
+        if self.managed and set(params)=={'draft'}:
+            return self._preview_query(smart_definition(params['draft']),execute,'')
         if not self.managed or set(params)!={'name','view','value'} or not playlist_name(params.get('name')):raise ValueError('Choose a playlist rule')
         directory=self._playlist_dir()
         try:
             raw=self._read(directory,params['name'])
             root=self._draft(self._xml(raw),params['view'],params['value'])
         finally:os.close(directory)
+        return self._preview_query(root,execute,hashlib.sha256(raw).hexdigest())
+
+    def _preview_query(self,root,execute,revision):
+        """Read at most one page from Kodi using the same rules that will be saved."""
         kind=root.get('type');method={'movies':'GetMovies','tvshows':'GetTVShows','episodes':'GetEpisodes'}[kind]
         query={'properties':['title'],'limits':{'start':0,'end':50},'sort':{'method':root.findtext('order'),'order':root.find('order').get('direction')}}
-        rule=root.find('rule')
-        if rule is not None:query['filter']={'field':rule.get('field'),'operator':rule.get('operator'),'value':rule.findtext('value','')}
+        rules=[{'field':rule.get('field'),'operator':rule.get('operator'),'value':rule.findtext('value','')} for rule in root.findall('rule')]
+        if rules:query['filter']=rules[0] if len(rules)==1 else {'and' if root.findtext('match')=='all' else 'or':rules}
         reply=json.loads(execute(json.dumps({'jsonrpc':'2.0','id':1,'method':'VideoLibrary.'+method,'params':query})))
         result=reply.get('result',{});items=result.get(kind);limits=result.get('limits',{})
         if (not isinstance(items,list) or len(items)>50 or limits.get('start')!=0 or limits.get('end')!=len(items)
@@ -247,9 +299,47 @@ class Playlists:
             identity=item.get(media+'id');title=item.get('title',item.get('label'))
             if type(identity) is not int or identity<1 or not isinstance(title,str) or not 1<=len(title)<=160:raise ValueError('Invalid preview member')
             rows.append({'title':title,'mediaType':media,'mediaId':identity})
-        return {'items':rows,'total':limits['total'],'revision':hashlib.sha256(raw).hexdigest()}
+        return {'items':rows,'total':limits['total'],'revision':revision}
+
+    def load_smart(self,name):
+        """Round-trip the supported subset and refuse definitions whose restrictions cannot be preserved."""
+        if not playlist_name(name) or not name.lower().endswith('.xsp'):
+            raise ValueError('Choose a smart playlist')
+        directory=self._playlist_dir()
+        try:raw=self._read(directory,name)
+        finally:os.close(directory)
+        root=self._xml(raw)
+        if root.get('type') not in ('movies','tvshows') or any(node.tag not in ('name','match','rule','order') for node in root):
+            raise ValueError('This playlist uses options outside the editor')
+        if any(len(root.findall(tag))>1 for tag in ('name','match','order')):
+            raise ValueError('Ambiguous playlist definition')
+        order=root.find('order')
+        rules=[]
+        for node in root.findall('rule'):
+            if set(node.attrib)!={'field','operator'}:
+                raise ValueError('This playlist uses unsupported rules')
+            if node.get('field')=='inprogress' and not len(node):
+                rules.append(dict(node.attrib,value=''));continue
+            if len(node)!=1 or node[0].tag!='value' or len(node[0]):
+                raise ValueError('This playlist uses unsupported rules')
+            rules.append(dict(node.attrib,value=node[0].text or ''))
+        draft={'title':root.findtext('name') or Path(name).stem,'kind':'movies' if root.get('type')=='movies' else 'shows',
+               'match':root.findtext('match') or 'all','rules':rules,'sort':order.text if order is not None else 'title',
+               'direction':order.get('direction','ascending') if order is not None else 'ascending'}
+        smart_definition(draft)
+        return {'draft':draft,'revision':hashlib.sha256(raw).hexdigest()}
 
     def edit(self,params):
+        if self.managed and set(params)=={'name','draft','revision'} and playlist_name(params['name']) and params['name'].lower().endswith('.xsp'):
+            root=smart_definition(params['draft'])
+            directory=self._playlist_dir()
+            try:
+                raw=self._read(directory,params['name'])
+                if hashlib.sha256(raw).hexdigest()!=params['revision'] or self._xml(raw).get('type')!=root.get('type'):
+                    raise ValueError('Playlist changed; reload the draft')
+                self._change(directory,{params['name']:ET.tostring(root,encoding='utf-8',xml_declaration=True)})
+            finally:os.close(directory)
+            return {'edited':True,'name':params['name']}
         if not self.managed or set(params)!={'name','view','value','revision'} or not playlist_name(params.get('name')):
             raise ValueError('Managed Kodi playlist rule edit required')
         directory=self._playlist_dir()

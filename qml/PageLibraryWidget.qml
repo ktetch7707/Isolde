@@ -6,6 +6,9 @@ Item {
     required property var provider
     required property string widgetKey
     property string originId:widgetKey
+    property string shelfName:""
+    property bool sectionLabel:false
+    property real unit:1
     property var style: ({})
     property var appearance: ({})
     property bool engaged:false
@@ -25,6 +28,9 @@ Item {
     readonly property var liveItems:frozen?frozenItems:client?client.items:[]
     readonly property bool usingSamples:readOnly && samplePreview
     readonly property var displayedItems:usingSamples?sampleItems:liveItems.slice(0,style.libraryLimit || 50)
+    // Expose the current poster to the page's shared presentation without moving playback ownership.
+    readonly property var featuredItem:style.libraryHero && displayedItems.length
+        ? displayedItems[Math.max(0, Math.min(displayedItems.length-1, frozen?frozenIndex:client?client.selectedIndex:0))] : null
     onDisplayedItemsChanged:Qt.callLater(function(){
         if(!root.frozen && root.client && !root.client.busy && root.displayedItems.length>0
             && (root.client.selectedIndex>=root.displayedItems.length || !root.chrome && root.client.selectedIndex<0))
@@ -51,7 +57,10 @@ Item {
     readonly property bool listMode:style.libraryLayout === "list"
     readonly property bool rowMode:style.libraryLayout === "row"
     readonly property bool chrome:style.libraryChrome!==false
-    readonly property int columns:listMode ? 1 : Math.max(1,style.libraryColumns || 4)
+    readonly property int columns:listMode ? 1 : style.libraryPosterWidth && grid.cellWidth>0
+        ? Math.max(1,Math.floor(grid.width/grid.cellWidth)) : Math.max(1,style.libraryColumns || 4)
+    readonly property real cardGap:(style.cardGap===undefined?16:style.cardGap)*unit
+    readonly property real posterHeight:listMode?0:(style.libraryPosterHeight || 0)*unit
     signal engage()
     function invoke(index) {
         if(!client || readOnly || frozen)return
@@ -84,26 +93,42 @@ Item {
         if(command===inputManager.navigateRight){if(index+1<root.displayedItems.length){returnMediaKey="";client.selectIndex(index+1)}return true}
         return false
     }
-    Rectangle { anchors.fill:parent; color:"transparent"; radius:root.style.radius || 12; border.width:root.engaged || root.highlighted?2:0; border.color:root.appearance.focusColor || "#C994A5" }
+    // Empty shelves still need a visible focus stop. A populated shelf puts focus on its active control instead.
+    Rectangle { objectName:"libraryEmptyFocus"; anchors.fill:parent; color:"transparent"; radius:root.style.radius || 12; border.width:(root.engaged || root.highlighted) && !root.displayedItems.length?2:0; border.color:root.appearance.focusColor || "#C994A5" }
     Column {
         visible:!root.games && !root.unifiedGuide
         anchors.fill:parent; anchors.margins:root.chrome?5:0; spacing:root.chrome?8:0
+        Text {
+            id:shelfLabel
+            visible:!root.sectionLabel && root.style.libraryShowLabel===true
+            width:parent.width
+            height:visible?implicitHeight+8*root.unit:0
+            text:root.style.visibleLabel || root.shelfName; textFormat:Text.PlainText; elide:Text.ElideRight
+            color:root.style.labelColor || root.appearance.headingColor || root.appearance.textColor || "white"
+            font.pixelSize:22*root.unit; font.weight:Font.DemiBold
+        }
         Row {
             visible:root.chrome;width:parent.width; height:visible?36:0; spacing:5
             Repeater { model:root.actions
                 delegate:Rectangle {
                     required property int index; required property string modelData
                     width:(parent.width-(root.actions.length-1)*5)/root.actions.length;height:36;radius:8;color:root.appearance.surfaceColor || "#202126"
-                    border.width:root.engaged && root.client && root.client.selectedIndex<0 && root.toolbarIndex===index?2:0;border.color:root.appearance.focusColor || "#C994A5"
+                    border.width:(root.engaged || root.highlighted) && root.client && root.client.selectedIndex<0 && root.toolbarIndex===index?2:0;border.color:root.appearance.focusColor || "#C994A5"
                     Text {textFormat:Text.PlainText; anchors.centerIn:parent;text:modelData;color:root.appearance.textColor || "#F5F1F3";font.pixelSize:13*(root.appearance.typographyScale || 1) }
                     MouseArea { anchors.fill:parent;onClicked:{root.engage();if(root.client)root.client.selectIndex(-1);root.toolbarIndex=index;root.invoke(index)} }
                 }
             }
         }
         GridView {
-            id:grid; objectName:"pageLibraryGrid";width:parent.width;height:Math.max(50,parent.height-(root.chrome?84:0));clip:true
+            id:grid; objectName:"pageLibraryGrid";width:parent.width
+            height:Math.max(0,Math.min(parent.height, (root.style.libraryShelfHeight || 0)*root.unit || parent.height)
+                - shelfLabel.height - (root.chrome?84:0));clip:true
             flow:root.rowMode?GridView.FlowTopToBottom:GridView.FlowLeftToRight
-            cellWidth:width/root.columns;cellHeight:root.listMode?78:root.rowMode?height:Math.max(140,root.style.artHeight || 230)
+            cellWidth:!root.listMode && root.style.libraryPosterWidth
+                ? Math.min(width,root.style.libraryPosterWidth*root.unit+root.cardGap) : width/(root.listMode?1:Math.max(1,root.style.libraryColumns || 4))
+            cellHeight:root.listMode?78:root.rowMode?height:root.posterHeight
+                ? root.posterHeight+root.cardGap+(58+(root.style.reflection===true?(root.style.reflectionHeight===undefined?30:root.style.reflectionHeight):0))*root.unit
+                : Math.max(140,root.style.artHeight || 230)
             model:root.displayedItems;currentIndex:root.frozen?root.frozenIndex:root.client?root.client.selectedIndex:-1;highlightRangeMode:GridView.ApplyRange;highlightMoveDuration:0
             delegate:Item {
                 required property int index;required property var modelData
@@ -112,12 +137,13 @@ Item {
                 HomeCard {
                     objectName:"libraryCard-"+index
                     anchors.fill:parent
-                    anchors.leftMargin:(root.style.cardGap===undefined?16:root.style.cardGap)/2
+                    anchors.leftMargin:Math.min(parent.width/2,root.cardGap/2)
                     anchors.rightMargin:anchors.leftMargin
                     anchors.topMargin:root.rowMode?0:anchors.leftMargin
                     anchors.bottomMargin:anchors.topMargin
-                    item:({name:modelData.title || modelData.label || "Untitled",logoSource:modelData.mediaType==="app"?modelData.logoSource || "":parent.art?parent.art.source:"",presentation:Object.assign({},root.style,{variant:root.style.libraryCardStyle || (root.listMode?"summary":"media"),subtitle:root.subtitleFor(modelData),progress:modelData.resume && modelData.resume.total>0?modelData.resume.position/modelData.resume.total:undefined})})
-                    appearance:root.appearance;selected:root.engaged && (root.frozen?root.frozenIndex:root.client?root.client.selectedIndex:-1)===index
+                    unit:root.unit; artworkHeightOverride:root.posterHeight; outlineOverArtwork:true
+                    item:({name:modelData.title || modelData.label || "Untitled",logoSource:modelData.mediaType==="app"?modelData.logoSource || "":parent.art?parent.art.source:"",presentation:Object.assign({},root.style,{visibleLabel:undefined,variant:root.style.libraryCardStyle || (root.listMode?"summary":"media"),subtitle:root.subtitleFor(modelData),progress:modelData.resume && modelData.resume.total>0?modelData.resume.position/modelData.resume.total:undefined})})
+                    appearance:root.appearance;selected:(root.engaged || root.highlighted) && (root.frozen?root.frozenIndex:root.client?root.client.selectedIndex:-1)===index
                     onActivated:{root.engage();if(root.client && !root.readOnly && !root.frozen){root.returnMediaKey="";root.client.selectIndex(index);root.rememberSelection();root.provider.activate(root.client,index,true,root.originId)}}
                 }
             }

@@ -152,7 +152,7 @@ static QVariantMap
 defaultGalleryPresentation()
 {
     return QVariantMap{{"schemaVersion", 1},
-                       {"title", "All Apps"},
+                       {"title", "More"},
                        {"layout", "grid"},
                        {"columns", 5},
                        {"density", "standard"},

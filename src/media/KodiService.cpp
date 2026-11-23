@@ -168,6 +168,18 @@ KodiService::KodiService(const QString& profile, QObject* parent)
                                 "Kodi did not exit cleanly. Folder permissions are unchanged; retry when ready.";
                         }
                         emit changed();
+                    } else if (requested == "application") {
+                        if (code == 0 && exitStatus == QProcess::NormalExit) {
+                            m_suspended = true;
+                            m_status = "Opening Kodi with this profile's setup.";
+                            emit changed();
+                            emit applicationPrepared();
+                        } else {
+                            m_status = "Kodi did not exit normally. Retry opening the app.";
+                            emit changed();
+                            emit applicationPreparationFailed(m_status);
+                            start();
+                        }
                     } else if (code == 0 && exitStatus == QProcess::NormalExit) {
                         commitFrontend(requested);
                     } else {
@@ -189,6 +201,13 @@ KodiService::KodiService(const QString& profile, QObject* parent)
 void
 KodiService::onModeDeadlineTimeout()
 {
+    if (m_pendingFrontend == "application") {
+        m_pendingFrontend.clear();
+        m_status = "Kodi is still saving. Try opening Kodi again in a moment.";
+        emit changed();
+        emit applicationPreparationFailed(m_status);
+        return;
+    }
     if (m_pendingFrontend == "folders")
         m_folderStatus = "Kodi has not finished saving. Folder permissions are unchanged; stop playback/scanning "
                          "and press Menu to retry.";
@@ -203,6 +222,14 @@ KodiService::onModeClientQuitReply(bool accepted)
 {
     if (!switching() || accepted)
         return;
+    if (m_pendingFrontend == "application") {
+        m_pendingFrontend.clear();
+        m_modeDeadline.stop();
+        m_status = "Stop playback or wait for the library scan to finish, then open Kodi again.";
+        emit changed();
+        emit applicationPreparationFailed(m_status);
+        return;
+    }
     if (m_pendingFrontend == "folders")
         m_folderStatus = "Stop playback and wait for scans to finish, then press Menu to retry. Folder permissions "
                          "are unchanged.";
@@ -210,6 +237,32 @@ KodiService::onModeClientQuitReply(bool accepted)
     m_pendingFrontend.clear();
     m_status = "Could not switch safely. Stop playback, wait for scans, and retry. Mode unchanged.";
     emit changed();
+}
+
+// Hand over the profile's Kodi home only after the managed process saves and exits.
+bool
+KodiService::prepareApplication()
+{
+    if (m_suspended)
+        return true;
+    if (m_pendingFrontend == "application")
+        return false;
+    if (switching() || m_folderEditing || (m_process.state() != QProcess::NotRunning && !m_ready))
+    {
+        emit applicationPreparationFailed("Kodi's library is busy getting ready. Try again in a moment.");
+        return false;
+    }
+    if (m_process.state() == QProcess::NotRunning)
+    {
+        m_suspended = true;
+        return true;
+    }
+    m_pendingFrontend = "application";
+    m_status = "Saving the Kodi library before opening the app.";
+    m_modeDeadline.start();
+    emit changed();
+    m_modeClient.quitIfIdle();
+    return false;
 }
 
 // Bound startup probing so a missing bridge is reported instead of waiting indefinitely.
@@ -768,13 +821,13 @@ KodiService::setupKeymaps(const QString& originalKeys, const QString& runtimeKey
         "<keymap><global><keyboard><home>NotifyAll(Isolde,home)</home><h>NotifyAll(Isolde,home)</h></keyboard></global>"
         "<FullscreenVideo><keyboard><escape>NotifyAll(Isolde,stop)</escape><backspace>NotifyAll(Isolde,stop)</"
         "backspace>"
-        "<return>NotifyAll(Isolde,pause)</return><space>NotifyAll(Isolde,pause)</space>"
+        "<return>NotifyAll(Isolde,options)</return><space>NotifyAll(Isolde,pause)</space>"
         "<left>NotifyAll(Isolde,backward)</left><right>NotifyAll(Isolde,forward)</right>"
         "<up>NotifyAll(Isolde,channel-previous)</up><down>NotifyAll(Isolde,channel-next)</down>"
         "<menu>NotifyAll(Isolde,options)</menu><m>NotifyAll(Isolde,options)</m>"
         "</keyboard></FullscreenVideo>"
         "<VideoOSD><keyboard><escape>NotifyAll(Isolde,stop)</escape><backspace>NotifyAll(Isolde,stop)</backspace>"
-        "<return>NotifyAll(Isolde,pause)</return><space>NotifyAll(Isolde,pause)</space>"
+        "<return>NotifyAll(Isolde,options)</return><space>NotifyAll(Isolde,pause)</space>"
         "<left>NotifyAll(Isolde,backward)</left><right>NotifyAll(Isolde,forward)</right>"
         "<up>NotifyAll(Isolde,channel-previous)</up><down>NotifyAll(Isolde,channel-next)</down>"
         "<menu>NotifyAll(Isolde,options)</menu><m>NotifyAll(Isolde,options)</m>"

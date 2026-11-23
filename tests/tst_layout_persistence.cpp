@@ -20,6 +20,7 @@ class LayoutPersistenceTests : public QObject
     skinSnapshotsSurviveResetAndArtworkChanges();
     void
     starterTemplatesAreEditableAndPreservePages();
+    void profileSkinsOwnSeparatePageTrees();
     void
     starterTemplateRolesRemainEditableWithoutProviders();
     void
@@ -314,11 +315,17 @@ LayoutPersistenceTests::starterTemplatesAreEditableAndPreservePages()
     const auto pageId = layout.createPage("Keep my page", "movies");
     QVERIFY(!pageId.isEmpty());
     const auto pages = layout.pages();
-    for (const auto& id : {"compact-launcher", "scrolling-dashboard", "poster-sidebar", "minimal-pastel"})
+    for (const auto& id : {"compact-launcher", "scrolling-dashboard", "poster-sidebar", "minimal-pastel", "arctic"})
     {
         QVERIFY2(layout.applySkin("builtin-" + QString::fromLatin1(id)), qPrintable(layout.errorString()));
         QCOMPARE(layout.pages(), pages);
         QVERIFY(!layout.components().isEmpty());
+        if (QString::fromLatin1(id) == "arctic")
+        {
+            const auto shelf = layout.components().first().toMap();
+            QCOMPARE(shelf["componentType"].toString(), QString("library"));
+            QVERIFY(shelf["presentation"].toMap()["reflection"].toBool());
+        }
         const auto componentId = layout.components().first().toMap()["id"].toString();
         QVERIFY(layout.setItemName(componentId, "My edited role"));
         HomeLayout reopened(&registry);
@@ -343,6 +350,46 @@ LayoutPersistenceTests::starterTemplatesAreEditableAndPreservePages()
     const auto unchanged = invalidCatalog.committedDocument();
     QVERIFY(!invalidCatalog.applySkin("builtin-compact-launcher"));
     QCOMPARE(invalidCatalog.committedDocument(), unchanged);
+}
+
+// Verify that editing an inactive skin leaves Home alone and switching restores the correct page tree.
+void LayoutPersistenceTests::profileSkinsOwnSeparatePageTrees()
+{
+    QTemporaryDir dir;
+    AppRegistry registry;
+    QVERIFY(registry.loadFromData(apps));
+    HomeLayout live(&registry);
+    const auto defaults = QFINDTESTDATA("../config/default-home-layout.json");
+    const auto path = dir.filePath("profile/home.json");
+    QVERIFY(live.load(defaults, path));
+    const auto original = live.createPage("Original", "blank");
+    QVERIFY(!original.isEmpty());
+    const auto originalBytes = readFile(path);
+    const auto id = live.createSkin("My TV skin");
+    QVERIFY2(!id.isEmpty(), qPrintable(live.errorString()));
+    QCOMPARE(live.activeSkinId(), QString("builtin-default"));
+    auto* editor = qobject_cast<HomeLayout*>(live.openSkinEditor(id));
+    QVERIFY2(editor, qPrintable(live.errorString()));
+    QVERIFY(editor->pages().isEmpty());
+    const auto movie = editor->createPage("Movies", "blank");
+    QVERIFY2(!movie.isEmpty(), qPrintable(editor->errorString()));
+    const auto expected = editor->pages();
+    QCOMPARE(readFile(path), originalBytes);
+    live.closeSkinEditor();
+    QVERIFY2(live.activateSkin(id), qPrintable(live.errorString()));
+    QCOMPARE(live.pages(), expected);
+    QCOMPARE(live.activeSkinId(), id);
+    QVERIFY(!live.deleteSkin(id));
+    HomeLayout reopened(&registry);
+    QVERIFY(reopened.load(defaults, path));
+    QCOMPARE(reopened.activeSkinId(), id);
+    QVERIFY2(reopened.activateSkin("builtin-default"), qPrintable(reopened.errorString()));
+    QVERIFY(reopened.pageModel(original));
+    QVERIFY(!reopened.pageModel(movie));
+    const auto copy = reopened.duplicateSkin(id, "Copy");
+    QVERIFY2(!copy.isEmpty(), qPrintable(reopened.errorString()));
+    QVERIFY2(reopened.activateSkin(copy), qPrintable(reopened.errorString()));
+    QCOMPARE(reopened.pages(), expected);
 }
 
 void
@@ -398,6 +445,21 @@ LayoutPersistenceTests::starterPageUpdatesPreserveDesignAndRollback()
     HomeLayout layout(&registry);
     QVERIFY(layout.load(QFINDTESTDATA("../config/default-home-layout.json"), dir.filePath("home.json")));
     QVERIFY(layout.applySkin("builtin-pastel"));
+    auto* guide = qobject_cast<PageModel*>(layout.pageModel("live-tv"));
+    QVERIFY(guide);
+    QCOMPARE(guide->composition().value("pageNavigation").toString(), QString("none"));
+    const auto guideItems = guide->items();
+    const auto menu = std::find_if(guideItems.cbegin(), guideItems.cend(), [](const QVariant& item) {
+        return item.toMap().value("family") == "page-menu";
+    });
+    QVERIFY(menu != guideItems.cend());
+    const auto manage = std::find_if(guideItems.cbegin(), guideItems.cend(), [](const QVariant& item) {
+        return item.toMap().value("id") == "manage-tv";
+    });
+    QVERIFY(manage != guideItems.cend());
+    const auto action = manage->toMap().value("actions").toList().value(0).toMap();
+    QCOMPARE(action.value("type").toString(), QString("open-guide"));
+    QCOMPARE(action.value("presentation").toMap().value("guideStart").toString(), QString("manage"));
     auto document = QJsonDocument::fromJson(layout.committedDocument()).object();
     auto components = document["components"].toArray();
     for (int i = 0; i < components.size(); ++i)

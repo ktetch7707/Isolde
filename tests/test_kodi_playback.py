@@ -92,10 +92,11 @@ class PlaybackTests(unittest.TestCase):
             for key,value in (("clientid",9),("uniqueid",101)):
                 if key in params["properties"] and not (key=="uniqueid" and self.omit_pvr_uniqueid):details[key]=value
             result={"channeldetails":details}
-        elif method == "Player.GetItem": result = {"item": {"type": self.kind, "id": self.item, **({"file":self.stream_file} if "file" in params.get("properties",[]) else {})}}
+        elif method == "Player.GetItem": result = {"item": {"label":"Example movie","type": self.kind, "id": self.item, **({"file":self.stream_file} if "file" in params.get("properties",[]) else {})}}
         elif method == "Player.GetProperties":
             values={"speed":self.speed,"canseek":self.seekable,"canchangespeed":True,"live":self.kind=="channel",
-                    "time":{"hours":self.position//3600,"minutes":self.position//60%60,"seconds":self.position%60}}
+                    "time":{"hours":self.position//3600,"minutes":self.position//60%60,"seconds":self.position%60},
+                    "totaltime":{"hours":self.duration//3600,"minutes":self.duration//60%60,"seconds":self.duration%60}}
             values.update({"subtitles":self.subtitle_tracks, "currentsubtitle":next((track for track in self.subtitle_tracks if track["index"]==self.subtitle_id), {}),
                            "subtitleenabled":self.subtitle_enabled,"audiostreams":[{"index":0,"name":"Stereo","language":"en"},{"index":1,"name":"Commentary","language":"en"}],"currentaudiostream":{"index":self.audio_id}})
             if set(params["properties"])-set(values):return json.dumps({"error":{"code":-32602,"message":"Invalid Player property"}})
@@ -112,8 +113,14 @@ class PlaybackTests(unittest.TestCase):
             # at this boundary so a permissive fake cannot hide broken seeks.
             self.assertEqual(set(params),{"playerid","value"})
             self.assertIsInstance(params["value"],dict)
-            self.assertEqual(set(params["value"]),{"step"})
-            self.assertIn(params["value"]["step"],("smallforward","smallbackward"))
+            if "time" in params["value"]:
+                self.assertEqual(set(params["value"]),{"time"})
+                target=params["value"]["time"]
+                self.assertEqual(set(target),{"hours","minutes","seconds","milliseconds"})
+                self.position=target["hours"]*3600+target["minutes"]*60+target["seconds"]
+            else:
+                self.assertEqual(set(params["value"]),{"step"})
+                self.assertIn(params["value"]["step"],("smallforward","smallbackward"))
         elif method == "Player.GetViewMode":
             self.assertEqual(params,{});result={"viewmode":self.view}
         elif method == "Player.SetViewMode":
@@ -343,6 +350,22 @@ class PlaybackTests(unittest.TestCase):
         self.assertEqual(self.player.handle("Isolde.PlayMovie", {"movieid": 7, "resume": True})["state"], "starting")
         self.active = True
         self.assertEqual(self.player.status()["state"], "playing")
+
+    def test_owned_timeline_and_absolute_seek(self):
+        """Expose real player timestamps and reject seeks after capability or ownership changes."""
+        self.player.handle("Isolde.PlayMovie", {"movieid":7,"resume":False})
+        self.active=True
+        self.position=25
+        status=self.player.status()
+        self.assertEqual((status["title"],status["position"],status["duration"]),("Example movie",25,7200))
+        seek=lambda position: self.player.handle("Isolde.PlaybackControl", {"action":"seek","position":position})
+        self.assertEqual(seek(75)["position"],75)
+        with self.assertRaises(ValueError): seek(7200)
+        self.seekable=False
+        with self.assertRaises(ValueError): seek(90)
+        self.item=99
+        with self.assertRaises(ValueError): seek(90)
+        self.assertEqual(sum(method=="Player.Seek" for method,_ in self.calls),1)
 
     def test_resume_pause_seek_home(self):
         self.start()

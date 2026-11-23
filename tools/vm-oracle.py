@@ -354,7 +354,7 @@ def dismiss_guest_disk_banner():
                 return {'identifiedDiskWarning':True,'ignored':True}
             component=button.get_component_iface()
             if component and component.grab_focus() and button.get_state_set().contains(Atspi.StateType.FOCUSED):
-                print('GUEST_DISK_IGNORE_FOCUSED',flush=True)
+                print('GUEST_DISK_IGNORE_FOCUSED',file=sys.stderr,flush=True)
                 deadline=time.monotonic()+5
                 while time.monotonic()<deadline:
                     if button.get_state_set().contains(Atspi.StateType.DEFUNCT):
@@ -1910,12 +1910,53 @@ class Oracle:
         # Guest desktop notifications must not cover owned-window evidence.
         # This does not change Isolde notification, permission or storage policy.
         run(['gsettings','set','org.gnome.desktop.notifications','show-banners','false'])
-        disk_banner=dismiss_guest_disk_banner()
+        # Initialize libatspi in a fresh process with the graphical session's
+        # environment. A fatal GLib error must leave the runner able to report it.
+        def accessibility_address():
+            """Ask the active desktop session where its separate accessibility bus listens."""
+            address_reply = run(['gdbus','call','--session','--dest','org.a11y.Bus',
+                                 '--object-path','/org/a11y/bus','--method','org.a11y.Bus.GetAddress'])
+            address_match = re.fullmatch(r"\('([^']+)',\)", address_reply)
+            if not address_match or not address_match[1].startswith('unix:'):
+                raise RuntimeError('Graphical session returned an invalid accessibility bus address')
+            return address_match[1]
+        def check_accessibility_bus(address):
+            """Check the advertised socket before loading libatspi, which aborts when it is stale."""
+            run(['gdbus','call','--address',address,'--dest','org.freedesktop.DBus',
+                 '--object-path','/org/freedesktop/DBus','--method','org.freedesktop.DBus.ListNames'])
+        try:
+            address = accessibility_address()
+        except subprocess.CalledProcessError as error:
+            details = (error.stderr or '').strip()[:1024]
+            raise RuntimeError(f'Could not get the accessibility bus address from the desktop session: {details}') from error
+        restarted_accessibility = False
+        try:
+            check_accessibility_bus(address)
+        except subprocess.CalledProcessError as error:
+            details = (error.stderr or '').strip()[:1024]
+            if 'No such file or directory' not in details and 'Connection refused' not in details:
+                raise RuntimeError(f'Graphical accessibility bus preflight failed: {details}') from error
+            print('Guest accessibility launcher advertised an unreachable socket; restarting its user service.',flush=True)
+            try:
+                run(['systemctl','--user','restart','at-spi-dbus-bus.service'])
+                address = accessibility_address()
+                check_accessibility_bus(address)
+            except subprocess.CalledProcessError as recovery_error:
+                details = (recovery_error.stderr or '').strip()[:1024]
+                raise RuntimeError(f'Guest accessibility bus recovery failed: {details}') from recovery_error
+            restarted_accessibility = True
+        environment['AT_SPI_BUS_ADDRESS'] = address
+        scan = subprocess.run(
+            [sys.executable, '-c',
+             "import json,runpy,sys; print(json.dumps(runpy.run_path(sys.argv[1])['dismiss_guest_disk_banner']()))",
+             str(Path(__file__).resolve())],
+            env=environment, stdout=subprocess.PIPE, text=True, timeout=15, check=True)
+        disk_banner=json.loads(scan.stdout)
         if disk_banner['identifiedDiskWarning'] and not disk_banner['ignored']:
             raise RuntimeError('Guest disk notification remains; refuse obscured visual evidence')
         if secret_prompt_paths(run(['busctl','--user','--list','tree','org.freedesktop.secrets'])):
             raise RuntimeError('Guest keyring prompts remain; refuse obscured visual evidence')
-        atomic_json(self.run/'guest-visual-desktop.json',{'guest':'isolde-test','dismissedPromptPaths':paths,'keyringServiceRestarted':restart,'diskBanner':disk_banner,'desktopBannersBefore':before,'desktopBannersAfter':False,'credentialsRead':False,'credentialsUnlocked':False})
+        atomic_json(self.run/'guest-visual-desktop.json',{'guest':'isolde-test','dismissedPromptPaths':paths,'keyringServiceRestarted':restart,'accessibilityServiceRestarted':restarted_accessibility,'diskBanner':disk_banner,'desktopBannersBefore':before,'desktopBannersAfter':False,'credentialsRead':False,'credentialsUnlocked':False})
 
     def configure_native(self, target="native", maintenance_tests_digest=None, demo_art_helper_digest=None, store_helper_digest=None, apply_storage_retention=False):
         if target not in {"native","surfshark","android","android-repair","android-store-support","games","guide","audio-test-tools","browser-test-tools","audio-test-recover","artifacts","desktop-prompts","storage-capacity","kodi-demo-art","store-test-data","kodi-managed","kodi-managed-audit"}: raise ValueError("Unsupported guest configuration target")

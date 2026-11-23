@@ -136,10 +136,46 @@ Window {
         commandCenter.open = true
     }
 
+    // Resolve the folder on its originating page so same-named components stay independent.
+    function folderComponent(originId) {
+        const items=pageSurface.open && pageSurface.model ? pageSurface.model.items : homeLayout.items
+        return items.find(item=>item.id===originId && !!item.appCollection) || null
+    }
+
+    // Persist each folder's order and membership through the existing atomic layout setters.
+    function saveFolderView(patch) {
+        if(!patch || !Object.keys(patch).length)return false
+        const model=pageSurface.open && pageSurface.model ? pageSurface.model : homeLayout
+        const folder=folderComponent(allApps.originId)
+        if(folder){
+            const style=Object.assign({},folder.presentation || {})
+            style.appGallery=Object.assign({},style.appGallery || {},patch)
+            return model.setItemPresentation(folder.id,style)
+        }
+        const composition=Object.assign({schemaVersion:1,enabled:false},model.composition || {})
+        composition.appGallery=Object.assign({},composition.appGallery || {},patch)
+        return model.setComposition(composition)
+    }
+
+    // Populate the gallery from the same selected apps and group as the authored folder.
+    function folderApps(folder, additions, candidatesOnly) {
+        const collection=folder?folder.appCollection:{}
+        const entries=appCatalog.galleryEntries.filter(app=>!collection.section || app.section===collection.section)
+        const included=(collection.ids || []).concat(additions || [])
+        const members=collection.mode==="selected"?entries.filter(app=>included.includes(app.id)):entries
+        if(candidatesOnly)return collection.mode==="selected"?entries.filter(app=>!included.includes(app.id)):[]
+        const registryApps=appRegistry.apps
+        const storeApp=registryApps.find(app=>app.id==="app-store")
+        return members.concat(collection.showStore!==false && (!folder || storeApp)
+            ? [Object.assign({id:"app-store",symbol:"S"},storeApp || {},{name:qsTr("Isolde App Store"),systemShortcut:"store"})] : [],
+            !folder || collection.mode==="all" && !collection.section
+                ? [{id:"isolde.settings",name:qsTr("Settings"),symbol:"⚙",systemShortcut:"settings"}] : [])
+    }
+
     function openAllAppsFromOrigin(originId) {
         if (!actionDispatcher.dispatch({type:"open-apps"}, originId || "")) {
             galleryReturnPageState = null
-            window.launchErrorText = "All Apps could not open."
+            window.launchErrorText = "The app folder could not open."
         }
     }
 
@@ -224,8 +260,8 @@ Window {
         if (kodiMedia.playbackActive) {
             if (command === inputManager.home) kodiMedia.playbackControl("home")
             else if (command === inputManager.back) kodiMedia.playbackControl("stop")
-            else if (command === inputManager.menu) playbackOptions.showControls()
-            else if (command === inputManager.playPause || command === inputManager.confirm) kodiMedia.playbackControl("pause")
+            else if (command === inputManager.menu || command === inputManager.confirm) playbackOptions.showControls()
+            else if (command === inputManager.playPause) kodiMedia.playbackControl("pause")
             else if (command === inputManager.navigateLeft) kodiMedia.playbackControl("backward")
             else if (command === inputManager.navigateRight) kodiMedia.playbackControl("forward")
             else if (command === inputManager.navigateUp) actionDispatcher.surfGuide(-1)
@@ -481,10 +517,18 @@ Window {
                 anchors.fill: parent
                 z: 60
                 visible: open && !sessionManager.active
-                entries: appCatalog.galleryEntries
+                readonly property var originFolder:window.folderComponent(originId)
+                readonly property var additions:originFolder?((originFolder.presentation || {}).appGallery || {}).addedIds:[]
+                entries: window.folderApps(originFolder,additions,false)
+                availableToAdd:window.folderApps(originFolder,additions,true)
                 galleryPresentation: Object.assign({}, appCatalog.galleryPresentation,
                     homeLayout.composition.appGallery || {},
-                    (pageSurface.open && pageSurface.model && pageSurface.model.composition.appGallery) || {},
+                    pageSurface.open ? Object.assign({hiddenIds:[],orderIds:[]},
+                        (pageSurface.model && pageSurface.model.composition.appGallery) || {}) : {},
+                    originFolder ? Object.assign((originFolder.presentation || {}).galleryTitle
+                        || (originFolder.presentation || {}).folderOnly || originFolder.appCollection.mode==="selected" || originFolder.appCollection.section
+                        ? {title:(originFolder.presentation || {}).galleryTitle || originFolder.name} : {},{
+                        hiddenIds:[],orderIds:originFolder.appCollection.ids || []},(originFolder.presentation || {}).appGallery || {}) : {},
                     {favoriteIds: (homeLayout.composition.appGallery || {}).favoriteIds || []})
                 appearance: window.shellAppearance("apps", pageSurface.open ? pageSurface.activeId : "")
                 internetAvailable: networkSettings.internetAvailable
@@ -492,6 +536,9 @@ Window {
                 onFavoriteChanged: (appId, favorite) => {
                     if (!homeLayout.setGalleryFavorite(appId, favorite)) allApps.feedback = homeLayout.errorString
                     else allApps.feedback = ""
+                }
+                onFolderEdited: patch => {
+                    allApps.feedback = window.saveFolderView(patch) ? "" : qsTr("The folder could not be saved.")
                 }
                 onLaunchRequested: appId => {
                     allApps.dispatchFromGallery(actionDispatcher, {type:"launch-app",appId:appId})

@@ -9,6 +9,7 @@
 #include <QSet>
 #include <QVariant>
 #include <QVariantList>
+#include <memory>
 
 class PageModel;
 class StudioSession;
@@ -179,10 +180,16 @@ class HomeLayout final : public QObject
     Q_INVOKABLE QVariantList pageStarterChoices() const;
     Q_INVOKABLE QString
     saveSkin(const QString& name);
-    Q_INVOKABLE bool
-    applySkin(const QString& id);
+    QString activeSkinId() const;
+    Q_INVOKABLE QString createSkin(const QString& name);
+    Q_INVOKABLE QString duplicateSkin(const QString& id, const QString& name);
+    Q_INVOKABLE bool activateSkin(const QString& id);
+    Q_INVOKABLE QObject* openSkinEditor(const QString& id);
     Q_INVOKABLE QObject* openSkinPreview(const QString& id);
     Q_INVOKABLE void closeSkinPreview();
+    Q_INVOKABLE void closeSkinEditor();
+    Q_INVOKABLE bool
+    applySkin(const QString& id);
     Q_INVOKABLE QVariantList
     skinPageUpdates(const QString& id) const;
     bool
@@ -231,6 +238,7 @@ class HomeLayout final : public QObject
 
     Q_PROPERTY(QString wallpaperSource READ wallpaperSource NOTIFY layoutChanged)
     Q_PROPERTY(QVariantList skins READ skins NOTIFY skinsChanged)
+    Q_PROPERTY(QString activeSkinId READ activeSkinId NOTIFY layoutChanged)
     Q_PROPERTY(QVariantList pages READ pages NOTIFY layoutChanged)
     Q_PROPERTY(bool isPage READ isPage CONSTANT)
     Q_PROPERTY(QString errorString READ errorString NOTIFY errorStringChanged)
@@ -417,6 +425,7 @@ class HomeLayout final : public QObject
     skinDirectory() const;
     QJsonObject
     skinSnapshot(const QString& id) const;
+    bool writeSkinSnapshot(const QString& id, const QString& name);
     QVariantMap
     componentPresentation(const QVariantMap& authored) const;
     bool
@@ -427,7 +436,7 @@ class HomeLayout final : public QObject
     applySkinWrapSinglePage(QJsonObject document, const QJsonArray& mergedPages, const QByteArray& previous);
     bool
     applySkinValidateArtwork(QJsonObject& document, const QJsonObject& assets) const;
-    bool
+    static bool
     isValidSkin(const QJsonObject& skin);
     bool
     storePage(const QString& id, const QJsonObject& document);
@@ -599,8 +608,11 @@ class HomeLayout final : public QObject
     QVariantMap m_studioAppearance;
     QHash<QString, PageModel*> m_pageModels;
     HomeLayout* m_owner = nullptr;
-    HomeLayout* m_skinPreview = nullptr;
     QString m_pageId;
+    QString m_activeSkinId = QStringLiteral("builtin-default");
+    QString m_skinEditorId, m_skinEditorName;
+    HomeLayout* m_skinEditor = nullptr;
+    HomeLayout* m_skinPreview = nullptr;
 
     AppRegistry* m_registry;
     QVariantList m_registryItems;

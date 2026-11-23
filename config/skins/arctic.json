@@ -2,15 +2,6 @@
   "name": "Arctic",
   "layout": {
     "schemaVersion": 2,
-    "composition": {
-      "schemaVersion": 1,
-      "enabled": false,
-      "headerControls": [
-        "sources",
-        "settings",
-        "edit"
-      ]
-    },
     "rootPage": {
       "name": "Home",
       "visible": true,
@@ -46,340 +37,297 @@
           "accent": "#6ea8d1"
         }
       },
-      "tileRoundness": 0.14
+      "tileRoundness": 0.14,
+      "backgroundStart": "#0b0d13",
+      "backgroundEnd": "#172735",
+      "surfaceColor": "#141720",
+      "selectedColor": "#233949",
+      "textColor": "#eef3f7",
+      "mutedColor": "#aebccd",
+      "focusColor": "#99d0ef",
+      "accentColor": "#78b1d8",
+      "homeColumns": 4
+    },
+    "composition": {
+      "schemaVersion": 1,
+      "enabled": true,
+      "headerControls": [
+        "search",
+        "settings",
+        "edit"
+      ],
+      "showClock": true,
+      "headerMode": "navigation",
+      "header": {"position":"bottom","height":52},
+      "columns": 1,
+      "margin": 24,
+      "gap": 16,
+      "fit": false,
+      "designHeight": 720,
+      "sectionHeight": 350,
+      "grid": {
+        "columns": 4,
+        "rows": 3,
+        "gap": 8,
+        "margin": 0,
+        "overlap": false,
+        "snap": true,
+        "mode": "sections"
+      },
+      "initialTab": "home",
+      "navigation": [
+        {
+          "id": "home",
+          "name": "Home",
+          "sections": [
+            "arctic-movies",
+            "arctic-continue",
+            "arctic-apps"
+          ]
+        },
+        {
+          "id": "movies",
+          "name": "Movies",
+          "action": {
+            "type": "launch-app",
+            "appId": "movies"
+          }
+        },
+        {
+          "id": "shows",
+          "name": "TV Shows",
+          "action": {
+            "type": "launch-app",
+            "appId": "shows"
+          }
+        },
+        {
+          "id": "guide",
+          "name": "Live TV",
+          "action": {
+            "type": "open-guide"
+          }
+        },
+        {
+          "id": "games",
+          "name": "Games",
+          "action": {
+            "type": "launch-app",
+            "appId": "steam"
+          }
+        },
+        {
+          "id": "apps",
+          "name": "Apps",
+          "action": {
+            "type": "open-apps"
+          }
+        }
+      ]
     },
     "categories": [
       {
-        "id": "widgets",
-        "name": "Widgets"
+        "id": "arctic-movies",
+        "name": "Movies",
+        "presentation": {
+          "height": 350,
+          "headingSize": 26,
+          "headingBold": true,
+          "headingColor": "#eaf4fb",
+          "padding": 12,
+          "panelColor": "#131c27",
+          "panelOpacity": 0,
+          "radius": 12,
+          "grid": {
+            "columns": 4,
+            "rows": 3,
+            "gap": 8,
+            "margin": 0,
+            "overlap": false,
+            "snap": true,
+            "mode": "screen"
+          }
+        }
       },
       {
-        "id": "apps",
-        "name": "Apps"
+        "id": "arctic-continue",
+        "name": "Continue watching",
+        "presentation": {
+          "height": 350,
+          "headingSize": 22,
+          "headingBold": true,
+          "headingColor": "#eaf4fb",
+          "padding": 12,
+          "panelColor": "#131c27",
+          "panelOpacity": 0,
+          "radius": 12,
+          "grid": {
+            "columns": 4,
+            "rows": 3,
+            "gap": 8,
+            "margin": 0,
+            "overlap": false,
+            "snap": true,
+            "mode": "screen"
+          }
+        }
       },
       {
-        "id": "music",
-        "name": "Music"
-      },
-      {
-        "id": "inputs",
-        "name": "Inputs"
-      },
-      {
-        "id": "system",
-        "name": "System"
+        "id": "arctic-apps",
+        "name": "Apps",
+        "presentation": {
+          "height": 176,
+          "headingSize": 22,
+          "headingBold": true,
+          "headingColor": "#eaf4fb",
+          "padding": 12,
+          "panelColor": "#131c27",
+          "panelOpacity": 0.64,
+          "radius": 12,
+          "grid": {
+            "columns": 4,
+            "rows": 3,
+            "gap": 8,
+            "margin": 0,
+            "overlap": false,
+            "snap": true,
+            "mode": "screen"
+          }
+        }
       }
     ],
     "components": [
       {
-        "kind": "widget",
-        "id": "clock",
-        "widgetType": "clock",
-        "size": "standard",
-        "categoryId": "widgets",
+        "id": "arctic-movies-shelf",
+        "name": "Movies",
+        "categoryId": "arctic-movies",
         "schemaVersion": 1,
-        "componentType": "clock",
+        "componentType": "library",
+        "kind": "widget",
+        "widgetType": "library",
         "source": {
           "schemaVersion": 1,
-          "provider": "shell",
-          "kind": "clock"
-        }
-      },
-      {
-        "kind": "widget",
-        "id": "movies-shelf",
-        "name": "Movies",
-        "widgetType": "library",
-        "size": "wide",
-        "categoryId": "apps",
-        "source": {
+          "provider": "kodi",
           "kind": "library",
           "libraryKind": "movies",
-          "provider": "kodi",
           "libraryView": "all",
-          "schemaVersion": 1,
           "libraryValue": ""
+        },
+        "placement": {
+          "x": 0,
+          "y": 0,
+          "width": 4,
+          "height": 3
         },
         "presentation": {
           "libraryKind": "movies",
           "libraryView": "all",
           "libraryLayout": "row",
-          "libraryColumns": 6,
-          "libraryLimit": 20,
-          "libraryChrome": true,
+          "libraryCardStyle": "media",
+          "libraryColumns": 9,
+          "libraryShowLabel": true,
+          "libraryHero": true,
+          "libraryHeroWidth": 68,
+          "libraryHeroHeight": 37,
+          "libraryHeroBackground": "artwork",
+          "libraryLimit": 28,
+          "libraryChrome": false,
+          "cardGap": 16,
           "reflection": true,
-          "reflectionHeight": 40,
-          "reflectionOpacity": 0.45
+          "reflectionHeight": 37,
+          "reflectionOpacity": 0.48,
+          "radius": 8,
+          "artFit": "cover",
+          "labelSize": 16,
+          "labelBold": true,
+          "focusWidth": 3
+        }
+      },
+      {
+        "id": "arctic-continue-shelf",
+        "name": "Continue watching",
+        "categoryId": "arctic-continue",
+        "schemaVersion": 1,
+        "componentType": "library",
+        "kind": "widget",
+        "widgetType": "library",
+        "source": {
+          "schemaVersion": 1,
+          "provider": "kodi",
+          "kind": "library",
+          "libraryKind": "movies",
+          "libraryView": "continue",
+          "libraryValue": ""
         },
-        "schemaVersion": 1,
-        "componentType": "library"
-      },
-      {
-        "kind": "app",
-        "id": "movies",
-        "appId": "movies",
-        "size": "standard",
-        "categoryId": "apps",
-        "schemaVersion": 1,
-        "componentType": "launcher",
-        "source": {
-          "schemaVersion": 1
+        "placement": {
+          "x": 0,
+          "y": 0,
+          "width": 4,
+          "height": 3
+        },
+        "presentation": {
+          "libraryKind": "movies",
+          "libraryView": "continue",
+          "libraryLayout": "row",
+          "libraryCardStyle": "media",
+          "libraryColumns": 9,
+          "libraryShowLabel": true,
+          "libraryHero": true,
+          "libraryHeroWidth": 68,
+          "libraryHeroHeight": 37,
+          "libraryHeroBackground": "artwork",
+          "libraryLimit": 28,
+          "libraryChrome": false,
+          "cardGap": 16,
+          "reflection": true,
+          "reflectionHeight": 37,
+          "reflectionOpacity": 0.48,
+          "radius": 8,
+          "artFit": "cover",
+          "labelSize": 16,
+          "labelBold": true,
+          "focusWidth": 3
         }
       },
       {
-        "kind": "app",
-        "id": "shows",
-        "appId": "shows",
-        "size": "standard",
-        "categoryId": "apps",
         "schemaVersion": 1,
-        "componentType": "launcher",
-        "source": {
-          "schemaVersion": 1
-        }
-      },
-      {
-        "kind": "app",
-        "id": "youtube",
-        "appId": "youtube",
-        "size": "standard",
-        "categoryId": "apps",
-        "schemaVersion": 1,
-        "componentType": "launcher",
-        "source": {
-          "schemaVersion": 1
-        }
-      },
-      {
-        "kind": "action",
-        "id": "hdmi-1",
-        "name": "HDMI 1",
-        "symbol": "1",
-        "size": "standard",
-        "categoryId": "inputs",
-        "actions": [
-          {
-            "schemaVersion": 1,
-            "type": "switch-input",
-            "input": 1
-          }
-        ],
-        "schemaVersion": 1,
-        "componentType": "launcher",
+        "id": "arctic-app-row",
+        "name": "Apps",
+        "categoryId": "arctic-apps",
+        "kind": "widget",
+        "componentType": "container",
+        "widgetType": "container",
+        "family": "app-bar",
         "source": {
           "schemaVersion": 1,
-          "provider": "isolde",
-          "kind": "capture-input",
-          "id": "1"
-        }
-      },
-      {
-        "kind": "action",
-        "id": "hdmi-2",
-        "name": "HDMI 2",
-        "symbol": "2",
-        "size": "standard",
-        "categoryId": "inputs",
-        "actions": [
-          {
+          "provider": "shell",
+          "kind": "container"
+        },
+        "appCollection": {
+          "mode": "all",
+          "ids": []
+        },
+        "placement": {
+          "x": 0,
+          "y": 0,
+          "width": 4,
+          "height": 3
+        },
+        "presentation": {
+          "variant": "orb",
+          "diameter": 72,
+          "labelSize": 15,
+          "labelPill": false,
+          "iconFocus": "glow",
+          "layout": {
             "schemaVersion": 1,
-            "type": "switch-input",
-            "input": 2
+            "mode": "row",
+            "rows": 1,
+            "columns": 16,
+            "visibleColumns": 8,
+            "gap": 16,
+            "padding": 8
           }
-        ],
-        "schemaVersion": 1,
-        "componentType": "launcher",
-        "source": {
-          "schemaVersion": 1,
-          "provider": "isolde",
-          "kind": "capture-input",
-          "id": "2"
-        }
-      },
-      {
-        "kind": "action",
-        "id": "hdmi-3",
-        "name": "HDMI 3",
-        "symbol": "3",
-        "size": "standard",
-        "categoryId": "inputs",
-        "actions": [
-          {
-            "schemaVersion": 1,
-            "type": "switch-input",
-            "input": 3
-          }
-        ],
-        "schemaVersion": 1,
-        "componentType": "launcher",
-        "source": {
-          "schemaVersion": 1,
-          "provider": "isolde",
-          "kind": "capture-input",
-          "id": "3"
-        }
-      },
-      {
-        "kind": "action",
-        "id": "hdmi-4",
-        "name": "HDMI 4",
-        "symbol": "4",
-        "size": "standard",
-        "categoryId": "inputs",
-        "actions": [
-          {
-            "schemaVersion": 1,
-            "type": "switch-input",
-            "input": 4
-          }
-        ],
-        "schemaVersion": 1,
-        "componentType": "launcher",
-        "source": {
-          "schemaVersion": 1,
-          "provider": "isolde",
-          "kind": "capture-input",
-          "id": "4"
-        }
-      },
-      {
-        "kind": "action",
-        "id": "hdmi-5",
-        "name": "HDMI 5",
-        "symbol": "5",
-        "size": "standard",
-        "categoryId": "inputs",
-        "actions": [
-          {
-            "schemaVersion": 1,
-            "type": "switch-input",
-            "input": 5
-          }
-        ],
-        "schemaVersion": 1,
-        "componentType": "launcher",
-        "source": {
-          "schemaVersion": 1,
-          "provider": "isolde",
-          "kind": "capture-input",
-          "id": "5"
-        }
-      },
-      {
-        "kind": "action",
-        "id": "hdmi-6",
-        "name": "HDMI 6",
-        "symbol": "6",
-        "size": "standard",
-        "categoryId": "inputs",
-        "actions": [
-          {
-            "schemaVersion": 1,
-            "type": "switch-input",
-            "input": 6
-          }
-        ],
-        "schemaVersion": 1,
-        "componentType": "launcher",
-        "source": {
-          "schemaVersion": 1,
-          "provider": "isolde",
-          "kind": "capture-input",
-          "id": "6"
-        }
-      },
-      {
-        "kind": "action",
-        "id": "hdmi-7",
-        "name": "HDMI 7",
-        "symbol": "7",
-        "size": "standard",
-        "categoryId": "inputs",
-        "actions": [
-          {
-            "schemaVersion": 1,
-            "type": "switch-input",
-            "input": 7
-          }
-        ],
-        "schemaVersion": 1,
-        "componentType": "launcher",
-        "source": {
-          "schemaVersion": 1,
-          "provider": "isolde",
-          "kind": "capture-input",
-          "id": "7"
-        }
-      },
-      {
-        "kind": "action",
-        "id": "hdmi-8",
-        "name": "HDMI 8",
-        "symbol": "8",
-        "size": "standard",
-        "categoryId": "inputs",
-        "actions": [
-          {
-            "schemaVersion": 1,
-            "type": "switch-input",
-            "input": 8
-          }
-        ],
-        "schemaVersion": 1,
-        "componentType": "launcher",
-        "source": {
-          "schemaVersion": 1,
-          "provider": "isolde",
-          "kind": "capture-input",
-          "id": "8"
-        }
-      },
-      {
-        "kind": "app",
-        "id": "steam-machine",
-        "appId": "steam",
-        "size": "standard",
-        "categoryId": "apps",
-        "schemaVersion": 1,
-        "componentType": "launcher",
-        "source": {
-          "schemaVersion": 1
-        }
-      },
-      {
-        "kind": "app",
-        "id": "app-store",
-        "appId": "app-store",
-        "size": "standard",
-        "categoryId": "system",
-        "schemaVersion": 1,
-        "componentType": "launcher",
-        "source": {
-          "schemaVersion": 1
-        }
-      },
-      {
-        "kind": "app",
-        "id": "desktop-mode",
-        "appId": "desktop-mode",
-        "size": "standard",
-        "categoryId": "system",
-        "schemaVersion": 1,
-        "componentType": "launcher",
-        "source": {
-          "schemaVersion": 1
-        }
-      },
-      {
-        "kind": "app",
-        "id": "settings",
-        "appId": "settings",
-        "size": "standard",
-        "categoryId": "system",
-        "schemaVersion": 1,
-        "componentType": "launcher",
-        "source": {
-          "schemaVersion": 1
         }
       }
     ]

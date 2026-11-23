@@ -4,231 +4,218 @@ Rectangle {
     id: root
     objectName: "skinPicker"
     required property var layoutModel
+    property var ambientModel: null
     property var appearance: ({})
     property bool open: false
     property int selected: 0
     property int operation: 0
-    property bool confirming: false
+    property string mode: "list"
     property string message: ""
-    property bool detailsOpen: false
     property var previewModel: null
-    readonly property var previewPage: previewModel && previewModel.homePageId
-        ? previewModel.pageModel(previewModel.homePageId) || previewModel : previewModel
+    property var previewAmbient: null
+    readonly property bool detailsVisible: mode==="actions" || mode==="delete"
+    readonly property bool screensaverPreview: detailsVisible && actions[operation]?.id==="screensaver"
+    readonly property var previewHome: previewModel
+        ? (previewModel.homePageId ? previewModel.pageModel(previewModel.homePageId) || previewModel : previewModel)
+        : null
+    onVisibleChanged: if (!visible && (previewModel || previewAmbient)) {
+        clearPreview()
+        mode = "list"
+    }
     signal closed()
     signal editSkin(string id)
-    signal addSkin()
-    readonly property var entries: layoutModel.skins || []
-    readonly property var choice: entries[selected] || ({})
-    readonly property var operations: [qsTr("Use this skin"), qsTr("Edit Home and pages"), qsTr("Duplicate skin"), qsTr("Delete skin")]
+    signal screensaverRequested(string id)
+    signal duplicated(string sourceId, string copyId)
+
     SurfacePalette { id: skinTheme; appearance: root.appearance }
-    color: skinTheme.background; visible: open
-    onVisibleChanged: if (!visible && detailsOpen) clearPreview()
-    // Clear transient choices whenever Settings opens the picker.
-    function begin() { clearPreview(); selected = 0; operation = 0; confirming = false; namingVisible = false; message = ""; open = true }
-    // Retire the scratch model whenever the details pane closes.
-    function clearPreview() {
-        detailsOpen = false
-        previewModel = null
+    color: skinTheme.background
+    readonly property var entries: (layoutModel.skins || []).concat([{id:"",name:qsTr("Add new skin")}])
+    readonly property var choice: entries[selected] || ({})
+    readonly property var actions: (choice.id === layoutModel.activeSkinId ? [] : [{id:"activate",name:qsTr("Use this skin")}])
+        .concat([{id:"edit",name:qsTr("Edit Home and pages")},{id:"screensaver",name:qsTr("Screensaver")},
+            {id:"duplicate",name:qsTr("Duplicate skin")}], choice.builtIn || choice.id===layoutModel.activeSkinId
+                ? [] : [{id:"delete",name:qsTr("Delete skin")}])
+
+    // Open at a stable skin identity so returning from Studio restores focus.
+    function begin(id) {
+        clearPreview()
+        selected=Math.max(0,entries.findIndex(entry=>entry.id===(id || layoutModel.activeSkinId)))
+        operation=0;mode="list";message="";open=true
+    }
+    // Select a skin or open the naming step for a new skin.
+    function selectEntry() {
+        message="";operation=0
+        if(!choice.id){keyboard.value=qsTr("New skin");keyboard.selectedIndex=0;mode="create"}
+        else {
+            previewModel=layoutModel.openSkinPreview(choice.id)
+            previewAmbient=ambientModel ? ambientModel.skinPreview(choice.id) : null
+            mode="actions"
+        }
+    }
+    // Release the preview before moving out of the selected skin.
+    function clearPreview(){
+        previewModel=null
+        previewAmbient=null
         layoutModel.closeSkinPreview()
     }
-    // Inspect the chosen skin before offering any action that could change Home.
-    function selectSkin() {
-        if (selected === entries.length) { open = false; addSkin(); return }
-        operation = 0
-        message = ""
-        previewModel = layoutModel.openSkinPreview(choice.id)
-        if (!previewModel) message = layoutModel.errorString
-        detailsOpen = true
-    }
-    // Apply and edit remain deliberate actions after opening the preview.
+    // Dispatch a chosen action only after selecting a skin from the list.
     function execute() {
-        message = ""
-        if (operation === 0) {
-            if (layoutModel.applySkin(choice.id)) { message = "Skin applied."; open = false; closed() }
-            else { message = layoutModel.errorString; return }
-        } else if (operation === 1) {
-            open = false; editSkin(choice.id)
-        } else if (operation === 2) {
-            keyboard.value = choice.name + " copy"; keyboard.selectedIndex = 0; namingVisible = true
-        } else if (operation === 3) {
-            if (choice.builtIn) { message = "Built-in skins cannot be deleted."; return }
-            confirming = true
-        }
+        const action=actions[operation]
+        if(!action)return
+        message=""
+        if(action.id==="activate") {
+            if(layoutModel.activateSkin(choice.id)){clearPreview();mode="list";message=qsTr("Skin is active.")}
+            else message=layoutModel.errorString
+        } else if(action.id==="edit") editSkin(choice.id)
+        else if(action.id==="screensaver") screensaverRequested(choice.id)
+        else if(action.id==="duplicate"){keyboard.value=choice.name+qsTr(" copy");keyboard.selectedIndex=0;mode="duplicate"}
+        else mode="delete"
     }
-    property bool namingVisible: false
-    // Keep the keyboard available on failure so the name can be corrected.
-    function confirmDuplicate(text) {
-        if (!text.trim()) { message = "Give the skin a name."; return }
-        const id = layoutModel.saveSkin(text.trim())
-        if (id) { message = "Skin saved as \"" + text.trim() + "\"."; namingVisible = false }
-        else { message = layoutModel.errorString; return }
+    // Add or copy a skin without activating it, then keep it selected.
+    function finishName(name) {
+        const creating=mode==="create", origin=choice.id
+        const id=creating?layoutModel.createSkin(name):layoutModel.duplicateSkin(origin,name)
+        if(!id){message=layoutModel.errorString;return}
+        if(!creating)duplicated(origin,id)
+        begin(id)
     }
-    // Delete only after explicit confirmation and keep errors visible in the picker.
-    function confirmDelete() {
-        const ok = layoutModel.deleteSkin(choice.id)
-        confirming = false
-        selected = Math.min(selected, Math.max(0, entries.length - 1))
-        message = ok ? "Skin deleted." : layoutModel.errorString
-        if (ok) { open = false; closed() }
-    }
-    // Delegate to the active overlay so remote input cannot change the underlying selection.
+    // Keep all list, detail and naming actions reachable from the remote.
     function handleCommand(command) {
-        if (namingVisible) { keyboard.handleCommand(command); return }
-        if (confirming) {
-            if (command === inputManager.back) confirming = false
-            else if (command === inputManager.confirm) confirmDelete()
+        if(mode==="create" || mode==="duplicate"){keyboard.handleCommand(command);return}
+        if(command===inputManager.back || (command===inputManager.navigateLeft && detailsVisible)){
+            if(mode==="list"){open=false;closed()}else mode=mode==="delete"?"actions":"list"
+            if(mode==="list")clearPreview()
             return
         }
-        if (detailsOpen) {
-            if (command === inputManager.back || command === inputManager.navigateLeft) clearPreview()
-            else if (command === inputManager.navigateUp) operation = Math.max(0, operation - 1)
-            else if (command === inputManager.navigateDown) operation = Math.min(operations.length - 1, operation + 1)
-            else if (command === inputManager.confirm) execute()
+        if(command===inputManager.confirm || command===inputManager.navigateRight){
+            if(mode==="list")selectEntry()
+            else if(mode==="actions")execute()
+            else if(mode==="delete" && command===inputManager.confirm){
+                if(layoutModel.deleteSkin(choice.id))begin()
+                else message=layoutModel.errorString
+            }
             return
         }
-        if (command === inputManager.back) { open = false; closed(); return }
-        else if (command === inputManager.navigateUp) selected = Math.max(0, selected - 1)
-        else if (command === inputManager.navigateDown) {
-            const last = entries.length > 0 ? entries.length : 0
-            selected = Math.min(last, selected + 1)
-        }
-        else if (command === inputManager.confirm || command === inputManager.navigateRight) selectSkin()
+        const change=command===inputManager.navigateUp?-1:command===inputManager.navigateDown?1:0
+        if(mode==="list")selected=Math.max(0,Math.min(entries.length-1,selected+change))
+        else if(mode==="actions")operation=Math.max(0,Math.min(actions.length-1,operation+change))
     }
-    MouseArea { anchors.fill: parent }
+
+    MouseArea { anchors.fill:parent }
     Row {
-        anchors.fill: parent
-        anchors.margins: 40
-        spacing: 24 * skinTheme.gapScale
+        anchors.fill:parent;anchors.margins:40;spacing:24*skinTheme.gapScale
         Column {
-            width: Math.min(parent.width * 0.36, 360 * skinTheme.textScale)
-            height: parent.height
-            spacing: 14
-            Text { text: qsTr("Skins"); color: skinTheme.backgroundText; font.family: skinTheme.fontFamily; font.pixelSize: 34 * skinTheme.textScale }
+        width:Math.min(parent.width*0.36,360*skinTheme.textScale);height:parent.height;spacing:14
+        Text {text:qsTr("Skins");color:skinTheme.backgroundText;font.family:skinTheme.fontFamily;font.pixelSize:Math.round(34*skinTheme.textScale)}
+        ListView {
+            id:rows
+            width:parent.width;height:Math.max(100,parent.height-y-42);spacing:8;clip:true
+            visible:root.mode==="list" || root.detailsVisible
+            model:root.entries
+            currentIndex:root.selected
+            highlightRangeMode:ListView.ApplyRange;highlightMoveDuration:0
+            delegate:Rectangle {
+                required property int index
+                required property var modelData
+                width:ListView.view.width;height:Math.max(54,64*skinTheme.textScale);radius:skinTheme.radius
+                readonly property bool focused:index===rows.currentIndex
+                color:focused?skinTheme.selected:skinTheme.surface
+                border.width:focused && root.mode==="list"?2:0;border.color:skinTheme.selectedFocus
+                Text {
+                    anchors.left:parent.left;anchors.leftMargin:16;anchors.verticalCenter:parent.verticalCenter
+                    width:parent.width-32;elide:Text.ElideRight;textFormat:Text.PlainText
+                    text:modelData.name+(modelData.id===root.layoutModel.activeSkinId?qsTr(" · Active"):"")
+                    color:parent.focused?skinTheme.selectedText:skinTheme.text;font.family:skinTheme.fontFamily;font.pixelSize:Math.round(22*skinTheme.textScale)
+                }
+                MouseArea {
+                    anchors.fill:parent
+                    onClicked:{root.selected=index;root.selectEntry()}
+                }
+            }
+        }
+        }
+        Column {
+            width:Math.max(0,parent.width-x);height:parent.height;spacing:10*skinTheme.gapScale
+            visible:root.detailsVisible || root.message.length>0
+            Text {
+                width:parent.width;visible:root.detailsVisible;elide:Text.ElideRight;textFormat:Text.PlainText
+                text:root.choice.name || "";font.family:skinTheme.fontFamily;font.weight:Font.DemiBold
+                color:skinTheme.backgroundText;font.pixelSize:28*skinTheme.textScale
+            }
+            Item {
+                id:previewFrame
+                objectName:"skinPreviewFrame"
+                readonly property var viewport:root.layoutModel.studioOptions.referenceViewport || ({})
+                readonly property real previewWidth:viewport.width || 1280
+                readonly property real previewHeight:viewport.height || 720
+                visible:root.detailsVisible && !!root.previewHome
+                width:Math.min(parent.width,parent.height*0.46*previewWidth/previewHeight)
+                height:width*previewHeight/previewWidth;clip:true
+                Item {
+                    width:previewFrame.previewWidth;height:previewFrame.previewHeight
+                    scale:previewFrame.width/width;transformOrigin:Item.TopLeft;enabled:false
+                    Loader {
+                        anchors.fill:parent;active:root.detailsVisible && !!root.previewHome
+                        sourceComponent:root.screensaverPreview && root.previewAmbient?screensaverSample:homeSample
+                    }
+                    Component {
+                        id:homeSample
+                        Screensaver { pageModel:root.previewHome;artworkResolver:root.previewModel;reducedMotion:true }
+                    }
+                    Component {
+                        id:screensaverSample
+                        AmbientScreen {
+                            settings:root.previewAmbient
+                            layoutModel:root.previewModel
+                            active:!!root.previewAmbient && !!root.previewModel
+                            staticPreview:true
+                        }
+                    }
+                }
+            }
+            Text {
+                visible:root.detailsVisible
+                text:!root.previewHome ? qsTr("Preview unavailable") : root.screensaverPreview ? qsTr("Screensaver preview") : qsTr("Home preview")
+                color:skinTheme.backgroundMuted;font.family:skinTheme.fontFamily;font.pixelSize:16*skinTheme.textScale
+            }
             ListView {
-                id: skinList
-                width: parent.width
-                height: parent.height - y
-                spacing: 8
-                clip: true
-                model: root.entries.concat([{name: qsTr("Add new skin")}])
-                currentIndex: root.selected
-                highlightRangeMode: ListView.ApplyRange
-                delegate: Rectangle {
+                id:actionRows
+                visible:root.mode==="actions"
+                width:parent.width;height:Math.max(0,parent.height-y-44*skinTheme.textScale)
+                clip:true;spacing:4*skinTheme.gapScale;model:root.actions;currentIndex:root.operation
+                highlightRangeMode:ListView.ApplyRange;highlightMoveDuration:0
+                delegate:Rectangle {
                     required property int index
                     required property var modelData
-                    width: skinList.width
-                    height: 64 * skinTheme.textScale
-                    radius: skinTheme.radius
-                    color: index === root.selected ? skinTheme.selected : skinTheme.surface
-                    border.width: index === root.selected && !root.detailsOpen ? 2 : 0
-                    border.color: skinTheme.selectedFocus
+                    readonly property bool focused:index===root.operation
+                    width:actionRows.width;height:Math.max(42,46*skinTheme.textScale)
+                    radius:skinTheme.radius;color:focused?skinTheme.selected:skinTheme.surface
+                    border.width:focused?2:0;border.color:skinTheme.selectedFocus
                     Text {
-                        anchors.fill: parent
-                        anchors.margins: 14
-                        verticalAlignment: Text.AlignVCenter
-                        text: modelData.name
-                        textFormat: Text.PlainText
-                        elide: Text.ElideRight
-                        color: index === root.selected ? skinTheme.selectedText : skinTheme.text
-                        font.family: skinTheme.fontFamily
-                        font.pixelSize: 22 * skinTheme.textScale
+                        anchors.fill:parent;anchors.margins:14;verticalAlignment:Text.AlignVCenter
+                        text:modelData.name;textFormat:Text.PlainText;elide:Text.ElideRight
+                        color:parent.focused?skinTheme.selectedText:skinTheme.text;font.family:skinTheme.fontFamily
+                        font.pixelSize:20*skinTheme.textScale
                     }
-                    MouseArea { anchors.fill: parent; onClicked: { root.selected = index; root.selectSkin() } }
-                }
-            }
-        }
-        Column {
-            width: Math.max(0, parent.width - x)
-            height: parent.height
-            spacing: 10 * skinTheme.gapScale
-            visible: root.detailsOpen
-            Text { width: parent.width; text: root.choice.name || ""; textFormat: Text.PlainText; elide: Text.ElideRight; color: skinTheme.backgroundText; font.family: skinTheme.fontFamily; font.pixelSize: 28 * skinTheme.textScale }
-            Item {
-                id: previewFrame
-                objectName: "skinPreviewFrame"
-                readonly property var viewport: root.layoutModel.studioOptions.referenceViewport || ({})
-                readonly property real previewWidth: viewport.width || 1280
-                readonly property real previewHeight: viewport.height || 720
-                visible: !!root.previewPage
-                width: Math.min(parent.width, parent.height * 0.52 * previewWidth / previewHeight)
-                height: width * previewHeight / previewWidth
-                clip: true
-                Screensaver {
-                    width: previewFrame.previewWidth
-                    height: previewFrame.previewHeight
-                    scale: previewFrame.width / width
-                    transformOrigin: Item.TopLeft
-                    enabled: false
-                    pageModel: root.detailsOpen ? root.previewPage : null
-                    artworkResolver: root.previewModel
-                    reducedMotion: true
+                    MouseArea {
+                        anchors.fill:parent;hoverEnabled:true
+                        onEntered:root.operation=index
+                        onClicked:{root.operation=index;root.execute()}
+                    }
                 }
             }
             Text {
-                width: parent.width
-                text: root.message || (root.previewPage ? qsTr("Home preview") : qsTr("Preview unavailable"))
-                wrapMode: Text.Wrap
-                color: skinTheme.backgroundMuted
-                font.family: skinTheme.fontFamily
-                font.pixelSize: 17 * skinTheme.textScale
-            }
-            ListView {
-                id: actionList
-                width: parent.width
-                height: Math.max(0, parent.height - y)
-                spacing: 4 * skinTheme.gapScale
-                clip: true
-                model: root.operations
-                currentIndex: root.operation
-                highlightRangeMode: ListView.ApplyRange
-                delegate: Rectangle {
-                    required property int index
-                    required property string modelData
-                    width: actionList.width
-                    height: 46 * skinTheme.textScale
-                    radius: skinTheme.radius
-                    color: index === root.operation ? skinTheme.selected : skinTheme.surface
-                    border.width: index === root.operation ? 2 : 0
-                    border.color: skinTheme.selectedFocus
-                    Text {
-                        anchors.fill: parent
-                        anchors.margins: 14
-                        verticalAlignment: Text.AlignVCenter
-                        text: modelData
-                        color: index === root.operation ? skinTheme.selectedText : skinTheme.text
-                        font.family: skinTheme.fontFamily
-                        font.pixelSize: 20 * skinTheme.textScale
-                    }
-                    MouseArea { anchors.fill: parent; onClicked: { root.operation = index; root.execute() } }
-                }
-            }
-        }
-    }
-    Rectangle {
-        anchors.fill: parent
-        visible: root.confirming
-        color: skinTheme.background
-        MouseArea { anchors.fill: parent }
-        Column {
-            anchors.centerIn: parent
-            width: parent.width * 0.75
-            spacing: 20
-            Text { width: parent.width; textFormat: Text.PlainText; wrapMode: Text.Wrap; color: skinTheme.backgroundText; font.pixelSize: 28 * skinTheme.textScale; text: qsTr("Delete “%1”?").arg(root.choice.name || "") }
-            Text { width: parent.width; wrapMode: Text.Wrap; color: skinTheme.backgroundMuted; font.pixelSize: 20 * skinTheme.textScale; text: qsTr("Confirm to delete this saved skin. Back cancels.") }
-            Text {
-                text: qsTr("Confirm")
-                color: skinTheme.backgroundText
-                font.pixelSize: 22 * skinTheme.textScale
-                MouseArea { anchors.fill: parent; onClicked: root.confirmDelete() }
+                visible:text.length>0;width:parent.width;wrapMode:Text.WordWrap;textFormat:Text.PlainText
+                color:skinTheme.backgroundText;font.family:skinTheme.fontFamily;font.pixelSize:18*skinTheme.textScale
+                text:root.message || (root.mode==="delete"?qsTr("Delete this skin? Confirm deletes it. Back cancels."):"")
             }
         }
     }
     OnScreenKeyboard {
-        id: keyboard
-        anchors.fill: parent
-        anchors.margins: 50
-        visible: root.namingVisible
-        onAccepted: text => root.confirmDuplicate(text)
-        onCanceled: root.namingVisible = false
+        id:keyboard
+        anchors.fill:parent;anchors.margins:40
+        visible:root.mode==="create" || root.mode==="duplicate"
+        onAccepted:text=>root.finishName(text)
+        onCanceled:root.mode=root.mode==="create"?"list":"actions"
     }
 }

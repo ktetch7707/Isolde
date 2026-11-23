@@ -83,9 +83,12 @@ Item {
             selectedIndex = Math.max(0, selectedIndex - 1)
         else if (command === inputManager.navigateDown)
             selectedIndex = Math.min(rows.length - 1, selectedIndex + 1)
-        else if (command === inputManager.confirm && rows[selectedIndex]) {
+        else if ((command === inputManager.confirm || command === inputManager.navigateRight) && rows[selectedIndex]) {
             const page = rows[selectedIndex].page
-            if (page === 5) { if (setupState.restart()) sessionManager.goHome() }
+            if (page === 5) {
+                if (command === inputManager.confirm && setupState.restart())
+                    sessionManager.goHome()
+            }
             else activePage = page
         }
     }

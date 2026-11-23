@@ -211,6 +211,7 @@ qt_add_qml_module(isolde
         qml/GuideRuleEditor.qml
         qml/GuideWidget.qml
         qml/LibraryBrowseControls.qml
+        qml/SmartPlaylistEditor.qml
         qml/KodiSettingsView.qml
         qml/PlaybackOptionsWindow.qml
         qml/KodiSourcesView.qml
@@ -297,6 +298,7 @@ qt_add_resources(isolde "isolde_config"
         config/interface-sounds.json
         config/skins/lounge.json
         config/skins/pastel.json
+        config/skins/arctic.json
         config/skins/templates.json
         config/skins/compact-launcher.json
         config/skins/scrolling-dashboard.json
@@ -551,6 +553,8 @@ if(BUILD_TESTING)
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
     set_tests_properties(studio_selection studio_artwork studio_colors studio_workflows PROPERTIES TIMEOUT 60 LABELS "studio;quick;qml"
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
+    # The recovered workflow suite adds rendering, skin lifecycle and playlist journeys.
+    set_tests_properties(studio_workflows PROPERTIES TIMEOUT 90)
     qt_add_executable(isolde_tests
         tests/tst_isolde.cpp
     )

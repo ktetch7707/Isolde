@@ -123,6 +123,8 @@ KodiMedia::consume()
         {17, &KodiMedia::handlePlaylistResponse},
         {18, &KodiMedia::handlePlaylistResponse},
         {19, &KodiMedia::handlePlaylistResponse},
+        {25, &KodiMedia::handlePlaylistResponse},
+        {26, &KodiMedia::handlePlaylistResponse},
         {9, &KodiMedia::handlePlaylistSaveResponse},
         {10, &KodiMedia::handlePlaylistRenameResponse},
         {11, &KodiMedia::handlePlaylistDeleteResponse},
@@ -154,7 +156,7 @@ KodiMedia::handleErrorResponse(const QJsonObject& /*response*/)
     static const QSet<int> playbackControlStages{7};
     static const QSet<int> manualMovieStages{8};
     static const QSet<int> subtitleLoadStages{13};
-    static const QSet<int> playlistOperationStages{9, 10, 11, 12, 16, 17, 18, 19};
+    static const QSet<int> playlistOperationStages{9, 10, 11, 12, 16, 17, 18, 19, 25, 26};
     static const QSet<int> subtitleTracksStages{14, 15};
     static const QSet<int> playbackOptionsStages{20, 21};
     static const QSet<int> sourceOperationStages{22, 23, 24};
@@ -457,6 +459,31 @@ KodiMedia::handlePlaylistResponse(const QJsonObject& result)
     const int stage = m_stage;
     m_busy = false;
     releaseSocket();
+    if (stage == 25)
+    {
+        const auto revision = result["revision"].toString();
+        const auto draft = result["draft"].toObject();
+        if (QRegularExpression("^[0-9a-f]{64}$").match(revision).hasMatch() &&
+            draft["rules"].isArray() && draft["rules"].toArray().size() <= 16)
+        {
+            m_smartPlaylistRevision = revision;
+            m_smartPlaylist = draft.toVariantMap();
+        }
+        m_playlistStatus = m_smartPlaylist.isEmpty() ? "This playlist could not be loaded for editing." : "Playlist loaded.";
+        emit changed();
+        return true;
+    }
+    if (stage == 26)
+    {
+        const auto name = result["name"].toString();
+        const bool saved = result["edited"].toBool() && name == m_smartPlaylistName;
+        m_playlistStatus = saved ? "Smart playlist saved." : "Kodi did not confirm the change.";
+        m_smartPlaylistRevision.clear();
+        if (saved)
+            emit playlistSaved(name);
+        emit changed();
+        return true;
+    }
     if (stage == 16 || stage == 19)
     {
         handlePlaylistSavedResponse(result, stage);
@@ -695,6 +722,15 @@ KodiMedia::applyPlaybackCommonFields(const QJsonObject& result)
     m_playbackStatus = m_presentationError.isEmpty() ? result.value("state").toString() : m_presentationError;
     m_playbackCanPause = result.value("canPause").isBool() && result.value("canPause").toBool();
     m_playbackCanSeek = result.value("canSeek").isBool() && result.value("canSeek").toBool();
+    m_playbackTimeline = {{"title", result.value("title").toString().left(256)},
+                          {"state", result.value("state").toString()}};
+    const int duration = result.value("duration").toInt(-1);
+    const int position = result.value("position").toInt(-1);
+    if (duration > 0 && duration <= 604800 && position >= 0 && position <= duration)
+    {
+        m_playbackTimeline.insert("duration", duration);
+        m_playbackTimeline.insert("position", position);
+    }
     if (result.value("controlError").isString())
         m_playbackStatus = result.value("controlError").toString().left(512);
     if (result.value("state").toString() == "failed" && result.value("reason").isString())

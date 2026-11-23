@@ -515,6 +515,8 @@ ComponentSchema::validPresentationField(const QString& key, const QVariant& v, c
         {"bodyText", [](const QVariantMap& m, bool s, bool c) { Q_UNUSED(s); Q_UNUSED(c); return validPresentationStringField(m, "bodyText"); }},
         {"moreLabel", [](const QVariantMap& m, bool s, bool c) { Q_UNUSED(s); Q_UNUSED(c); return validPresentationStringField(m, "moreLabel"); }},
         {"galleryTitle", [](const QVariantMap& m, bool s, bool c) { Q_UNUSED(s); Q_UNUSED(c); return validPresentationStringField(m, "galleryTitle"); }},
+        {"folderOnly", [](const QVariantMap& m, bool, bool c) { return c && validPresentationBoolFlag(m, "folderOnly"); }},
+        {"appGallery", [](const QVariantMap& m, bool, bool c) { return c && validCompositionAppGallery(m); }},
         {"appIconStyle", [](const QVariantMap& m, bool s, bool c) { Q_UNUSED(s); Q_UNUSED(c); return validPresentationIconStyle(m); }},
         {"iconFocus", [](const QVariantMap& m, bool s, bool c) { Q_UNUSED(s); Q_UNUSED(c); return validPresentationIconStyle(m); }},
         {"iconBacking", [](const QVariantMap& m, bool s, bool c) { Q_UNUSED(s); Q_UNUSED(c); return validPresentationIconStyle(m); }},
@@ -573,6 +575,7 @@ ComponentSchema::validPresentationField(const QString& key, const QVariant& v, c
         {"guideChannels", [](const QVariantMap& m, bool s, bool c) { Q_UNUSED(s); Q_UNUSED(c); return validPresentationGuideFields(m); }},
         {"styleId", [](const QVariantMap& m, bool s, bool c) { Q_UNUSED(s); Q_UNUSED(c); return validPresentationStyleId(m); }},
         {"guideSurface", [](const QVariantMap& m, bool s, bool c) { Q_UNUSED(s); Q_UNUSED(c); return validPresentationGuideFields(m); }},
+        {"guideStart", [](const QVariantMap& m, bool, bool) { return validPresentationGuideFields(m); }},
         {"guideOverlayPosition", [](const QVariantMap& m, bool s, bool c) { Q_UNUSED(s); Q_UNUSED(c); return validPresentationGuideOverlay(m); }},
         {"guideOverlayWidth", [](const QVariantMap& m, bool s, bool c) { Q_UNUSED(s); Q_UNUSED(c); return validPresentationGuideOverlay(m); }},
         {"guideOverlayHeight", [](const QVariantMap& m, bool s, bool c) { Q_UNUSED(s); Q_UNUSED(c); return validPresentationGuideOverlay(m); }},
@@ -604,6 +607,15 @@ ComponentSchema::validPresentationField(const QString& key, const QVariant& v, c
         {"cardGap", [](const QVariantMap& m, bool s, bool c) { Q_UNUSED(s); Q_UNUSED(c); return validPresentationNumericField(m, "cardGap", s); }},
         {"artHeight", [](const QVariantMap& m, bool s, bool c) { Q_UNUSED(s); Q_UNUSED(c); return validPresentationNumericField(m, "artHeight", s); }},
         {"reflection", [](const QVariantMap& m, bool s, bool c) { Q_UNUSED(s); Q_UNUSED(c); return validPresentationBoolFlag(m, "reflection"); }},
+        {"libraryHero", [](const QVariantMap& m, bool s, bool c) { Q_UNUSED(s); Q_UNUSED(c); return validPresentationBoolFlag(m, "libraryHero"); }},
+        {"libraryHeroWidth", [](const QVariantMap& m, bool s, bool c) { Q_UNUSED(c); return validPresentationNumericField(m, "libraryHeroWidth", s); }},
+        {"libraryHeroHeight", [](const QVariantMap& m, bool s, bool c) { Q_UNUSED(c); return validPresentationNumericField(m, "libraryHeroHeight", s); }},
+        {"libraryHeroBackground", [](const QVariantMap& m, bool, bool) { return QStringList{"theme", "fixed", "artwork"}.contains(m.value("libraryHeroBackground").toString()); }},
+        {"libraryHeroColor", [](const QVariantMap& m, bool, bool) { return validPresentationSurfaceColor(m); }},
+        {"libraryShowLabel", [](const QVariantMap& m, bool, bool) { return validPresentationBoolFlag(m, "libraryShowLabel"); }},
+        {"libraryPosterWidth", [](const QVariantMap& m, bool s, bool) { return validPresentationNumericField(m, "libraryPosterWidth", s); }},
+        {"libraryPosterHeight", [](const QVariantMap& m, bool s, bool) { return validPresentationNumericField(m, "libraryPosterHeight", s); }},
+        {"libraryShelfHeight", [](const QVariantMap& m, bool s, bool) { return validPresentationNumericField(m, "libraryShelfHeight", s); }},
         {"reflectionHeight", [](const QVariantMap& m, bool s, bool c) { Q_UNUSED(s); Q_UNUSED(c); return validPresentationNumericField(m, "reflectionHeight", s); }},
         {"reflectionOpacity", [](const QVariantMap& m, bool s, bool c) { Q_UNUSED(s); Q_UNUSED(c); return validPresentationNumericField(m, "reflectionOpacity", s); }}};
     auto it = handlers.find(key);
@@ -1054,6 +1066,8 @@ ComponentSchema::validPresentationGuideField(const QString& key, const QVariant&
         return validPresentationGuideChannels(val);
     if (key == "guideSurface")
         return validPresentationGuideSurface(val);
+    if (key == "guideStart")
+        return val.toString() == "manage";
     return false;
 }
 
@@ -1266,6 +1280,16 @@ ComponentSchema::validPresentationNumericField(const QVariantMap& v, const QStri
         return validPresentationNumericSize(number);
     if (key == "reflectionHeight")
         return number >= 0 && number <= 400;
+    if (key == "libraryHeroWidth")
+        return number >= 40 && number <= 100;
+    if (key == "libraryHeroHeight")
+        return number >= 24 && number <= 100;
+    if (key == "libraryPosterWidth")
+        return number == 0 || (number >= 64 && number <= 480);
+    if (key == "libraryPosterHeight")
+        return number == 0 || (number >= 80 && number <= 600);
+    if (key == "libraryShelfHeight")
+        return number == 0 || (number >= 96 && number <= 720);
     if (key == "reflectionOpacity")
         return number >= 0 && number <= 1;
     if (key == "contentWidth")
@@ -1572,7 +1596,8 @@ ComponentSchema::validCompositionSettingsCategoryOrder(const QVariantMap& value)
     const QSet<QString> ids{
         "network", "picture", "home", "apps", "inputs", "remotes", "profiles", "media", "system", "display-skins"};
     const auto order = value.value("settingsCategoryOrder").toList();
-    if (order.size() != ids.size())
+    // Accept saved orders from before Display & Skins was consolidated into Skins.
+    if (order.size() != ids.size() && order.size() != ids.size() - 1)
         return false;
     QSet<QString> seen;
     for (const auto& id : order)
@@ -1582,7 +1607,7 @@ ComponentSchema::validCompositionSettingsCategoryOrder(const QVariantMap& value)
             return false;
         seen.insert(id.toString());
     }
-    return true;
+    return seen.size() == ids.size() || !seen.contains("display-skins");
 }
 
 /**
@@ -1612,7 +1637,7 @@ ComponentSchema::validCompositionAppGallery(const QVariantMap& value)
     if (value.value("appGallery").metaType().id() != QMetaType::QVariantMap)
         return false;
     const auto gallery = value.value("appGallery").toMap();
-    if (gallery.size() > 10)
+    if (gallery.size() > 19)
         return false;
     for (auto it = gallery.cbegin(); it != gallery.cend(); ++it)
     {
@@ -1634,6 +1659,15 @@ ComponentSchema::validCompositionAppGalleryField(const QString& key, const QVari
                                     "filterEnabled",
                                     "favoritesEnabled",
                                     "favoriteIds",
+                                    "orderIds",
+                                    "hiddenIds",
+                                    "addedIds",
+                                    "tileHeight",
+                                    "tileGap",
+                                    "surfaceOpacity",
+                                    "radius",
+                                    "surfaceColor",
+                                    "focusColor",
                                     "title"};
     if (!keys.contains(key))
         return false;
@@ -1649,8 +1683,16 @@ ComponentSchema::validCompositionAppGalleryField(const QString& key, const QVari
         return validCompositionAppGalleryBool(val);
     if (key == "title")
         return validCompositionAppGalleryTitle(val);
-    if (key == "favoriteIds")
+    if (key == "favoriteIds" || key == "orderIds" || key == "hiddenIds" || key == "addedIds")
         return validCompositionAppGalleryFavoriteIds(val);
+    if (key == "tileHeight")
+        return validCompositionHeaderNumber(val, {56, 320});
+    if (key == "tileGap" || key == "radius")
+        return validCompositionHeaderNumber(val, {0, 48});
+    if (key == "surfaceOpacity")
+        return validCompositionHeaderNumber(val, {0, 1});
+    if (key == "surfaceColor" || key == "focusColor")
+        return validCompositionHeaderColor(val);
     return false;
 }
 
@@ -1761,7 +1803,7 @@ ComponentSchema::validCompositionHeaderField(const QString& key, const QVariant&
         return validCompositionHeaderPosition(entry);
     if (key == "showTitle" || key == "showDate")
         return validCompositionHeaderBool(entry);
-    if (key == "textColor" || key == "backgroundColor" || key == "focusColor")
+    if (key == "textColor" || key == "backgroundColor" || key == "focusColor" || key == "clockColor")
         return validCompositionHeaderColor(entry);
     if (key == "customLogo")
         return validCompositionHeaderCustomLogo(entry);
@@ -2388,7 +2430,6 @@ ComponentSchema::action(const QVariantMap& input, QString* error)
     handlers.insert("switch-input", [](const QVariantMap& in, QString* err) { return actionSwitchInput(in, err); });
     handlers.insert("desktop-mode", [](const QVariantMap& in, QString* err) { return actionDesktopMode(in, err); });
     handlers.insert("wait", [](const QVariantMap& in, QString* err) { return actionWait(in, err); });
-    handlers.insert("run-script", [](const QVariantMap& in, QString* err) { return actionRunScript(in, err); });
     handlers.insert("open-folder", [](const QVariantMap& in, QString* err) { return actionOpenTarget(in, "open-folder", err); });
     handlers.insert("open-file", [](const QVariantMap& in, QString* err) { return actionOpenTarget(in, "open-file", err); });
     handlers.insert("open-disc", [](const QVariantMap& in, QString* err) { return actionOpenTarget(in, "open-disc", err); });
@@ -2541,42 +2582,6 @@ ComponentSchema::actionWait(const QVariantMap& input, QString* error)
     if (!std::isfinite(duration) || duration < 50 || duration > 30000 || std::floor(duration) != duration)
         return reject(error, "Wait duration must be 50-30000 ms.");
     QVariantMap result{{"schemaVersion", 1}, {"type", "wait"}, {"duration", static_cast<int>(duration)}};
-    return result;
-}
-
-QVariantMap
-ComponentSchema::actionRunScript(const QVariantMap& input, QString* error)
-{
-    for (auto it = input.cbegin(); it != input.cend(); ++it)
-        if (!QStringList{"schemaVersion", "type", "target", "args", "timeoutMs"}.contains(it.key()))
-            return reject(error, "Script actions contain only script target, arguments and optional timeout.");
-    const auto script = input.value("target").toString().trimmed();
-    if (script.isEmpty() || script.size() > MaxActionTargetSize || script.contains(QChar::Null) ||
-        !QDir::isAbsolutePath(script))
-        return reject(error, "Use an absolute script path without control characters.");
-    QVariantMap result{{"schemaVersion", 1}, {"type", "run-script"}, {"target", script}};
-    if (input.contains("args"))
-    {
-        const auto args = input.value("args");
-        if (args.metaType().id() != QMetaType::QVariantList)
-            return reject(error, "Script arguments must be a list.");
-        QStringList argList;
-        for (const auto& arg : args.toList())
-        {
-            const auto s = arg.toString();
-            if (s.contains(QChar::Null) || s.size() > 1024)
-                return reject(error, "Script arguments must be short strings without control characters.");
-            argList.append(s);
-        }
-        result["args"] = argList;
-    }
-    if (input.contains("timeoutMs"))
-    {
-        const double timeout = input.value("timeoutMs").toDouble();
-        if (!std::isfinite(timeout) || timeout < 1000 || timeout > 300000 || std::floor(timeout) != timeout)
-            return reject(error, "Script timeout must be 1000-300000 ms.");
-        result["timeoutMs"] = static_cast<int>(timeout);
-    }
     return result;
 }
 

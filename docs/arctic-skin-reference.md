@@ -20,18 +20,16 @@ Pinned per assignment requirement #1. Source: official Kodi.tv Omega listing + u
 - Main menu / submenu navigation, hubs, widgets, library view modes, details, context menus, search, playback overlays, Live TV/radio, skin settings.
 - Light/dark coordinated appearances; focus transitions; emphasis and spacing conventions.
 
-## Isolde implementation (this session)
+## Isolde Arctic skin
 
-### Poster reflection (explicit requirement)
-- `src/home/ComponentSchema.cpp`: added presentation validators `reflection` (bool flag), `reflectionHeight` (numeric 0–400), `reflectionOpacity` (numeric 0–1) to the presentation handlers map and `validPresentationNumericField` dispatch.
-- `qml/HomeCard.qml`: added `reflectionEnabled`/`reflectionHeight`/`reflectionOpacity` computed properties; renders a per-card reflection beneath the poster using `ShaderEffectSource` (samples the already-rendered poster texture — no new artwork request) + `ShaderEffect` that mirrors vertically from the poster's lower edge and fades to transparent (`opacity * (1 - y)`). Anchored at `poster.bottom`, clipped to `reflectionHeight`, gated on `poster.visible && poster.loadedSource`. No focus stop / accessible label.
-- `config/studio-defaults.json`: inspector Appearance fields `Poster reflection` (toggle), `Reflection height` (slider 0–200), `Reflection opacity` (slider 0–100%), scoped to `library`/`section` presentation. Reuses the standard scalar/toggle transaction and live preview.
+The Arctic preset uses a bottom navigation row and a scrolling stack of sections. Movies and Continue watching use Kodi-backed poster rows, while an Apps section shows installed apps. The bottom tabs give direct access to Movies, TV Shows, Live TV, Games, and All Apps. Studio can edit the sections, content sources, spacing, and navigation controls.
 
-### Default skin
-- `config/default-home-layout.json`: fresh-profile default (`builtin-default`) re-themed to Arctic dark palette (background #0b0d13, cards #141720, text #e8e6ea, highlight/accent #6ea8d1, tileRoundness 0.14). All original items/categories kept so existing profiles and navigation behavior are retained.
-- `config/skins/arctic.json`: new named built-in skin (schemaVersion-1 wrapper, `{"name","layout","assets","schemaVersion":1}`) with the same Arctic layout; registered as `builtin-arctic` in `HomeLayout::skins()` and `skinSnapshot()` (src/home/HomeSkins.cpp).
-- Existing profiles keep their saved skin/layouts via the normal user-path load; default-home-layout.json is only the fresh-profile default.
+**Show focused movie artwork and details** is available on library shelves in Studio. The page displays the focused shelf's selected title, synopsis, available metadata, and Kodi fanart, with the poster as a fallback. Left and Right select posters within the shelf. Up and Down move between shelves, and each shelf preserves its selection. Kodi still owns the media and playback actions.
 
-### Verification status
-- No local Qt/build tooling on this host (win32, no qmake/cmake/g++), so C++/QML was not compiled locally and `tools/vm-test.ps1` was not run. JSON files validated by parsing. VM verification via the Isolde-Test VM and `ctest --test-dir build --output-on-failure` remains pending.
-- Reflection is off by default (presentation.reflection undefined), so existing offscreen suites are unaffected until a shelf opts in.
+**Featured artwork width** and **Featured artwork height** adjust the hero per shelf. Set both to 100% to fill the page with artwork behind the poster row and navigation. **Featured background** follows the page theme, uses the color chosen in **Featured background color**, or matches the focused artwork. Artwork mode samples the visible image and keeps the theme's underlying lightness for text contrast. Arctic starts in artwork mode.
+
+**Edit component** opens the shelf controls directly. **Show shelf label** reveals the label text field. **Poster width**, **Poster height**, and **Shelf height** set the shelf dimensions, while **Border width** and **Border** in Style set the poster outline. The page's available space constrains the result. From the last component, press Down to reach Arctic's bottom navigation. **Header → Time → Clock color** sets the time color independently of the date.
+
+The media card reserves space below each poster for its reflection. The existing artwork canvas mirrors the painted pixels and fades their alpha, preserving the crop and corners and using the same artwork request. Studio exposes **Poster reflection**, **Reflection height**, and **Reflection opacity** in Appearance. The effect adds no navigation stop.
+
+`config/skins/arctic.json` is a packaged, editable v2 component layout. The fresh-profile launcher uses the Arctic palette with its existing shortcut lineup expressed as v2 components. Saved profiles keep their existing layouts until a skin is applied. The merged arbitrary script action was removed from the layout schema, dispatcher, and editor.

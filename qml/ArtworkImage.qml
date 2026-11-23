@@ -33,17 +33,18 @@ Canvas {
     property real contentScale:1
     property real glowWidth:0
     property real glowOpacity:0.65
-    property real reflectionHeight: 0
-    property real reflectionOpacity: 0
-    onReflectionHeightChanged: requestPaint()
-    onReflectionOpacityChanged: requestPaint()
+    property real reflectionHeight:0
+    property real reflectionOpacity:0
+    property bool featherBackdrop:false
+    property bool sampleBackdropColor:false
+    property var backdropColor:null
     readonly property int status: probe.status
     onSourceChanged:clearAnimation()
     onManagedAssetChanged:clearAnimation()
     onAnimationResolverChanged:clearAnimation()
     onMotionEnabledChanged:clearAnimation()
     onReducedMotionChanged:clearAnimation()
-    onDisplaySourceChanged:{if(loadedSource.toString())unloadImage(loadedSource);loadedSource=displaySource;if(displaySource.toString())loadImage(displaySource);requestPaint()}
+    onDisplaySourceChanged:{backdropColor=null;if(loadedSource.toString())unloadImage(loadedSource);loadedSource=displaySource;if(displaySource.toString())loadImage(displaySource);requestPaint()}
     Component.onDestruction:clearAnimation()
     function clearAnimation(){animation=({});animationFrame=0;animationLoop=0;animationFinished=false;animationAttempted=false;animationError="";if(leasedResolver)leasedResolver.releaseArtworkAnimation(animationOwner);leasedResolver=null}
     function onScreen(){
@@ -85,6 +86,10 @@ Canvas {
     onGlowOpacityChanged:requestPaint()
     onWidthChanged: requestPaint()
     onHeightChanged: requestPaint()
+    onReflectionHeightChanged: requestPaint()
+    onReflectionOpacityChanged: requestPaint()
+    onFeatherBackdropChanged: requestPaint()
+    onSampleBackdropColorChanged: requestPaint()
     onImageLoaded: requestPaint()
     onVisibleChanged:if(visible)requestPaint();else clearAnimation()
     Image { id: probe; source: root.source; visible: false; asynchronous: true; onStatusChanged: root.requestPaint() }
@@ -95,8 +100,8 @@ Canvas {
         c.reset()
         let x = crop ? crop.x : 0, y = crop ? crop.y : 0
         let w = crop ? crop.width : probe.sourceSize.width, h = crop ? crop.height : probe.sourceSize.height
-        const imageHeight=height-reflectionHeight
-        const innerWidth=Math.max(1,width-2*contentInset),innerHeight=Math.max(1,imageHeight-2*contentInset),ratio=innerWidth/innerHeight
+        const artHeight=Math.max(1,height-reflectionHeight)
+        const innerWidth=Math.max(1,width-2*contentInset),innerHeight=Math.max(1,artHeight-2*contentInset),ratio=innerWidth/innerHeight
         let dx=contentInset,dy=contentInset,dw=innerWidth,dh=innerHeight
         if(fit==="contain") {const factor=Math.min(innerWidth/w,innerHeight/h)*contentScale;dw=w*factor;dh=h*factor;dx=contentInset+(innerWidth-dw)*focalX;dy=contentInset+(innerHeight-dh)*focalY}
         else {
@@ -104,7 +109,7 @@ Canvas {
             else { const cut = w/ratio; y += (h-cut)*focalY; h = cut }
             const zw=w/zoom,zh=h/zoom;x+=(w-zw)*focalX;y+=(h-zh)*focalY;w=zw;h=zh
         }
-        c.save(); c.beginPath(); c.roundedRect(0,0,width,imageHeight,Math.min(radius,width/2),Math.min(radius,imageHeight/2)); c.clip()
+        c.save(); c.beginPath(); c.roundedRect(0,0,width,artHeight,Math.min(radius,width/2),Math.min(radius,artHeight/2)); c.clip()
         // Qt's raster Canvas rounds a source crop below one pixel to an empty
         // QImage. Transform the whole image instead, with the same output clip.
         // The transform avoids preparing an oversized intermediate bitmap.
@@ -138,22 +143,52 @@ Canvas {
             c.putImageData(foreground,0,0,0,0,foreground.width,foreground.height)
         } else draw(0,0)
         c.restore()
-        // Reuse the loaded artwork and crop so software-rendered previews show the same reflection.
-        if (reflectionHeight > 0 && reflectionOpacity > 0) {
-            c.save()
-            c.beginPath(); c.rect(0,imageHeight,width,reflectionHeight); c.clip()
-            c.save()
-            c.translate(0,2*imageHeight); c.scale(1,-1)
-            c.beginPath(); c.roundedRect(0,0,width,imageHeight,Math.min(radius,width/2),Math.min(radius,imageHeight/2)); c.clip()
-            draw(0,0)
-            c.restore()
-            const fade = c.createLinearGradient(0,imageHeight,0,height)
-            fade.addColorStop(0,Qt.rgba(0,0,0,reflectionOpacity))
-            fade.addColorStop(1,"transparent")
-            c.globalCompositeOperation="destination-in"
-            c.fillStyle=fade
-            c.fillRect(0,imageHeight,width,reflectionHeight)
-            c.restore()
+        if(sampleBackdropColor){
+            // Read the sample region once so a full-page canvas does not repeatedly flush to the CPU.
+            const left=Math.floor(width*.2),top=Math.floor(artHeight*.3)
+            const right=Math.floor(width*.8),bottom=Math.floor(artHeight*.7)
+            const region=c.getImageData(left,top,right-left+1,bottom-top+1)
+            const pixels=region.data
+            let red=0,green=0,blue=0,weight=0
+            for(const x of [.2,.35,.5,.65,.8])for(const y of [.3,.5,.7]){
+                const offset=((Math.floor(artHeight*y)-top)*region.width+Math.floor(width*x)-left)*4
+                const contribution=(pixels[offset+3] || 0)/255
+                red+=(pixels[offset] || 0)*contribution;green+=(pixels[offset+1] || 0)*contribution;blue+=(pixels[offset+2] || 0)*contribution
+                weight+=contribution
+            }
+            backdropColor=weight?Qt.rgba(red/(255*weight),green/(255*weight),blue/(255*weight),1):null
+        }
+        if(featherBackdrop){
+            // Fade into the page through transparency so the underlying theme or wallpaper shows through.
+            const side=c.createLinearGradient(0,0,width,0)
+            side.addColorStop(0,"black");side.addColorStop(.55,"transparent");side.addColorStop(.88,"transparent");side.addColorStop(1,"black")
+            const edge=c.createLinearGradient(0,0,0,height)
+            edge.addColorStop(0,"black");edge.addColorStop(.17,"transparent");edge.addColorStop(.63,"transparent");edge.addColorStop(1,"black")
+            c.globalCompositeOperation="destination-out"
+            c.fillStyle=side;c.fillRect(0,0,width,height)
+            c.fillStyle=edge;c.fillRect(0,0,width,height)
+            c.globalCompositeOperation="source-over"
+        }
+        if(reflectionHeight>0 && reflectionOpacity>0){
+            // Mirror just the painted bottom strip so the crop and corners stay identical.
+            // This also works on Qt Quick's software renderer.
+            const top=Math.ceil(artHeight),rows=Math.min(Math.floor(height)-top,Math.floor(artHeight))
+            const columns=Math.floor(width)
+            if(rows<1 || columns<1)return
+            const source=c.getImageData(0,top-rows,columns,rows)
+            const reflected=c.createImageData(columns,rows)
+            const originalPixels=source.data, pixels=reflected.data
+            for(let y=0;y<rows;++y){
+                const alpha=reflectionOpacity*(1-y/rows)
+                for(let x=0;x<columns;++x){
+                    const from=((rows-1-y)*columns+x)*4, to=(y*columns+x)*4
+                    pixels[to]=originalPixels[from]
+                    pixels[to+1]=originalPixels[from+1]
+                    pixels[to+2]=originalPixels[from+2]
+                    pixels[to+3]=Math.round(originalPixels[from+3]*alpha)
+                }
+            }
+            c.putImageData(reflected,0,top,0,0,columns,rows)
         }
     }
 }

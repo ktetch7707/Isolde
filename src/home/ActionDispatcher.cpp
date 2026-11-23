@@ -1,6 +1,5 @@
 #include <QCoreApplication>
 #include <QDateTime>
-#include <QProcess>
 #include <QScopedValueRollback>
 #include <QTimer>
 #include <algorithm>
@@ -515,43 +514,6 @@ ActionDispatcher::dispatchSingleAction(const QVariantMap& value, const QString& 
         else
         {
             emit captureSessionRequested(input, originId);
-            accepted = true;
-        }
-    }
-    else if (type == "run-script")
-    {
-        const auto script = value.value("target").toString().trimmed();
-        const auto argsValue = value.value("args");
-        QStringList args;
-        if (argsValue.metaType().id() == QMetaType::QVariantList)
-        {
-            for (const auto& arg : argsValue.toList())
-                args.append(arg.toString());
-        }
-        const int timeoutMs = value.value("timeoutMs", 30000).toInt();
-        auto* process = new QProcess(this);
-        connect(process, &QProcess::finished, this, [this, process, script](int code, QProcess::ExitStatus status)
-        {
-            process->deleteLater();
-            if (code != 0 || status != QProcess::NormalExit)
-                emit rejected(tr("Script %1 exited with code %2.").arg(script).arg(code));
-        });
-        connect(process, &QProcess::errorOccurred, this, [this, process, script](QProcess::ProcessError error)
-        {
-            process->deleteLater();
-            if (error == QProcess::FailedToStart)
-                emit rejected(tr("Script %1 could not be started.").arg(script));
-        });
-        QTimer::singleShot(timeoutMs, process, [process]() { if (process->state() == QProcess::Running) process->kill(); });
-        process->start(script, args);
-        if (!process->waitForStarted(5000))
-        {
-            process->kill();
-            process->deleteLater();
-            emit rejected(tr("Script %1 failed to start within 5 seconds.").arg(script));
-        }
-        else
-        {
             accepted = true;
         }
     }
