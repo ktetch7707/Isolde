@@ -76,6 +76,18 @@ Rectangle {
         Text { text: setupState.error; color: "#FFB4A9"; width: parent.width; wrapMode: Text.WordWrap; font.pixelSize: 17; visible: text.length > 0 }
         Text { text: root.adjusting ? "Adjust with your remote. Esc / Back returns to setup navigation." : "← → choose    Enter select    Esc / Back previous step"; color: "#91A0BC"; font.pixelSize: 16 }
         Row {
+            visible: setupState.step === 7
+            spacing: 16
+            Rectangle {
+                width: 34; height: 34; radius: 8
+                color: setupState.autostartEnabled ? "#D5B083" : "#1C2940"
+                border.width: 1; border.color: "#D5B083"
+                Text { anchors.centerIn: parent; text: setupState.autostartEnabled ? "✓" : ""; color: "#080C18"; font.pixelSize: 22 }
+                MouseArea { anchors.fill: parent; onClicked: setupState.setAutostartEnabled(!setupState.autostartEnabled) }
+                Text { anchors.left: parent.right; anchors.leftMargin: 12; anchors.verticalCenter: parent.verticalCenter; text: "Start Isolde automatically at login"; color: "#B9C5D9"; font.pixelSize: 18 }
+            }
+        }
+        Row {
             spacing: 16
             Repeater {
                 model: ["Back", "Adjust settings", setupState.step === 7 ? "Start Isolde" : "Continue"]
