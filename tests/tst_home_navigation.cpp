@@ -90,6 +90,7 @@ class HomeNavigationTests : public QObject
     appearancePreviewCancelAndApply();
     void
     composedReferenceNavigationAndGeometry();
+    void placedMenuReachesAdjacentControls();
     void
     pastelReferenceNavigationAndGeometry();
     void
@@ -897,8 +898,9 @@ HomeNavigationTests::skinsAndDesignAreReachableFromSettings()
     QVERIFY(command(InputManager::Confirm));
     auto* keyboard = skins->findChild<QObject*>("skinNameKeyboard");
     QVERIFY(keyboard);
+    const auto skinCount = home.skins().size();
     QVERIFY(QMetaObject::invokeMethod(keyboard, "accepted", Q_ARG(QString, QString("My clouds"))));
-    QCOMPARE(home.skins().size(), 8);
+    QCOMPARE(home.skins().size(), skinCount + 1);
     const auto id = home.skins().last().toMap()["id"].toString();
     QVERIFY(command(InputManager::Back));
     QVERIFY(!root->property("editing").toBool());
@@ -2244,6 +2246,67 @@ HomeNavigationTests::pastelReferenceNavigationAndGeometry()
     root->setProperty("wallpaperSource", home.wallpaperSource());
     QTRY_VERIFY(!root->property("hasWallpaper").toBool()); // fallback keeps the light palette readable
 }
+// A vertical menu spans several grid rows, so its adjacent controls need not share its origin row.
+void HomeNavigationTests::placedMenuReachesAdjacentControls()
+{
+    InputManager input;
+    QQmlEngine engine;
+    engine.rootContext()->setContextProperty("inputManager", &input);
+    engine.rootContext()->setContextProperty("isoldeVersion", "test");
+    QQmlComponent component(&engine, QUrl::fromLocalFile(QStringLiteral(HOME_QML)));
+    QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+    const QVariantMap grid{{"mode", "screen"}, {"columns", 8}, {"rows", 6}};
+    QVariantList items, placements;
+    // Keep the renderer's item and placement inputs in sync as the layout model would.
+    const auto add = [&](const QString& id, const QString& type, const QString& family,
+                         const QVariantMap& placement, const QVariantList& actions)
+    {
+        items.append(QVariantMap{{"id", id}, {"name", id}, {"componentType", type}, {"family", family},
+                                 {"placement", placement}, {"actions", actions}});
+        placements.append(QVariantMap{{"id", id}, {"placement", placement}});
+    };
+    add("pages", "container", "page-menu", {{"x", 0}, {"y", 0}, {"width", 2}, {"height", 5}}, {});
+    add("search", "button", "", {{"x", 2}, {"y", 4}, {"width", 2}, {"height", 1}},
+        {QVariantMap{{"type", "open-search"}}});
+    add("settings", "button", "", {{"x", 2}, {"y", 5}, {"width", 2}, {"height", 1}},
+        {QVariantMap{{"type", "settings"}, {"section", -1}}});
+    const QVariantList pages{QVariantMap{{"name", "Home"}, {"id", ""}},
+                             QVariantMap{{"name", "Movies"}, {"id", "movies"}},
+                             QVariantMap{{"name", "Apps"}, {"id", "apps"}}};
+    std::unique_ptr<QObject> root(component.createWithInitialProperties({
+        {"items", items}, {"sections", QVariantList{}}, {"grid", grid}, {"placements", placements}, {"menuPages", pages},
+        {"brandVisible", false}, {"backgroundStart", QColor("#101010")}, {"backgroundEnd", QColor("#101010")},
+        {"tileRoundness", 0.18}, {"internetAvailable", true}, {"localNetworkAvailable", true},
+        {"hasContextualSources", false},
+        {"composition", QVariantMap{{"enabled", true}, {"grid", grid}}}, {"width", 1280}, {"height", 720}}));
+    QVERIFY2(root, qPrintable(component.errorString()));
+    auto* composed = root->findChild<QObject*>("composedHome");
+    QVERIFY(composed);
+    QTRY_VERIFY(composed->property("widgets").value<QJSValue>().property("pages").isObject());
+    const auto menu = composed->property("widgets").value<QJSValue>().property("pages").toQObject();
+    QSignalSpy activated(root.get(), SIGNAL(actionActivated(QVariant,QString)));
+    // Send the same commands as the remote and check the component that receives Confirm.
+    const auto command = [&](int value)
+    {
+        return QMetaObject::invokeMethod(root.get(), "handleCommand", Q_ARG(QVariant, value));
+    };
+    QVERIFY(command(InputManager::NavigateDown));
+    QVERIFY(command(InputManager::NavigateDown));
+    QCOMPARE(menu->property("selected").toInt(), 2);
+    QVERIFY(command(InputManager::NavigateRight));
+    QCOMPARE(root->property("focusedItemId").toString(), QString("search"));
+    QVERIFY(command(InputManager::Confirm));
+    QCOMPARE(activated.size(), 1);
+    QCOMPARE(activated.last()[1].toString(), QString("search"));
+    QVERIFY(command(InputManager::NavigateDown));
+    QCOMPARE(root->property("focusedItemId").toString(), QString("settings"));
+    QVERIFY(command(InputManager::NavigateUp));
+    QCOMPARE(root->property("focusedItemId").toString(), QString("search"));
+    QVERIFY(command(InputManager::NavigateLeft));
+    QCOMPARE(root->property("focusedItemId").toString(), QString("pages"));
+    QCOMPARE(menu->property("selected").toInt(), 2);
+}
+
 void
 HomeNavigationTests::televisionLibraryRemoteFlow()
 {

@@ -36,6 +36,45 @@ Item {
     readonly property int selectedIndex: visibleEntries.findIndex(app => app.id === selectedId)
     SurfacePalette { id: theme; appearance: root.appearance }
 
+    // Intercept remote/keyboard arrow keys at grid edges and from controls,
+    // so focus never leaks to Settings or other off-grid elements. GridView's
+    // native Up/Down/Left/Right within the grid is left untouched.
+    Keys.onPressed: function(event) {
+        const key = event.key
+        // From any control: arrow keys go through handleCommand (to grid, or between controls)
+        if (focusArea !== "grid") {
+            if (key === Qt.Key_Up) { root.handleCommand(inputManager.navigateUp); event.accepted = true; return }
+            if (key === Qt.Key_Down) { root.handleCommand(inputManager.navigateDown); event.accepted = true; return }
+            if (key === Qt.Key_Left) { root.handleCommand(inputManager.navigateLeft); event.accepted = true; return }
+            if (key === Qt.Key_Right) { root.handleCommand(inputManager.navigateRight); event.accepted = true; return }
+        }
+        // From grid edges: prevent focus leak to Settings/controls
+        if (focusArea === "grid" && visibleEntries.length > 0) {
+            const idx = visibleEntries.findIndex(app => app.id === selectedId)
+            const step = layoutMode === "list" ? 1 : columns
+            const lastIdx = visibleEntries.length - 1
+            if (key === Qt.Key_Right && idx === lastIdx) {
+                root.handleCommand(inputManager.navigateRight); event.accepted = true; return
+            }
+            if (key === Qt.Key_Left && idx === 0) {
+                root.handleCommand(inputManager.navigateLeft); event.accepted = true; return
+            }
+            if (key === Qt.Key_Down && idx >= visibleEntries.length - step) {
+                root.handleCommand(inputManager.navigateDown); event.accepted = true; return
+            }
+            if (key === Qt.Key_Up && idx < step) {
+                root.handleCommand(inputManager.navigateUp); event.accepted = true; return
+            }
+        }
+        // Confirm/Back from anywhere
+        if (key === Qt.Key_Select || key === Qt.Key_Return || key === Qt.Key_Enter) {
+            root.handleCommand(inputManager.confirm); event.accepted = true
+        }
+        else if (key === Qt.Key_Back) {
+            root.handleCommand(inputManager.back); event.accepted = true
+        }
+    }
+
     signal launchRequested(string appId)
     signal storeRequested()
     signal settingsRequested()
@@ -148,36 +187,38 @@ Item {
             searchRequested()
             return true
         }
-        if (focusArea === "filter" || focusArea === "favorites" || focusArea === "store" || focusArea === "settings") {
-            if (command === inputManager.navigateLeft || command === inputManager.navigateRight) {
-                const controls = (galleryPresentation.filterEnabled === false ? [] : ["filter"])
-                    .concat(galleryPresentation.favoritesEnabled ? ["favorites"] : [], ["store", "settings"])
-                const index = controls.indexOf(focusArea)
-                focusArea = controls[Math.max(0, Math.min(controls.length - 1,
-                    index + (command === inputManager.navigateRight ? 1 : -1)))]
-                return true
-            }
-            if (command === inputManager.navigateDown) {
-                focusArea = "grid"
-                if (!selectedId && visibleEntries.length) selectedId = visibleEntries[0].id
-                return true
-            }
-            if (command === inputManager.confirm) {
-                if (focusArea === "filter") {
-                    keyboard.value = filterText
-                    keyboard.selectedIndex = 0
-                    keyboardOpen = true
-                } else if (focusArea === "favorites") {
-                    favoritesOnly = !favoritesOnly
-                    if (favoritesOnly && !visibleEntries.some(app => app.id === selectedId)) selectedId = visibleEntries.length ? visibleEntries[0].id : ""
-                } else if (focusArea === "store") {
-                    storeRequested()
-                } else {
-                    settingsRequested()
-                }
-                return true
+        if (focusArea === "filter" || focusArea === "favorites" || focusArea === "store" || focusArea === "settings" || focusArea === "search") {
+        if (command === inputManager.navigateLeft || command === inputManager.navigateRight) {
+            const controls = (galleryPresentation.filterEnabled === false ? [] : ["filter"])
+                .concat(galleryPresentation.favoritesEnabled ? ["favorites"] : [], ["store", "settings", "search"])
+            const index = controls.indexOf(focusArea)
+            focusArea = controls[Math.max(0, Math.min(controls.length - 1,
+                index + (command === inputManager.navigateRight ? 1 : -1)))]
+            return true
+        }
+        if (command === inputManager.navigateDown) {
+            focusArea = "grid"
+            if (!selectedId && visibleEntries.length) selectedId = visibleEntries[0].id
+            return true
+        }
+        if (command === inputManager.confirm) {
+            if (focusArea === "filter") {
+                keyboard.value = filterText
+                keyboard.selectedIndex = 0
+                keyboardOpen = true
+            } else if (focusArea === "favorites") {
+                favoritesOnly = !favoritesOnly
+                if (favoritesOnly && !visibleEntries.some(app => app.id === selectedId)) selectedId = visibleEntries.length ? visibleEntries[0].id : ""
+            } else if (focusArea === "store") {
+                storeRequested()
+            } else if (focusArea === "search") {
+                searchRequested()
+            } else {
+                settingsRequested()
             }
             return true
+        }
+        return true
         }
         if (command === inputManager.navigateUp) {
             const index = selectedIndex
@@ -196,8 +237,18 @@ Item {
         }
         if (command === inputManager.navigateLeft || command === inputManager.navigateRight) {
             if (!visibleEntries.length) return true
-            selectAt(Math.max(0, Math.min(visibleEntries.length - 1,
-                Math.max(0, selectedIndex) + (command === inputManager.navigateRight ? 1 : -1))))
+            const controls = (galleryPresentation.filterEnabled === false ? [] : ["filter"])
+                .concat(galleryPresentation.favoritesEnabled ? ["favorites"] : [], ["store", "settings"])
+            const nextIndex = Math.max(0, selectedIndex) + (command === inputManager.navigateRight ? 1 : -1)
+            if (command === inputManager.navigateRight && nextIndex >= visibleEntries.length) {
+                focusArea = controls[controls.length - 1]
+                return true
+            }
+            if (command === inputManager.navigateLeft && nextIndex < 0) {
+                focusArea = controls[0]
+                return true
+            }
+            selectAt(Math.max(0, Math.min(visibleEntries.length - 1, nextIndex)))
             return true
         }
         if (command === inputManager.confirm) {
@@ -312,6 +363,16 @@ Item {
                 border.width: root.focusArea === "settings" ? 3 : 1
                 border.color: root.focusArea === "settings" ? theme.focus : theme.outline
                 Text { anchors.centerIn: parent; text: "Settings"; color: theme.text; font.pixelSize: 18 * theme.textScale }
+            }
+            Rectangle {
+                width: parent.width * 0.12
+                height: 56
+                anchors.verticalCenter: parent.verticalCenter
+                radius: theme.radius
+                color: root.focusArea === "search" ? theme.selected : theme.surface
+                border.width: root.focusArea === "search" ? 3 : 1
+                border.color: root.focusArea === "search" ? theme.focus : theme.outline
+                Text { anchors.centerIn: parent; text: "Search"; color: theme.text; font.pixelSize: 18 * theme.textScale }
             }
         }
         Text {

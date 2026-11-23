@@ -1,6 +1,8 @@
 # Isolde Agent Backlog — first-product software completion
 Location: `docs/agent-backlog.md`. Persistent entrypoint: `AGENTS.md`.
 
+Arctic Home focus repair: directional navigation compares placed component footprints, so Right from a tall page menu reaches an adjacent Search control. Isolde-Test `arctic-spatial-focus-c` passed Home and Studio navigation, including Apps → Search → Settings and the reverse route, using an authored placement fixture. The same run verified the App Gallery QML key-handler repair. Evidence: `build/vm-oracle/arctic-spatial-focus-c/report/LastTest.log`. No acceptance percentage change or deployment.
+
 November 20 Arctic merge review: Isolde-Test run `arctic-merge-edb2df4` built directly from `origin/main` at `edb2df4`. Compilation stopped at `ComponentSchema.cpp` because `actionRunScript` has no namespace declaration. CTest and visual checks did not run. Source review also found an undefined `poster` ID and inline GLSL in Qt 6 `ShaderEffect`, alongside v1 `items` in the merged layouts and a layout action that executes arbitrary programs. Evidence: `build/vm-oracle/arctic-merge-edb2df4/report/build.log`.
 
 November 20 Studio Button shelf: reuse the app row renderer for individually authored shortcuts, with Pastel-inspired round cards and a shelf-specific overflow menu. Isolde-Test `studio-button-shelf-b` verified HDMI shortcut authoring, sequential action routing, focus return, and unchanged profile bytes during Try. `studio-button-shelf-final` passed 67/67 CTests, including existing overflow and ordered placement checks. The staged Lounge/Pastel visual run was blocked at guest accessibility preflight before capture.

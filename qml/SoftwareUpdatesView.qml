@@ -6,15 +6,25 @@ Item {
     property int selectedIndex: 0
     SurfacePalette { id: shell; appearance: root.appearance }
     readonly property var updater: typeof softwareUpdates !== "undefined" ? softwareUpdates : null
-    readonly property var actions: [
-        { name: qsTr("Check for updates"), enabled: updater && !updater.checking },
-        { name: qsTr("Dismiss notification"), enabled: updater && updater.available }
-    ]
+    readonly property var actions: (function () {
+        const list = [];
+        if (updater && !updater.checking)
+            list.push({ name: qsTr("Check for updates"), enabled: true });
+        if (updater && updater.available) {
+            list.push({ name: qsTr("Install update"), enabled: updater.available && !updater.installing });
+            list.push({ name: qsTr("Dismiss notification"), enabled: true });
+        }
+        if (updater && updater.installing)
+            list.push({ name: qsTr("Installing…"), enabled: false });
+        return list;
+    })()
 
     function activate(index) {
         if (!updater || !actions[index].enabled) return
         if (index === 0) updater.check()
-        else updater.dismiss()
+        else if (actions[index].name === qsTr("Install update")) updater.install()
+        else if (actions[index].name === qsTr("Dismiss notification")) updater.dismiss()
+        else if (actions[index].name === qsTr("Roll back")) updater.rollback()
     }
     function handleCommand(command) {
         if (command === inputManager.navigateUp) selectedIndex = Math.max(0, selectedIndex - 1)
@@ -29,6 +39,16 @@ Item {
             scroll.contentY = Math.max(0, row.y + row.height - scroll.height)
     }
     onSelectedIndexChanged: Qt.callLater(revealSelection)
+    onActionsChanged: selectedIndex = Math.min(selectedIndex, actions.length - 1)
+
+    Connections {
+        target: updater
+        onInstallFinished: {
+            if (success) {
+                selectedIndex = 0
+            }
+        }
+    }
 
     Flickable {
         id: scroll
@@ -44,7 +64,6 @@ Item {
             Text { width: parent.width; text: qsTr("Installed version: ") + isoldeVersion; color: shell.text; font.family: shell.fontFamily; font.pixelSize: 20 * shell.textScale; wrapMode: Text.Wrap }
             Text { width: parent.width; visible: root.updater && root.updater.latestVersion !== ""; text: qsTr("Candidate version: ") + (root.updater ? root.updater.latestVersion : ""); color: shell.text; font.family: shell.fontFamily; font.pixelSize: 20 * shell.textScale; wrapMode: Text.Wrap }
             Text { width: parent.width; text: root.updater ? root.updater.status : qsTr("Update service unavailable."); color: shell.muted; font.family: shell.fontFamily; font.pixelSize: 18 * shell.textScale; wrapMode: Text.Wrap }
-            Text { width: parent.width; text: qsTr("Download and installation are not yet available. Release authentication and recovery must be configured first."); color: shell.muted; font.family: shell.fontFamily; font.pixelSize: 18 * shell.textScale; wrapMode: Text.Wrap }
             Repeater {
                 id: actionRows
                 model: root.actions

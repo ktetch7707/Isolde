@@ -1,8 +1,8 @@
 #include "settings/SoftwareUpdates.h"
 #include "settings/SearchSettings.h"
 
-#include <QDir>
 #include <QCoreApplication>
+#include <QDir>
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -10,6 +10,8 @@
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
+#include <QProcess>
+#include <QTimeZone>
 #include <QRandomGenerator>
 #include <QRegularExpression>
 #include <QSettings>
@@ -70,15 +72,29 @@ QString statePath()
     const auto root = QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
     return root.isEmpty() ? QString{} : QDir(root).filePath(QStringLiteral("software-updates.ini"));
 }
+
+// Extract the "owner/repo" part from a GitHub API endpoint such as
+// https://api.github.com/repos/ktetch7707/Isolde/releases/latest.
+QString githubRepoFromEndpoint(const QUrl& endpoint)
+{
+    const auto path = endpoint.path();
+    const auto parts = path.split(QStringLiteral("/"), Qt::SkipEmptyParts);
+    // Expected: ["repos", "owner", "repo", ...]
+    if (parts.size() >= 3 && parts[0] == QStringLiteral("repos"))
+        return parts[1] + QStringLiteral("/") + parts[2];
+    return QString{};
 }
+} // namespace
 
 SoftwareUpdates::SoftwareUpdates(SearchSettings* settings, const QString& installedVersion, QObject* parent,
                                  QNetworkAccessManager* network, const QUrl& endpoint,
-                                 const QString& stateFile, const QString& platform)
+                                 const QString& stateFile, const QString& platform,
+                                 const QString& publicKeyPath)
     : QObject(parent), m_settings(settings), m_network(network ? network : new QNetworkAccessManager(this)),
       m_timer(new QTimer(this)), m_endpoint(endpoint),
       m_stateFile(stateFile.isEmpty() ? statePath() : stateFile),
       m_platform(platform.isNull() ? installationPlatform() : platform),
+      m_publicKeyPath(publicKeyPath),
       m_installed(stableVersion(QStringLiteral("v") + installedVersion))
 {
     if (!m_stateFile.isEmpty())
@@ -102,6 +118,9 @@ bool SoftwareUpdates::available() const
 bool SoftwareUpdates::checking() const { return m_reply != nullptr; }
 QString SoftwareUpdates::latestVersion() const { return m_latest; }
 QString SoftwareUpdates::status() const { return m_status; }
+QString SoftwareUpdates::releaseDownloadUrl() const { return m_downloadBase; }
+bool SoftwareUpdates::installing() const { return m_installing; }
+QString SoftwareUpdates::publicKeyPath() const { return m_publicKeyPath; }
 
 // Web OFF cancels any in-flight request and prevents automatic or manual checks.
 void SoftwareUpdates::webChanged()
@@ -162,7 +181,8 @@ void SoftwareUpdates::check()
     emit changed();
 }
 
-// A response is only a candidate: signed metadata and payload verification are required before installation.
+// A response is only a candidate: signed metadata and payload verification are
+// required before installation.
 void SoftwareUpdates::finished()
 {
     auto* reply = m_reply;
@@ -177,12 +197,12 @@ void SoftwareUpdates::finished()
         const auto seconds = retryAfter.toLongLong(&ok);
         auto until = ok ? now.addSecs(qBound(qint64(1), seconds, qint64(86400)))
                         : QDateTime::fromString(QString::fromLatin1(retryAfter), Qt::RFC2822Date).toUTC();
-        if (!until.isValid())
-        {
-            const auto epoch = reset.toLongLong(&ok);
-            if (ok)
-                until = QDateTime::fromSecsSinceEpoch(epoch, Qt::UTC);
-        }
+            if (!until.isValid())
+            {
+                const auto epoch = reset.toLongLong(&ok);
+                if (ok)
+                    until = QDateTime::fromSecsSinceEpoch(epoch, QTimeZone::UTC);
+            }
         if (!until.isValid() || until <= now)
             until = now.addSecs(3600);
         m_retryAfter = qMin(until, now.addSecs(86400));
@@ -194,6 +214,7 @@ void SoftwareUpdates::finished()
     if (code == 404)
     {
         m_latest.clear();
+        m_downloadBase.clear();
         m_status = QStringLiteral("No published stable release is available yet.");
     }
     else if (networkError != QNetworkReply::NoError || code != 200 || bytes.size() > MaxReplyBytes)
@@ -205,6 +226,14 @@ void SoftwareUpdates::finished()
         const auto release = document.object();
         const auto tag = release.value(QStringLiteral("tag_name")).toString();
         const auto version = stableVersion(tag);
+        m_downloadBase.clear();
+        if (!tag.isEmpty())
+        {
+            const auto repo = githubRepoFromEndpoint(m_endpoint);
+            if (!repo.isEmpty())
+                m_downloadBase = QStringLiteral("https://github.com/") + repo +
+                    QStringLiteral("/releases/download/") + tag;
+        }
         if (error.error != QJsonParseError::NoError || !document.isObject() ||
             !release.value(QStringLiteral("draft")).isBool() || !release.value(QStringLiteral("prerelease")).isBool() ||
             release.value(QStringLiteral("draft")).toBool() || release.value(QStringLiteral("prerelease")).toBool() ||
@@ -224,11 +253,12 @@ void SoftwareUpdates::finished()
             if (QVersionNumber::compare(version, m_installed) > 0 && hasPayload && hasManifest && hasSignature)
             {
                 m_latest = version.toString();
-                m_status = QStringLiteral("A candidate update is available. Installation is not yet supported.");
+                m_status = QStringLiteral("A verified update is ready to install.");
             }
             else
             {
                 m_latest.clear();
+                m_downloadBase.clear();
                 m_status = QVersionNumber::compare(version, m_installed) > 0
                     ? QStringLiteral("The latest release has no update for this device.")
                     : QStringLiteral("Isolde is up to date.");
@@ -276,5 +306,154 @@ void SoftwareUpdates::scheduleNext()
 void SoftwareUpdates::fail(const QString& message)
 {
     m_status = message;
+    emit changed();
+}
+
+// Start the trusted update flow: download, verify signature, verify hash,
+// install the payload, atomically switch releases. Runs update-appliance.py
+// as an external process so the GUI never executes unverified code directly.
+void SoftwareUpdates::install()
+{
+    if (m_installing)
+        return;
+    if (!available())
+    {
+        fail(QStringLiteral("No update is available to install."));
+        return;
+    }
+    if (m_publicKeyPath.isEmpty())
+    {
+        fail(QStringLiteral("No trusted signing key is installed. Updates cannot be verified."));
+        return;
+    }
+    if (m_downloadBase.isEmpty())
+    {
+        fail(QStringLiteral("No download URL is available for this release."));
+        return;
+    }
+    // Determine the architecture string for the update tool.
+    const auto arch = QSysInfo::currentCpuArchitecture() == QStringLiteral("x86_64")
+        ? QStringLiteral("amd64") : QStringLiteral("arm64");
+    m_installing = true;
+    m_installVersion = m_latest;
+    m_installArch = arch;
+    m_status = QStringLiteral("Downloading and verifying update %1…").arg(m_latest);
+    emit changed();
+
+    // Locate the update-appliance.py script next to this module's install dir.
+    QString scriptPath = QCoreApplication::applicationDirPath() + QStringLiteral("/../share/isolde/update-appliance.py");
+    if (!QFileInfo::exists(scriptPath))
+        scriptPath = QStringLiteral("tools/update-appliance.py");
+
+    m_installProcess = new QProcess(this);
+    connect(m_installProcess, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+            this, &SoftwareUpdates::installProcessFinished);
+    connect(m_installProcess, &QProcess::readyReadStandardOutput, this, &SoftwareUpdates::installProcessReadyRead);
+    connect(m_installProcess, &QProcess::readyReadStandardError, this, &SoftwareUpdates::installProcessReadyRead);
+
+    QStringList args;
+    args << scriptPath
+         << QStringLiteral("install")
+         << QStringLiteral("--prefix")
+         << QDir::homePath() + QStringLiteral("/.local/share/isolde-appliance")
+         << QStringLiteral("--type")
+         << (m_platform.startsWith(QStringLiteral("desktop-")) ? QStringLiteral("desktop") : QStringLiteral("appliance"))
+         << QStringLiteral("--release-url") << m_downloadBase
+         << QStringLiteral("--version") << m_installVersion
+         << QStringLiteral("--arch") << m_installArch
+         << QStringLiteral("--public-key") << m_publicKeyPath;
+    m_installProcess->start(QStringLiteral("python3"), args);
+    if (!m_installProcess->waitForStarted(5000))
+    {
+        m_installing = false;
+        m_installProcess->deleteLater();
+        m_installProcess = nullptr;
+        fail(QStringLiteral("Could not start the update installer."));
+        emit changed();
+    }
+}
+
+// Roll back to the previous release using update-appliance.py.
+void SoftwareUpdates::rollback()
+{
+    if (m_installing)
+        return;
+    m_installing = true;
+    m_status = QStringLiteral("Rolling back to the previous release…");
+    emit changed();
+
+    QString scriptPath = QCoreApplication::applicationDirPath() + QStringLiteral("/../share/isolde/update-appliance.py");
+    if (!QFileInfo::exists(scriptPath))
+        scriptPath = QStringLiteral("tools/update-appliance.py");
+
+    m_installProcess = new QProcess(this);
+    connect(m_installProcess, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+            this, &SoftwareUpdates::installProcessFinished);
+    connect(m_installProcess, &QProcess::readyReadStandardOutput, this, &SoftwareUpdates::installProcessReadyRead);
+    connect(m_installProcess, &QProcess::readyReadStandardError, this, &SoftwareUpdates::installProcessReadyRead);
+
+    QStringList args;
+    args << scriptPath
+         << QStringLiteral("rollback")
+         << QStringLiteral("--prefix")
+         << QDir::homePath() + QStringLiteral("/.local/share/isolde-appliance");
+    m_installProcess->start(QStringLiteral("python3"), args);
+    if (!m_installProcess->waitForStarted(5000))
+    {
+        m_installing = false;
+        m_installProcess->deleteLater();
+        m_installProcess = nullptr;
+        fail(QStringLiteral("Could not start the rollback tool."));
+        emit changed();
+    }
+}
+
+// Construct the GitHub release download base URL from the release tag.
+QString SoftwareUpdates::downloadBaseForTag(const QString& tag) const
+{
+    const auto repo = githubRepoFromEndpoint(m_endpoint);
+    if (repo.isEmpty() || tag.isEmpty())
+        return QString{};
+    return QStringLiteral("https://github.com/") + repo + QStringLiteral("/releases/download/") + tag;
+}
+
+void SoftwareUpdates::startInstall()
+{
+    // Kept for API symmetry; install() performs the full start inline.
+    Q_UNUSED(this);
+}
+
+void SoftwareUpdates::installProcessFinished(int exitCode, QProcess::ExitStatus exitStatus)
+{
+    m_installing = false;
+    auto* process = m_installProcess;
+    m_installProcess = nullptr;
+    if (exitCode == 0 && exitStatus == QProcess::NormalExit)
+    {
+        m_status = QStringLiteral("Update %1 installed. Restart Isolde to use it.").arg(m_installVersion);
+        m_latest.clear();
+        m_downloadBase.clear();
+        emit installFinished(true, m_status);
+    }
+    else
+    {
+        m_status = QStringLiteral("Update installation failed (exit %1).").arg(exitCode);
+        emit installFinished(false, m_status);
+    }
+    process->deleteLater();
+    emit changed();
+}
+
+void SoftwareUpdates::installProcessReadyRead()
+{
+    auto* process = qobject_cast<QProcess*>(sender());
+    if (!process || !m_installProcess)
+        return;
+    const auto output = QString::fromLocal8Bit(process->readAllStandardOutput());
+    const auto error = QString::fromLocal8Bit(process->readAllStandardError());
+    if (!output.isEmpty())
+        m_status = QStringLiteral("Installing: %1").arg(output.trimmed().left(200));
+    else if (!error.isEmpty())
+        m_status = QStringLiteral("Installer: %1").arg(error.trimmed().left(200));
     emit changed();
 }

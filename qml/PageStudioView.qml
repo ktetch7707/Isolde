@@ -169,6 +169,7 @@ Item {
     readonly property var contextActions: ["Move", "Resize", "Rename", "Duplicate", "Remove", "Text", "Surface opacity", "Corners", "Position and size","Hide / show","Lock / unlock",gridMode?"Reading order before…":"Move before…",gridMode?"Reading order after…":"Move after…","Move to section…","Edit group contents","Ungroup","Move to group…","Select / deselect for grouping","Group internal layout…"]
     readonly property var names: ["Clock", "Text", "Group", "Input slots (4 × 2)"]
     readonly property var current: items.find(i=>i.id===selectedId) || null
+    readonly property var tileLayerItems: current && (current.componentType==="container" || current.componentType==="carousel") ? items.filter(i=>(i.parentId || "")===current.id && i.placement) : []
     readonly property var addPrototype:addingType && session?session.componentPrototype(addingType,addingConfiguration):({})
     readonly property bool manipulating:["move","flowMove","resize","size","collision","collisionDetails","geometry"].indexOf(mode)>=0
     function componentName(item) {
@@ -177,7 +178,7 @@ Item {
     }
     function editorReveals(item){if(!item.hidden)return true;if(mode==="preview")return false;let id=selectedId;for(let depth=0;id && depth<=4;++depth){if(id===item.id)return true;const node=items.find(i=>i.id===id);id=node?node.parentId || "":""}return false}
     readonly property string operationSummary:componentName(addingType?null:current)+" · row "+(candidate.y+1)+", column "+(candidate.x+1)+" · "+candidate.width+" × "+candidate.height+" cells"
-    readonly property string operationTitle:({headerContext:"Header",editorSettings:"Editor settings",replaceReview:"Replace component",restoreDefaults:"Reset page",applyFailed:"Couldn't save changes",versions:"History",manageVersions:"Manage history",manageVersion:"Manage version",versionReview:"Compare saved version",layerItem:"Page item",dirty:"Unsaved changes",apply:trialReturned?"Keep these changes?":"Save changes?",trialDuration:"Try for",library:"Design library",more:"More tools",pages:"Pages",view:"Canvas view",noRoom:"No room",flowMove:"Move in this layout",moveOptions:"Move and size",anchors:"Resize anchor",destination:"Choose a section",groupDestination:"Move into a group",orderBefore:gridMode?"Reading order before":"Move before",orderAfter:gridMode?"Reading order after":"Move after",collision:"Resolve overlap",collisionDetails:"Affected components",geometry:"Position and size",conversionPreview:"Review page layout",gridExact:"Exact layout values"})[mode] || ""
+    readonly property string operationTitle:({headerContext:"Header",editorSettings:"Editor settings",replaceReview:"Replace component",restoreDefaults:"Reset page",applyFailed:"Couldn't save changes",versions:"History",manageVersions:"Manage history",manageVersion:"Manage version",versionReview:"Compare saved version",layerItem:"Page item",tileLayers:"Components on tile",dirty:"Unsaved changes",apply:trialReturned?"Keep these changes?":"Save changes?",trialDuration:"Try for",library:"Design library",more:"More tools",pages:"Pages",view:"Canvas view",noRoom:"No room",flowMove:"Move in this layout",moveOptions:"Move and size",anchors:"Resize anchor",destination:"Choose a section",groupDestination:"Move into a group",orderBefore:gridMode?"Reading order before":"Move before",orderAfter:gridMode?"Reading order after":"Move after",collision:"Resolve overlap",collisionDetails:"Affected components",geometry:"Position and size",conversionPreview:"Review page layout",gridExact:"Exact layout values"})[mode] || ""
     readonly property string footerText: {
         if(preview.layoutError)return breadcrumb+" · "+preview.layoutError
         if(mode==="flowMove")return message
@@ -790,6 +791,7 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
         if(mode==="restoreDefaults")return ["Cancel","Restore this page in draft; keep other pages","Restore Whole interface..."]
         if(mode==="defaultsReview")return ["Keep draft","Restore Whole interface in draft"].concat(defaultRemovedPages.map(p=>"Remove page: "+p.name))
         if(mode==="context") return (current && (current.componentType==="container" || current.componentType==="carousel")) ? ["Move","Edit component","Duplicate","Delete…","Edit contents"] : ["Move","Edit component","Duplicate","Delete…"]
+        if(mode==="tileLayers") return tileLayerItems.map((i,index)=>(index+1)+" · "+componentName(i)).concat(["Back"])
         if(mode==="flowMove")return ["Move before…","Move after…","Convert to a grid…","Cancel"]
         if(mode==="moveOptions")return ["Position and size",gridMode?"Reading order before…":"Move before…",gridMode?"Reading order after…":"Move after…",sectionMode?"Move to section…":"Sections unavailable in this layout","Resize anchor…","Move into group…","Return to "+gestureMode]
         if(mode==="anchors")return ["Top left","Top right","Bottom left","Bottom right"]
@@ -1003,6 +1005,12 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
             if(selectingMultiple){const next=multiSelection.slice(),index=next.indexOf(selectedId);if(index>=0)next.splice(index,1);else if(next.length<32)next.push(selectedId);multiSelection=next;return}
             layerOrigin=choice;mode="layerItem";choice=0;return
         }
+        if(mode==="tileLayers"){
+            if(choice===tileLayerItems.length){mode="canvas";choice=0;return}
+            if(!tileLayerItems[choice])return
+            selectedId=tileLayerItems[choice].id;headerSelection=""
+            mode="context";choice=0;return
+        }
         if(mode==="view"){
             if(choice===0)camera.zoom=Math.min(2,camera.zoom+0.1)
             else if(choice===1){camera.zoom=1;camera.panX=0;camera.panY=0}
@@ -1021,7 +1029,7 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
             if(choice===pageEntries.length+1){mode="pageContext";choice=0;return}
             pageFocus[pageId]=selectedId;pageId=pageEntries[choice].id;selectedId=pageFocus[pageId] || "";mode="canvas";toolbarFocus=false;return
         }
-        if(mode==="add") {addingType=["clock","text","container","input-panel"][choice];const prototype=session.componentPrototype(addingType);if(!prototype.root){message=session.errorString;return}origin={};originScopeId=scopeId;originParentId=parentScopeId;gestureMode="move";candidate=Object.assign({},prototype.root.placement,{x:0,y:0});mode="move";toolbarFocus=false;return}
+        if(mode==="add") {addingType=["clock","text","container","input-panel","shape"][choice];const prototype=session.componentPrototype(addingType);if(!prototype.root){message=session.errorString;return}origin={};originScopeId=scopeId;originParentId=parentScopeId;gestureMode="move";candidate=Object.assign({},prototype.root.placement,{x:0,y:0});mode="move";toolbarFocus=false;return}
         if(mode==="collision") {if(choice===2)cancelGesture();else if(choice===3){if(collisionPreview.valid){mode="collisionDetails";choice=0;message="Proposed positions only · Back returns to Shift / Swap / Cancel. Nothing has changed."}else message=collisionPreview.reason}else if(collisionPreview.valid)acceptCandidate(choice===0 ? "shift":"swap");else message=collisionPreview.reason;return}
         if(mode==="collisionDetails")return
         if(mode==="moveOptions") {
@@ -1241,7 +1249,7 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
             else if(c===inputManager.navigateRight){toolbarFocus=false;if(!current && scopedItems.length)selectedId=scopedItems[0].id}
             else if(c===inputManager.confirm)activateMenu(menuIndex)
         } else {
-            if(c===inputManager.confirm){if(current){mode="context";choice=0}else chooseTool(0);return}
+            if(c===inputManager.confirm){if(current){mode=tileLayerItems.length>0?"tileLayers":"context";choice=0}else chooseTool(0);return}
             const index=items.findIndex(i=>i.id===selectedId)
             if(gridMode && current && current.placement) {
                 const p=current.placement, cx=p.x+p.width/2, cy=p.y+p.height/2
@@ -1482,7 +1490,7 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
                                     else studio.message="Grid boundary: choose a position inside the grid."
                                     updateEdge(point)
                                 }
-                                onReleased:{if(dragging){if(studio.mode==="move")studio.acceptCandidate();else if(studio.mode==="flowMove")studio.handleCommand(inputManager.confirm)}else if(studio.mode==="canvas"){studio.mode="context";studio.choice=0}dragging=false}
+                                onReleased:{if(dragging){if(studio.mode==="move")studio.acceptCandidate();else if(studio.mode==="flowMove")studio.handleCommand(inputManager.confirm)}else if(studio.mode==="canvas"){studio.mode=studio.tileLayerItems.length>0?"tileLayers":"context";studio.choice=0}dragging=false}
                                 onCanceled:{if(dragging && (studio.mode==="move" || studio.mode==="flowMove"))studio.cancelGesture();dragging=false}
                             }
                             Rectangle {

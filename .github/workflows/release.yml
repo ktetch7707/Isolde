@@ -1,0 +1,138 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-release:
+    # Production builds must run on Ubuntu 26.04. Use a self-hosted runner
+    # labeled ubuntu-26.04 until GitHub-hosted runners are available.
+    runs-on: [self-hosted, ubuntu-26.04]
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify Ubuntu 26.04
+        run: |
+          source /etc/os-release
+          if [ "${ID}" != "ubuntu" ] || [ "${VERSION_ID}" != "26.04" ]; then
+            echo "::error::Release builds require Ubuntu 26.04, got ${ID} ${VERSION_ID}"
+            exit 1
+          fi
+          echo "ARCH=$(dpkg --print-architecture)" >> $GITHUB_ENV
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            cmake ninja-build g++ \
+            qt6-base-dev qt6-declarative-dev qt6-tools-dev \
+            qt6-multimedia-dev qt6-serialport-dev qt6-webengine-dev qt6-webchannel-dev \
+            libqt6sql6-sqlite \
+            qml6-module-qtquick qml6-module-qtquick-window qml6-module-qtquick-controls \
+            qml6-module-qtquick-layouts qml6-module-qtquick-templates \
+            qml6-module-qtqml-workerscript qml6-module-qtwebengine qml6-module-qtwebchannel \
+            qml6-module-qtquick-dialogs qml6-module-qtmultimedia \
+            bubblewrap dbus-daemon libglib2.0-bin python3 pkexec \
+            network-manager pulseaudio-utils wireplumber pipewire-pulse wmctrl \
+            kodi gstreamer1.0-tools gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
+            gstreamer1.0-plugins-bad gstreamer1.0-libav gstreamer1.0-gl \
+            dpkg-dev
+
+      - name: Configure and build
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON
+          cmake --build build --parallel "$(nproc)"
+
+      - name: Run test suite
+        run: |
+          ctest --test-dir build --output-on-failure -j "$(nproc)"
+        env:
+          QT_QPA_PLATFORM: offscreen
+          QT_QUICK_BACKEND: software
+
+      - name: Build appliance payload tarball
+        id: appliance
+        run: |
+          VERSION=$(cat VERSION)
+          ARCH="${{ env.ARCH }}"
+          rm -rf appliance-stage
+          cmake --install build --prefix appliance-stage
+          tar -czf "isolde-${VERSION}-linux-${ARCH}.tar.gz" -C appliance-stage .
+          SIZE=$(stat -c %s "isolde-${VERSION}-linux-${ARCH}.tar.gz")
+          SHA256=$(sha256sum "isolde-${VERSION}-linux-${ARCH}.tar.gz" | cut -d' ' -f1)
+          echo "artifact=isolde-${VERSION}-linux-${ARCH}.tar.gz" >> $GITHUB_OUTPUT
+          echo "size=${SIZE}" >> $GITHUB_OUTPUT
+          echo "sha256=${SHA256}" >> $GITHUB_OUTPUT
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Build desktop .deb package
+        id: deb
+        run: |
+          python3 tools/build-desktop-deb.py --build-dir build --output-dir dist
+          ls -la dist/
+
+      - name: Generate signing key pair (if missing)
+        run: |
+          if [ ! -f tools/isolde-signing-key.pem ]; then
+            echo "::warning::Private signing key not found in repo. Generating ephemeral key for this run."
+            echo "For production, provide ISOLDE_SIGNING_KEY as a secret and write it to tools/isolde-signing-key.pem before signing."
+            openssl genpkey -algorithm ED25519 -out tools/isolde-signing-key.pem
+            openssl pkey -in tools/isolde-signing-key.pem -pubout -out tools/isolde-signing-key.pub
+          fi
+
+      - name: Sign appliance payload
+        id: sign-appliance
+        run: |
+          VERSION="${{ steps.appliance.outputs.version }}"
+          ARCH="${{ env.ARCH }}"
+          python3 tools/sign-release.py \
+            --payload appliance-stage \
+            --private-key tools/isolde-signing-key.pem \
+            --output-signature "isolde-${VERSION}-linux-${ARCH}.tar.gz.sig"
+          echo "signature=isolde-${VERSION}-linux-${ARCH}.tar.gz.sig" >> $GITHUB_OUTPUT
+
+      - name: Build and sign update manifest
+        id: manifest
+        run: |
+          VERSION="${{ steps.appliance.outputs.version }}"
+          ARCH="${{ env.ARCH }}"
+          SIZE="${{ steps.appliance.outputs.size }}"
+          SHA256="${{ steps.appliance.outputs.sha256 }}"
+          FILENAME="isolde-${VERSION}-linux-${ARCH}.tar.gz"
+          python3 tools/sign-release.py --build-manifest \
+            --version "${VERSION}" \
+            --arch "${ARCH}" \
+            --filename "${FILENAME}" \
+            --size "${SIZE}" \
+            --sha256 "${SHA256}" \
+            --type appliance \
+            --private-key tools/isolde-signing-key.pem \
+            --output-manifest update-manifest.json \
+            --output-signature update-manifest.sig
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Isolde ${{ steps.appliance.outputs.version }}
+          draft: false
+          prerelease: false
+          files: |
+            isolde-*-linux-*.tar.gz
+            isolde-*-linux-*.tar.gz.sig
+            dist/isolde_*.deb
+            update-manifest.json
+            update-manifest.sig
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

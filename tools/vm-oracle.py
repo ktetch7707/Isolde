@@ -2322,9 +2322,27 @@ class Oracle:
         return {str(p.relative_to(config)): digest(p) for p in config.rglob("home-layout.json")
                 if p.is_file() and not p.is_symlink()}
 
-    def deploy(self):
-        payload = self.tested_payload()
+    def manual_test_payload(self):
+        """Stage the completed guest build for user testing without issuing a passing test receipt."""
+        if self.command("hostname") != "isolde-test" or self.root != Path.home() / "isolde-oracle":
+            raise RuntimeError("Manual test deployment is restricted to Isolde-Test")
+        work = self.root / "work"
+        entries = manifest(self.run / "files.sha256")
+        report = self.run / "ctest.xml"
+        if not (self.run / "build.log").is_file() or not report.is_file() or not list(ET.parse(report).iter("testcase")):
+            raise RuntimeError("Run must have completed its build and produced a CTest report")
+        if json.loads((work / "manifest.json").read_text()) != entries:
+            raise RuntimeError("The incremental build belongs to a different source snapshot")
+        verify_tree(self.run / "source", entries)
+        verify_tree(work / "source", entries)
+        payload = Path(tempfile.mkdtemp(prefix="manual-payload-", dir=self.run))
+        self.stage("stage-manual-payload", ["cmake", "--install", str(work / "build"), "--prefix", str(payload)], 120)
+        return payload
+
+    # Use the normal atomic release transaction for both tested and user-directed VM refreshes.
+    def deploy(self, manual_test=False):
         if (self.root/'storage-policy.json').is_file():self.storage_retention(apply=True)
+        payload = self.manual_test_payload() if manual_test else self.tested_payload()
         source = self.run / "source"
         spec = importlib.util.spec_from_file_location("oracle_installer", source / "tools/install-appliance.py")
         installer = importlib.util.module_from_spec(spec)
@@ -2349,6 +2367,8 @@ class Oracle:
                         pid = service.get("MainPID", "0")
                         if service["ActiveState"] == "active" and Path(f"/proc/{pid}/exe").resolve() == release / "bin/isolde":
                             result = {"release": str(release), "before": before, "after": self.links(), "service": service}
+                            if manual_test:
+                                result.update(manualTest=True, sourceDigest=digest(self.run / "files.sha256"))
                             atomic_json(self.run / "deploy-result.json", result)
                             self.update(**result)
                             return
@@ -3099,6 +3119,7 @@ def main():
     parser.add_argument("--case", choices=CASES, default="studio")
     parser.add_argument("--installed", action="store_true")
     parser.add_argument('--diagnostic',action='store_true')
+    parser.add_argument('--manual-test', action='store_true')
     parser.add_argument("--native-app", choices=["freetube", "cbc-gem", "steam"], default="freetube")
     parser.add_argument("--configure-target",choices=["native","surfshark","android","android-repair","android-store-support","games","guide","audio-test-tools","browser-test-tools","audio-test-recover","artifacts","desktop-prompts","storage-capacity","kodi-demo-art","store-test-data","kodi-managed","kodi-managed-audit"],default="native")
     parser.add_argument('--demo-art-helper-digest')
@@ -3113,6 +3134,7 @@ def main():
     parser.add_argument("--orphan-visual-pid", type=int, default=0)
     args = parser.parse_args()
     if args.diagnostic and (args.action!='visual' or args.installed):parser.error('Diagnostic visuals are staged-only')
+    if args.manual_test and args.action != 'deploy':parser.error('Manual test is Deploy-only')
     if args.resume_run_id and (args.action!='test' or args.suite!='all' or args.reuse_full_run):parser.error('Campaign resumption requires a full Test without reuse')
     if args.orphan_visual_pid and (args.action != "recover" or not 1 < args.orphan_visual_pid < 2**31): parser.error("Visual orphan PID is Recover-only")
     if args.storage and args.action!="status":parser.error("Storage inventory is Status-only")
@@ -3241,7 +3263,7 @@ def main():
             elif args.action == "visual":
                 oracle.visual(args.case, args.installed,args.reopen_helper_digest,args.feature_helper_digest,args.studio_helper_digest,args.history_helper_digest,args.reference_helper_digest,args.reference_collections_digest,args.diagnostic,args.store_helper_digest)
             elif args.action == "deploy":
-                oracle.deploy()
+                oracle.deploy(args.manual_test)
             elif args.action == "provision":
                 oracle.provision()
             elif args.action == "diagnose":

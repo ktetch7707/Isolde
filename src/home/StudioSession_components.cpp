@@ -368,6 +368,25 @@ StudioSession::selectComponentNodes(const QString& type, const QVariantMap& opti
             {{"x", 0}, {"y", 0}, {"width", span.value("width")}, {"height", span.value("height")}});
         nodes.append(item);
     }
+    else if (type == "shape")
+    {
+        QJsonObject item;
+        item["kind"] = "widget";
+        item["id"] = "shape-1";
+        item["widgetType"] = "shape";
+        item["componentType"] = "shape";
+        item["name"] = "Shape";
+        item["size"] = "standard";
+        item["presentation"] = QJsonObject{{"shape", "rectangle"}, {"variant", "shape"}, {"surfaceColor", "#1C2940"}, {"surfaceOpacity", 1}};
+        item["placement"] = QJsonObject{{"x", 0}, {"y", 0}, {"width", 2}, {"height", 2}};
+        // Ensure unique id
+        int suffix = 2;
+        while (std::any_of(nodes.cbegin(), nodes.cend(), [&](const QJsonValue& v) {
+            return v.toObject().value("id").toString() == item["id"].toString();
+        }))
+            item["id"] = QString("shape-%1").arg(suffix++);
+        nodes.append(item);
+    }
     else
     {
         setError(tr("Choose a registered component type."));

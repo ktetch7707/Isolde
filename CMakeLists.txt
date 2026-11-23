@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(Isolde VERSION 0.0.1.2 LANGUAGES CXX)
+project(Isolde VERSION 0.0.1.3 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -400,9 +400,12 @@ endforeach()
 install(TARGETS isolde RUNTIME DESTINATION bin)
 install(FILES tools/component-health.py DESTINATION share/isolde)
 install(FILES tools/emulator-session.py DESTINATION share/isolde)
+install(FILES tools/isolde-signing-key.pub DESTINATION share/isolde)
 install(FILES tools/steam-games.py DESTINATION share/isolde)
 install(FILES tools/portable-game-installer.py DESTINATION share/isolde)
 install(FILES tools/optical-exec.py DESTINATION share/isolde)
+install(FILES tools/wait-for-display.py DESTINATION share/isolde)
+install(FILES tools/recovery-controller.py DESTINATION share/isolde)
 configure_file(tools/steam-games.py ${CMAKE_CURRENT_BINARY_DIR}/share/isolde/steam-games.py COPYONLY)
 configure_file(tools/portable-game-installer.py ${CMAKE_CURRENT_BINARY_DIR}/share/isolde/portable-game-installer.py COPYONLY)
 configure_file(tools/optical-exec.py ${CMAKE_CURRENT_BINARY_DIR}/share/isolde/optical-exec.py COPYONLY)
@@ -657,7 +660,7 @@ if(BUILD_TESTING)
         searchHeaderSwitchRemoteFocusAndStableResults searchPreferenceProfileIsolationAndWriteFailure
         appSuppliedIconsUseManagedArtwork
         kodiSettingsFollowUserTheme appearancePreviewCancelAndApply composedReferenceNavigationAndGeometry
-        pastelReferenceNavigationAndGeometry skinsAndDesignAreReachableFromSettings
+        pastelReferenceNavigationAndGeometry skinsAndDesignAreReachableFromSettings placedMenuReachesAdjacentControls
         pageComposerAndIndependentKodiWidgets gridEditorMoveResizeDuplicateRemove)
     set(ISOLDE_STUDIO_NAVIGATION_CASES
         customizeOpensStudioAndPreservesDirtyExit studioRemoteDraftApplyAndCancel
@@ -701,6 +704,8 @@ if(BUILD_TESTING)
         add_test(NAME portable_game_installer COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_portable_game_installer.py)
         add_test(NAME optical_exec_adapter COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_optical_exec.py)
         add_test(NAME vpn_setup COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_vpn_setup.py)
+        add_test(NAME signing_keys COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_sign_release.py)
+        add_test(NAME update_appliance COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_update_appliance.py)
         qt_add_executable(isolde_vpn_tests tests/tst_vpn.cpp)
         target_link_libraries(isolde_vpn_tests PRIVATE isolde_core Qt6::Test Qt6::Qml Qt6::Quick)
         target_compile_definitions(isolde_vpn_tests PRIVATE VPN_QML="${CMAKE_CURRENT_SOURCE_DIR}/qml/VpnSettingsView.qml")

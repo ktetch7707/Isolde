@@ -1171,3 +1171,46 @@ test('Interface sound theme arrows remain a draft until Confirm and preview neve
     s.handleCommand('down');s.handleCommand('ok');assert.deepEqual(previews,['resource.uisounds.fixture']);assert.equal(writes.length,0);
     s.handleCommand('up');s.handleCommand('ok');assert.deepEqual(writes,['resource.uisounds.fixture']);
 });
+
+test("AppGallery right wraps from last app through Settings to Search", () => {
+    const inputManager = {back: 1, home: 2, navigateLeft: 3, navigateRight: 4, confirm: 5, menu: 6};
+    const calls = [];
+    const scope = vm.createContext({
+        open: true, focusArea: "grid", selectedIndex: 2, selectedId: "app-c",
+        visibleEntries: [
+            {id: "app-a", name: "App A"},
+            {id: "app-b", name: "App B"},
+            {id: "app-c", name: "App C"},
+        ],
+        galleryPresentation: {filterEnabled: true, favoritesEnabled: true},
+        inputManager,
+        searchRequested() { calls.push("search"); },
+        settingsRequested() { calls.push("settings"); },
+        storeRequested() { calls.push("store"); },
+    });
+    method("AppGallery.qml", "handleCommand", scope);
+
+    // Right from last app -> wraps to Search (the last control)
+    scope.handleCommand(inputManager.navigateRight);
+    assert.equal(scope.focusArea, "search", "right from last app lands on search");
+    assert.equal(calls.length, 0, "no confirm fired on navigate right");
+
+    // Confirm on Search triggers search
+    scope.handleCommand(inputManager.confirm);
+    assert.equal(calls[0], "search", "confirm on search triggers searchRequested");
+
+    // Left from Search wraps to Settings
+    scope.focusArea = "search";
+    calls.length = 0;
+    scope.handleCommand(inputManager.navigateLeft);
+    assert.equal(scope.focusArea, "settings", "left from search wraps to settings");
+
+    // Right from Settings wraps to Search
+    scope.handleCommand(inputManager.navigateRight);
+    assert.equal(scope.focusArea, "search", "right from settings wraps to search");
+
+    // Down from Search returns to grid
+    scope.handleCommand(inputManager.navigateDown);
+    assert.equal(scope.focusArea, "grid", "down from search returns to grid");
+    assert.equal(scope.selectedId, "app-a", "down reselects first app");
+});

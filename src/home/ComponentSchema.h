@@ -73,6 +73,7 @@ QVariantMap actionSettings(const QVariantMap& input, QString* error);
 QVariantMap actionSwitchInput(const QVariantMap& input, QString* error);
 QVariantMap actionDesktopMode(const QVariantMap& input, QString* error);
 QVariantMap actionWait(const QVariantMap& input, QString* error);
+QVariantMap actionRunScript(const QVariantMap& input, QString* error);
 QVariantMap actionOpenTarget(const QVariantMap& input, const QString& type, QString* error);
 QVariantList actions(const QVariantList& input, QString* error = nullptr);
 QVariantMap action(const QVariantMap& input, QString* error = nullptr);
