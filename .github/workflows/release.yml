@@ -11,9 +11,7 @@ concurrency:
 
 jobs:
   build-and-release:
-    # Production builds must run on Ubuntu 26.04. Use a self-hosted runner
-    # labeled ubuntu-26.04 until GitHub-hosted runners are available.
-    runs-on: [self-hosted, ubuntu-26.04]
+    runs-on: ubuntu-26.04
     timeout-minutes: 60
     permissions:
       contents: write

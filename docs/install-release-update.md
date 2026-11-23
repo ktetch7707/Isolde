@@ -103,8 +103,7 @@ git push origin v0.0.1.3
 
 The release workflow:
 
-1. Verifies Ubuntu 26.04 (self-hosted runner required until GitHub-hosted
-   runners support 26.04)
+1. Verifies Ubuntu 26.04 on a GitHub-hosted runner
 2. Installs build dependencies
 3. Configures, builds, runs the full CTest suite (a failed build/test blocks
    the release)
