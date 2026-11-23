@@ -148,36 +148,38 @@ Item {
             searchRequested()
             return true
         }
-        if (focusArea === "filter" || focusArea === "favorites" || focusArea === "store" || focusArea === "settings") {
-            if (command === inputManager.navigateLeft || command === inputManager.navigateRight) {
-                const controls = (galleryPresentation.filterEnabled === false ? [] : ["filter"])
-                    .concat(galleryPresentation.favoritesEnabled ? ["favorites"] : [], ["store", "settings"])
-                const index = controls.indexOf(focusArea)
-                focusArea = controls[Math.max(0, Math.min(controls.length - 1,
-                    index + (command === inputManager.navigateRight ? 1 : -1)))]
-                return true
-            }
-            if (command === inputManager.navigateDown) {
-                focusArea = "grid"
-                if (!selectedId && visibleEntries.length) selectedId = visibleEntries[0].id
-                return true
-            }
-            if (command === inputManager.confirm) {
-                if (focusArea === "filter") {
-                    keyboard.value = filterText
-                    keyboard.selectedIndex = 0
-                    keyboardOpen = true
-                } else if (focusArea === "favorites") {
-                    favoritesOnly = !favoritesOnly
-                    if (favoritesOnly && !visibleEntries.some(app => app.id === selectedId)) selectedId = visibleEntries.length ? visibleEntries[0].id : ""
-                } else if (focusArea === "store") {
-                    storeRequested()
-                } else {
-                    settingsRequested()
-                }
-                return true
+        if (focusArea === "filter" || focusArea === "favorites" || focusArea === "store" || focusArea === "settings" || focusArea === "search") {
+        if (command === inputManager.navigateLeft || command === inputManager.navigateRight) {
+            const controls = (galleryPresentation.filterEnabled === false ? [] : ["filter"])
+                .concat(galleryPresentation.favoritesEnabled ? ["favorites"] : [], ["store", "settings", "search"])
+            const index = controls.indexOf(focusArea)
+            focusArea = controls[Math.max(0, Math.min(controls.length - 1,
+                index + (command === inputManager.navigateRight ? 1 : -1)))]
+            return true
+        }
+        if (command === inputManager.navigateDown) {
+            focusArea = "grid"
+            if (!selectedId && visibleEntries.length) selectedId = visibleEntries[0].id
+            return true
+        }
+        if (command === inputManager.confirm) {
+            if (focusArea === "filter") {
+                keyboard.value = filterText
+                keyboard.selectedIndex = 0
+                keyboardOpen = true
+            } else if (focusArea === "favorites") {
+                favoritesOnly = !favoritesOnly
+                if (favoritesOnly && !visibleEntries.some(app => app.id === selectedId)) selectedId = visibleEntries.length ? visibleEntries[0].id : ""
+            } else if (focusArea === "store") {
+                storeRequested()
+            } else if (focusArea === "search") {
+                searchRequested()
+            } else {
+                settingsRequested()
             }
             return true
+        }
+        return true
         }
         if (command === inputManager.navigateUp) {
             const index = selectedIndex
@@ -322,6 +324,16 @@ Item {
                 border.width: root.focusArea === "settings" ? 3 : 1
                 border.color: root.focusArea === "settings" ? theme.focus : theme.outline
                 Text { anchors.centerIn: parent; text: "Settings"; color: theme.text; font.pixelSize: 18 * theme.textScale }
+            }
+            Rectangle {
+                width: parent.width * 0.12
+                height: 56
+                anchors.verticalCenter: parent.verticalCenter
+                radius: theme.radius
+                color: root.focusArea === "search" ? theme.selected : theme.surface
+                border.width: root.focusArea === "search" ? 3 : 1
+                border.color: root.focusArea === "search" ? theme.focus : theme.outline
+                Text { anchors.centerIn: parent; text: "Search"; color: theme.text; font.pixelSize: 18 * theme.textScale }
             }
         }
         Text {
