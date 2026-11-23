@@ -181,6 +181,8 @@ class HomeLayout final : public QObject
     saveSkin(const QString& name);
     Q_INVOKABLE bool
     applySkin(const QString& id);
+    Q_INVOKABLE QObject* openSkinPreview(const QString& id);
+    Q_INVOKABLE void closeSkinPreview();
     Q_INVOKABLE QVariantList
     skinPageUpdates(const QString& id) const;
     bool
@@ -597,6 +599,7 @@ class HomeLayout final : public QObject
     QVariantMap m_studioAppearance;
     QHash<QString, PageModel*> m_pageModels;
     HomeLayout* m_owner = nullptr;
+    HomeLayout* m_skinPreview = nullptr;
     QString m_pageId;
 
     AppRegistry* m_registry;

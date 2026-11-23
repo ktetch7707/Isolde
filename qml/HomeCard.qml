@@ -75,38 +75,14 @@ Item {
             objectName: "cardArtwork"
             animationResolver:root.artworkResolver;managedAsset:root.item.customLogo || ""
             motionEnabled:root.artworkMotionAllowed && root.style.animateArtwork===true;reducedMotion:root.appearance.motionEnabled===false
-            anchors.fill: parent; source: root.kind === "orb" || root.launcherArtwork ? "" : root.item.logoSource || ""
+            anchors.top: parent.top; anchors.left: parent.left; anchors.right: parent.right
+            height: parent.height + reflectionHeight
+            reflectionHeight: root.reflectionHeight
+            reflectionOpacity: root.reflectionAlpha
+            source: root.kind === "orb" || root.launcherArtwork ? "" : root.item.logoSource || ""
             crop: root.style.imageCrop || null; radius: surface.radius
             visible:root.item.showLogo!==false && !root.launcherArtwork
             fit:root.style.artFit || "cover";focalX:root.style.artFocalX===undefined?0.5:root.style.artFocalX;focalY:root.style.artFocalY===undefined?0.5:root.style.artFocalY;zoom:root.style.artZoom || 1
-        }
-        // Poster reflection: mirrors the already rendered poster art directly beneath the card, fading to
-        // transparent. Reuses the poster texture via ShaderEffectSource so no new artwork request is made.
-        Item {
-            id: reflectionArea
-            anchors.top: poster.bottom
-            anchors.left: parent.left
-            anchors.right: parent.right
-            height: root.reflectionHeight
-            clip: true
-            visible: root.reflectionEnabled && root.reflectionHeight > 0 && poster.visible && poster.loadedSource.toString()
-            ShaderEffectSource {
-                id: posterTexture
-                sourceItem: poster
-                live: true
-                visible: false
-                textureSize: Qt.size(Math.max(1, poster.width), Math.max(1, poster.height))
-            }
-            ShaderEffect {
-                anchors.fill: parent
-                visible: reflectionArea.visible
-                property var source: posterTexture
-                property real posterHeight: Math.max(1, poster.height)
-                property real reflectionHeight: Math.max(1, reflectionArea.height)
-                property real reflOpacity: root.reflectionAlpha
-                fragmentShader: "#ifdef GL_ES\nprecision mediump float;\n#endif\nuniform sampler2D source;\nuniform float posterHeight;\nuniform float reflectionHeight;\nuniform float reflOpacity;\nvarying vec2 qt_TexCoord0;\nvoid main() {\n  float t = qt_TexCoord0.y * (reflectionHeight / posterHeight);\n  vec4 color = texture2D(source, vec2(qt_TexCoord0.x, 1.0 - t));\n  float fade = 1.0 - qt_TexCoord0.y;\n  gl_FragColor = color * vec4(1.0, 1.0, 1.0, reflOpacity * fade);\n}"
-                vertexShader: "attribute highp vec4 vertex;\nattribute highp vec2 textureCoordinate;\nvarying highp vec2 qt_TexCoord0;\nuniform highp mat4 qt_Matrix;\nvoid main() {\n  gl_Position = qt_Matrix * vertex;\n  qt_TexCoord0 = textureCoordinate;\n}\n"
-            }
         }
         LineIcon {
             visible: !root.showLauncherArtwork && (root.kind === "source" || root.kind === "summary") && root.item.widgetType !== "clock"

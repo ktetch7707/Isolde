@@ -95,6 +95,7 @@ class HomeNavigationTests : public QObject
     pastelReferenceNavigationAndGeometry();
     void
     skinsAndDesignAreReachableFromSettings();
+    void skinPickerPreviewsWithoutApplying();
     void
     pageComposerAndIndependentKodiWidgets();
     void
@@ -1192,6 +1193,60 @@ HomeNavigationTests::repairsSourceWithRemoteAndCanCancel()
     QCOMPARE(home.items()[0].toMap()["size"].toString(), QString("wide"));
     QCOMPARE(home.items()[0].toMap()["opacity"].toDouble(), 0.4);
 }
+// Exercise the Settings picker path so selecting a skin renders the draft without changing Home.
+void HomeNavigationTests::skinPickerPreviewsWithoutApplying()
+{
+    QTemporaryDir directory;
+    AppRegistry registry;
+    HomeLayout home(&registry);
+    const auto userLayout = directory.filePath("home.json");
+    QVERIFY(home.load(QFINDTESTDATA("../config/default-home-layout.json"), userLayout));
+    const auto original = home.committedDocument();
+    const bool hadUserFile = QFile::exists(userLayout);
+    InputManager input;
+    QQmlEngine engine;
+    engine.rootContext()->setContextProperty("inputManager", &input);
+    engine.rootContext()->setContextProperty("isoldeVersion", "test");
+    QQmlComponent component(&engine, QUrl::fromLocalFile(
+        QFileInfo(QStringLiteral(HOME_QML)).dir().filePath("SkinPicker.qml")));
+    QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+    std::unique_ptr<QObject> picker(component.createWithInitialProperties(
+        {{"layoutModel", QVariant::fromValue(&home)}, {"width", 1280}, {"height", 720}}));
+    QVERIFY2(picker, qPrintable(component.errorString()));
+    QQuickWindow window;
+    window.resize(1280, 720);
+    qobject_cast<QQuickItem*>(picker.get())->setParentItem(window.contentItem());
+    window.show();
+    QVERIFY(QMetaObject::invokeMethod(picker.get(), "begin"));
+    const auto skins = home.skins();
+    // Cover a populated Pastel preview and Arctic's typed packaged preset.
+    for (const auto& id : {QString("builtin-pastel"), QString("builtin-arctic")})
+    {
+        const auto match = std::find_if(skins.cbegin(), skins.cend(),
+                                       [&](const QVariant& skin) { return skin.toMap()["id"] == id; });
+        QVERIFY(match != skins.cend());
+        picker->setProperty("selected", int(std::distance(skins.cbegin(), match)));
+        QVERIFY(QMetaObject::invokeMethod(picker.get(), "handleCommand", Q_ARG(QVariant, int(InputManager::Confirm))));
+        const auto previewValue = picker->property("previewModel");
+        auto* preview = qobject_cast<HomeLayout*>(previewValue.metaType() == QMetaType::fromType<QJSValue>()
+            ? previewValue.value<QJSValue>().toQObject() : previewValue.value<QObject*>());
+        QVERIFY2(preview, qPrintable(id + ": " + home.errorString()));
+        QVERIFY(preview != &home);
+        QVERIFY(!preview->components().isEmpty());
+        auto* frame = picker->findChild<QQuickItem*>("skinPreviewFrame");
+        QVERIFY(frame);
+        QTRY_VERIFY(frame->isVisible() && frame->width() > 0);
+        const auto artifacts = qEnvironmentVariable("ISOLDE_TEST_ARTIFACTS");
+        if (!artifacts.isEmpty())
+            QVERIFY(window.grabWindow().save(artifacts + "/studio-test-skin-preview-" + id + ".png"));
+        QCOMPARE(home.committedDocument(), original);
+        QCOMPARE(QFile::exists(userLayout), hadUserFile);
+        QVERIFY(QMetaObject::invokeMethod(picker.get(), "handleCommand", Q_ARG(QVariant, int(InputManager::Back))));
+        QVERIFY(!frame->isVisible());
+        QVERIFY(!picker->property("detailsOpen").toBool());
+    }
+}
+
 void
 HomeNavigationTests::universalLocalSearchRemoteFlow()
 {

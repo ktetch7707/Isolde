@@ -5,6 +5,7 @@ import QtQuick
 Item {
     id: root
     property var pageModel: null
+    property var artworkResolver: null
     property bool reducedMotion: false
     Loader {
         anchors.fill: parent
@@ -24,6 +25,9 @@ Item {
         composition: root.pageModel ? root.pageModel.composition : ({})
         grid: root.pageModel ? root.pageModel.grid : ({})
         placements: root.pageModel ? root.pageModel.placements : []
+        artworkResolver: root.artworkResolver || (typeof homeLayout !== "undefined" ? homeLayout : null)
+        previewOnly: !!root.artworkResolver
+        freezeData: !!root.artworkResolver
         artworkMotionAllowed: !root.reducedMotion
         internetAvailable: false
         localNetworkAvailable: false

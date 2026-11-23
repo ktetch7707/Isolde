@@ -1,6 +1,8 @@
 # Isolde Agent Backlog — first-product software completion
 Location: `docs/agent-backlog.md`. Persistent entrypoint: `AGENTS.md`.
 
+Settings skin previews are now in the current branch. Isolde-Test `skin-preview-current-c` passed Home and Studio navigation, rendered Pastel and Arctic in the Settings picker, and verified that opening and closing each preview leaves the active layout bytes untouched. Arctic now ships typed components, and reflected artwork uses the same Canvas renderer as the preview. Evidence: `build/vm-oracle/skin-preview-current-c/report/LastTest.log` and the two `studio-test-skin-preview-*.png` captures. No acceptance percentage change.
+
 Arctic Home focus repair: directional navigation compares placed component footprints, so Right from a tall page menu reaches an adjacent Search control. Isolde-Test `arctic-spatial-focus-c` passed Home and Studio navigation, including Apps → Search → Settings and the reverse route, using an authored placement fixture. The same run verified the App Gallery QML key-handler repair. Evidence: `build/vm-oracle/arctic-spatial-focus-c/report/LastTest.log`. No acceptance percentage change or deployment.
 
 November 20 Arctic merge review: Isolde-Test run `arctic-merge-edb2df4` built directly from `origin/main` at `edb2df4`. Compilation stopped at `ComponentSchema.cpp` because `actionRunScript` has no namespace declaration. CTest and visual checks did not run. Source review also found an undefined `poster` ID and inline GLSL in Qt 6 `ShaderEffect`, alongside v1 `items` in the merged layouts and a layout action that executes arbitrary programs. Evidence: `build/vm-oracle/arctic-merge-edb2df4/report/build.log`.
