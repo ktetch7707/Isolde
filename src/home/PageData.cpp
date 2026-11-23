@@ -136,6 +136,20 @@ PageData::artwork(const QString& kind, int id)
     }
     return m_artwork[key];
 }
+// Keep one cancellable backdrop loader per profile instead of prefetching an entire shelf.
+QObject*
+PageData::backdrop(const QString& kind, int id)
+{
+    if (!m_valid || id < 1 || !QStringList{"movie", "episode", "tvshow", "season"}.contains(kind))
+        return nullptr;
+    const QString key = QStringLiteral(":focused-backdrop");
+    auto*& art = m_artwork[key];
+    if (!art)
+        art = new KodiArtwork(m_profile, this, m_directory);
+    art->loadBackdrop(kind, id);
+    return art;
+}
+
 void
 PageData::activate(QObject* object, int index, bool resume, const QString& originId)
 {

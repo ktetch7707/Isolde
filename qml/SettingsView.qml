@@ -13,7 +13,7 @@ Item {
     property var pendingCategoryOrder: []
     readonly property bool arranging: pendingCategoryOrder.length > 0
     readonly property var sections: {
-        const order = arranging ? pendingCategoryOrder : layoutModel.composition.settingsCategoryOrder || []
+        const order = (arranging ? pendingCategoryOrder : layoutModel.composition.settingsCategoryOrder || []).filter(id=>id!=="display-skins")
         if (order.length !== packagedSections.length) return packagedSections
         const sorted = order.map(id => packagedSections.find(section => section.id === id))
         return sorted.every(section => !!section) && new Set(order).size === order.length ? sorted : packagedSections
@@ -33,8 +33,12 @@ Item {
     property var rowSelections: ({})
     property string editPageId: ""
     property string editComponentId: ""
+    property var skinEditor:null
+    property var screensaverEditor:null
+    property string editingSkinId:""
     readonly property var category: sections[selectedSection] || ({})
     readonly property var categoryRows: category.rows || []
+    readonly property string paneRoute: inPage ? route : (category.route || "")
     readonly property int selectedRow: rowSelections[category.id] || 0
     onSelectedRowChanged: Qt.callLater(revealCategoryRow)
     onCategoryChanged: Qt.callLater(() => { categoryScroll.contentY=0; revealCategoryRow() })
@@ -130,6 +134,14 @@ Item {
     function openAppsSettings() { openCategory("apps", "") }
 
     function backToParent() {
+        if(editingSkinId && (route==="studio" || route==="skin-screensaver")){
+            const id=editingSkinId
+            route="skins";editingSkinId="";skinEditor=null;screensaverEditor=null
+            layoutModel.closeSkinEditor()
+            ambientSettings.closeSkinEditor()
+            skinPicker.begin(id)
+            return
+        }
         if (categoryRows.length && route) route = ""
         else { route = ""; inPage = false }
     }
@@ -151,6 +163,13 @@ Item {
         }
         if (route === "studio") { homePage.handleCommand(command); return }
         if (route === "skins") { skinPicker.handleCommand(command); return }
+        if (route === "skin-screensaver") {
+            if (skinScreensaver.item) {
+                if(command===inputManager.back && !skinScreensaver.item.editing)backToParent()
+                else skinScreensaver.item.handleCommand(command)
+            }
+            return
+        }
         if (route === "media") {
             if (command === inputManager.back) { if (!mediaPage.back()) backToParent() }
             else mediaPage.handleCommand(command)
@@ -172,7 +191,8 @@ Item {
             if (command === inputManager.navigateUp) selectRow(Math.max(0, selectedRow - 1))
             else if (command === inputManager.navigateDown) selectRow(Math.min(categoryRows.length - 1, selectedRow + 1))
             else if (command === inputManager.navigateLeft) inPage = false
-            else if (command === inputManager.confirm && categoryRows[selectedRow]) openRoute(categoryRows[selectedRow].route)
+            else if ((command === inputManager.navigateRight || command === inputManager.confirm) && categoryRows[selectedRow])
+                openRoute(categoryRows[selectedRow].route)
             return
         }
         if (route === "network") networkPage.handleCommand(command)
@@ -185,13 +205,20 @@ Item {
         else if (route === "system") systemPage.handleCommand(command)
     }
 
-    Rectangle { anchors.fill: parent; color: shell.background }
+    Rectangle {
+        anchors.fill: parent
+        gradient: Gradient {
+            GradientStop { position: 0; color: root.appearance.backgroundStart || shell.background }
+            GradientStop { position: 1; color: shell.background }
+        }
+    }
     CustomizeHomeView {
         id: homePage
+        layoutModel:root.skinEditor || root.layoutModel
         anchors.fill: parent
         visible: root.fullPage
-        initialPageId: root.editPageId
-        initialComponentId: root.editComponentId
+        initialPageId: root.editingSkinId ? "" : root.editPageId
+        initialComponentId: root.editingSkinId ? "" : root.editComponentId
         items: root.homeItems
         availableApps: root.availableApps
         artwork: root.artwork
@@ -206,32 +233,60 @@ Item {
         anchors.fill: parent
         visible: open && root.inPage && root.route === "skins"
         layoutModel: root.layoutModel
-        appearance: root.appearance
+        ambientModel: ambientSettings
+        appearance:root.appearance
         z: 6
         onClosed: if (root.route === "skins") root.backToParent()
         onEditSkin: id => {
+            const model=root.layoutModel.openSkinEditor(id)
+            if(!model){message=root.layoutModel.errorString;return}
+            root.skinEditor=model; root.editingSkinId=id
             root.route = "studio"
-            Qt.callLater(() => homePage.previewDesign(id))
         }
-        onAddSkin: root.route = "studio"
+        onScreensaverRequested:id=>{
+            const model=root.layoutModel.openSkinEditor(id)
+            if(!model){message=root.layoutModel.errorString;return}
+            root.skinEditor=model;root.editingSkinId=id
+            root.screensaverEditor=id===root.layoutModel.activeSkinId?ambientSettings:ambientSettings.openSkinEditor(id)
+            root.route="skin-screensaver"
+        }
+        onDuplicated:(sourceId,copyId)=>ambientSettings.copySkinSettings(sourceId,copyId)
+    }
+    Loader {
+        id:skinScreensaver;anchors.fill:parent;z:7
+        active:root.inPage && root.route==="skin-screensaver" && !!root.screensaverEditor && !!root.skinEditor
+        sourceComponent:AmbientSettingsView {
+            appearance:root.appearance;settingsModel:root.screensaverEditor || ambientSettings
+            layoutModel:root.skinEditor || root.layoutModel
+            canPreview:root.editingSkinId===root.layoutModel.activeSkinId
+            onPreviewRequested:root.previewAmbientRequested()
+        }
     }
 
     Row {
         anchors.fill: parent
-        anchors.margins: 54
-        spacing: 28 * shell.gapScale
+        anchors.margins: 44
+        spacing: 36 * shell.gapScale
         visible: !root.fullPage
         Column {
             id: sectionColumn
-            width: Math.min(360, parent.width * .36)
+            width: Math.min(350 * shell.textScale, parent.width * .33)
             height: parent.height
             spacing: 16 * shell.gapScale
-            Text { width:parent.width; wrapMode:Text.Wrap; font.family:shell.fontFamily; text:qsTr("Settings"); color:shell.backgroundText; font.pixelSize:34*shell.textScale; font.weight:Font.DemiBold }
-            Text { width:parent.width; wrapMode:Text.Wrap; font.family:shell.fontFamily; text:root.navigationError || (root.arranging ? qsTr("Move category: Up / Down\nConfirm saves · Back cancels") : root.inPage ? qsTr("Back returns one level") : qsTr("Choose a category\nMenu to reorder")); color:shell.backgroundMuted; font.pixelSize:18*shell.textScale }
+            Row {
+                width:parent.width; spacing:12
+                LineIcon { width:28*shell.textScale;height:width;anchors.verticalCenter:parent.verticalCenter;name:"settings";ink:shell.backgroundText }
+                Text { font.family:shell.fontFamily;text:qsTr("Settings");color:shell.backgroundText;font.pixelSize:36*shell.textScale;font.weight:Font.DemiBold }
+            }
+            Text {
+                visible:text.length>0;width:parent.width;wrapMode:Text.Wrap;font.family:shell.fontFamily
+                text:root.navigationError || (root.arranging?qsTr("Up / Down moves · OK saves · Back cancels"):"")
+                color:root.navigationError?shell.backgroundError:shell.backgroundMuted;font.pixelSize:17*shell.textScale
+            }
             ListView {
                 objectName: "settingsSections"
                 width: parent.width; height: parent.height - y; clip: true
-                spacing: 8 * shell.gapScale
+                spacing: 5 * shell.gapScale
                 currentIndex: root.selectedSection
                 highlightRangeMode: ListView.ApplyRange; highlightMoveDuration: 0
                 model: root.sections
@@ -240,18 +295,21 @@ Item {
                     required property var modelData
                     readonly property bool selected: root.selectedSection === index
                     width: ListView.view.width
-                    height: Math.max(76*shell.textScale, sectionLabels.implicitHeight+28)
+                    height: Math.max(53*shell.textScale, sectionLabel.implicitHeight+20)
                     radius: shell.radius
-                    color: selected ? shell.selected : shell.surface
-                    border.width: selected && !root.inPage ? 3 : 1
-                    border.color: selected && !root.inPage ? shell.selectedFocus : shell.outline
+                    color: selected ? shell.selected : "transparent"
+                    border.width: selected && !root.inPage ? 2 : 0
+                    border.color: shell.selectedFocus
                     SettingsUpdateBadge { anchors.top: parent.top; anchors.right: parent.right; z: 5; settingsTarget: modelData.id === "system" }
-                    Column {
-                        id: sectionLabels
-                        anchors.left:parent.left; anchors.right:parent.right; anchors.verticalCenter:parent.verticalCenter; anchors.margins:14
-                        spacing:6*shell.gapScale
-                        Text { width:parent.width; wrapMode:Text.Wrap; font.family:shell.fontFamily; text:modelData.name; color:selected?shell.selectedText:shell.text; font.pixelSize:21*shell.textScale; font.weight:Font.DemiBold }
-                        Text { width:parent.width; wrapMode:Text.Wrap; font.family:shell.fontFamily; text:modelData.description; color:selected?shell.selectedText:shell.muted; font.pixelSize:16*shell.textScale }
+                    Accessible.role: Accessible.Button
+                    Accessible.name: modelData.name
+                    Accessible.description: modelData.description
+                    Text {
+                        id:sectionLabel
+                        anchors.left:parent.left;anchors.right:parent.right;anchors.verticalCenter:parent.verticalCenter
+                        anchors.leftMargin:16;anchors.rightMargin:16;elide:Text.ElideRight;textFormat:Text.PlainText
+                        font.family:shell.fontFamily;text:modelData.name;color:selected?shell.selectedText:shell.backgroundText
+                        font.pixelSize:20*shell.textScale;font.weight:selected?Font.DemiBold:Font.Normal
                     }
                     MouseArea { anchors.fill:parent; enabled:!root.arranging; onClicked:root.openCategory(modelData.id, "") }
                 }
@@ -260,7 +318,7 @@ Item {
         Rectangle {
             width: parent.width - sectionColumn.width - parent.spacing
             height: parent.height
-            radius: shell.radius; color: shell.elevated; border.color: shell.outline
+            radius: shell.radius; color: shell.elevated
             Item {
                 anchors.fill:parent; anchors.margins:26
                 // Preview category contents without allowing a second active focus.
@@ -269,11 +327,11 @@ Item {
                     anchors.fill:parent; clip:true
                     contentHeight:categoryContents.implicitHeight
                     boundsBehavior:Flickable.StopAtBounds
-                    visible: !root.inPage || !root.route
+                    visible: !root.paneRoute || (!root.inPage && root.paneRoute==="skins")
                 Column {
                     id: categoryContents
                     width:parent.width
-                    spacing:20*shell.gapScale
+                    spacing:10*shell.gapScale
                     Text { width:parent.width; wrapMode:Text.Wrap; text:root.category.name || qsTr("Settings unavailable"); font.family:shell.fontFamily; font.pixelSize:30*shell.textScale; font.weight:Font.DemiBold; color:shell.elevatedText }
                     Text { width:parent.width; wrapMode:Text.Wrap; text:root.category.description || qsTr("The packaged navigation could not be loaded."); font.family:shell.fontFamily; font.pixelSize:20*shell.textScale; color:shell.elevatedMuted }
                     Repeater {
@@ -284,31 +342,73 @@ Item {
                             required property var modelData
                             readonly property bool selected: root.inPage && root.selectedRow === index
                             objectName: "settingsCategoryRow-" + modelData.route
-                            width:parent.width; height:Math.max(90*shell.textScale, menuLabels.implicitHeight+32)
+                            width:parent.width; height:Math.max(75*shell.textScale, menuLabels.implicitHeight+22)
                             radius:shell.radius; color:selected?shell.selected:shell.surface
-                            border.width:selected?3:1; border.color:selected?shell.selectedFocus:shell.outline
+                            border.width:selected?2:0; border.color:shell.selectedFocus
+                            Accessible.role: Accessible.Button
+                            Accessible.name: modelData.name
+                            Accessible.description: modelData.description
+                            LineIcon {
+                                id:routeArrow
+                                anchors.right:parent.right;anchors.rightMargin:16;anchors.verticalCenter:parent.verticalCenter
+                                name:"arrow-right";width:18*shell.textScale;height:width;ink:selected?shell.selectedText:shell.muted
+                            }
                             Column {
                                 id:menuLabels
-                                anchors.left:parent.left; anchors.right:parent.right; anchors.verticalCenter:parent.verticalCenter; anchors.margins:16
-                                spacing:8*shell.gapScale
+                                anchors.left:parent.left; anchors.right:routeArrow.left; anchors.verticalCenter:parent.verticalCenter; anchors.margins:16
+                                spacing:3*shell.gapScale
                                 Text { width:parent.width; wrapMode:Text.Wrap; text:modelData.name; font.family:shell.fontFamily; font.pixelSize:23*shell.textScale; font.weight:Font.DemiBold; color:selected?shell.selectedText:shell.text }
                                 Text { width:parent.width; wrapMode:Text.Wrap; text:modelData.description; font.family:shell.fontFamily; font.pixelSize:18*shell.textScale; color:selected?shell.selectedText:shell.muted }
                             }
                             MouseArea { anchors.fill:parent; enabled:!root.arranging; onClicked:{root.inPage=true;root.selectRow(index);root.openRoute(modelData.route)} }
                         }
                     }
-                    Text { visible:!root.categoryRows.length; width:parent.width; wrapMode:Text.Wrap; text:qsTr("Confirm to open"); font.family:shell.fontFamily; font.pixelSize:20*shell.textScale; color:shell.elevatedMuted }
+                    Repeater {
+                        model: !root.inPage && root.category.route === "skins" ? skinPicker.entries : []
+                        delegate: Rectangle {
+                            required property int index
+                            required property var modelData
+                            objectName: "settingsSkin-" + modelData.id
+                            width: parent.width
+                            height: Math.max(54 * shell.textScale, skinName.implicitHeight + 20)
+                            radius: shell.radius
+                            color: shell.surface
+                            Text {
+                                id: skinName
+                                anchors.fill: parent
+                                anchors.margins: 12
+                                verticalAlignment: Text.AlignVCenter
+                                text: modelData.name + (modelData.id === root.layoutModel.activeSkinId ? qsTr(" · Active") : "")
+                                textFormat: Text.PlainText
+                                elide: Text.ElideRight
+                                font.family: shell.fontFamily
+                                font.pixelSize: 20 * shell.textScale
+                                color: shell.text
+                            }
+                            MouseArea {
+                                anchors.fill: parent
+                                enabled: !root.arranging
+                                onClicked: {
+                                    const skinIndex = index
+                                    root.openCategory(root.category.id, "")
+                                    skinPicker.selected = skinIndex
+                                    skinPicker.selectEntry()
+                                }
+                            }
+                        }
+                    }
+                    Text { visible:!root.categoryRows.length && root.category.route !== "skins"; width:parent.width; wrapMode:Text.Wrap; text:qsTr("Confirm to open"); font.family:shell.fontFamily; font.pixelSize:20*shell.textScale; color:shell.elevatedMuted }
                 }
                 }
                 NetworkSettingsView {id:networkPage;anchors.fill:parent;appearance:root.appearance;visible:root.inPage && root.route==="network"}
                 VpnSettingsView {id:vpnPage;anchors.fill:parent;appearance:root.appearance;visible:root.inPage && root.route==="vpn"}
                 StoreSettingsView {id:storePage;anchors.fill:parent;appearance:root.appearance;visible:root.inPage && root.route==="store-preferences";onBrowserRequested: appId => root.browserRequested(appId)}
                 InterfaceSoundSettingsView {id:interfaceSoundPage;anchors.fill:parent;appearance:root.appearance;visible:root.inPage && root.route==="interface-sounds"}
-                KodiSettingsView {id:mediaPage;anchors.fill:parent;appearance:root.appearance;visible:root.inPage && root.route==="media"}
+                KodiSettingsView {id:mediaPage;anchors.fill:parent;appearance:root.appearance;visible:root.paneRoute==="media";enabled:root.inPage}
                 SourceSettingsView {id:sourcePage;anchors.fill:parent;appearance:root.appearance;visible:root.inPage && root.route==="sources"}
-                ProfileSettingsView {id:profilePage;anchors.fill:parent;appearance:root.appearance;visible:root.inPage && root.route==="profiles"}
-                RemoteSettingsView {id:remotePage;anchors.fill:parent;appearance:root.appearance;visible:root.inPage && root.route==="remotes"}
-                SystemSettingsView {id:systemPage;anchors.fill:parent;appearance:root.appearance;visible:root.inPage && ["display","audio","ambient","capture","system"].includes(root.route);onPreviewRequested:root.previewAmbientRequested()}
+                ProfileSettingsView {id:profilePage;anchors.fill:parent;appearance:root.appearance;visible:root.paneRoute==="profiles";enabled:root.inPage}
+                RemoteSettingsView {id:remotePage;anchors.fill:parent;appearance:root.appearance;visible:root.paneRoute==="remotes";enabled:root.inPage}
+                SystemSettingsView {id:systemPage;anchors.fill:parent;appearance:root.appearance;visible:["display","audio","ambient","capture","system"].includes(root.paneRoute);enabled:root.inPage;onPreviewRequested:root.previewAmbientRequested()}
             }
         }
     }

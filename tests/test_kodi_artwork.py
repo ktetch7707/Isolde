@@ -14,6 +14,30 @@ spec.loader.exec_module(module)
 
 
 class ArtworkTests(unittest.TestCase):
+    def test_backdrop_prefers_cached_fanart_without_changing_poster_reads(self):
+        """Keep the two artwork roles distinct for the same focused movie."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            images = {name: b"\x89PNG\r\n\x1a\n" + name.encode() for name in ("poster", "fanart")}
+            for name, data in images.items():
+                (root / name).write_bytes(data)
+
+            def execute(raw):
+                """Expose two Kodi textures through the real artwork dispatch boundary."""
+                request = json.loads(raw)
+                if request["method"] == "Textures.GetTextures":
+                    result = {"textures": [{"cachedurl": request["params"]["filter"]["value"]}]}
+                else:
+                    result = {"moviedetails": {"art": {"poster": "poster", "fanart": "fanart"}}}
+                return json.dumps({"result": result})
+
+            art = module.Artwork(execute, directory)
+            for role in ("poster", "backdrop"):
+                params = {"kind": "movie", "id": 1}
+                if role == "backdrop":
+                    params["role"] = role
+                self.assertEqual(base64.b64decode(art.get(params)["data"]), images["fanart" if role == "backdrop" else "poster"])
+
     def test_music_art_uses_audio_library_identity_without_network(self):
         """Use Kodi audio identities even when the requested artwork is missing."""
         with tempfile.TemporaryDirectory() as directory:

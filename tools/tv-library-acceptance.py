@@ -299,6 +299,10 @@ provider.setSettingString("searchlanguage","en-US")
         layout.write_text(json.dumps(dict(schemaVersion=2,rootPage=dict(name='Home',visible=True,position=0),
             categories=[],components=[],composition=dict(schemaVersion=1,enabled=True,showClock=False,
                 grid=dict(columns=8,rows=6,mode='screen'),headerControls=['settings','edit']))))
+        if args.playlist_playback:
+            # Model a profile where the guest's already-installed Kodi app is enabled.
+            (layout.parent/'installed-apps.json').write_text(json.dumps(
+                dict(schemaVersion=1,installed=['kodi'],packageStates={'kodi':'installed'},failureReasons={})))
     if args.movie_art or args.kodi_import:
         managed_art=config/'profiles'/profile/'artwork';managed_art.mkdir(parents=True)
         managed_poster=managed_art/(hashlib.sha256(poster.read_bytes()).hexdigest()+'.png')
@@ -858,22 +862,33 @@ provider.setSettingString("searchlanguage","en-US")
                     return status.get('state')=='playing'
                 wait(fresh_movie_playing,'Fresh Isolde source played its real local movie without Kodi menus')
                 poster_capture('moviefreshplaying')
-                key('kodi','Menu')
-                controls=wait(lambda:next((row[0] for row in windows() if row[2]==str(process.pid) and row[-1]=='Isolde playback controls'),None),'Fresh native Menu opened Isolde playback controls')
+                key('kodi','Return')
+                controls=wait(lambda:next((row[0] for row in windows() if row[2]==str(process.pid) and row[-1]=='Isolde playback controls'),None),'Native OK opened the Isolde playback overlay')
                 poster_capture('moviefreshcontrols')
-                for _ in range(3):key(controls,'Down',.1)
+                # Audio sits immediately to the right of Picture size.
+                for _ in range(12):key(controls,'Up',.08)
+                key(controls,'Down',.08)
                 key(controls,'Return');key(controls,'Down');key(controls,'Return')
                 wait(lambda:any(row['id']==1 and row['selected'] for row in rpc(directory,'Isolde.GetPlaybackOptions')['audio']),'Remote audio selection changed the real Kodi audio stream')
                 poster_capture('moviefreshaudio');key(controls,'Escape')
-                for _ in range(20):key(controls,'Up',.04)
-                key(controls,'Down');key(controls,'Down')
                 def player_seconds():
+                    """Read Kodi directly so a preview alone cannot satisfy the seek assertion."""
                     value=rpc(directory,'Player.GetProperties',{'playerid':1,'properties':['time']})['time']
                     return value.get('hours',0)*3600+value.get('minutes',0)*60+value.get('seconds',0)
-                for step in range(30):
-                    key(controls,'Return',.35)
-                    if step%5==4:print('REMOTE_SEEK_PROGRESS '+json.dumps({'presses':step+1,'seconds':player_seconds(),'state':rpc(directory,'Isolde.PlaybackStatus')}),flush=True)
+                for _ in range(15):key(controls,'Up',.04)
+                key(controls,'Down');key(controls,'Down')
+                key(controls,'Return')
+                wait(lambda:rpc(directory,'Isolde.PlaybackStatus').get('state')=='paused','Overlay paused the movie')
+                before_preview=player_seconds()
+                key(controls,'Right');key(controls,'Escape')
+                assert player_seconds()==before_preview,'Canceling the preview moved Kodi playback'
+                for _ in range(20):key(controls,'Right',.08)
+                poster_capture('moviefreshseekpreview')
+                assert player_seconds()==before_preview,'Previewing moved Kodi playback before confirmation'
+                key(controls,'Return')
                 position=wait(lambda:(seconds if (seconds:=player_seconds())>180 else None),'Remote seek passed Kodi default resume threshold')
+                key(controls,'Return')
+                wait(lambda:rpc(directory,'Isolde.PlaybackStatus').get('state')=='playing','Overlay resumed the movie')
                 key(controls,'Escape');key('kodi','Escape')
                 wait(lambda:rpc(directory,'Isolde.PlaybackStatus').get('state')=='ended','Fresh movie stopped through managed Back')
                 def stored_resume():
@@ -972,7 +987,7 @@ provider.setSettingString("searchlanguage","en-US")
                     "freshSourceSetupThroughIsolde":True,"sourcePreviewCancelNoWrite":True,"nativeSourceWriteFailureRecovery":True,"capabilityGuideRemoteRoute":True,"kodiMenusRequired":False,
                     "freshPlaybackReturnThroughIsolde":True,"actualKodiResumeSavedAndRestored":True,"preferenceOffLibraryDirect":True,"remoteHomeMoviesRoute":True,"realAudioTrackSelection":True,"sourceEditPreservesProgress":True,"remoteMusicSourceBrowsePlayback":True,"seekPosition":position,"storedResume":resume,
                     "preferenceWriteFailureRetained":True,
-                    "captures":["mediacapabilities","sourceempty","sourcepreview","sourcesaved","sourcefailed","sourcerecovered","movieart","movieposterpreview","movieposterapplied","moviefreshplaying","moviefreshcontrols","moviefreshaudio","moviefreshreturned","sourceprogresspreserved","localplaybackon","localplaybackfailed","localplaybackoff","movieresumed","moviefreshhome","musicsource","musicalbums","musicsongs","musiccontrols","musicreturned"]},indent=2))
+                    "captures":["mediacapabilities","sourceempty","sourcepreview","sourcesaved","sourcefailed","sourcerecovered","movieart","movieposterpreview","movieposterapplied","moviefreshplaying","moviefreshcontrols","moviefreshaudio","moviefreshseekpreview","moviefreshreturned","sourceprogresspreserved","localplaybackon","localplaybackfailed","localplaybackoff","movieresumed","moviefreshhome","musicsource","musicalbums","musicsongs","musiccontrols","musicreturned"]},indent=2))
                 return
             shows = wait(lambda: rpc(directory, "VideoLibrary.GetTVShows", {"properties": ["title"]}).get("tvshows"), "Kodi imported TV fixture")
             show_id = next(s["tvshowid"] for s in shows if s["title"] == "Isolde Television Fixture")
@@ -1067,7 +1082,7 @@ provider.setSettingString("searchlanguage","en-US")
                     def manage_playlist(name):
                         current=rpc(directory,'Isolde.GetPlaylists')['playlists']
                         index=next(i for i,row in enumerate(current) if row['playlistName']==name)
-                        press('Up',30);press('Down',index+2);press('Return');time.sleep(.5)
+                        press('Up',30);press('Down',index+3);press('Return');time.sleep(.5)
                         assert rpc(directory,'Isolde.PlaybackStatus')['state'] not in ('starting','playing','paused'), 'Playlist management unexpectedly started playback'
                     if args.playlist_playback:
                         press("Escape");press("Right");press("Return")
@@ -1088,7 +1103,7 @@ provider.setSettingString("searchlanguage","en-US")
                         catalog=rpc(directory,"Isolde.GetPlaylists")["playlists"]
                         assert any(p["playlistName"]=="Fixture episodes.xsp" for p in catalog)
                         created_index=next(i for i,p in enumerate(catalog) if p["playlistName"]==created[0].name)
-                        press("Down",created_index+2);press("Return");time.sleep(1)
+                        press("Down",created_index+3);press("Return");time.sleep(1)
                         saved_items=rpc(directory,"Isolde.GetPlaylistItems",{"name":created[0].name,"kind":"shows","start":0,"end":50})["tvshows"]
                         assert {i["tvshowid"] for i in saved_items}=={show_id}
                         result=rpc(directory,"Isolde.GetPlaylistItems",{"name":"Fixture episodes.xsp","kind":"shows","start":0,"end":50})
@@ -1106,15 +1121,17 @@ provider.setSettingString("searchlanguage","en-US")
                         remote_text(press,collision_file.name)
                         time.sleep(2);playlist_capture('playlistcollision')
                         assert renamed.exists() and collision_file.read_bytes()==collision_bytes,'Collision destroyed a playlist'
-                        manage_playlist(renamed.name);press('Down',4);press('Return');press('Return');press('Escape')
+                        manage_playlist(renamed.name);press('Down',4);press('Return');time.sleep(.5);press('Escape')
                         rename_bytes=renamed.read_bytes()
                         assert b'<rule' not in rename_bytes,'Cancelled rule draft changed the saved definition'
-                        # Replace rules only after a real read-only Kodi preview and explicit review.
-                        press('Down',4);press('Return');press('Return');press('Down');press('Return')
+                        # Draft a title rule and check the real read-only preview before saving.
+                        press('Return');time.sleep(.5)
+                        press('Down',3);press('Return');press('Return');press('Down');press('Return')
+                        press('Down',2);press('Return')
                         remote_text(press,'fixture')
-                        press('Return');time.sleep(2);playlist_capture('playlistrules')
+                        press('Escape');press('Down',7);press('Return');time.sleep(2);playlist_capture('playlistrules')
                         assert renamed.read_bytes()==rename_bytes,'Preview wrote the playlist'
-                        press('Escape');press('Return');press('Return')
+                        press('Escape');press('Down',8);press('Return')
                         wait(lambda:ET.fromstring(renamed.read_bytes()).findtext('rule/value')=='fixture','Reviewed rule replacement committed')
                         manage_playlist(renamed.name);press('Down',2);press('Return');press('Down',2);press('Return');press('Down',3);press('Return');press('Down')
                         sort_bytes=renamed.read_bytes();playlist_capture('playlistorder')
@@ -1141,24 +1158,28 @@ provider.setSettingString("searchlanguage","en-US")
                     press("Down");press("Return")
                     wait(lambda:rpc(directory,"Isolde.PlaybackStatus").get("state")=="playing","Real playlist episode playing")
                     playlist_capture("playlistplaying")
-                    key("kodi","Return")  # Focused on-screen Pause control.
+                    key('kodi','Return')
+                    def controls_window():
+                        return next((row[0] for row in windows() if row[2]==str(process.pid) and row[-1]=='Isolde playback controls'),None)
+                    controls=wait(controls_window,'Native OK opened the owned Isolde playback controls')
+                    key(controls,'Return')
                     wait(lambda:rpc(directory,"Isolde.PlaybackStatus").get("state")=="paused","Real playlist episode paused")
                     playlist_capture("playlistpaused")
                     before_item=rpc(directory,'Player.GetItem',{'playerid':1,'properties':[]})['item']
-                    key('kodi','Menu')
-                    def controls_window():
-                        return next((row[0] for row in windows() if row[2]==str(process.pid) and row[-1]=='Isolde playback controls'),None)
-                    controls=wait(controls_window,'Native Menu opened the owned Isolde playback controls')
                     playlist_capture('playlistcontrols')
-                    # Transport rows vary by available neighbors. The video
-                    # options follow them, immediately above the three final rows.
                     for _ in range(12):key(controls,'Down',.08)
-                    for _ in range(3):key(controls,'Up',.08)
+                    key(controls,'Up',.08)
+                    key(controls,'Return')
+                    playlist_capture('playlistinfo')
+                    key(controls,'Escape')
+                    # Picture size stays at the left edge of the row.
+                    for _ in range(12):key(controls,'Up',.08)
                     key(controls,'Return');key(controls,'Down');key(controls,'Return')
                     wait(lambda:rpc(directory,'Isolde.GetPlaybackOptions').get('view')=='zoom','Remote picture-size choice applied by Kodi')
                     playlist_capture('playlistpicture')
                     key(controls,'Escape')
-                    key(controls,'Up',.08)
+                    for _ in range(12):key(controls,'Down',.08)
+                    for _ in range(2):key(controls,'Up',.08)
                     key(controls,'Return')
                     wait(lambda:rpc(directory,'Isolde.GetPlaybackOptions')['subtitles'],'Kodi discovered the local subtitle fixture')
                     key(controls,'Down');key(controls,'Return')
@@ -1166,8 +1187,8 @@ provider.setSettingString("searchlanguage","en-US")
                     key(controls,'Up');key(controls,'Return')
                     assert rpc(directory,'Isolde.GetPlaybackOptions')['subtitleEnabled'] is False
                     key(controls,'Escape')
-                    for _ in range(20):key(controls,'Up',.04)
-                    for _ in range(4):key(controls,'Down',.08)
+                    for _ in range(12):key(controls,'Down',.08)
+                    for _ in range(3):key(controls,'Up',.08)
                     key(controls,'Return')
                     def current_episode():
                         if rpc(directory,'Isolde.PlaybackStatus').get('state')!='playing':return None
@@ -1175,7 +1196,7 @@ provider.setSettingString("searchlanguage","en-US")
                     wait(lambda:(item if (item:=current_episode()) and item.get('id')!=before_item['id'] else None),'Remote Next opened another actual playlist episode')
                     playlist_capture('playlistnext')
                     key('kodi','Menu');controls=wait(controls_window,'Playback controls reopened on next episode')
-                    for _ in range(3):key(controls,'Down',.08)
+                    key(controls,'Up',.08)
                     key(controls,'Return')
                     wait(lambda:(item if (item:=current_episode()) and item.get('id')==before_item['id'] else None),'Remote Previous restored the original actual episode')
                     key('kodi','Menu');controls=wait(controls_window,'Playback controls reopened on original episode')
@@ -1190,11 +1211,42 @@ provider.setSettingString("searchlanguage","en-US")
                     run("wmctrl","-i","-a",shell,env=env);time.sleep(1)
                     playlist_capture("playlistreturned")
                     if args.playlist_playback:
+                        # Open the full Kodi interface through Settings with the default Isolde frontend.
+                        press('Home');press('Up',20);press('Left',20);press('Return')
+                        press('Up',20)
+                        # Right moves from a category to its rows and opens a row.
+                        press('Right');press('Right')
+                        playlist_capture('playlistsettingsdirectional')
+                        press('Escape');press('Escape')
+                        # Enter Skins with Right, then preview a different skin without using it.
+                        press('Down',2);press('Right');press('Down',2);press('Return')
+                        playlist_capture('playlistskinhomepreview')
+                        press('Down',2)
+                        playlist_capture('playlistskinsaverpreview')
+                        press('Escape');press('Escape')
+                        press('Up',20)
+                        press('Down',7)
+                        playlist_capture('playlistsettingspreview')
+                        press('Right')
+                        press('Down',5);press('Return')
+                        def interactive_kodi():
+                            """Distinguish the foreground native app from a minimized library window."""
+                            active=run('xprop','-root','_NET_ACTIVE_WINDOW',env=env,timeout=5).strip().split()[-1]
+                            return next((row[0] for row in windows() if 'Kodi' in row[-1] and int(active,16)==int(row[0],16)),None)
+                        native_window=wait(interactive_kodi,'Kodi opened directly from Isolde mode',seconds=45)
+                        playlist_capture('playlistnativekodi')
+                        run('wmctrl','-i','-c',native_window,env=env,timeout=5)
+                        wait(lambda:all(row[0]!=native_window for row in windows()),'Native Kodi window closed',seconds=30)
+                        def returned_library():
+                            """Require the managed bridge to answer again after native Kodi releases the home."""
+                            try:return rpc(directory,'Isolde.PlaybackStatus').get('state')=='idle'
+                            except (OSError,RuntimeError,ValueError):return False
+                        wait(returned_library,'Isolde library resumed after native Kodi exit',seconds=45)
                         for path,digest in hashes.items():
                             assert hashlib.sha256(Path(path).read_bytes()).hexdigest()==digest
                         (evidence/"result.json").write_text(json.dumps(dict(passed=True, realKodi=True,
                             remotePictureSize=True, remoteSubtitles=True, realNextPrevious=True,
-                            controlsCloseRestoresVideoFocus=True, mediaUnchanged=True)))
+                            controlsCloseRestoresVideoFocus=True, directKodiOpenAndReturn=True, mediaUnchanged=True)))
                         return
                 from importlib.machinery import SourceFileLoader
                 studio_path=Path(__file__).with_name('home-components-acceptance.py')

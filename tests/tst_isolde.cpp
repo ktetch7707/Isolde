@@ -1852,6 +1852,23 @@ IsoldeTests::ambientSettingsPersistAndClamp()
     QCOMPARE(restored.imageFit(), QString("fill"));
     QVERIFY(!restored.shuffle());
     QVERIFY(restored.showClock());
+
+    // Switching skins and editing an inactive screensaver must keep each rotation independent.
+    QVERIFY(restored.setPageIds({QStringLiteral("default-page")}));
+    auto* editor = qobject_cast<AmbientSettings*>(restored.openSkinEditor("user-cinema"));
+    QVERIFY(editor);
+    QVERIFY(editor->pageIds().isEmpty());
+    QVERIFY(editor->setPageIds({QStringLiteral("cinema-page")}));
+    editor->toggleClock();
+    QCOMPARE(restored.pageIds(), QStringList{QStringLiteral("default-page")});
+    QVERIFY(restored.showClock());
+    restored.copySkinSettings("user-cinema", "user-copy");
+    restored.closeSkinEditor();
+    restored.selectSkin("user-copy");
+    QCOMPARE(restored.pageIds(), QStringList{QStringLiteral("cinema-page")});
+    QVERIFY(!restored.showClock());
+    restored.selectSkin("builtin-default");
+    QVERIFY(restored.showClock());
 }
 
 void

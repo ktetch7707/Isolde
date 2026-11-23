@@ -235,6 +235,42 @@ class BridgeTests(unittest.TestCase):
                 self.assertEqual(len(calls),2 if kind=="episode" else 1)
 
     @unittest.skipUnless(os.name=="posix","Kodi playlist writes run inside the Linux guest")
+    def test_smart_decade_playlists_preview_and_preserve_shelf_identity(self):
+        """Exercise combined year rules, bounded preview, publication and revision-checked edits."""
+        spec=importlib.util.spec_from_file_location('isolde_smart_playlists',Path(__file__).resolve().parents[1]/'kodi/service.isolde.bridge/playlists.py')
+        module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+        with tempfile.TemporaryDirectory() as directory:
+            store=module.Playlists(directory,managed=True)
+            files=Path(directory)/'playlists/video'
+            for decade in (1980,1990,2000):
+                draft={'title':f'{decade}s Movies','kind':'movies','match':'all','sort':'year','direction':'ascending',
+                       'rules':[{'field':'year','operator':'greaterthan','value':str(decade-1)},
+                                {'field':'year','operator':'lessthan','value':str(decade+10)}]}
+                before=set(files.iterdir())
+
+                def execute(raw):
+                    """Confirm that Kodi receives both strict bounds in one AND filter."""
+                    params=json.loads(raw)['params']
+                    self.assertEqual(params['filter'],{'and':draft['rules']})
+                    self.assertEqual(params['limits'],{'start':0,'end':50})
+                    return json.dumps({'result':{'movies':[{'movieid':12,'title':'A matching film'}],
+                                                   'limits':{'start':0,'end':1,'total':1}}})
+
+                preview=store.preview({'draft':draft},execute)
+                self.assertEqual(preview['total'],1)
+                self.assertEqual(set(files.iterdir()),before)
+                created=store.create({'draft':draft})
+                filename=created['playlistName']
+                loaded=store.preview({'name':filename,'load':True},execute)
+                self.assertEqual(loaded['draft'],draft)
+                renamed=dict(draft,title=f'Best of the {decade}s')
+                store.edit({'name':filename,'draft':renamed,'revision':loaded['revision']})
+                self.assertEqual(store.load_smart(filename)['draft'],renamed)
+                with self.assertRaises(ValueError):store.edit({'name':filename,'draft':draft,'revision':loaded['revision']})
+                self.assertEqual(store.load_smart(filename)['draft'],renamed)
+            self.assertEqual(len(list(files.glob('*.xsp'))),3)
+
+    @unittest.skipUnless(os.name=="posix","Kodi playlist writes run inside the Linux guest")
     def test_create_playlist_is_kodi_owned_atomic_and_profile_bounded(self):
         module_spec=importlib.util.spec_from_file_location("isolde_playlists",Path(__file__).resolve().parents[1]/"kodi/service.isolde.bridge/playlists.py")
         module=importlib.util.module_from_spec(module_spec);module_spec.loader.exec_module(module)

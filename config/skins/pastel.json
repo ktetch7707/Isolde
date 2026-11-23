@@ -943,7 +943,7 @@
               "schemaVersion": 1,
               "kind": "widget",
               "placement": {
-                "x": 0,
+                "x": 1,
                 "height": 3,
                 "width": 4,
                 "y": 0
@@ -974,7 +974,7 @@
               "id": "manage-tv",
               "placement": {
                 "y": 3,
-                "x": 0,
+                "x": 1,
                 "width": 4,
                 "height": 1
               },
@@ -985,14 +985,31 @@
                 "schemaVersion": 1,
                 "provider": "shell"
               },
-              "name": "Manage TV sources in Kodi",
+              "name": "Manage TV channels",
               "actions": [ {
-                "type": "launch-app",
-                "appId": "kodi"
+                "type": "open-guide",
+                "presentation": {"guideStart": "manage"}
               } ],
               "kind": "widget",
               "schemaVersion": 1,
               "categoryId": "library"
+            },
+            {
+              "id": "tv-page-menu",
+              "name": "Pages",
+              "kind": "widget",
+              "widgetType": "container",
+              "componentType": "container",
+              "family": "page-menu",
+              "schemaVersion": 1,
+              "source": {"schemaVersion": 1, "provider": "shell", "kind": "container"},
+              "categoryId": "library",
+              "placement": {"x": 0, "y": 0, "width": 1, "height": 4},
+              "presentation": {
+                "radius": 12,
+                "labelSize": 20,
+                "layout": {"schemaVersion": 1, "mode": "column", "columns": 1, "rows": 8, "gap": 8, "padding": 8, "wrap": false}
+              }
             }
           ],
           "theme": {},
@@ -1003,10 +1020,10 @@
             }
           ],
           "composition": {
-            "pageNavigation": "left",
+            "pageNavigation": "none",
             "headerMode": "identity",
             "grid": {
-              "columns": 4,
+              "columns": 5,
               "mode": "screen",
               "rows": 4,
               "overlap": false,

@@ -5,8 +5,8 @@ import QtQuick
 Item {
     id: root
     property var pageModel: null
-    property var artworkResolver: null
     property bool reducedMotion: false
+    property var artworkResolver: typeof homeLayout !== "undefined" ? homeLayout : null
     Loader {
         anchors.fill: parent
         active: !!root.pageModel
@@ -14,6 +14,9 @@ Item {
         anchors.fill: parent
         visible: !!root.pageModel
         enabled: false
+        previewOnly:true
+        artworkResolver:root.artworkResolver
+        headerDefaults:root.artworkResolver ? root.artworkResolver.studioOptions.headerDefaults || {} : ({})
         items: root.pageModel ? root.pageModel.items : []
         sections: root.pageModel ? root.pageModel.sections : []
         brandVisible: root.pageModel ? root.pageModel.brandVisible : false
@@ -25,8 +28,6 @@ Item {
         composition: root.pageModel ? root.pageModel.composition : ({})
         grid: root.pageModel ? root.pageModel.grid : ({})
         placements: root.pageModel ? root.pageModel.placements : []
-        artworkResolver: root.artworkResolver || (typeof homeLayout !== "undefined" ? homeLayout : null)
-        previewOnly: !!root.artworkResolver
         freezeData: !!root.artworkResolver
         artworkMotionAllowed: !root.reducedMotion
         internetAvailable: false

@@ -207,6 +207,8 @@ class Playback:
             return self.status()
         if method == "Isolde.PlaybackStatus" and not params:
             return self.status()
+        if method == "Isolde.PlaybackControl" and set(params) == {"action", "position"} and params["action"] == "seek":
+            return self.seek_to(params["position"])
         if method == "Isolde.PlaybackControl" and set(params) == {"action"}:
             return self.control(params["action"])
         raise ValueError("Unsupported playback request")
@@ -239,7 +241,12 @@ class Playback:
             for row in rows:
                 if not isinstance(row,dict) or type(row.get("index")) is not int or row["index"]<0 or row["index"] in seen:raise ValueError("Invalid track identity")
                 seen.add(row["index"])
-                result["audio" if key=="audiostreams" else "subtitles"].append({"id":row["index"],"name":str(row.get("name", ""))[:160],"language":str(row.get("language",""))[:32],"selected":row["index"]==selected.get("index") and (key=="audiostreams" or result["subtitleEnabled"])})
+                track={"id":row["index"],"name":str(row.get("name", ""))[:160],"language":str(row.get("language",""))[:32],"selected":row["index"]==selected.get("index") and (key=="audiostreams" or result["subtitleEnabled"])}
+                if key=="audiostreams" and type(row.get("channels")) is int and 1 <= row["channels"] <= 32:
+                    track["channels"]=row["channels"]
+                if key=="subtitles" and row.get("isforced") is True:
+                    track["forced"]=True
+                result["audio" if key=="audiostreams" else "subtitles"].append(track)
         view=self.rpc("Player.GetViewMode")
         result["view"]=view.get("viewmode", "normal")
         return result
@@ -331,7 +338,33 @@ class Playback:
             return
         self.natural_end = True
 
+    @staticmethod
+    def timeline_seconds(value):
+        """Convert a bounded Kodi time object, leaving unknown timestamps unavailable."""
+        limits = {"hours": 168, "minutes": 59, "seconds": 59}
+        if not isinstance(value, dict) or any(type(value.get(k)) is not int or not 0 <= value[k] <= limit for k, limit in limits.items()):
+            return None
+        return value["hours"] * 3600 + value["minutes"] * 60 + value["seconds"]
+
+    def seek_to(self, position):
+        """Commit a previewed time only against the currently owned, seekable player."""
+        if type(position) is not int or not 0 <= position <= 604800:
+            raise ValueError("Invalid seek position")
+        player = self.owned_player()
+        props = self.rpc("Player.GetProperties", {"playerid": player, "properties": ["canseek", "totaltime"]})
+        duration = self.timeline_seconds(props.get("totaltime"))
+        if props.get("canseek") is not True or not duration or position >= duration:
+            raise ValueError("This seek position is no longer available")
+        if not self.owned_item(self.player_item(player)):
+            raise ValueError("Playback ownership changed")
+        hours, remainder = divmod(position, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        self.rpc("Player.Seek", {"playerid": player, "value": {"time": {"hours": hours, "minutes": minutes, "seconds": seconds, "milliseconds": 0}}})
+        self.control_error = ""
+        return self.status()
+
     def status(self):
+        timeline = {}
         if self.movie is not None:
             players = self.rpc("Player.GetActivePlayers")
             videos = [p for p in players if p.get("type") == ("audio" if self.media_type == "song" else "video")]
@@ -346,7 +379,14 @@ class Playback:
                     self.movie, self.state = None, "replaced"
                 else:
                     verify_seek = self.scheduled_offset is not None and self.scheduled_offset > 0 and not self.seen and self.pending_stop is None
-                    props = self.rpc("Player.GetProperties", {"playerid": player, "properties": ["speed", "canseek", "time"] if verify_seek else ["speed", "canseek"]})
+                    props = self.rpc("Player.GetProperties", {"playerid": player, "properties": ["speed", "canseek", "time", "totaltime"]})
+                    position = self.timeline_seconds(props.get("time"))
+                    duration = self.timeline_seconds(props.get("totaltime"))
+                    if duration and position is not None:
+                        timeline.update(position=min(position, duration), duration=duration)
+                    label = item.get("label")
+                    if isinstance(label, str):
+                        timeline["title"] = label[:256]
                     self.can_pause = self.pause_available()
                     self.can_seek = props.get("canseek") is True
                     if verify_seek:
@@ -396,6 +436,8 @@ class Playback:
             result.update(channelDelta=self.channel_delta, channelRequest=self.channel_request)
         result["canPause"] = self.movie is not None and self.can_pause
         result["canSeek"] = self.movie is not None and self.can_seek
+        if self.movie is not None:
+            result.update(timeline)
         if self.state == "ended": result["naturalEnd"] = self.natural_end and not self.stop_requested
         if self.control_error: result["controlError"] = self.control_error
         if self.failure_reason: result["reason"] = self.failure_reason

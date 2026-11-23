@@ -1313,10 +1313,16 @@ def exercise_collections(evidence, executable, layout, original, fixture, key, p
         if index%2:key("Right")
         key("Return")
     capture("collectionhome")
+    # Identify fixture changes before gallery input so a filter cannot inherit a startup write.
+    before_gallery=layout.read_bytes()
+    assert before_gallery==original,"Collection fixture changed before opening More"
     top();key("Return");capture("selectedgallery")
+    assert layout.read_bytes()==before_gallery,"Opening the folder authored layout data"
     def filter_gallery(text):
-        key("Up",8);key("Return");remote_text(key,text);key("Down")
-        assert layout.read_bytes()==original,"Local gallery filter authored layout data"
+        # More keeps the filter in the focused app's menu instead of its title row.
+        before_filter=layout.read_bytes()
+        key("Menu");key("Down",6);key("Return");remote_text(key,text)
+        assert layout.read_bytes()==before_filter,"Local gallery filter authored layout data"
     filter_gallery("free");capture("collectionfilter")
     key("Return");native_cycle(1,"collectionclient")
     capture("selectedreturn")
@@ -1434,14 +1440,21 @@ def exercise_studio_workflows(evidence,layout,key,capture,expect):
         item=next(i for i in json.loads(layout.read_text())['components'] if i['id']=='personal-source')
         return item['placement']['width']==2 and item['placement']['height']==2 and item['presentation']['sizeAspectLocked'] is True
     expect(sized,'Proportional outer size applied atomically');saved=layout.read_bytes();shot('sizeapplied')
-    menu(3);key('Down',2);key('Return');key('Down',30);key('Up');key('Return') # Header -> Show advanced.
-    fields=[f for f in json.loads((Path(__file__).resolve().parents[1]/'config/studio-defaults.json').read_text())['inspector']['pageFields'] if f['tab']=='Header']
-    def field(name):
-        key('Up',30);key('Down',next(i for i,f in enumerate(fields) if f['key']==name));key('Return')
-    field('headerMode');key('Up',30);key('Down');key('Return')
-    field('showClock');shot('headerpreview');assert layout.read_bytes()==saved
-    field('order');key('Up',30);key('Down',3);key('Return');field('position');key('Up',30);key('Down');key('Return');shot('headerorder');assert layout.read_bytes()==saved
-    apply()
+    menu(3);key('Down',2);key('Return') # Page appearance -> Header groups.
+    groups=json.loads((Path(__file__).resolve().parents[1]/'config/studio-defaults.json').read_text())['headerGroups']
+    def header_group(name):
+        """Open a named header group and return its field order for remote replay."""
+        index=next(i for i,g in enumerate(groups) if g['label']==name)
+        key('Up',30);key('Down',index);key('Return')
+        return groups[index]['keys']
+    def field(keys,name):
+        """Open a field by its position inside the selected header group."""
+        key('Up',30);key('Down',keys.index(name));key('Return')
+    field(header_group('Title'),'headerMode');key('Up',30);key('Down');key('Return');key('Escape')
+    field(header_group('Time'),'showClock');shot('headerpreview');assert layout.read_bytes()==saved;key('Escape')
+    text_fields=header_group('Text')
+    field(text_fields,'order');key('Up',30);key('Down',3);key('Return');field(text_fields,'position');key('Up',30);key('Down');key('Return');shot('headerorder');assert layout.read_bytes()==saved
+    apply(3)
     expect(lambda:json.loads(layout.read_text())['composition'].get('headerMode')=='identity' and json.loads(layout.read_text())['composition'].get('showClock') is True and json.loads(layout.read_text())['composition']['header']['order']==['clock','title','controls'] and json.loads(layout.read_text())['composition']['header']['position']=='bottom','Authored header applied through shared model')
     saved=layout.read_bytes();shot('headerapplied')
     menu(4);key('Down',30);key('Return');shot('headerreopened');assert layout.read_bytes()==saved

@@ -2,6 +2,7 @@ import QtQuick
 
 Item {
     id:surface
+    property bool sectionLabel:false
     required property var items
     required property var metrics
     required property var host
@@ -121,6 +122,7 @@ Item {
             Loader {
                 id:appsLoader;x:node.padding;y:node.padding+node.headingHeight;width:parent.width-2*node.padding;height:parent.height-2*node.padding-node.headingHeight;active:node.apps || node.buttons
                 sourceComponent:PageAppCarousel {
+                    folderName:node.modelData.item.name || ""
                     buttonItems:node.buttons?node.childEntries.filter(e=>!e.item.hidden).sort((a,b)=>a.placement.y-b.placement.y || a.placement.x-b.placement.x).map(e=>e.item):null
                     registry:surface.host.appProvider;collection:node.modelData.item.appCollection || ({mode:"selected",ids:[]});originId:node.modelData.item.id;globalGalleryRoute:!node.buttons;style:node.buttons?Object.assign({moreLabel:qsTr("More buttons"),galleryTitle:node.modelData.item.name},node.style):node.style;appearance:surface.host.appearance;unit:surface.unit
                     galleryAppearance:surface.host.shellAppsAppearance || surface.host.appearance
@@ -266,7 +268,8 @@ Item {
                 sourceComponent:PageLibraryWidget {
                     provider:surface.previewOverlay?null:surface.host.libraryProvider;widgetKey:surface.host.pageKey+"."+node.modelData.item.id
                     originId:node.modelData.item.id
-                    style:node.style;appearance:surface.host.appearance
+                    style:node.style;appearance:surface.host.appearance;unit:surface.unit
+                    shelfName:node.modelData.item.name || "";sectionLabel:surface.sectionLabel
                     readOnly:surface.host.editMode || surface.host.previewOnly;frozen:surface.host.freezeData
                     samplePreview:surface.host.samplePreview;sampleItems:surface.host.sampleItems
                 highlighted:node.selected

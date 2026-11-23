@@ -179,8 +179,25 @@ KodiArtwork::setPoster(const QString& kind, int id, const QString& managedId)
 void
 KodiArtwork::load(const QString& kind, int id)
 {
+    loadArtwork(kind, id, false);
+}
+
+// Give the featured artwork its own fetch without changing poster callers.
+void
+KodiArtwork::loadBackdrop(const QString& kind, int id)
+{
+    if (m_backdrop && m_kind == kind && m_item == id)
+        return;
+    loadArtwork(kind, id, true);
+}
+
+// Cancel the previous request so a late image cannot replace the newly focused item.
+void
+KodiArtwork::loadArtwork(const QString& kind, int id, bool backdrop)
+{
     cancel();
     m_setting = false;
+    m_backdrop = backdrop;
     m_poster.clear();
     m_kind = kind;
     m_item = id;
@@ -217,6 +234,8 @@ KodiArtwork::begin()
     QJsonObject params{{"kind", m_kind}, {"id", m_item}};
     if (m_setting)
         params.insert("data", QString::fromLatin1(m_poster.toBase64()));
+    else if (m_backdrop)
+        params.insert("role", "backdrop");
     m_request = QJsonDocument(QJsonObject{{"jsonrpc", "2.0"},
                                           {"id", ++m_requestId},
                                           {"method", m_setting ? "Isolde.SetPoster" : "Isolde.GetArtwork"},

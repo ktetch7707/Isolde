@@ -388,9 +388,6 @@ setupSessionsLaunchGuard()
             if (vpnSettings.busy() && app && app->type != "settings" && app->type != "store" &&
                 app->type != "customize")
                 return "Finish the current VPN setup operation before opening another app.";
-            if (id == "kodi" && !kodiService.canOpenApplication())
-                return "Switch to Kodi application mode in Settings → Media & Playback first. This lets Kodi save your "
-                       "setup before opening its interface.";
             return {};
         });
 }
@@ -412,6 +409,29 @@ setupKodiServiceMediaConnections()
 void
 setupLaunchPreparation()
 {
+    // Hold the library home for native Kodi until the session exits or fails.
+    QObject::connect(&kodiService, &KodiService::applicationPrepared, &sessions, [this]
+    {
+        if (!pendingLaunch || pendingNativeDefinition.id != "kodi")
+            kodiService.suspend(false);
+        else if (!sessions.resumePreparedLaunch(pendingNativeDefinition))
+            kodiService.suspend(false);
+    }, Qt::QueuedConnection);
+    QObject::connect(&kodiService, &KodiService::applicationPreparationFailed, &sessions, [this](const QString& reason)
+    {
+        pendingLaunch = pendingNativeLaunch = pendingVpnReady = false;
+        sessions.launchDeferred(reason);
+    }, Qt::QueuedConnection);
+    QObject::connect(&sessions, &SessionManager::returnedHome, &kodiService, [this](const QString& id)
+    {
+        if (id == "kodi")
+            kodiService.suspend(false);
+    });
+    QObject::connect(&sessions, &SessionManager::sessionFailed, &kodiService, [this](const QString& id, const QString&)
+    {
+        if (id == "kodi")
+            kodiService.suspend(false);
+    });
     sessions.setLaunchPreparation(
         [this](const AppDefinition& definition)
         {
@@ -435,6 +455,8 @@ setupLaunchPreparation()
             if ((definition.type != "desktop" && definition.type != "android") ||
                 (desktopMode.active() && desktopMode.nativeMode()))
             {
+                if (definition.id == "kodi" && !kodiService.prepareApplication())
+                    return false;
                 pendingLaunch = false;
                 pendingVpnReady = false;
                 return true;
@@ -542,6 +564,9 @@ setupQmlEngineAndPresentKodi()
         qWarning("%s", qPrintable(catalog.errorString()));
     if (!homeLayout.load({}, profileManager.layoutPath()))
         qFatal("%s", qPrintable(homeLayout.errorString()));
+    ambientSettings.selectSkin(homeLayout.activeSkinId());
+    QObject::connect(&homeLayout, &HomeLayout::layoutChanged, &ambientSettings,
+                     [this] { ambientSettings.selectSkin(homeLayout.activeSkinId()); });
     sourceManager.setLayout(&homeLayout);
     const auto updateNativeReturn = [this]
     {

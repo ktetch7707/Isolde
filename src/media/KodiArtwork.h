@@ -24,6 +24,7 @@ class KodiArtwork final : public QObject
     }
     Q_INVOKABLE void
     load(const QString& kind, int id);
+    void loadBackdrop(const QString& kind, int id);
     Q_INVOKABLE void
     clear();
     void
@@ -38,6 +39,7 @@ class KodiArtwork final : public QObject
     changed();
 
   private:
+    void loadArtwork(const QString& kind, int id, bool backdrop);
     void
     begin();
     void
@@ -50,6 +52,7 @@ class KodiArtwork final : public QObject
     int m_item = -1, m_requestId = 0, m_descriptor = -1;
     bool m_active = false;
     bool m_setting = false;
+    bool m_backdrop = false;
     std::function<QString(const QString&)> m_resolver;
     QByteArray m_poster;
     QByteArray m_received, m_request;

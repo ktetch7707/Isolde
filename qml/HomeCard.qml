@@ -14,6 +14,8 @@ Item {
     property string selectionColor: ""
     property color outsideColor: "#0e1018"
     property real unit: 1
+    property real artworkHeightOverride:0
+    property bool outlineOverArtwork:false
     property date now: new Date()
     // Actual renderer measurements; Studio consumes these only for nonblocking preflight findings.
     readonly property bool designLabelClipped:(sourceTitle.visible && sourceTitle.truncated) || (summaryTitle.visible && summaryTitle.truncated) || (bodyText.visible && (bodyText.truncated || bodyText.contentHeight>bodyText.height)) || (mediaTitle.visible && mediaTitle.truncated) || (customTitle.visible && customTitle.truncated)
@@ -40,11 +42,11 @@ Item {
     readonly property color surfaceInk: root.style.surfaceColor || root.appearance.surfaceColor || "#28262F"
     readonly property bool legacyBody:style.bodySize===undefined && style.bodyAlign===undefined && style.bodyBold===undefined
     readonly property bool customLabel:style.labelPosition!==undefined
-    // Poster reflection: mirrors the already rendered poster art directly beneath the card.
-    // Stored per shelf in the shared appearance model (reflection/reflectionHeight/reflectionOpacity).
-    readonly property bool reflectionEnabled: style.reflection === true
-    readonly property real reflectionHeight: reflectionEnabled ? (style.reflectionHeight || 0) * unit : 0
-    readonly property real reflectionAlpha: style.reflectionOpacity === undefined ? 0.45 : style.reflectionOpacity
+    // Keep the reflection inside the shelf cell so it cannot overlap another row or its controls.
+    readonly property real reflectionAlpha:style.reflectionOpacity===undefined?.45:style.reflectionOpacity
+    readonly property real reflectionHeight:kind==="media" && style.reflection===true && reflectionAlpha>0 && !!item.logoSource && item.showLogo!==false
+        ? Math.max(0,Math.min((style.reflectionHeight===undefined?30:style.reflectionHeight)*unit,(height-58*unit)/3)) : 0
+    readonly property real mediaArtworkHeight:Math.max(0,height-58*unit-reflectionHeight)
     readonly property bool interactive: item.componentType !== "shape" && item.componentType !== "text" && (item.componentType !== "image" || !!primaryAction.type)
     // Geometry comes from the rendered surface, including the orb's own diameter.
     // Editors can retain this outline when the authored body is transparent.
@@ -60,7 +62,7 @@ Item {
         id: surface
         objectName: "cardSurface"
         visible: root.kind !== "orb"
-        width:root.ellipse?Math.max(parent.width,root.bodyHeight):parent.width; height:root.ellipse?width:root.kind==="shape" && root.style.shape==="divider"?(root.style.borderWidth || 2)*root.unit:root.customLabel && root.style.labelPosition==="below"?root.bodyHeight:root.kind === "recent" ? Math.min(parent.height - 36*root.unit,(root.style.artHeight || 86)*root.unit) : root.kind === "media" ? Math.max(35, parent.height - 58 * root.unit) : parent.height
+        width:root.ellipse?Math.max(parent.width,root.bodyHeight):parent.width; height:root.ellipse?width:root.kind==="shape" && root.style.shape==="divider"?(root.style.borderWidth || 2)*root.unit:root.artworkHeightOverride>0?Math.min(root.artworkHeightOverride,root.kind==="media"?root.mediaArtworkHeight:root.bodyHeight):root.customLabel && root.style.labelPosition==="below"?root.bodyHeight-root.reflectionHeight:root.kind === "recent" ? Math.min(parent.height - 36*root.unit,(root.style.artHeight || 86)*root.unit) : root.kind === "media" ? Math.max(35,root.mediaArtworkHeight) : parent.height
         y:root.kind==="shape" && root.style.shape==="divider"?(parent.height-height)/2:0
         transform:Scale {xScale:root.ellipseScaleX;yScale:root.ellipseScaleY}
         radius: root.corner
@@ -75,14 +77,19 @@ Item {
             objectName: "cardArtwork"
             animationResolver:root.artworkResolver;managedAsset:root.item.customLogo || ""
             motionEnabled:root.artworkMotionAllowed && root.style.animateArtwork===true;reducedMotion:root.appearance.motionEnabled===false
-            anchors.top: parent.top; anchors.left: parent.left; anchors.right: parent.right
-            height: parent.height + reflectionHeight
-            reflectionHeight: root.reflectionHeight
-            reflectionOpacity: root.reflectionAlpha
+            anchors.fill: parent; anchors.bottomMargin:-root.reflectionHeight
             source: root.kind === "orb" || root.launcherArtwork ? "" : root.item.logoSource || ""
+            reflectionHeight:root.reflectionHeight;reflectionOpacity:root.reflectionAlpha
             crop: root.style.imageCrop || null; radius: surface.radius
             visible:root.item.showLogo!==false && !root.launcherArtwork
             fit:root.style.artFit || "cover";focalX:root.style.artFocalX===undefined?0.5:root.style.artFocalX;focalY:root.style.artFocalY===undefined?0.5:root.style.artFocalY;zoom:root.style.artZoom || 1
+        }
+        // Poster fills cover the surface border, so draw the authored outline above the image.
+        Rectangle {
+            objectName:"cardArtworkOutline"
+            visible:root.outlineOverArtwork && border.width>0
+            anchors.fill:parent; color:"transparent"; radius:surface.radius
+            border.width:surface.border.width; border.color:surface.border.color
         }
         LineIcon {
             visible: !root.showLauncherArtwork && (root.kind === "source" || root.kind === "summary") && root.item.widgetType !== "clock"
@@ -132,7 +139,7 @@ Item {
         font.family:root.appearance.fontFamily || "DejaVu Sans";lineHeight:root.style.bodyLineHeight || 1;verticalAlignment:Text.AlignVCenter
     }
     Text {id:mediaTitle;textFormat:Text.PlainText;
-        visible: (root.kind === "media" || root.kind === "recent") && !root.customLabel && root.item.showTitle!==false; x: 0; y: surface.height + (root.kind === "recent" ? 5 : 12) * root.unit; width: parent.width
+        visible: (root.kind === "media" || root.kind === "recent") && !root.customLabel && root.item.showTitle!==false; x: 0; y: surface.height + root.reflectionHeight + (root.kind === "recent" ? 5 : 12) * root.unit; width: parent.width
         text: root.title; color: root.ink; font.family: root.appearance.fontFamily || "DejaVu Sans"; font.pixelSize: (root.style.labelSize || (root.kind === "recent" ? 12 : 18)) * root.textScale
         maximumLineCount: 2; wrapMode: Text.WordWrap; elide: Text.ElideRight
     }
@@ -150,7 +157,7 @@ Item {
     Rectangle {
         id:customLabelSurface
         visible:root.customLabel && root.style.labelPosition!=="hidden" && root.item.showTitle!==false
-        x:0;y:root.style.labelPosition==="below"?(root.ellipse?root.bodyHeight:surface.height):Math.max(0,(root.ellipse?root.bodyHeight:surface.height)-height)
+        x:0;y:root.style.labelPosition==="below"?(root.ellipse?root.bodyHeight:surface.height+root.reflectionHeight):Math.max(0,(root.ellipse?root.bodyHeight:surface.height)-height)
         width:parent.width;height:customTitle.implicitHeight+12*root.unit;radius:root.style.labelPill?height/2:0
         color:root.style.labelSurfaceColor || "transparent"
         Text {id:customTitle;anchors.centerIn:parent;width:parent.width-12*root.unit;text:root.title;textFormat:Text.PlainText;color:root.style.labelColor || root.appearance.labelColor || root.ink;horizontalAlignment:root.style.textAlign==="left"?Text.AlignLeft:root.style.textAlign==="right"?Text.AlignRight:Text.AlignHCenter;wrapMode:root.style.labelWrap===false?Text.NoWrap:Text.Wrap;maximumLineCount:root.style.labelLines || 2;elide:Text.ElideRight;font.pixelSize:(root.style.labelSize || 20)*root.textScale;font.bold:!!root.style.labelBold;font.family:root.appearance.fontFamily || "DejaVu Sans"}

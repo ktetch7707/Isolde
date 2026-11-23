@@ -107,7 +107,7 @@ HomeLayout::skins() const
         QVariantMap{{"id", "builtin-arctic"},
                     {"name", tr("Arctic")},
                     {"builtIn", true},
-                    {"description", tr("Artwork-led dark default skin with poster reflections and light/dark appearances")}}};
+                    {"description", tr("Dark Home with reflected poster shelves and a row of installed apps")}}};
     result.append(starterTemplates(m_defaultPath));
     const QDir directory(skinDirectory());
     for (const auto& file : directory.entryList({"*.json"}, QDir::Files, QDir::Name))
@@ -127,14 +127,29 @@ HomeLayout::skins() const
 QString
 HomeLayout::saveSkin(const QString& name)
 {
+    const auto id = "user-" + QUuid::createUuid().toString(QUuid::WithoutBraces);
+    return writeSkinSnapshot(id, name) ? id : QString();
+}
+
+// Write the whole skin atomically, including artwork used by any of its pages.
+bool
+HomeLayout::writeSkinSnapshot(const QString& id, const QString& name)
+{
+    if (!ProfileManager::allows("edit") || !ComponentSchema::safeId(id))
+    {
+        setError(tr("Editing skins is restricted for this profile."));
+        return false;
+    }
     if (!validName(name))
     {
         setError(tr("Give your skin a name of 1–80 characters."));
-        return {};
+        return false;
     }
     QJsonObject assets;
     bool valid = true;
-    artwork(QJsonDocument::fromJson(documentData()).object(),
+    auto layout = QJsonDocument::fromJson(documentData()).object();
+    layout.remove("activeSkinId");
+    artwork(layout,
             [&](const QString& path)
             {
                 if (assets.contains(path))
@@ -158,23 +173,157 @@ HomeLayout::saveSkin(const QString& name)
     if (!valid)
     {
         setError(tr("A Home image is missing or too large. Choose it again before saving a skin."));
-        return {};
+        return false;
     }
-    const auto id = "user-" + QUuid::createUuid().toString(QUuid::WithoutBraces);
     QDir().mkpath(skinDirectory());
     if (!writeObject(QDir(skinDirectory()).filePath(id + ".json"),
                      {{"schemaVersion", 1},
                       {"name", name.trimmed()},
-                      {"layout", QJsonDocument::fromJson(documentData()).object()},
+                      {"layout", layout},
                       {"assets", assets}}))
     {
         setError(tr("Unable to save skin. The current Home has not changed."));
+        return false;
+    }
+    setError({});
+    emit skinsChanged();
+    return true;
+}
+
+// Expose the identity recorded with the current profile's committed layout.
+QString HomeLayout::activeSkinId() const
+{
+    return m_activeSkinId;
+}
+
+// Start a blank skin as a separate document, leaving the profile on its current skin.
+QString HomeLayout::createSkin(const QString& name)
+{
+    if (m_owner || !ProfileManager::allows("edit") || !validName(name))
+    {
+        setError(tr("Enter a valid skin name and check this profile's editing permissions."));
+        return {};
+    }
+    HomeLayout blank(m_registry);
+    blank.m_defaultPath = m_defaultPath;
+    blank.m_userPath = m_userPath;
+    auto layout = skinSnapshot(QStringLiteral("builtin-default")).value("layout").toObject();
+    layout["schemaVersion"] = 2;
+    layout.remove("items");
+    layout.remove("grid");
+    layout.remove("activeSkinId");
+    layout["rootPage"] = QJsonObject{{"name", tr("Home")}, {"visible", true}, {"position", 0}};
+    layout["composition"] = QJsonObject{{"schemaVersion", 1}, {"enabled", true}};
+    for (const auto* key : {"categories", "components", "pages"})
+        layout[key] = QJsonArray{};
+    layout["homePageId"] = QString();
+    if (!blank.loadDocument(QJsonDocument(layout).toJson(), false))
+    {
+        setError(blank.errorString());
+        return {};
+    }
+    const auto id = blank.saveSkin(name);
+    setError(blank.errorString());
+    if (!id.isEmpty())
+        emit skinsChanged();
+    return id;
+}
+
+// Duplicate the selected document, including inactive pages and their artwork.
+QString HomeLayout::duplicateSkin(const QString& id, const QString& name)
+{
+    if (!ProfileManager::allows("edit") || !validName(name))
+    {
+        setError(tr("Give your skin a name and check this profile's editing permissions."));
+        return {};
+    }
+    if (id == m_activeSkinId)
+        return saveSkin(name);
+    auto snapshot = skinSnapshot(id);
+    if (!isValidSkin(snapshot))
+    {
+        setError(tr("The selected skin is unavailable."));
+        return {};
+    }
+    snapshot["name"] = name.trimmed();
+    snapshot.remove("pagePolicy");
+    const auto copy = "user-" + QUuid::createUuid().toString(QUuid::WithoutBraces);
+    QDir().mkpath(skinDirectory());
+    if (!writeObject(QDir(skinDirectory()).filePath(copy + ".json"), snapshot))
+    {
+        setError(tr("Unable to save the skin copy."));
         return {};
     }
     setError({});
     emit skinsChanged();
-    return id;
+    return copy;
 }
+
+// Switch to the selected skin's own page tree and save the outgoing working copy first.
+bool HomeLayout::activateSkin(const QString& id)
+{
+    if (id == m_activeSkinId)
+        return true;
+    const auto snapshot = skinSnapshot(id);
+    if (m_owner || !isValidSkin(snapshot))
+    {
+        setError(tr("The selected skin is unavailable."));
+        return false;
+    }
+    QString outgoingName;
+    for (const auto& entry : skins())
+        if (entry.toMap().value("id") == m_activeSkinId)
+            outgoingName = entry.toMap().value("name").toString();
+    if (!writeSkinSnapshot(m_activeSkinId, outgoingName))
+        return false;
+    auto document = snapshot.value("layout").toObject();
+    if (!document.contains("pages"))
+        document["pages"] = QJsonArray{};
+    document["activeSkinId"] = id;
+    return applySkinDocument(document, snapshot.value("assets").toObject());
+}
+
+// Give Studio an isolated model whose Save writes the selected skin instead of replacing the live Home.
+QObject* HomeLayout::openSkinEditor(const QString& id)
+{
+    if (id == m_activeSkinId && ProfileManager::allows("edit"))
+        return this;
+    closeSkinEditor();
+    const auto snapshot = skinSnapshot(id);
+    if (m_owner || !isValidSkin(snapshot) || !ProfileManager::allows("edit"))
+    {
+        setError(tr("This skin cannot be edited in the current profile."));
+        return nullptr;
+    }
+    auto* editor = new HomeLayout(m_registry, this);
+    editor->m_defaultPath = m_defaultPath;
+    editor->m_defaultTheme = m_defaultTheme;
+    editor->m_userPath = m_userPath;
+    editor->m_skinEditorId = id;
+    editor->m_skinEditorName = snapshot.value("name").toString(tr("Isolde default"));
+    auto layout = snapshot.value("layout").toObject();
+    layout.remove("activeSkinId");
+    if (!editor->loadDocument(QJsonDocument(layout).toJson(), false) ||
+        !editor->applySkinValidateArtwork(layout, snapshot.value("assets").toObject()) ||
+        !editor->loadDocument(QJsonDocument(layout).toJson(), false))
+    {
+        setError(editor->errorString().isEmpty() ? tr("Unable to load the skin artwork.") : editor->errorString());
+        editor->deleteLater();
+        return nullptr;
+    }
+    m_skinEditor = editor;
+    setError({});
+    return editor;
+}
+
+// Retire the editor after its views stop using the old draft model.
+void HomeLayout::closeSkinEditor()
+{
+    if (m_skinEditor)
+        m_skinEditor->deleteLater();
+    m_skinEditor = nullptr;
+}
+
 bool
 HomeLayout::applySkinDocument(QJsonObject document, const QJsonObject& assets, bool addMissingPages)
 {
@@ -183,6 +332,8 @@ HomeLayout::applySkinDocument(QJsonObject document, const QJsonObject& assets, b
         setError(tr("Editing is restricted in Settings > Profiles."));
         return false;
     }
+    if (!m_owner && !document.contains("activeSkinId") && m_activeSkinId != QStringLiteral("builtin-default"))
+        document["activeSkinId"] = m_activeSkinId;
     const auto previous = documentData();
     QJsonArray mergedPages = m_pages;
     if (addMissingPages && !applySkinAddMissingPages(document, mergedPages))
@@ -322,6 +473,11 @@ HomeLayout::applySkinValidateArtwork(QJsonObject& document, const QJsonObject& a
 QJsonObject
 HomeLayout::skinSnapshot(const QString& id) const
 {
+    if (!ComponentSchema::safeId(id))
+        return {};
+    const auto saved = readObject(QDir(skinDirectory()).filePath(id + ".json"));
+    if (isValidSkin(saved))
+        return saved;
     if (id == "builtin-default")
     {
         QFile file(m_defaultPath);
@@ -351,8 +507,10 @@ HomeLayout::skinSnapshot(const QString& id) const
 QObject* HomeLayout::openSkinPreview(const QString& id)
 {
     closeSkinPreview();
+    if (!m_owner && id == m_activeSkinId)
+        return this;
     const auto snapshot = skinSnapshot(id);
-    if (!isValidSkin(snapshot))
+    if (m_owner || !isValidSkin(snapshot))
     {
         setError(tr("This skin is missing or invalid."));
         return nullptr;
@@ -590,7 +748,7 @@ HomeLayout::renameSkin(const QString& id, const QString& name)
 bool
 HomeLayout::deleteSkin(const QString& id)
 {
-    if (!id.startsWith("user-") || !ComponentSchema::safeId(id) ||
+    if (id == m_activeSkinId || !ProfileManager::allows("edit") || !id.startsWith("user-") || !ComponentSchema::safeId(id) ||
         !QFile::remove(QDir(skinDirectory()).filePath(id + ".json")))
     {
         setError(tr("Unable to delete skin. Built-in skins are kept."));

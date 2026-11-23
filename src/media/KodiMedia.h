@@ -38,6 +38,7 @@ class KodiMedia final : public QObject
     Q_PROPERTY(bool sourcePreviewReady READ sourcePreviewReady NOTIFY changed)
     Q_PROPERTY(bool playbackCanPause READ playbackCanPause NOTIFY changed)
     Q_PROPERTY(bool playbackCanSeek READ playbackCanSeek NOTIFY changed)
+    Q_PROPERTY(QVariantMap playbackTimeline READ playbackTimeline NOTIFY changed)
     Q_PROPERTY(QString viewKind READ viewKind NOTIFY changed)
     Q_PROPERTY(QString viewValue READ viewValue NOTIFY changed)
     Q_PROPERTY(QVariantList collections READ collections NOTIFY changed)
@@ -45,6 +46,7 @@ class KodiMedia final : public QObject
     Q_PROPERTY(QString playlistStatus READ playlistStatus NOTIFY changed)
     Q_PROPERTY(QVariantList playlistPreview READ playlistPreview NOTIFY changed)
     Q_PROPERTY(bool playlistPreviewReady READ playlistPreviewReady NOTIFY changed)
+    Q_PROPERTY(QVariantMap smartPlaylist READ smartPlaylist NOTIFY changed)
     Q_PROPERTY(QVariantList playlistMembers READ playlistMembers NOTIFY changed)
   public:
     explicit KodiMedia(const QString& profile, QObject* parent = nullptr, const QString& testDirectory = {});
@@ -107,6 +109,11 @@ class KodiMedia final : public QObject
     openLibrary(const QString& kind);
     Q_INVOKABLE void
     savePlaylist(const QString& name);
+    Q_INVOKABLE void loadSmartPlaylist(const QString& name);
+    Q_INVOKABLE void previewSmartPlaylist(const QVariantMap& draft);
+    Q_INVOKABLE void saveSmartPlaylist(const QString& name, const QVariantMap& draft);
+    // Expose loaded rules separately from the preview's matching media rows.
+    QVariantMap smartPlaylist() const { return m_smartPlaylist; }
     Q_INVOKABLE void
     renamePlaylist(const QString& name, const QString& newName);
     Q_INVOKABLE void
@@ -402,6 +409,10 @@ class KodiMedia final : public QObject
     playMovie(int movieId, bool resume = true);
     Q_INVOKABLE void
     playbackControl(const QString& action);
+    // Commit the chosen timestamp through the owned Kodi session.
+    Q_INVOKABLE void seekPlayback(int position);
+    // Expose the latest Kodi sample without a second polling loop.
+    QVariantMap playbackTimeline() const { return m_playbackActive ? m_playbackTimeline : QVariantMap{}; }
     void
     presentationFailed();
     Q_INVOKABLE void
@@ -646,6 +657,8 @@ class KodiMedia final : public QObject
     QString m_profile, m_viewKind = "all", m_viewValue, m_collectionStatus;
     QString m_playlistStatus;
     QVariantList m_playlistPreview, m_playlistMembers;
+    QVariantMap m_smartPlaylist;
+    QString m_smartPlaylistName, m_smartPlaylistRevision;
     QString m_playlistOrderName, m_playlistRevision;
     QString m_playlistRuleName, m_playlistRuleView, m_playlistRuleValue, m_playlistRuleRevision;
     bool m_playlistPreviewReady = false;
@@ -674,6 +687,7 @@ class KodiMedia final : public QObject
     int m_pageStart = 0, m_requestedStart = 0, m_totalMovies = 0, m_pageCount = 0;
     bool m_playbackActive = false, m_playbackVisible = false;
     bool m_playbackCanPause = false, m_playbackCanSeek = false;
+    QVariantMap m_playbackTimeline;
     bool m_lastPlaybackNaturalEnd = false;
     bool m_scheduledPlayback = false;
     QString m_scheduledKind;

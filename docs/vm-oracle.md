@@ -173,6 +173,8 @@ VM `Isolde-Test`; VirtualBox `C:/Program Files/Oracle/VirtualBox`; guest Ubuntu 
 
 Keep the normal graphical session logged in. Harnesses import only DISPLAY/XAUTHORITY/XDG_RUNTIME_DIR/DBUS_SESSION_BUS_ADDRESS from the user service manager; do not hard-code a display/UID or export offscreen settings into the service. If stopped, use `tools/start-isolde-vm-visible.ps1`; do not restore snapshots, alter autologin or bypass a lock/password prompt. Physical HDMI/CEC/audio/latency and a disconnected cold-boot Generator Test remain separate gates.
 
+The graphical preflight resolves the logged-in desktop's AT-SPI bus through the session bus and checks the advertised socket before inspecting notifications. When that socket is missing or refuses connections, the runner restarts only the Isolde-Test guest's accessibility user service once and rechecks it. The desktop receipt records whether it restarted the service.
+
 Low-level scripts are implementation details. `run-visual-acceptance.ps1` requires the runner's guardian; direct unguarded launches are retired. Historical evidence remains in [the October 19 record](vm-update-2026-10-19.md) and task execution records; old `/tmp/isolde-*` trees are never a current-source default.
 
 ### Reviewed Guide fixture inputs

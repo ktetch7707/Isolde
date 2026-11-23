@@ -3,6 +3,7 @@
 #include <QObject>
 #include <QStringList>
 #include <QVariantList>
+#include <QVariantMap>
 
 class AmbientSettings final : public QObject
 {
@@ -24,6 +25,11 @@ class AmbientSettings final : public QObject
 
   public:
     explicit AmbientSettings(QObject* parent = nullptr);
+    void selectSkin(const QString& id);
+    Q_INVOKABLE QObject* openSkinEditor(const QString& id);
+    Q_INVOKABLE QVariantMap skinPreview(const QString& id) const;
+    Q_INVOKABLE void closeSkinEditor();
+    Q_INVOKABLE void copySkinSettings(const QString& sourceId, const QString& targetId);
 
     [[nodiscard]] bool
     enabled() const;
@@ -93,9 +99,11 @@ class AmbientSettings final : public QObject
     changed();
 
   private:
-    const QString m_settingsGroup;
+    AmbientSettings(const QString& group, bool createPhotoDirectory);
+    QString m_settingsGroup;
+    AmbientSettings* m_editor = nullptr;
     void
-    load();
+    load(bool createPhotoDirectory = true);
     void
     save() const;
     void

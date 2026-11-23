@@ -37,14 +37,14 @@
     "colorTheme": {
       "schemaVersion": 1,
       "colors": {
-        "background": "#19191e",
-        "cards": "#202126",
-        "text": "#f5f1f3",
-        "highlight": "#c994a5",
-        "accent": "#c994a5"
+        "background": "#0b0d13",
+        "cards": "#141720",
+        "text": "#e8e6ea",
+        "highlight": "#6ea8d1",
+        "accent": "#6ea8d1"
       }
     },
-    "tileRoundness": 0.18
+    "tileRoundness": 0.14
   },
   "categories": [
     {
@@ -91,8 +91,18 @@
       "categoryId": "apps",
       "schemaVersion": 1,
       "componentType": "launcher",
+      "actions": [
+        {
+          "schemaVersion": 1,
+          "type": "launch-app",
+          "appId": "movies"
+        }
+      ],
       "source": {
-        "schemaVersion": 1
+        "schemaVersion": 1,
+        "provider": "apps",
+        "kind": "app",
+        "id": "movies"
       }
     },
     {
@@ -103,8 +113,18 @@
       "categoryId": "apps",
       "schemaVersion": 1,
       "componentType": "launcher",
+      "actions": [
+        {
+          "schemaVersion": 1,
+          "type": "launch-app",
+          "appId": "shows"
+        }
+      ],
       "source": {
-        "schemaVersion": 1
+        "schemaVersion": 1,
+        "provider": "apps",
+        "kind": "app",
+        "id": "shows"
       }
     },
     {
@@ -115,8 +135,18 @@
       "categoryId": "apps",
       "schemaVersion": 1,
       "componentType": "launcher",
+      "actions": [
+        {
+          "schemaVersion": 1,
+          "type": "launch-app",
+          "appId": "youtube"
+        }
+      ],
       "source": {
-        "schemaVersion": 1
+        "schemaVersion": 1,
+        "provider": "apps",
+        "kind": "app",
+        "id": "youtube"
       }
     },
     {
@@ -311,8 +341,18 @@
       "categoryId": "apps",
       "schemaVersion": 1,
       "componentType": "launcher",
+      "actions": [
+        {
+          "schemaVersion": 1,
+          "type": "launch-app",
+          "appId": "steam"
+        }
+      ],
       "source": {
-        "schemaVersion": 1
+        "schemaVersion": 1,
+        "provider": "apps",
+        "kind": "app",
+        "id": "steam"
       }
     },
     {
@@ -323,8 +363,18 @@
       "categoryId": "system",
       "schemaVersion": 1,
       "componentType": "launcher",
+      "actions": [
+        {
+          "schemaVersion": 1,
+          "type": "launch-app",
+          "appId": "app-store"
+        }
+      ],
       "source": {
-        "schemaVersion": 1
+        "schemaVersion": 1,
+        "provider": "apps",
+        "kind": "app",
+        "id": "app-store"
       }
     },
     {
@@ -335,8 +385,18 @@
       "categoryId": "system",
       "schemaVersion": 1,
       "componentType": "launcher",
+      "actions": [
+        {
+          "schemaVersion": 1,
+          "type": "launch-app",
+          "appId": "desktop-mode"
+        }
+      ],
       "source": {
-        "schemaVersion": 1
+        "schemaVersion": 1,
+        "provider": "apps",
+        "kind": "app",
+        "id": "desktop-mode"
       }
     },
     {
@@ -347,8 +407,18 @@
       "categoryId": "system",
       "schemaVersion": 1,
       "componentType": "launcher",
+      "actions": [
+        {
+          "schemaVersion": 1,
+          "type": "launch-app",
+          "appId": "settings"
+        }
+      ],
       "source": {
-        "schemaVersion": 1
+        "schemaVersion": 1,
+        "provider": "apps",
+        "kind": "app",
+        "id": "settings"
       }
     }
   ]

@@ -1054,6 +1054,9 @@ function settingsNavigationScope() {
     const defaults = JSON.parse(fs.readFileSync(path.join(__dirname, '../config/studio-defaults.json'), 'utf8'));
     const scope = vm.createContext({
         selectedSection: 0, inPage: false, route: '', rowSelections: {}, pendingCategoryOrder: [], navigationError: '',
+        remoteEditing: false,
+        editingSkinId: '',
+        qsTr: text => text,
         sections: defaults.settingsNavigation.categories,
         inputManager: {navigateUp: 'up', navigateDown: 'down', navigateLeft: 'left', navigateRight: 'right', confirm: 'ok', back: 'back', menu: 'menu'},
         systemPage: {activePage: -1, captureReturnPage: -1}, profileManager: {editingAllowed: true},
@@ -1081,6 +1084,25 @@ test('Settings preserves legacy shortcuts after category reordering and rejects 
     for (const invalid of [-1, 9, 1.5, '1']) s.openSection(invalid);
     s.openCategory('network', 'capture');
     assert.deepEqual([s.selectedSection, s.inPage, s.route], before);
+});
+
+test('Settings opens Skins directly from the category rail', () => {
+    const s = settingsNavigationScope();
+    let opens = 0;
+    s.skinPicker = {begin: () => opens++, handleCommand: () => s.backToParent()};
+    s.selectedSection = s.sections.findIndex(section => section.id === 'display-skins');
+    assert.equal(s.category.name, 'Skins');
+    assert.equal(s.category.route, 'skins');
+    assert.equal(s.categoryRows.length, 0);
+    s.handleCommand('right');
+    assert.equal(s.route, 'skins');
+    assert.equal(opens, 1);
+    s.handleCommand('back');
+    assert.equal(s.inPage, false);
+    assert.equal(s.category.id, 'display-skins');
+    s.handleCommand('ok');
+    assert.equal(s.route, 'skins');
+    assert.equal(opens, 2);
 });
 
 test('Settings App Store is a destination and Back restores the same Apps row', () => {

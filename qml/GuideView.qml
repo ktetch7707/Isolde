@@ -99,6 +99,7 @@ Item {
         originId=origin || "";presentation=style || {};open=true;mode="";headerFocused=true;headerIndex=0
         nowUtc=Date.now()/1000;anchorUtc=nowUtc;fromUtc=Math.floor(nowUtc/1800)*1800;navigationError=""
         pendingFocusChannelId=focusChannelId || "";applyPendingFocus()
+        if(presentation.guideStart==="manage"){mode="manage";menuIndex=0}
         if(controller.clockWarning){mode="deviceClock";menuIndex=0}
         loadWindow()
     }

@@ -318,8 +318,7 @@ isSupportedActionType(const QString& type)
                                            QStringLiteral("open-disc"),
                                            QStringLiteral("desktop-mode"),
                                            QStringLiteral("switch-input"),
-                                           QStringLiteral("wait"),
-                                           QStringLiteral("run-script")};
+                                           QStringLiteral("wait")};
     return actionTypes.contains(type);
 }
 
@@ -1332,7 +1331,7 @@ HomeLayout::loadDocument(const QByteArray& data, bool userDocument)
         return false;
     QJsonObject object = QJsonDocument::fromJson(data).object();
     static const QSet<QString> baseKeys{"schemaVersion", "composition", "rootPage", "theme",
-                                        "categories", "pages", "homePageId", "studioAppearance"};
+                                        "categories", "pages", "homePageId", "studioAppearance", "activeSkinId"};
     for (auto it = object.constBegin(); it != object.constEnd(); ++it)
         if (!baseKeys.contains(it.key()) && it.key() != "components")
         {
@@ -1386,6 +1385,14 @@ HomeLayout::loadDocument(const QByteArray& data, bool userDocument)
         setError(hierarchyError);
         return false;
     }
+    const auto skinId = object.value("activeSkinId").toString(QStringLiteral("builtin-default"));
+    if (object.contains("activeSkinId") && (m_owner || !ComponentSchema::safeId(skinId) ||
+        !object["activeSkinId"].isString() || !(skinId.startsWith("builtin-") || skinId.startsWith("user-"))))
+    {
+        setError(tr("Invalid active skin identity."));
+        return false;
+    }
+    m_activeSkinId = skinId;
     m_items = components;
     m_pages = pages;
     m_homePageId = homePage.toString();
@@ -2479,6 +2486,8 @@ HomeLayout::documentData() const
     {
         object.insert("pages", m_pages);
         object.insert("homePageId", m_homePageId);
+        if (m_activeSkinId != QStringLiteral("builtin-default"))
+            object.insert("activeSkinId", m_activeSkinId);
         if (!m_rootPage.isEmpty())
             object.insert("rootPage", m_rootPage);
         if (!m_studioAppearance.isEmpty())
@@ -2507,6 +2516,8 @@ HomeLayout::save()
         setError(ok ? QString() : m_owner->errorString());
         return ok;
     }
+    if (!m_skinEditorId.isEmpty())
+        return writeSkinSnapshot(m_skinEditorId, m_skinEditorName);
     QDir().mkpath(QFileInfo(m_userPath).absolutePath());
     const auto data = documentData();
     if (data.isEmpty() || data.size() > 4 * 1024 * 1024)

@@ -21,6 +21,7 @@ Popup {
     background: null
     contentItem: Item {
         focus: true
+        clip: true
         Keys.onShortcutOverride: event => { event.accepted = true }
         Keys.onPressed: event => { root.dismissRequested(); event.accepted = true }
         AmbientScreen {

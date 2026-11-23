@@ -16,6 +16,74 @@ AmbientSettings::AmbientSettings(QObject* parent) : QObject(parent), m_settingsG
     load();
 }
 
+// Read another skin's settings without creating that skin's photo directory.
+AmbientSettings::AmbientSettings(const QString& group, bool createPhotoDirectory) : m_settingsGroup(group)
+{
+    load(createPhotoDirectory);
+}
+
+// Give the Settings preview only the data needed to render the screensaver.
+QVariantMap AmbientSettings::skinPreview(const QString& id) const
+{
+    if (!ComponentSchema::safeId(id))
+        return {};
+    auto group = ProfileManager::ambientGroup();
+    if (id != QStringLiteral("builtin-default"))
+        group += QStringLiteral("/skins/") + id;
+    const AmbientSettings sample(group, false);
+    return {{"mode", sample.mode()}, {"pageIds", sample.pageIds()},
+            {"slideshowSeconds", sample.slideshowSeconds()}, {"showClock", sample.showClock()},
+            {"showDate", sample.showDate()}, {"showSystemHint", sample.showSystemHint()},
+            {"photoDirectory", sample.photoDirectory()}, {"photoUrls", sample.photoUrls()},
+            {"imageFit", sample.imageFit()}, {"shuffle", sample.shuffle()}};
+}
+
+// Keep the original profile settings for its default skin and isolate all other skins.
+void AmbientSettings::selectSkin(const QString& id)
+{
+    if (!ComponentSchema::safeId(id))
+        return;
+    auto group = ProfileManager::ambientGroup();
+    if (id != QStringLiteral("builtin-default"))
+        group += QStringLiteral("/skins/") + id;
+    if (group == m_settingsGroup)
+        return;
+    m_settingsGroup = group;
+    load();
+    emit changed();
+}
+
+// Supply a separate object for editing screensaver settings without changing the active idle display.
+QObject* AmbientSettings::openSkinEditor(const QString& id)
+{
+    closeSkinEditor();
+    m_editor = new AmbientSettings(this);
+    m_editor->selectSkin(id);
+    return m_editor;
+}
+
+// Release the settings object when its view has returned to the skin list.
+void AmbientSettings::closeSkinEditor()
+{
+    if (m_editor)
+        m_editor->deleteLater();
+    m_editor = nullptr;
+}
+
+// Copy screensaver preferences with a duplicated skin while keeping the stores independent.
+void AmbientSettings::copySkinSettings(const QString& sourceId, const QString& targetId)
+{
+    if (!ComponentSchema::safeId(sourceId) || !ComponentSchema::safeId(targetId) ||
+        !targetId.startsWith(QStringLiteral("user-")) || sourceId == targetId || !ProfileManager::allows("edit"))
+        return;
+    QSettings source, target;
+    const auto group = ProfileManager::ambientGroup();
+    source.beginGroup(sourceId == QStringLiteral("builtin-default") ? group : group + "/skins/" + sourceId);
+    target.beginGroup(group + "/skins/" + targetId);
+    for (const auto& key : source.childKeys())
+        target.setValue(key, source.value(key));
+}
+
 bool
 AmbientSettings::enabled() const
 {
@@ -309,31 +377,34 @@ AmbientSettings::reset()
     emit changed();
 }
 
+// Keep browsing read-only while preserving directory setup for the runtime.
 void
-AmbientSettings::load()
+AmbientSettings::load(bool createPhotoDirectory)
 {
     QSettings settings;
     settings.beginGroup(m_settingsGroup);
-    m_enabled = settings.value(QStringLiteral("enabled"), m_enabled).toBool();
-    m_timeoutMinutes = clamp(settings.value(QStringLiteral("timeoutMinutes"), m_timeoutMinutes).toInt(), 1, 120);
-    const auto mode = settings.value(QStringLiteral("mode"), m_mode).toString();
+    m_enabled = settings.value(QStringLiteral("enabled"), true).toBool();
+    m_timeoutMinutes = clamp(settings.value(QStringLiteral("timeoutMinutes"), 5).toInt(), 1, 120);
+    const auto mode = settings.value(QStringLiteral("mode"), QStringLiteral("slideshow")).toString();
     m_mode = (mode == QStringLiteral("gradient") || mode == QStringLiteral("dim") || mode == QStringLiteral("pages"))
                  ? mode
                  : QStringLiteral("slideshow");
     const auto storedPages = settings.value(QStringLiteral("pageIds")).toStringList();
+    m_pageIds.clear();
     if (storedPages.size() <= 64)
         for (const auto& id : storedPages)
             if (ComponentSchema::safeId(id) && !m_pageIds.contains(id))
                 m_pageIds.append(id);
-    m_slideshowSeconds = clamp(settings.value(QStringLiteral("slideshowSeconds"), m_slideshowSeconds).toInt(), 5, 300);
-    m_showClock = settings.value(QStringLiteral("showClock"), m_showClock).toBool();
-    m_showDate = settings.value(QStringLiteral("showDate"), m_showDate).toBool();
-    m_showSystemHint = settings.value(QStringLiteral("showSystemHint"), m_showSystemHint).toBool();
+    m_slideshowSeconds = clamp(settings.value(QStringLiteral("slideshowSeconds"), 15).toInt(), 5, 300);
+    m_showClock = settings.value(QStringLiteral("showClock"), true).toBool();
+    m_showDate = settings.value(QStringLiteral("showDate"), true).toBool();
+    m_showSystemHint = settings.value(QStringLiteral("showSystemHint"), true).toBool();
     m_photoDirectory = settings.value(QStringLiteral("photoDirectory"), defaultPhotoDirectory()).toString();
-    const auto fit = settings.value(QStringLiteral("imageFit"), m_imageFit).toString();
+    const auto fit = settings.value(QStringLiteral("imageFit"), QStringLiteral("fill")).toString();
     m_imageFit = (fit == QStringLiteral("fit") || fit == QStringLiteral("stretch")) ? fit : QStringLiteral("fill");
-    m_shuffle = settings.value(QStringLiteral("shuffle"), m_shuffle).toBool();
-    QDir().mkpath(m_photoDirectory);
+    m_shuffle = settings.value(QStringLiteral("shuffle"), false).toBool();
+    if (createPhotoDirectory)
+        QDir().mkpath(m_photoDirectory);
     scanPhotos();
 }
 

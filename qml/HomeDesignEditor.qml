@@ -41,7 +41,7 @@ Rectangle {
             enumeration("initialTab","Starting tab",(config.navigation || []).map(t => t.id)),
             {key:"wallpaper",label:"Choose wallpaper",command:true},{key:"removeWallpaper",label:"Remove wallpaper",command:true}].filter(f => layoutModel.isPage || ["pageNavigation","sidebarWidth"].indexOf(f.key)<0)
         if (scope === 3) return [text("name","Tab name"),text("sections","Visible sections (IDs separated by commas; empty shows all)"),
-            enumeration("action.type","Tab action",["none","open-page","open-apps","open-search","settings","launch-app","open-collection","desktop-mode","run-script","open-url","open-folder","open-file","open-disc","play-movie"]),
+            enumeration("action.type","Tab action",["none","open-page","open-apps","open-search","settings","launch-app","open-collection","desktop-mode","open-url","open-folder","open-file","open-disc","play-movie"]),
             text("action.pageId","Destination page ID"),text("action.appId","Action app ID"),text("action.collectionId","Action collection ID"),text("action.target","Action target"),text("action.openWith","Open with app ID"),
             number("action.section","Settings section (-1 = overview)",-1,5,1,-1),number("action.movieId","Kodi movie ID",1,2147483647,1,1),
             {key:"addTab",label:"Add navigation tab",command:true},{key:"removeTab",label:"Remove this tab",command:true}]
@@ -60,7 +60,7 @@ Rectangle {
             number("padding","Panel padding",0,400,1,0),text("trailingLabel","Section link label"),
             enumeration("trailingAction.type","Section link action",["none","open-page","open-apps","open-search","settings","launch-app","open-collection"]),
             text("trailingAction.pageId","Link page ID"),text("trailingAction.appId","Link app ID"),text("trailingAction.collectionId","Link collection ID"),number("trailingAction.section","Link Settings section",-1,5,1,-1)].concat(result)
-        else result = result.concat([text("cardName","Card name"),enumeration("action.type","Card action",["open-page","open-apps","open-search","settings","launch-app","open-collection","desktop-mode","run-script","open-url","open-folder","open-file","open-disc","play-movie"]),text("action.pageId","Destination page ID"),text("action.appId","App ID"),text("action.collectionId","Collection ID"),text("action.target","Target"),text("action.openWith","Open with app ID"),number("action.section","Settings section",-1,5,1,-1),number("action.movieId","Kodi movie ID",1,2147483647,1,1),number("progress","Progress",0,1,0.01,0),number("imageCrop.x","Crop left",0,16384,1,0),number("imageCrop.y","Crop top",0,16384,1,0),
+        else result = result.concat([text("cardName","Card name"),enumeration("action.type","Card action",["open-page","open-apps","open-search","settings","launch-app","open-collection","desktop-mode","open-url","open-folder","open-file","open-disc","play-movie"]),text("action.pageId","Destination page ID"),text("action.appId","App ID"),text("action.collectionId","Collection ID"),text("action.target","Target"),text("action.openWith","Open with app ID"),number("action.section","Settings section",-1,5,1,-1),number("action.movieId","Kodi movie ID",1,2147483647,1,1),number("progress","Progress",0,1,0.01,0),number("imageCrop.x","Crop left",0,16384,1,0),number("imageCrop.y","Crop top",0,16384,1,0),
             number("imageCrop.width","Crop width",1,16384,1,100),number("imageCrop.height","Crop height",1,16384,1,100),{key:"cardArtwork",label:"Choose card artwork",command:true},
             {key:"removeArtwork",label:"Remove card artwork",command:true},{key:"removeCrop",label:"Use full artwork",command:true}])
         if(scope===2 && current.kind==="widget")result=result.filter(f=>!f.key.startsWith("action."))
@@ -102,7 +102,6 @@ Rectangle {
                     if (value === "open-collection" || value === "play-movie") nested.collectionId = "movies"
                     if (value === "play-movie") nested.movieId = 1
                     if (value === "open-url") nested.target = "https://example.com"
-                    if (value === "run-script") nested.target = "/media/script.sh"
                     if (["open-folder","open-file","open-disc"].indexOf(value) >= 0) { nested.target = "/media"; nested.openWith = "system" }
                     source[path[0]] = nested
                 }

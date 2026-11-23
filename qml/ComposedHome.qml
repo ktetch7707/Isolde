@@ -8,14 +8,16 @@ Item {
     required property var host
     readonly property var config: host.composition
     readonly property var tabs: config.navigation || []
+    readonly property bool hasVisibleTabs: !identityHeader && tabs.length > 0
     property string activeTabId: config.initialTab || (tabs[0] ? tabs[0].id : "")
     readonly property int activeTab: Math.max(0,tabs.findIndex(t => t.id === activeTabId))
     property int focusedTab: activeTab
     onFocusedTabChanged: Qt.callLater(() => {
         const item = navigationTabs.itemAt(focusedTab); if (!item) return
-        if (item.x < navigationStrip.contentX) navigationStrip.contentX = item.x
-        else if (item.x + item.width > navigationStrip.contentX + navigationStrip.width)
-            navigationStrip.contentX = Math.max(0,item.x + item.width - navigationStrip.width)
+        const left = navigationRow.x + item.x
+        if (left < navigationStrip.contentX) navigationStrip.contentX = left
+        else if (left + item.width > navigationStrip.contentX + navigationStrip.width)
+            navigationStrip.contentX = Math.max(0,left + item.width - navigationStrip.width)
     })
     property bool navigationFocused: false
     property int navigationGeneration: 0
@@ -45,9 +47,45 @@ Item {
     }
     readonly property var headerControls: host.visibleHeaderControls(config.headerControls || (config.headerMode === "identity" ? ["search", "settings"] : ["settings", "edit"]))
     readonly property bool identityHeader: config.headerMode === "identity"
+    readonly property bool bottomNavigation:headerStyle.position==="bottom"
+    property var focusedLibrary:null
+    onWidgetsChanged:Qt.callLater(syncFeaturedShelf)
+    onActiveWidgetChanged:Qt.callLater(syncFeaturedShelf)
+    onSectionActionIdChanged:Qt.callLater(syncFeaturedShelf)
+    Connections {
+        target:root.host
+        function onFocusedIndexChanged(){Qt.callLater(root.syncFeaturedShelf)}
+        function onItemsChanged(){Qt.callLater(root.syncFeaturedShelf)}
+    }
+    // Resolve focus after shelf registration settles because the hero changes viewport geometry.
+    function syncFeaturedShelf() {
+        focusedLibrary=widgets[activeWidget || sectionActionId || ((host.items || [])[host.focusedIndex] || {}).id] || null
+    }
+    readonly property var featuredMovie:!host.editMode && focusedLibrary && focusedLibrary.featuredItem || null
+    readonly property var featuredStyle:featuredMovie && focusedLibrary.style || ({})
+    readonly property string featuredBackground:featuredStyle.libraryHeroBackground || "theme"
+    // Blend sampled hues toward the page's own lightness so themes keep readable text.
+    function tintWithArtwork(base, paint, strength) {
+        const lightness=.2126*base.r+.7152*base.g+.0722*base.b
+        const artworkLightness=.2126*paint.r+.7152*paint.g+.0722*paint.b
+        const channel=value=>Math.max(0,Math.min(1,value*strength+lightness-artworkLightness*strength))
+        return Qt.rgba(channel(paint.r),channel(paint.g),channel(paint.b),1)
+    }
+    readonly property var featuredBackdrop: {
+        const revision=host.libraryProvider?host.libraryProvider.revision:0
+        return featuredMovie && host.libraryProvider && host.libraryProvider.backdrop
+            ? host.libraryProvider.backdrop(featuredMovie.mediaType,featuredMovie.mediaId) : null
+    }
+    readonly property var featuredPoster:featuredMovie && host.libraryProvider && (!featuredBackdrop || !featuredBackdrop.source)
+        ? host.libraryProvider.artwork(featuredMovie.mediaType,featuredMovie.mediaId) : null
     readonly property var headerStyle:Object.assign({},(host.headerDefaults || {})[identityHeader?"identity":"navigation"] || {},config.header || {})
     readonly property var headerOrder:headerStyle.order || ["title","controls","clock"]
     readonly property color headerInk:headerStyle.textColor || host.appearance.textColor || "#EEEAF0"
+    // Align within the space reserved for the title, leaving overflowing tabs scrollable.
+    function titleOffset(width, available) {
+        const space=Math.max(0,available-width)
+        return headerStyle.titleAlignment==="right"?space:headerStyle.titleAlignment==="center"?space/2:0
+    }
     readonly property string headerLogo:headerStyle.customLogo && host.artworkResolver?host.artworkResolver.resolveArtwork(headerStyle.customLogo):""
     function headerPosition(part) {
         let position=(headerStyle.padding || 0)*root.unit
@@ -165,9 +203,9 @@ Item {
         const topLeft=content.contentItem.mapToItem(host,x,y),bottomRight=content.contentItem.mapToItem(host,x+width,y+height)
         return {x:topLeft.x,y:topLeft.y,width:bottomRight.x-topLeft.x,height:bottomRight.y-topLeft.y}
     }
-    function revealScope(scope) {
+    function revealScope(scope, includeHeading) {
         const surface=sectionSurfaces[scope || ""];if(!sectionMode || !surface)return
-        const point=surface.mapToItem(content.contentItem,0,0)
+        const point=(includeHeading?surface.sectionFrame:surface).mapToItem(content.contentItem,0,0)
         content.contentY=Math.max(0,Math.min(content.contentHeight-content.height,point.y))
     }
     function revealPlacement(p,scope) {
@@ -227,14 +265,19 @@ Item {
         if(sectionMode && host.editMode && host.scopeView)return sections.filter(s=>(s.id || "")===host.editScopeId)
         return !tab || !tab.sections ? sections : tab.sections.map(id => sections.find(s => s.id === id)).filter(s => !!s)
     }
-    function sectionHeight(style) { return (style.height===undefined ? (sectionMode?config.sectionHeight:180):style.height)*unit }
+    // A single library can size and label its section from its own inspector.
+    function sectionLibrary(section) {
+        const items=section.items || []
+        return items.length===1 && items[0].componentType==="library" ? items[0].presentation || {} : (section.presentation || {}).variant==="library" ? section.presentation : {}
+    }
+    function sectionHeight(style, section) { return (sectionLibrary(section).libraryShelfHeight || (style.height===undefined ? (sectionMode?config.sectionHeight:180):style.height))*unit }
     readonly property var geometry: {
         let rows = [], entries = [], column = 0, row = 0
         for (const section of visibleSections) {
             const style = section.presentation || {}
             const span = Math.min(columns, style.span || columns)
             if (column + span > columns) { row++; column = 0 }
-            const height = sectionHeight(style)
+            const height = sectionHeight(style, section)
             rows[row] = Math.max(rows[row] || 0, height)
             entries.push({row: row, column: column, span: span})
             column += span
@@ -312,6 +355,8 @@ Item {
         const item=(host.items || []).find(i=>i.id===entry.id)
         const collection=entry.widget || item && (item.componentType==="library" || item.appCollection || item.family==="page-menu" || item.family==="carousel")
         if(collection && widgets[entry.id])activeWidget=entry.id
+        if (sectionMode && item && item.placement && (featuredMovie || item.presentation && item.presentation.libraryHero))
+            Qt.callLater(()=>revealScope(item.categoryId || "",true))
     }
     // Compare the full grid footprints so a control can neighbor any row of a tall component.
     function directionalPlacement(entries, current, horizontal, forward) {
@@ -344,7 +389,7 @@ Item {
         }
         if(activeGroup && command===inputManager.back){const group=(host.items || []).find(i=>i.id===activeGroup);if(group){host.focusedIndex=host.itemIndex(group.id);activeGroup=group.parentId || ""}else activeGroup="";return}
         if (host.recoveryFocused) {
-            if (command === inputManager.navigateDown) { host.recoveryFocused = false; navigationFocused = tabs.length > 0 }
+            if (command === (bottomNavigation?inputManager.navigateUp:inputManager.navigateDown)) { host.recoveryFocused = false; navigationFocused = hasVisibleTabs }
             else if (command === inputManager.navigateLeft) host.recoveryIndex = Math.max(0,host.recoveryIndex-1)
             else if (command === inputManager.navigateRight) host.recoveryIndex = Math.min(headerControls.length-1,host.recoveryIndex+1)
             else if (command === inputManager.confirm) activateControl(host.recoveryIndex)
@@ -362,8 +407,12 @@ Item {
                 focusedTab = Math.min(tabs.length - 1, focusedTab + 1)
             }
             else if (command === inputManager.confirm) activateTab(focusedTab)
-            else if (command === inputManager.navigateUp) host.focusRecoveryHeader()
-            else if (command === inputManager.navigateDown) { const first = focusEntries()[0]; if (first) { focusEntry(first); navigationFocused = false } }
+            else if (command === (bottomNavigation?inputManager.navigateDown:inputManager.navigateUp)) host.focusRecoveryHeader()
+            else if (command === (bottomNavigation?inputManager.navigateUp:inputManager.navigateDown)) {
+                const entries=focusEntries(), current=entries.find(e=>host.itemIndex(e.id)===host.focusedIndex)
+                const target=bottomNavigation && current?current:entries[0]
+                if(target){focusEntry(target);navigationFocused=false}
+            }
             return
         }
         const entries = focusEntries(), current = entries.find(e => sectionActionId ? e.id === sectionActionId : !e.sectionAction && host.itemIndex(e.id) === host.focusedIndex) || entries[0]
@@ -410,34 +459,86 @@ Item {
         } else if (command === inputManager.navigateUp || command === inputManager.navigateDown) {
             const direction = command === inputManager.navigateUp ? -1 : 1
             const rows = entries.filter(e => (e.row-current.row)*direction > 0).map(e => e.row)
-            if (!rows.length && direction < 0) { navigationFocused = tabs.length > 0; if(!tabs.length)host.focusRecoveryHeader(); return }
+            if (!rows.length && (direction < 0 || bottomNavigation)) {
+                if(bottomNavigation && direction<0)host.focusRecoveryHeader()
+                else {navigationFocused=hasVisibleTabs;if(!hasVisibleTabs)host.focusRecoveryHeader()}
+                return
+            }
             const row = direction < 0 ? Math.max(...rows) : Math.min(...rows)
             candidates = entries.filter(e => e.row === row).sort((a,b) => Math.abs(a.x-current.x)-Math.abs(b.x-current.x))
         }
         if(!candidates.length && activeGroup && (command===inputManager.navigateLeft || command===inputManager.navigateRight)){const group=host.items.find(i=>i.id===activeGroup);if(group && (group.presentation.layout || {}).wrap)candidates=entries.slice().sort((a,b)=>command===inputManager.navigateRight?a.x-b.x:b.x-a.x)}
         next = candidates[0]; if(next)focusEntry(next)
     }
+    Rectangle {
+        objectName:"focusedLibraryBackground"
+        anchors.fill:parent
+        visible:!!root.featuredMovie && (root.featuredBackground==="fixed" && !!root.featuredStyle.libraryHeroColor
+            || root.featuredBackground==="artwork" && !!heroArt.backdropColor)
+        gradient:Gradient {
+            GradientStop {position:0;color:root.featuredBackground==="fixed"?root.featuredStyle.libraryHeroColor || host.backgroundStart:
+                heroArt.backdropColor ? root.tintWithArtwork(host.backgroundStart,heroArt.backdropColor,.32) : host.backgroundStart}
+            GradientStop {position:1;color:root.featuredBackground==="fixed"?root.featuredStyle.libraryHeroColor || host.backgroundEnd:
+                heroArt.backdropColor ? root.tintWithArtwork(host.backgroundEnd,heroArt.backdropColor,.18) : host.backgroundEnd}
+        }
+    }
+    // Keep artwork behind the whole page so increasing it never pushes the shelves away.
+    ArtworkImage {
+        id:heroArt;objectName:"focusedLibraryArtwork"
+        readonly property real widthPercent:root.featuredStyle.libraryHeroWidth || 68
+        readonly property real heightPercent:root.featuredStyle.libraryHeroHeight || 37
+        readonly property real widthExpansion:Math.max(0,(widthPercent-90)/10)
+        readonly property real heightExpansion:Math.max(0,(heightPercent-50)/50)
+        x:root.width-root.margin*(1-widthExpansion)-width
+        y:(root.margin+featured.y)*(1-heightExpansion)
+        width:featured.width*widthPercent/100+(root.width-featured.width)*widthExpansion
+        height:heightPercent<=50?featured.height:featured.parent.height*.5*(1-heightExpansion)+root.height*heightExpansion
+        source:root.featuredBackdrop && root.featuredBackdrop.source || root.featuredPoster && root.featuredPoster.source || ""
+        fit:"cover";featherBackdrop:true;visible:featured.visible
+        sampleBackdropColor:root.featuredBackground==="artwork"
+    }
     Item {
         anchors.fill: parent; anchors.margins: root.margin
         Item {
-            id: header;objectName:"pageHeader"; width: parent.width; height: (root.headerStyle.height || (root.identityHeader ? 58 : 42))*root.unit
+            id:featured;objectName:"focusedLibraryDetails"
+            // Ease the details back to the normal banner size as artwork expands over the page.
+            readonly property real heightPercent:Math.min(50,heroArt.heightPercent)-13*heroArt.heightExpansion
+            visible:!!root.featuredMovie;width:parent.width;height:visible?parent.height*heightPercent/100:0
+            y:root.bottomNavigation?0:header.height+root.gap;clip:true
+            Column {
+                anchors.left:parent.left;anchors.leftMargin:12*root.unit;anchors.verticalCenter:parent.verticalCenter
+                width:parent.width*.52;spacing:12*root.unit
+                Text {objectName:"focusedLibraryTitle";width:parent.width;text:root.featuredMovie?root.featuredMovie.title || root.featuredMovie.label || "":"";textFormat:Text.PlainText;elide:Text.ElideRight;color:host.appearance.textColor || "white";font.pixelSize:40*root.unit;font.weight:Font.DemiBold}
+                Text {objectName:"focusedLibrarySynopsis";width:parent.width;text:root.featuredMovie?root.featuredMovie.plot || "":"";textFormat:Text.PlainText;wrapMode:Text.WordWrap;maximumLineCount:4;elide:Text.ElideRight;color:host.appearance.textColor || "white";font.pixelSize:19*root.unit}
+                Text {
+                    width:parent.width;textFormat:Text.PlainText;elide:Text.ElideRight;color:host.appearance.mutedColor || "white";font.pixelSize:16*root.unit
+                    text:{const movie=root.featuredMovie;return movie?[movie.year || "",movie.runtime>0?qsTr("%1 min").arg(Math.round(movie.runtime/60)):"",movie.rating>0?Number(movie.rating).toFixed(1):""].filter(Boolean).join("  ·  "):""}
+                }
+            }
+        }
+        Item {
+            id: header;objectName:"pageHeader"; width: parent.width
+            height: Math.max((root.headerStyle.height || (root.identityHeader ? 58 : 42))*root.unit,
+                clock.visible?clock.height+2*(root.headerStyle.padding || 0)*root.unit:0)
             y:root.headerStyle.position==="bottom"?parent.height-height:0
             readonly property real innerHeight:height-2*(root.headerStyle.padding || 0)*root.unit
             Rectangle {anchors.fill:parent;radius:(root.headerStyle.radius || 0)*root.unit;color:root.headerStyle.backgroundColor || host.appearance.surfaceColor || "transparent";opacity:root.headerStyle.opacity || 0}
             Rectangle {anchors.fill:parent;color:"transparent";radius:(root.headerStyle.radius || 0)*root.unit;border.width:host.editMode && !!host.editHeaderSelection?(root.headerStyle.focusWidth || 2)*root.unit:0;border.color:root.headerStyle.focusColor || host.appearance.focusColor || root.headerInk}
             Flickable {
-                id: navigationStrip; clip: true; contentWidth: root.identityHeader ? width : navigationRow.implicitWidth
+                id: navigationStrip; clip: true; contentWidth: root.identityHeader ? width : Math.max(width,navigationRow.implicitWidth)
                 objectName:"pageHeader-title";x:root.headerPosition("title");y:(root.headerStyle.padding || 0)*root.unit
                 width: Math.max(0,parent.width - controls.width - (clock.visible ? clock.width : 0) - (root.headerStyle.gap===undefined?22:root.headerStyle.gap)*root.unit*(clock.visible ? 2 : 1)-2*(root.headerStyle.padding || 0)*root.unit); height: header.innerHeight
                 Row {
                     visible: root.identityHeader && root.headerStyle.showTitle!==false; height: parent.height; spacing: 10*root.unit
-                    width:implicitWidth;x:root.headerStyle.titleAlignment==="right"?parent.width-width:root.headerStyle.titleAlignment==="center"?(parent.width-width)/2:0
+                    objectName:"pageHeader-identity"
+                    width:implicitWidth;x:root.titleOffset(width,navigationStrip.width)
                     LineIcon { visible:!root.headerLogo;name:"sparkle"; width:38*root.unit; height:width; anchors.verticalCenter:parent.verticalCenter }
                     ArtworkImage {visible:!!root.headerLogo;source:root.headerLogo;width:(root.headerStyle.titleSize || 48)*root.unit*2;height:parent.height;fit:"contain"}
                     Text { visible:!root.headerLogo;anchors.verticalCenter:parent.verticalCenter;width:Math.min(implicitWidth,Math.max(0,navigationStrip.width-48*root.unit));elide:Text.ElideRight;text:root.config.identity===undefined?"Isolde":root.config.identity; color:root.headerStyle.textColor || host.appearance.headingColor || root.headerInk; font.family:host.appearance.fontFamily || "DejaVu Sans"; font.pixelSize:(root.headerStyle.titleSize || 48)*root.unit; font.weight:Font.Light }
                 }
                 Row {
-                    id: navigationRow; visible:!root.identityHeader; height:parent.height; spacing:26*root.unit
+                    id: navigationRow;objectName:"pageHeader-navigation";visible:!root.identityHeader; height:parent.height; spacing:26*root.unit
+                    width:implicitWidth;x:root.titleOffset(width,navigationStrip.width)
                     Repeater {
                         id:navigationTabs; model:root.tabs
                         delegate:Item {
@@ -479,17 +580,21 @@ Item {
                 }
             }
             Item {
-                id:clock;objectName:"pageHeader-clock"; visible:root.config.showClock === true; width:(root.headerStyle.clockWidth || 100)*root.unit;height:clockBody.implicitHeight;x:root.headerPosition("clock");anchors.verticalCenter:parent.verticalCenter
+                id:clock;objectName:"pageHeader-clock";visible:root.config.showClock === true
+                width:Math.max((root.headerStyle.clockWidth || 100)*root.unit,timeLabel.implicitWidth,
+                    timeMeasure.width,dateLabel.visible?dateLabel.implicitWidth:0)
+                height:clockBody.implicitHeight;x:root.headerPosition("clock");anchors.verticalCenter:parent.verticalCenter
                 Column {id:clockBody;width:parent.width;spacing:3*root.unit
-                Text { width:parent.width;elide:Text.ElideRight;text:Qt.formatTime(root.now,root.headerStyle.timeFormat || "h:mm AP"); color:root.headerInk; font.family:host.appearance.fontFamily || "DejaVu Sans"; font.pixelSize:(root.headerStyle.clockSize || 18)*root.unit }
-                Text { width:parent.width;elide:Text.ElideRight;visible:root.headerStyle.showDate!==false;text:Qt.formatDate(root.now,root.headerStyle.dateFormat || "ddd, MMM d"); color:root.headerStyle.textColor || host.appearance.mutedColor || "#625B73"; font.family:host.appearance.fontFamily || "DejaVu Sans"; font.pixelSize:(root.headerStyle.dateSize || 12)*root.unit }
+                Text {id:timeLabel;objectName:"pageHeader-timeLabel";width:parent.width;elide:Text.ElideRight;text:Qt.formatTime(root.now,root.headerStyle.timeFormat || "h:mm AP"); color:root.headerStyle.clockColor || root.headerInk; font.family:host.appearance.fontFamily || "DejaVu Sans"; font.pixelSize:(root.headerStyle.clockSize || 18)*root.unit }
+                Text {id:dateLabel;width:parent.width;elide:Text.ElideRight;visible:root.headerStyle.showDate!==false;text:Qt.formatDate(root.now,root.headerStyle.dateFormat || "ddd, MMM d"); color:root.headerStyle.textColor || host.appearance.mutedColor || "#625B73"; font.family:host.appearance.fontFamily || "DejaVu Sans"; font.pixelSize:(root.headerStyle.dateSize || 12)*root.unit }
                 }
+                TextMetrics {id:timeMeasure;font:timeLabel.font;text:Qt.formatTime(new Date(2000,0,1,23,58,58),root.headerStyle.timeFormat || "h:mm AP")}
                 MouseArea {anchors.fill:parent;enabled:host.editMode;onClicked:host.editHeaderSelected("clock")}
             }
         }
         Flickable {
-            id:content; objectName:"composedContent"; width:parent.width; height:parent.height-header.height-root.gap; contentHeight:root.placementMode && !root.sectionMode ? root.pageContentHeight : grid.implicitHeight; clip:true
-            y:root.headerStyle.position==="bottom"?0:header.height+root.gap
+            id:content; objectName:"composedContent"; width:parent.width; height:Math.max(0,parent.height-header.height-root.gap-featured.height); contentHeight:root.placementMode && !root.sectionMode ? root.pageContentHeight : grid.implicitHeight; clip:true
+            y:(root.bottomNavigation?0:header.height+root.gap)+featured.height
             boundsBehavior:Flickable.StopAtBounds
             onYChanged:root.settleRuntimeFocus()
             onHeightChanged:root.settleRuntimeFocus()
@@ -521,7 +626,11 @@ Item {
                             ? "Responsive rules leave no room in "+modelData.name+". Increase the section size, reduce minimum sizes or choose Scroll." : ""
                         Layout.fillWidth:true; Layout.columnSpan:metrics.span
                         Layout.preferredWidth:(content.width-root.gap*(root.columns-1))*metrics.span/root.columns
-                        Layout.preferredHeight:root.sectionHeight(style)*root.geometry.factor
+                        Layout.preferredHeight: {
+                            const requested=root.sectionHeight(style, modelData)*root.geometry.factor
+                            const isFeatured=style.libraryHero || (modelData.items || []).some(item=>item.presentation && item.presentation.libraryHero)
+                            return featured.visible && isFeatured ? Math.min(requested,content.height) : requested
+                        }
                         Layout.maximumHeight:Layout.preferredHeight; Layout.alignment:Qt.AlignTop
                         FrostedPanel {
                             objectName:"sectionPanel-"+sectionView.modelData.id
@@ -534,11 +643,15 @@ Item {
                             width:Math.max(0,Math.min(parent.width,(sectionView.style.contentWidth || 3840)*root.unit)-2*sectionView.padding)
                             height:parent.height-2*sectionView.padding; spacing:9*root.unit
                             Item {
-                                id:heading; visible:sectionView.style.showHeading !== false; width:parent.width
+                                id:heading
+                                readonly property var libraryStyle:root.sectionLibrary(sectionView.modelData)
+                                visible:libraryStyle.libraryShowLabel===undefined?sectionView.style.showHeading!==false:libraryStyle.libraryShowLabel || !!sectionView.style.trailingAction
+                                width:parent.width
                                 height:visible ? (sectionView.style.headingSize || 27)*root.unit+6*root.unit : 0
-                                LineIcon { visible:!!sectionView.style.icon; name:sectionView.style.icon || "clock"; ink:sectionView.style.iconColor || host.appearance.iconColor || sectionView.style.headingColor || host.appearance.headingColor || host.appearance.textColor || "#EEEAF0"; width:20*root.unit; height:width; anchors.verticalCenter:parent.verticalCenter }
-                                Text { x:sectionView.style.icon ? 30*root.unit : 0; anchors.verticalCenter:parent.verticalCenter; width:parent.width-x-trailing.width
-                                    text:sectionView.modelData.name; color:sectionView.style.headingColor || host.appearance.headingColor || host.appearance.textColor || "#EEEAF0"; elide:Text.ElideRight
+                                LineIcon { visible:heading.libraryStyle.libraryShowLabel!==false && !!sectionView.style.icon; name:sectionView.style.icon || "clock"; ink:sectionView.style.iconColor || host.appearance.iconColor || sectionView.style.headingColor || host.appearance.headingColor || host.appearance.textColor || "#EEEAF0"; width:20*root.unit; height:width; anchors.verticalCenter:parent.verticalCenter }
+                                Text { objectName:"sectionHeading-"+sectionView.modelData.id; x:sectionView.style.icon ? 30*root.unit : 0; anchors.verticalCenter:parent.verticalCenter; width:parent.width-x-trailing.width
+                                    visible:heading.libraryStyle.libraryShowLabel!==false
+                                    text:heading.libraryStyle.libraryShowLabel && heading.libraryStyle.visibleLabel || sectionView.modelData.name; color:sectionView.style.headingColor || host.appearance.headingColor || host.appearance.textColor || "#EEEAF0"; elide:Text.ElideRight
                                     font.family:host.appearance.fontFamily || "DejaVu Sans"; font.pixelSize:(sectionView.style.headingSize || 27)*root.unit*host.textScale
                                     font.weight:sectionView.style.headingBold === false ? Font.Normal : Font.DemiBold }
                                 Rectangle {
@@ -586,8 +699,10 @@ Item {
                             }
                             PlacedComponents {
                                 id:sectionPlacement
+                                sectionLabel:(sectionView.modelData.items || []).length===1
                                 property string sectionId:sectionView.modelData.id || ""
                                 property string sectionName:sectionView.modelData.name || ""
+                                readonly property Item sectionFrame:sectionView
                                 readonly property string responsiveError:sectionView.responsiveError
                                 property bool editableGrid:sectionView.style.variant!=="library"
                                 readonly property bool geometryReady:sectionView.width>0 && sectionView.height>0 && Math.abs(sectionView.height-sectionView.Layout.preferredHeight)<0.5
@@ -615,7 +730,7 @@ Item {
                                     provider:host.libraryProvider; widgetKey:host.pageKey+"."+sectionView.modelData.id
                                     originId:"widget-"+sectionView.modelData.id
                                     readOnly:host.editMode || host.previewOnly;frozen:host.freezeData;samplePreview:host.samplePreview;sampleItems:host.sampleItems
-                                    style:sectionView.style; appearance:host.appearance
+                                    style:sectionView.style; appearance:host.appearance; unit:root.unit; sectionLabel:true
                                     engaged:root.activeWidget === "widget-"+sectionView.modelData.id
                                     highlighted:!host.editMode && !host.recoveryFocused && !root.navigationFocused && (root.sectionActionId==="widget-"+sectionView.modelData.id || !root.sectionActionId && !!root.focusEntries()[0] && root.focusEntries()[0].id==="widget-"+sectionView.modelData.id)
                                     onEngage: { root.activeWidget="widget-"+sectionView.modelData.id; root.sectionActionId=root.activeWidget; host.recoveryFocused=false; root.navigationFocused=false }
