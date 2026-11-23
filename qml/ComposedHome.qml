@@ -330,7 +330,15 @@ Item {
         }
         if (navigationFocused) {
             if (command === inputManager.navigateLeft) focusedTab = Math.max(0, focusedTab - 1)
-            else if (command === inputManager.navigateRight) focusedTab = Math.min(tabs.length - 1, focusedTab + 1)
+            else if (command === inputManager.navigateRight) {
+                if (focusedTab === tabs.length - 1 && headerControls.length > 0) {
+                    navigationFocused = false
+                    recoveryFocused = true
+                    recoveryIndex = 0
+                    return
+                }
+                focusedTab = Math.min(tabs.length - 1, focusedTab + 1)
+            }
             else if (command === inputManager.confirm) activateTab(focusedTab)
             else if (command === inputManager.navigateUp) host.focusRecoveryHeader()
             else if (command === inputManager.navigateDown) { const first = focusEntries()[0]; if (first) { focusEntry(first); navigationFocused = false } }
