@@ -7,7 +7,32 @@ image). The appliance image path is described in `docs/user-setup.md`.
 
 ## 1. Install on Ubuntu 26.04
 
-### Option A: From source (developer / pilot)
+### For non-technical users (recommended)
+
+Download the signed `.deb` from the GitHub release page
+(https://github.com/ktetch7707/Isolde/releases), then install it:
+
+```sh
+sudo apt install ./isolde_0.0.1.3_amd64.deb
+```
+
+You can also double-click the `.deb` file in the file manager to open it in
+Ubuntu Software Center and click Install.
+
+After installation:
+
+1. **Launch Isolde** from the applications menu ("Isolde") or run
+   `/opt/isolde/bin/isolde --windowed`
+2. **Setup wizard opens automatically** — seven steps using remote or keyboard:
+   - Welcome → Network → Display → Audio → Remote → Profiles → First library → Start Isolde
+3. **Optionally enable autostart** on the final setup step ("Start Isolde
+   automatically at login"). Isolde will then start at every graphical login.
+4. **Done** — Isolde is ready to use.
+
+Profiles, layouts, and settings are stored in your home directory and survive
+updates.
+
+### For developers (from source)
 
 Install build dependencies:
 
@@ -38,35 +63,7 @@ ctest --test-dir build --output-on-failure
 
 Isolde starts fullscreen by default; `--windowed` is for development.
 
-### Option B: From a signed desktop .deb (consumer, after first release)
-
-Download the signed `.deb` from the GitHub release page (see section 2), then:
-
-```sh
-sudo apt install ./isolde_0.0.1.3_amd64.deb
-```
-
-The package installs Isolde under `/opt/isolde` and adds a windowed
-**"Isolde (Desktop)"** entry to the applications menu. It does not configure
-autostart, login, or appliance recovery. Launch from the menu or run:
-
-```sh
-/opt/isolde/bin/isolde --windowed
-```
-
-### First run
-
-The first run opens a seven-step remote/keyboard setup wizard:
-1. Language and region
-2. Display safe area and UI scale
-3. Audio (volume owner, test volume/mute)
-4. Remote pairing/test
-5. Network
-6. Privacy and update defaults
-7. Confirm Home layout and finish
-
-The wizard works offline. Repeat it later with **Settings → System → Setup
-guide** or `isolde --setup`.
+---
 
 ## 2. Push a release (maintainer)
 
@@ -98,7 +95,6 @@ tests, signs, and publishes automatically.
 
 ```sh
 git checkout -b release-0.0.1.3
-# Update VERSION and CMake project version if needed (they must match)
 echo "0.0.1.3" > VERSION
 git commit -am "Prepare 0.0.1.3"
 git tag v0.0.1.3
@@ -122,6 +118,8 @@ The release workflow:
 
 The manifest binds version, OS, architecture, filename, size, SHA-256, and
 channel, and is signature-verified before any device installs it.
+
+---
 
 ## 3. Update on that machine
 
