@@ -321,14 +321,14 @@ void SoftwareUpdates::install()
         fail(QStringLiteral("No update is available to install."));
         return;
     }
-    if (m_downloadBase.isEmpty())
-    {
-        fail(QStringLiteral("No download URL is available for this release."));
-        return;
-    }
     if (m_publicKeyPath.isEmpty())
     {
         fail(QStringLiteral("No trusted signing key is installed. Updates cannot be verified."));
+        return;
+    }
+    if (m_downloadBase.isEmpty())
+    {
+        fail(QStringLiteral("No download URL is available for this release."));
         return;
     }
     // Determine the architecture string for the update tool.
