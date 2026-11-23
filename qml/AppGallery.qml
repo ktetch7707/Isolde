@@ -196,8 +196,18 @@ Item {
         }
         if (command === inputManager.navigateLeft || command === inputManager.navigateRight) {
             if (!visibleEntries.length) return true
-            selectAt(Math.max(0, Math.min(visibleEntries.length - 1,
-                Math.max(0, selectedIndex) + (command === inputManager.navigateRight ? 1 : -1))))
+            const controls = (galleryPresentation.filterEnabled === false ? [] : ["filter"])
+                .concat(galleryPresentation.favoritesEnabled ? ["favorites"] : [], ["store", "settings"])
+            const nextIndex = Math.max(0, selectedIndex) + (command === inputManager.navigateRight ? 1 : -1)
+            if (command === inputManager.navigateRight && nextIndex >= visibleEntries.length) {
+                focusArea = controls[controls.length - 1]
+                return true
+            }
+            if (command === inputManager.navigateLeft && nextIndex < 0) {
+                focusArea = controls[0]
+                return true
+            }
+            selectAt(Math.max(0, Math.min(visibleEntries.length - 1, nextIndex)))
             return true
         }
         if (command === inputManager.confirm) {
