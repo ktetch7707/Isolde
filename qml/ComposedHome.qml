@@ -245,10 +245,10 @@ Item {
         return { entries: entries, rows: rows, factor: config.fit === false ? 1 : Math.min(1, available / Math.max(1,total)) }
     }
     function focusEntries() {
-        if(activeGroup)return (host.items || []).filter(i=>(i.parentId || "")===activeGroup && !!i.placement && host.focusable(i)).map(i=>({id:i.id,row:i.placement.y,x:i.placement.x+i.placement.width/2}))
+        if(activeGroup)return (host.items || []).filter(i=>(i.parentId || "")===activeGroup && !!i.placement && host.focusable(i)).map(i=>({id:i.id,row:i.placement.y,x:i.placement.x+i.placement.width/2,placement:i.placement}))
         if (placementMode && !sectionMode) {
             const tab=tabs[activeTab]
-            return placedItems.filter(e=>host.focusable(e.item) && (!tab || !tab.sections || tab.sections.indexOf(e.item.categoryId || "")>=0)).map(e=>({id:e.item.id,row:e.placement.y,x:e.placement.x+e.placement.width/2}))
+            return placedItems.filter(e=>host.focusable(e.item) && (!tab || !tab.sections || tab.sections.indexOf(e.item.categoryId || "")>=0)).map(e=>({id:e.item.id,row:e.placement.y,x:e.placement.x+e.placement.width/2,placement:e.placement}))
         }
         let entries = []
         for (let s = 0; s < visibleSections.length; s++) {
@@ -313,6 +313,28 @@ Item {
         const collection=entry.widget || item && (item.componentType==="library" || item.appCollection || item.family==="page-menu" || item.family==="carousel")
         if(collection && widgets[entry.id])activeWidget=entry.id
     }
+    // Compare the full grid footprints so a control can neighbor any row of a tall component.
+    function directionalPlacement(entries, current, horizontal, forward) {
+        const axis = horizontal ? "x" : "y"
+        const length = horizontal ? "width" : "height"
+        const cross = horizontal ? "y" : "x"
+        const breadth = horizontal ? "height" : "width"
+        const origin = current.placement
+        const candidates = []
+        for (const entry of entries) {
+            const target = entry.placement
+            const distance = forward ? target[axis] - (origin[axis] + origin[length])
+                                     : origin[axis] - (target[axis] + target[length])
+            if (distance < 0) continue
+            const overlap = Math.min(origin[cross] + origin[breadth], target[cross] + target[breadth])
+                          - Math.max(origin[cross], target[cross])
+            const offset = Math.abs(origin[cross] + origin[breadth]/2 - target[cross] - target[breadth]/2)
+            candidates.push({entry:entry, offAxis:overlap <= 0, gap:Math.max(0,-overlap), distance:distance, offset:offset})
+        }
+        candidates.sort((a,b) => a.offAxis-b.offAxis || a.gap-b.gap || a.distance-b.distance || a.offset-b.offset)
+        return candidates.length ? candidates[0].entry : null
+    }
+    // Let the focused widget handle its own entries before moving across components.
     function handleCommand(command) {
         if (activeWidget) {
             const widget = widgets[activeWidget]
@@ -333,8 +355,8 @@ Item {
             else if (command === inputManager.navigateRight) {
                 if (focusedTab === tabs.length - 1 && headerControls.length > 0) {
                     navigationFocused = false
-                    recoveryFocused = true
-                    recoveryIndex = 0
+                    host.recoveryFocused = true
+                    host.recoveryIndex = 0
                     return
                 }
                 focusedTab = Math.min(tabs.length - 1, focusedTab + 1)
@@ -369,8 +391,20 @@ Item {
             else if (item.actions && item.actions.length>0) host.actionActivated({actions:item.actions}, item.id)
             return
         }
+        const horizontal = command === inputManager.navigateLeft || command === inputManager.navigateRight
+        const vertical = command === inputManager.navigateUp || command === inputManager.navigateDown
+        if (current.placement && (horizontal || vertical)) {
+            const forward = command === inputManager.navigateRight || command === inputManager.navigateDown
+            const target = directionalPlacement(entries, current, horizontal, forward)
+            if (target) { focusEntry(target); return }
+            if (vertical && !forward) {
+                navigationFocused = tabs.length > 0
+                if (!navigationFocused) host.focusRecoveryHeader()
+            }
+            if (!horizontal || !activeGroup) return
+        }
         let candidates = [], next
-        if (command === inputManager.navigateLeft || command === inputManager.navigateRight) {
+        if (horizontal && !current.placement) {
             const direction = command === inputManager.navigateLeft ? -1 : 1
             candidates = entries.filter(e => e.row === current.row && (e.x - current.x)*direction > 0).sort((a,b) => Math.abs(a.x-current.x)-Math.abs(b.x-current.x))
         } else if (command === inputManager.navigateUp || command === inputManager.navigateDown) {

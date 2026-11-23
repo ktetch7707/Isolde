@@ -39,8 +39,8 @@ Item {
     // Intercept remote/keyboard arrow keys at grid edges and from controls,
     // so focus never leaks to Settings or other off-grid elements. GridView's
     // native Up/Down/Left/Right within the grid is left untouched.
-    Keys.handle: Keys.Left | Keys.Right | Keys.Up | Keys.Down | Keys.Select | Keys.Back
-    Keys.onPressed: {
+    Keys.onPressed: function(event) {
+        const key = event.key
         // From any control: arrow keys go through handleCommand (to grid, or between controls)
         if (focusArea !== "grid") {
             if (key === Qt.Key_Up) { root.handleCommand(inputManager.navigateUp); event.accepted = true; return }

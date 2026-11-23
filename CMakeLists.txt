@@ -660,7 +660,7 @@ if(BUILD_TESTING)
         searchHeaderSwitchRemoteFocusAndStableResults searchPreferenceProfileIsolationAndWriteFailure
         appSuppliedIconsUseManagedArtwork
         kodiSettingsFollowUserTheme appearancePreviewCancelAndApply composedReferenceNavigationAndGeometry
-        pastelReferenceNavigationAndGeometry skinsAndDesignAreReachableFromSettings
+        pastelReferenceNavigationAndGeometry skinsAndDesignAreReachableFromSettings placedMenuReachesAdjacentControls
         pageComposerAndIndependentKodiWidgets gridEditorMoveResizeDuplicateRemove)
     set(ISOLDE_STUDIO_NAVIGATION_CASES
         customizeOpensStudioAndPreservesDirtyExit studioRemoteDraftApplyAndCancel
