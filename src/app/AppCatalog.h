@@ -136,17 +136,20 @@ class AppCatalog final : public QObject
     QString
     storeStatus() const
     {
-        return m_onlineStoreSearch && m_provider ? m_provider->status() : QString();
+        const auto* provider = m_provider.data();
+        return m_onlineStoreSearch && provider ? provider->status() : QString();
     }
     bool
     hasNextStorePage() const
     {
-        return m_onlineStoreSearch && m_provider && m_provider->hasNextPage();
+        const auto* provider = m_provider.data();
+        return m_onlineStoreSearch && provider && provider->hasNextPage();
     }
     bool
     hasPreviousStorePage() const
     {
-        return m_onlineStoreSearch && m_provider && m_provider->hasPreviousPage();
+        const auto* provider = m_provider.data();
+        return m_onlineStoreSearch && provider && provider->hasPreviousPage();
     }
     Q_INVOKABLE bool
     load(const QString& catalogPath = {}, const QString& statePath = {}, const QString& installRoot = {});
@@ -183,7 +186,8 @@ class AppCatalog final : public QObject
     QString
     storeSourceName() const
     {
-        return m_provider ? m_provider->providerName() : tr("No online repository connected");
+        const auto* provider = m_provider.data();
+        return provider ? provider->providerName() : tr("No online repository connected");
     }
 
   signals:
