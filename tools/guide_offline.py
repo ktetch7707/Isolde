@@ -24,9 +24,8 @@ if len(sys.argv)>3:os.execv(sys.argv[3],[sys.argv[3],'--windowed'])
 '''
 
 
-def command(arguments):
+def command(arguments, sandbox=Path('/usr/lib/isolde-native/bwrap')):
     """Use the packaged root-owned sandbox to enforce the offline boundary."""
-    sandbox=Path('/usr/lib/isolde-native/bwrap')
     for path in (sandbox,*sandbox.parents):
         info=path.lstat()
         if path.is_symlink() or info.st_uid!=0 or info.st_mode & (stat.S_IWGRP|stat.S_IWOTH):raise RuntimeError('Untrusted native network sandbox path')
@@ -34,13 +33,13 @@ def command(arguments):
     return [str(sandbox),'--unshare-user','--unshare-net','--die-with-parent','--cap-drop','ALL','--bind','/','/','--proc','/proc','--dev-bind','/dev','/dev','--',*arguments]
 
 
-def preflight():
+def preflight(sandbox=Path('/usr/lib/isolde-native/bwrap')):
     """Verify the actual network denial before relying on it for a playback fixture."""
     with tempfile.TemporaryDirectory(prefix='isolde-guide-network-') as folder:
         root = Path(folder)
         script = root / 'denied.py'
         script.write_text(PROBE)
-        result=subprocess.run(command(['/usr/bin/python3',str(script),str(root),os.readlink('/proc/self/ns/net')]),text=True,capture_output=True,timeout=10)
+        result=subprocess.run(command(['/usr/bin/python3',str(script),str(root),os.readlink('/proc/self/ns/net')], sandbox=sandbox),text=True,capture_output=True,timeout=10)
         if result.returncode:raise RuntimeError('Offline namespace preflight failed: '+result.stderr[-2048:])
         proof=json.loads((root/'network-denial.json').read_text())
         assert proof['namespace']!=proof['parentNamespace'] and len(proof['externalConnectErrors'])==2 and all(type(value) is int and value!=0 for value in proof['externalConnectErrors'])
@@ -48,5 +47,9 @@ def preflight():
 
 
 if __name__=='__main__':
-    if sys.argv[1:]!=['--self-test']:raise SystemExit('Use the bounded VM runner')
-    preflight()
+    if sys.argv[1:]==['--self-test']:
+        preflight()
+    elif sys.argv[1:]==['--self-test-system-bwrap']:
+        preflight(Path('/usr/bin/bwrap'))
+    else:
+        raise SystemExit('Use the bounded VM runner')

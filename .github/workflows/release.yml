@@ -72,7 +72,6 @@ jobs:
 
       - name: Run test suite
         run: |
-          sudo install -D -m 0755 /usr/bin/bwrap /usr/lib/isolde-native/bwrap
           mkdir -p "$ISOLDE_TEST_ARTIFACTS"
           ctest --test-dir build --output-on-failure -j "$(nproc)"
         env:
