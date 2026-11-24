@@ -51,8 +51,12 @@ class WebRemoteTest final : public QObject
         QVERIFY(check.waitForFinished(55000));
         QCOMPARE(check.exitStatus(), QProcess::NormalExit);
         QFile diagnostics(artifacts + "/external-web-remote-driver.log");
-        diagnostics.open(QIODevice::ReadOnly);
-        const auto message = diagnostics.readAll();
+        QByteArray message;
+        if (diagnostics.open(QIODevice::ReadOnly))
+            message = diagnostics.readAll();
+        QFile browserLog(artifacts + "/external-web-remote.log");
+        if (check.exitCode() != 0 && browserLog.open(QIODevice::ReadOnly))
+            message += "\nBrowser sandbox log:\n" + browserLog.readAll();
         QVERIFY2(check.exitCode() == 0, message.constData());
     }
     void
