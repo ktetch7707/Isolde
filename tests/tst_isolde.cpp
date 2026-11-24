@@ -214,6 +214,28 @@ class IsoldeTests final : public QObject
         QCOMPARE(provider.pages, 1);
         QVERIFY(!catalog.hasNextStorePage());
     }
+
+    void
+    storeProviderMayDisappearWhenErrorClears()
+    {
+        AppRegistry registry;
+        AppCatalog catalog(&registry);
+        auto* provider = new CountingStoreProvider;
+        catalog.setStoreProvider(provider);
+        catalog.searchStore(QString(129, 'x'));
+        const auto connection = connect(&catalog, &AppCatalog::errorStringChanged, &catalog, [&] {
+            if (catalog.errorString().isEmpty())
+            {
+                delete provider;
+                provider = nullptr;
+            }
+        });
+        catalog.setOnlineStoreSearch(true);
+        QVERIFY(!provider);
+        QVERIFY(!catalog.storeProvider());
+        disconnect(connection);
+    }
+
     void
     downloadedAndroidManifestPersistsAndRejectsTampering()
     {

@@ -552,7 +552,8 @@ StudioSession::validateProposeInputs(const QString& scope, const QString& /*page
 {
     if (!editingPermitted())
         return false;
-    if (!currentProfile() || (scope != "page" && scope != "interface") || (m_live->isPage() && scope == "interface"))
+    const auto* live = m_live.data();
+    if (!currentProfile() || !live || (scope != "page" && scope != "interface") || (live->isPage() && scope == "interface"))
     {
         setError(tr("Choose Current page or Whole interface in an active profile."));
         return false;
@@ -906,7 +907,8 @@ StudioSession::exportDesign(const QString& value, const QString& scope, const QS
 bool
 StudioSession::validateExportPreconditions(const QString& scope)
 {
-    if (!currentProfile() || (scope != "page" && scope != "interface") || (scope == "interface" && m_live->isPage()))
+    const auto* live = m_live.data();
+    if (!currentProfile() || !live || (scope != "page" && scope != "interface") || (scope == "interface" && live->isPage()))
     {
         setError(tr("Choose Current page or Whole interface in an active profile."));
         return false;

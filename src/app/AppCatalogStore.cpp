@@ -92,7 +92,13 @@ AppCatalog::checkForUpdates()
     setError({});
     m_operationStatus.clear();
     m_availableUpdates.clear();
-    m_provider->requestUpdates(packages);
+    if (auto* provider = m_provider.data())
+        provider->requestUpdates(packages);
+    else
+    {
+        setError(tr("Enable F-Droid access before checking for updates."));
+        return false;
+    }
     emit entriesChanged();
     return true;
 }
@@ -330,8 +336,8 @@ AppCatalog::setupAndroid(bool softwareRendering)
                 {
                     setError({});
                     m_operationStatus = tr("Android setup complete. Choose an app to install.");
-                    if (m_onlineStoreSearch && m_provider)
-                        m_provider->requestSearch(m_storeQuery);
+                    if (auto* provider = m_provider.data(); m_onlineStoreSearch && provider)
+                        provider->requestSearch(m_storeQuery);
                 }
                 else if (m_errorString.isEmpty())
                     setError(m_cancelRequested

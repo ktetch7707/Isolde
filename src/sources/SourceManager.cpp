@@ -281,7 +281,8 @@ SourceManager::fail(const QString& message)
 bool
 SourceManager::setPolicy(const QVariantMap& changes)
 {
-    if (!m_layout)
+    auto* layout = m_layout.data();
+    if (!layout)
         return fail(tr("Open this profile's Home before editing its display policy."));
     auto next = policy();
     for (auto it = changes.cbegin(); it != changes.cend(); ++it)
@@ -289,13 +290,17 @@ SourceManager::setPolicy(const QVariantMap& changes)
     if (!ComponentSchema::validSourcePolicy(next))
         return fail(tr("Invalid source policy. Nothing changed."));
     bool saved = false;
-    if (m_layout->homePageId().isEmpty())
-        saved = m_layout->setAppearance({{"sourcePolicy", next}});
-    else if (auto* page = qobject_cast<PageModel*>(m_layout->pageModel(m_layout->homePageId())))
+    const auto homePageId = layout->homePageId();
+    if (homePageId.isEmpty())
+        saved = layout->setAppearance({{"sourcePolicy", next}});
+    else if (auto* page = qobject_cast<PageModel*>(layout->pageModel(homePageId)))
         saved = page->setAppearance({{"sourcePolicy", next}});
     if (!saved)
-        return fail(m_layout->errorString().isEmpty() ? tr("Could not save source policy. Retry.")
-                                                      : m_layout->errorString());
+    {
+        layout = m_layout.data();
+        const auto error = layout ? layout->errorString() : QString();
+        return fail(error.isEmpty() ? tr("Could not save source policy. Retry.") : error);
+    }
     m_error.clear();
     refresh();
     ++m_revision;
@@ -392,7 +397,8 @@ SourceManager::projected(const QString& pageId, const QString& slotId, bool noti
         (workflow.value("editing").toBool() && rules.value("suppressEditing").toBool()))
         return {};
     const auto pages = rules.value("pages").toList(), slotIds = rules.value("slots").toList();
-    if (!pages.contains(pageId) && !(pages.contains("home") && m_layout && pageId == m_layout->homePageId()))
+    const auto* layout = m_layout.data();
+    if (!pages.contains(pageId) && !(pages.contains("home") && layout && pageId == layout->homePageId()))
         return {};
     if (!slotIds.isEmpty() && !slotIds.contains(slotId))
         return {};

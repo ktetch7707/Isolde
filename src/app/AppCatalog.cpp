@@ -288,11 +288,10 @@ AppCatalog::setStoreProvider(StoreProvider* provider)
         setError(tr("Unknown Store source."));
         return;
     }
-    if (m_provider)
-    {
-        m_provider->cancel();
-        m_provider->disconnect(this);
-    }
+    if (auto* currentProvider = m_provider.data())
+        currentProvider->cancel();
+    if (auto* currentProvider = m_provider.data())
+        currentProvider->disconnect(this);
     m_providerResults.clear();
     m_provider = provider;
     if (m_provider)
@@ -314,9 +313,10 @@ AppCatalog::isValidStoreProvider(StoreProvider* provider) const
 void
 AppCatalog::onStoreResultsChanged()
 {
-    if (m_provider && (!m_provider->isOnline() || m_onlineStoreSearch))
+    const auto* provider = m_provider.data();
+    if (provider && (!provider->isOnline() || m_onlineStoreSearch))
     {
-        const auto results = m_provider->results();
+        const auto results = provider->results();
         if (results.size() > 200)
         {
             setError(tr("The Store returned more than 200 results. Narrow your search."));
@@ -331,10 +331,11 @@ AppCatalog::onStoreResultsChanged()
 void
 AppCatalog::onStoreUpdatesChanged()
 {
-    if (!m_onlineStoreSearch || !m_provider)
+    const auto* provider = m_provider.data();
+    if (!m_onlineStoreSearch || !provider)
         return;
     m_availableUpdates.clear();
-    const auto results = m_provider->updateResults();
+    const auto results = provider->updateResults();
     if (results.size() > 256)
     {
         setError(tr("Too many update results."));
@@ -377,12 +378,13 @@ AppCatalog::setOnlineStoreSearch(bool enabled)
     if (enabled && m_provider)
     {
         setError({});
-        m_provider->requestSearch(m_storeQuery);
+        if (auto* provider = m_provider.data())
+            provider->requestSearch(m_storeQuery);
     }
     else
     {
-        if (m_provider)
-            m_provider->cancel();
+        if (auto* provider = m_provider.data())
+            provider->cancel();
         m_providerResults.clear();
         m_availableUpdates.clear();
         if (m_downloadReply)
@@ -404,10 +406,12 @@ AppCatalog::searchStore(const QString& query)
     m_storeQuery = query.trimmed();
     if (!busy())
         m_operationStatus.clear();
-    if (m_provider && (!m_provider->isOnline() || m_onlineStoreSearch))
+    const auto* provider = m_provider.data();
+    if (provider && (!provider->isOnline() || m_onlineStoreSearch))
     {
         setError({});
-        m_provider->requestSearch(m_storeQuery);
+        if (auto* currentProvider = m_provider.data())
+            currentProvider->requestSearch(m_storeQuery);
     }
 }
 
@@ -439,7 +443,8 @@ AppCatalog::changeStorePage(int direction)
     {
         m_operationStatus.clear();
         setError({});
-        m_provider->requestPage(direction);
+        if (auto* provider = m_provider.data())
+            provider->requestPage(direction);
     }
 }
 
@@ -1539,7 +1544,8 @@ AppCatalog::addWebApp(const QString& name, const QString& address, const QString
 bool
 AppCatalog::downloadAndInstall(const QString& storeId)
 {
-    if (!m_onlineStoreSearch || !m_provider || !m_provider->isOnline() || busy())
+    const auto* provider = m_provider.data();
+    if (!m_onlineStoreSearch || !provider || !provider->isOnline() || busy())
     {
         setError(tr("Online store search is not enabled."));
         emit operationFailed(m_errorString);

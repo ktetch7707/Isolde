@@ -134,12 +134,13 @@ StudioSession::apply(const QString& focusId)
 bool
 StudioSession::validateApplyPreconditions()
 {
-    if (!m_active || !m_live || m_live->m_userPath != m_profilePath)
+    auto* live = m_live.data();
+    if (!m_active || !live || live->m_userPath != m_profilePath)
     {
         setError(QStringLiteral("The profile changed. Reopen Skin Studio."));
         return false;
     }
-    if (isStaleAgainst(m_live->committedDocument()))
+    if (isStaleAgainst(live->committedDocument()))
     {
         setError(QStringLiteral("The applied design changed. Reload or copy your draft before applying."));
         return false;
