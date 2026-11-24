@@ -58,9 +58,10 @@ StudioSession::actionChoices() const
 QVariantList
 StudioSession::sourceChoices(const QString& id, const QString& pageId) const
 {
-    if (!currentProfile())
+    auto* live = m_live.data();
+    if (!currentProfile() || !live)
         return {};
-    HomeLayout worker(m_live->registry());
+    HomeLayout worker(live->registry());
     configureWorker(worker);
     auto document = QJsonDocument::fromJson(m_draft).object();
     if (!pageId.isEmpty())
@@ -100,17 +101,18 @@ void
 StudioSession::configureWorker(HomeLayout& worker, bool assetPaths) const
 {
     worker.m_draftOnly = true;
-    if (!m_live)
+    const auto* live = m_live.data();
+    if (!live)
         return;
-    worker.m_defaultPath = m_live->m_defaultPath;
-    worker.m_defaultTheme = m_live->m_defaultTheme;
-    worker.m_collections = m_live->m_collections;
-    worker.m_captureInputsReady = m_live->m_captureInputsReady;
-    worker.m_assetPaths = m_live->m_assetPaths;
+    worker.m_defaultPath = live->m_defaultPath;
+    worker.m_defaultTheme = live->m_defaultTheme;
+    worker.m_collections = live->m_collections;
+    worker.m_captureInputsReady = live->m_captureInputsReady;
+    worker.m_assetPaths = live->m_assetPaths;
     for (auto it = m_stagedAssets.cbegin(); it != m_stagedAssets.cend(); ++it)
         worker.m_assetPaths[it.key()] = it.value();
     if (assetPaths)
-        worker.m_userPath = m_live->m_userPath;
+        worker.m_userPath = live->m_userPath;
 }
 
 bool
@@ -355,7 +357,13 @@ StudioSession::selectComponentNodes(const QString& type, const QVariantMap& opti
     }
     else if (type == "clock" || type == "text")
     {
-        HomeLayout factory(m_live->registry());
+        auto* live = m_live.data();
+        if (!live)
+        {
+            setError(tr("Reopen Skin Studio before adding components."));
+            return false;
+        }
+        HomeLayout factory(live->registry());
         configureWorker(factory);
         if (!factory.addWidget(type))
         {
@@ -831,9 +839,10 @@ StudioSession::additionProposal(const QString& type,
                                 const QVariantMap& configuration,
                                 bool enableScrolling)
 {
-    if (!currentProfile())
+    auto* live = m_live.data();
+    if (!currentProfile() || !live)
         return {{"valid", false}, {"reason", QStringLiteral("The edit session has closed.")}};
-    HomeLayout temporary(m_live->registry());
+    HomeLayout temporary(live->registry());
     configureWorker(temporary);
     if (!temporary.loadDocument(m_draft, false))
         return {{"valid", false}, {"reason", temporary.errorString()}};
@@ -898,8 +907,9 @@ StudioSession::additionProposal(const QString& type,
     document["components"] = entries;
     store();
     QString error;
+    live = m_live.data();
     if (!HomeLayout::validateStudioDocument(
-            QJsonDocument(root).toJson(), &error, m_live ? m_live->m_defaultTheme : QVariantMap{}))
+            QJsonDocument(root).toJson(), &error, live ? live->m_defaultTheme : QVariantMap{}))
         return {{"valid", false}, {"reason", error}};
     proposal["document"] = root.toVariantMap();
     proposal["commands"] = QVariantList{QVariantMap{{"operation", "addResolved"},

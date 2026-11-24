@@ -28,7 +28,8 @@ StudioSession::StudioSession(QObject* parent) : QObject(parent)
             this,
             [this]
             {
-                if (m_live && !m_live->m_draftOnly && m_profileId == qApp->property("isoldeProfile").toString())
+                const auto* live = m_live.data();
+                if (live && !live->m_draftOnly && m_profileId == qApp->property("isoldeProfile").toString())
                     qApp->setProperty("isoldeStudioDirty", m_active && isDirty());
                 if (m_model && !m_draft.isEmpty() && m_model->documentData() != m_draft)
                 {
@@ -81,7 +82,8 @@ StudioSession::bind(HomeLayout* layout)
 void
 StudioSession::invalidate()
 {
-    if (m_live && !m_live->m_draftOnly && m_profileId == qApp->property("isoldeProfile").toString())
+    const auto* live = m_live.data();
+    if (live && !live->m_draftOnly && m_profileId == qApp->property("isoldeProfile").toString())
         qApp->setProperty("isoldeStudioDirty", false);
     m_active = false;
     clearReferenceImage();
@@ -385,7 +387,8 @@ StudioSession::validDraft(const QByteArray& data)
         return false;
     }
     QString error;
-    if (!HomeLayout::validateStudioDocument(data, &error, m_live ? m_live->m_defaultTheme : QVariantMap{}))
+    const auto* live = m_live.data();
+    if (!HomeLayout::validateStudioDocument(data, &error, live ? live->m_defaultTheme : QVariantMap{}))
     {
         setError(error);
         return false;
