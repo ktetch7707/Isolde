@@ -511,7 +511,7 @@ if(BUILD_TESTING)
     set_tests_properties(studio_color_interactions PROPERTIES TIMEOUT 60 LABELS "studio;quick;qml"
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
     add_test(NAME studio_performance COMMAND isolde_studio_quick_tests -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/studio/tst_performance.qml)
-    set_tests_properties(studio_performance PROPERTIES TIMEOUT 180 LABELS "studio;quick;qml"
+    set_tests_properties(studio_performance PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE LABELS "studio;quick;qml"
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
     add_test(NAME studio_reuse COMMAND isolde_studio_quick_tests -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/studio/tst_reuse.qml)
     set_tests_properties(studio_reuse PROPERTIES TIMEOUT 60 LABELS "studio;quick;qml"
