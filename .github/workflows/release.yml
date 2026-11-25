@@ -78,6 +78,8 @@ jobs:
           QT_QPA_PLATFORM: offscreen
           QT_QUICK_BACKEND: software
           ISOLDE_TEST_ARTIFACTS: ${{ runner.temp }}/isolde-test-artifacts
+          # The hosted runner's AppArmor policy prevents Chrome's nested sandbox.
+          ISOLDE_SKIP_EXTERNAL_CHROME_TEST: 1
 
       - name: Build appliance payload tarball
         id: appliance
