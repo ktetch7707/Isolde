@@ -37,6 +37,8 @@ class WebRemoteTest final : public QObject
     void
     externalChromeRemoteBoundary()
     {
+        if (qEnvironmentVariableIntValue("ISOLDE_SKIP_EXTERNAL_CHROME_TEST") == 1)
+            QSKIP("External Chrome sandbox test disabled for this runner");
         QProcess check;
         QTemporaryDir fallback;
         const auto artifacts = qEnvironmentVariable("ISOLDE_TEST_ARTIFACTS", fallback.path());
