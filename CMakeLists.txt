@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(Isolde VERSION 0.0.1.6 LANGUAGES CXX)
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/VERSION" ISOLDE_PROJECT_VERSION)
+string(STRIP "${ISOLDE_PROJECT_VERSION}" ISOLDE_PROJECT_VERSION)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/VERSION")
+project(Isolde VERSION "${ISOLDE_PROJECT_VERSION}" LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -698,7 +701,8 @@ if(BUILD_TESTING)
         add_test(NAME interface_sounds COMMAND isolde_interface_sound_tests)
         set_tests_properties(interface_sounds PROPERTIES TIMEOUT 30)
         add_test(NAME appliance_installation COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_appliance_install.py)
-        add_test(NAME desktop_deb_packaging COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_desktop_deb.py)
+        add_test(NAME desktop_deb_packaging COMMAND ${CMAKE_COMMAND} -E env
+            "ISOLDE_TEST_BUILD_DIR=${CMAKE_BINARY_DIR}" ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_desktop_deb.py)
         add_test(NAME default_app_provisioning COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_default_apps.py)
         add_test(NAME android_provisioning COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_android_provisioning.py)
         add_test(NAME fdroid_store COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_fdroid_store.py)

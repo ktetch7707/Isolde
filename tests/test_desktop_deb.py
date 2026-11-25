@@ -157,6 +157,13 @@ class DesktopPackageTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "does not match"):
             self.package()
 
+    @unittest.skipUnless(os.environ.get("ISOLDE_TEST_BUILD_DIR"), "Requires a configured build")
+    def test_configured_build_matches_version(self):
+        self.assertEqual(
+            desktop_deb.check_build(Path(os.environ["ISOLDE_TEST_BUILD_DIR"])),
+            (ROOT / "VERSION").read_text().strip(),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
