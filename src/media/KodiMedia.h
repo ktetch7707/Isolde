@@ -223,6 +223,8 @@ class KodiMedia final : public QObject
     setVisualizationAvailable(bool available);
     Q_INVOKABLE void
     setVisualizationName(const QString& name);
+    Q_INVOKABLE void
+    setPlayingKind(const QString& kind);
     /** Starts a picture slideshow from a source path.
      * @brief Starts a picture slideshow.
      * @details Launches Kodi's slideshow for a picture source path. Rejects

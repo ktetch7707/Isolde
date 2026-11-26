@@ -3036,7 +3036,7 @@ KodiMediaTests::musicShuffleRepeatControls()
     QCOMPARE(media.repeatMode(), QString("off"));
 
     // Shuffle/repeat accepted when music playing.
-    media.m_playingKind = "song";
+    media.setPlayingKind("song");
     media.setPlaybackActive(true);
     media.setShuffle(true);
     QVERIFY(media.shuffleEnabled());
@@ -3069,7 +3069,7 @@ KodiMediaTests::musicLyricsVisualizationSlots()
     QVERIFY(media.loadVisualization().isEmpty());
 
     // Lyrics available when playing song with provider.
-    media.m_playingKind = "song";
+    media.setPlayingKind("song");
     media.setPlaybackActive(true);
     media.setLyricsAvailable(true);
     media.setLyricsText("Verse one... Chorus...");
