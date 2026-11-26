@@ -540,7 +540,7 @@ KodiMedia::handleRecordingsResponse(const QJsonObject& result)
         return true;
     }
     QVariantList items;
-    for (const auto& value : recs.toArray())
+    for (const auto& value : recs)
     {
         const auto rec = value.toObject();
         const auto id = rec["recordedid"].toInt(-1);
@@ -592,7 +592,7 @@ KodiMedia::handleTimersResponse(const QJsonObject& result)
         return true;
     }
     QVariantList items;
-    for (const auto& value : tmr.toArray())
+    for (const auto& value : tmr)
     {
         const auto timer = value.toObject();
         const auto id = timer["timerid"].toInt(-1);
@@ -762,7 +762,7 @@ KodiMedia::handleGetChaptersResponse(const QJsonObject& result)
     }
     QVariantList items;
     int currentIndex = -1;
-    for (const auto& value : chaps.toArray())
+    for (const auto& value : chaps)
     {
         const auto chap = value.toObject();
         const auto idx = chap["index"].toInt(-1);
@@ -857,7 +857,7 @@ KodiMedia::handlePVRGroupsResponse(const QJsonObject& result)
         return true;
     }
     QVariantList items;
-    for (const auto& value : groups.toArray())
+    for (const auto& value : groups)
     {
         const auto group = value.toObject();
         const auto id = group["groupid"].toInt(-1);
@@ -890,7 +890,7 @@ KodiMedia::handlePVRGroupMembersResponse(const QJsonObject& result)
         return true;
     }
     QVariantList items;
-    for (const auto& value : members.toArray())
+    for (const auto& value : members)
     {
         const auto member = value.toObject();
         const auto id = member["memberid"].toInt(-1);
