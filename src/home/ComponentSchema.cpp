@@ -2619,17 +2619,34 @@ ComponentSchema::validateInspectorField(const QVariantMap& field, QString* error
                                           "responsive", "sourcePolicy", "grid", "editableMenu",
                                           "header", "headerEditor"};
     if (!field.contains("schemaVersion") || !versionOne(field))
-        return reject(error, "Inspector field requires schemaVersion 1.");
+    {
+        reject(error, "Inspector field requires schemaVersion 1.");
+        return false;
+    }
     if (!field.contains("key") || !safeId(field.value("key").toString()))
-        return reject(error, "Inspector field key must be a safe id.");
+    {
+        reject(error, "Inspector field key must be a safe id.");
+        return false;
+    }
     if (!field.contains("label") || field.value("label").toString().trimmed().isEmpty()
         || field.value("label").toString().size() > 80)
-        return reject(error, "Inspector field label must be non-empty and at most 80 characters.");
+    {
+        reject(error, "Inspector field label must be non-empty and at most 80 characters.");
+        return false;
+    }
     if (!field.contains("type") || !validTypes.contains(field.value("type").toString()))
-        return reject(error, "Inspector field type must be a known type.");
+    {
+        reject(error, "Inspector field type must be a known type.");
+        return false;
+    }
     for (const auto& k : field.keys())
+    {
         if (!validKeys.contains(k))
-            return reject(error, "Inspector field contains unknown key.");
+        {
+            reject(error, "Inspector field contains unknown key.");
+            return false;
+        }
+    }
     return true;
 }
 
@@ -2640,14 +2657,20 @@ ComponentSchema::validateInspectorFields(const QVariantList& fields, QString* er
     // and each field passes validateInspectorField. Studio surface editor depends
     // on these definitions being well formed before any field is rendered.
     if (fields.isEmpty() || fields.size() > 256)
-        return reject(error, "Inspector fields list must be non-empty and at most 256 entries.");
+    {
+        reject(error, "Inspector fields list must be non-empty and at most 256 entries.");
+        return false;
+    }
     QSet<QString> seenKeys;
     for (const auto& value : fields)
     {
         const auto field = value.toMap();
         const auto key = field.value("key").toString();
         if (seenKeys.contains(key))
-            return reject(error, "Duplicate inspector field key.");
+        {
+            reject(error, "Duplicate inspector field key.");
+            return false;
+        }
         seenKeys.insert(key);
         if (!validateInspectorField(field, error))
             return false;
