@@ -2766,14 +2766,20 @@ ComponentSchema::validateActionCategoryDefinitions(const QVariantList& categorie
     // Validates a list of action category definitions: bounded size, unique names,
     // and each category passes validateActionCategoryDefinition.
     if (categories.isEmpty() || categories.size() > 12)
-        return reject(error, "Action categories list must be non-empty and at most 12 entries.");
+    {
+        reject(error, "Action categories list must be non-empty and at most 12 entries.");
+        return false;
+    }
     QSet<QString> seenNames;
     for (const auto& value : categories)
     {
         const auto category = value.toMap();
         const auto name = category.value("name").toString();
         if (seenNames.contains(name))
-            return reject(error, "Duplicate action category name.");
+        {
+            reject(error, "Duplicate action category name.");
+            return false;
+        }
         seenNames.insert(name);
         if (!validateActionCategoryDefinition(category, error))
             return false;
@@ -3161,7 +3167,7 @@ ComponentSchema::component(const QVariantMap& input, bool deriveSource, QString*
         const auto slot = input.value("contentSlot").toMap();
         const auto label = slot.value("label");
         const auto kind = slot.value("kind").toString();
-        if (slot.size() != 4 && slot.size() != 5 || !slot.contains("schemaVersion") || !versionOne(slot) ||
+        if ((slot.size() != 4 && slot.size() != 5) || !slot.contains("schemaVersion") || !versionOne(slot) ||
             !safeId(slot.value("id").toString()) || label.metaType().id() != QMetaType::QString ||
             label.toString().trimmed().isEmpty() || label.toString().size() > 80 ||
             (kind != "buttons" && kind != "apps" && kind != "media"))
@@ -3171,8 +3177,8 @@ ComponentSchema::component(const QVariantMap& input, bool deriveSource, QString*
             const auto permitted = slot.value("permitted").toList();
             for (const auto& value : permitted)
             {
-                const auto kind = value.toString();
-                if (kind.isEmpty() || kind.size() > 40)
+                const auto permittedKind = value.toString();
+                if (permittedKind.isEmpty() || permittedKind.size() > 40)
                     return reject(error, "Slot permitted component kind must be a non-empty name up to 40 characters.");
             }
         }
