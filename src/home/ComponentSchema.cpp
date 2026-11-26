@@ -2728,14 +2728,20 @@ ComponentSchema::validateActionDefinitions(const QVariantList& actions, QString*
     // action passes validateActionDefinition. Action dispatcher routes commands by
     // id; duplicates would cause ambiguous command resolution.
     if (actions.isEmpty() || actions.size() > 128)
-        return reject(error, "Action definitions list must be non-empty and at most 128 entries.");
+    {
+        reject(error, "Action definitions list must be non-empty and at most 128 entries.");
+        return false;
+    }
     QSet<QString> seenIds;
     for (const auto& value : actions)
     {
         const auto action = value.toMap();
         const auto id = action.value("action").toString();
         if (seenIds.contains(id))
-            return reject(error, "Duplicate action definition id.");
+        {
+            reject(error, "Duplicate action definition id.");
+            return false;
+        }
         seenIds.insert(id);
         if (!validateActionDefinition(action, error))
             return false;
@@ -2750,13 +2756,27 @@ ComponentSchema::validateActionCategoryDefinition(const QVariantMap& category, Q
     // non-empty name, and a non-empty list of known action type ids. Categories
     // group actions in Studio pickers; empty or unknown type lists break selection.
     if (!category.contains("schemaVersion") || !versionOne(category))
-        return reject(error, "Action category requires schemaVersion 1.");
+    {
+        reject(error, "Action category requires schemaVersion 1.");
+        return false;
+    }
     if (!category.contains("name") || category.value("name").toString().trimmed().isEmpty()
         || category.value("name").toString().size() > 80)
-        return reject(error, "Action category name must be non-empty and at most 80 characters.");
-    if (!category.contains("types") || !category.value("types").isList()
-        || category.value("types").toList().isEmpty())
-        return reject(error, "Action category must list at least one action type.");
+    {
+        reject(error, "Action category name must be non-empty and at most 80 characters.");
+        return false;
+    }
+    if (!category.contains("types"))
+    {
+        reject(error, "Action category must list at least one action type.");
+        return false;
+    }
+    const auto types = category.value("types").toList();
+    if (types.isEmpty())
+    {
+        reject(error, "Action category must list at least one action type.");
+        return false;
+    }
     return true;
 }
 
