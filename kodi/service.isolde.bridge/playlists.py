@@ -394,3 +394,43 @@ class Playlists:
             self._change(directory,{name:data})
         finally:os.close(directory)
         return {'reordered':True,'name':params['name'],'count':len(records)}
+
+    def addPlaylistEntry(self, params):
+        if not self.managed or set(params)!={'name','mediaType','mediaId','revision'} or not playlist_name(params.get('name')):
+            raise ValueError('Managed Kodi playlist entry addition required')
+        if not params['name'].lower().endswith(('.m3u','.m3u8')):
+            raise ValueError('Use smart-playlist sort for rule-based playlists')
+        if params['mediaType'] not in ('movie','episode','song') or type(params['mediaId']) is not int or params['mediaId'] < 1:
+            raise ValueError('Choose a valid media type and ID')
+        directory=self._playlist_dir()
+        try:
+            name=params['name']
+            raw=self._read(directory,name)
+            if hashlib.sha256(raw).hexdigest()!=params['revision']:raise ValueError('Playlist changed; reload its members before editing')
+            header,records,pending=self._members(raw)
+            if len(records)>=256:raise ValueError('Playlist is full')
+            entry='#EXTINF:-1,Media '+str(params['mediaId'])+'\n'+str(params['mediaId'])+'\n'
+            data=(''.join(header)+''.join(records)+entry+''.join(pending)).encode('utf-8')
+            self._change(directory,{name:data})
+        finally:os.close(directory)
+        return {'added':True,'name':params['name']}
+
+    def removePlaylistEntry(self, params):
+        if not self.managed or set(params)!={'name','index','revision'} or not playlist_name(params.get('name')):
+            raise ValueError('Managed Kodi playlist entry removal required')
+        if not params['name'].lower().endswith(('.m3u','.m3u8')):
+            raise ValueError('Use smart-playlist sort for rule-based playlists')
+        if type(params['index']) is not int or params['index'] < 0:
+            raise ValueError('Choose a valid member index')
+        directory=self._playlist_dir()
+        try:
+            name=params['name']
+            raw=self._read(directory,name)
+            if hashlib.sha256(raw).hexdigest()!=params['revision']:raise ValueError('Playlist changed; reload its members before editing')
+            header,records,pending=self._members(raw)
+            if params['index']>=len(records):raise ValueError('Member index out of range')
+            del records[params['index']]
+            data=(''.join(header)+''.join(records)+''.join(pending)).encode('utf-8')
+            self._change(directory,{name:data})
+        finally:os.close(directory)
+        return {'removed':True,'name':params['name']}

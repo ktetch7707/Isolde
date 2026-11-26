@@ -580,6 +580,8 @@ ActionDispatcher::handleMediaAction(const QVariantMap& value, const QString& ori
         return handleTuneChannel(value, originId);
     if (type == "open-collection" || type == "play-movie" || type == "open-show")
         return handleOpenCollection(value, originId);
+    if (type == "media.play" || type == "media.resume" || type == "media.markWatched")
+        return handleMediaLibraryAction(value, originId);
     return false;
 }
 
@@ -610,6 +612,28 @@ ActionDispatcher::handleOpenCollection(const QVariantMap& value, const QString& 
         m_media->openCollectionShow(id, value.value("tvShowId").toInt());
     else
         m_media->openCollection(id);
+    return true;
+}
+
+bool
+ActionDispatcher::handleMediaLibraryAction(const QVariantMap& value, const QString& originId)
+{
+    Q_UNUSED(originId);
+    const auto type = value.value("type").toString();
+    const auto kind = value.value("mediaKind").toString();
+    const int id = value.value("mediaId").toInt();
+    if (type == "media.markWatched")
+    {
+        const bool watched = value.value("watched", true).toBool();
+        if (!m_media->markWatched(kind, id, watched))
+        {
+            emit rejected("Kodi cannot mark the item watched right now. Try again when the library is ready.");
+            return false;
+        }
+        return true;
+    }
+    const bool resume = (type == "media.resume");
+    m_media->playMedia(kind, id, resume);
     return true;
 }
 

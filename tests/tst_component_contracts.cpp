@@ -18,9 +18,15 @@ class ComponentContractTests : public QObject
     void
     guideActionsValidateIdentityAndAppearance();
     void
+    mediaActionsValidateIdentityAndResume();
+    void
+    slotValidationPermitsAndRejectsComponentKinds();
+    void
     captureAndAudioEditorActionsValidateAndDispatch();
     void
     densePlacementValidationPreservesBoundsAndTouchingEdges();
+    void
+    versionedFieldRoleSlotActionDefinitionsValidate();
 };
 
 int
@@ -81,6 +87,108 @@ ComponentContractTests::validatesContracts()
          {"name", "Console"}, {"actions", QVariantList{inputAction}}}, true);
     QCOMPARE(inputTile["source"].toMap()["provider"].toString(), QString("isolde"));
     QCOMPARE(inputTile["source"].toMap()["id"].toString(), QString("4"));
+}
+
+void
+ComponentContractTests::mediaActionsValidateIdentityAndResume()
+{
+    QString error;
+    const auto play = ComponentSchema::action(
+        {{"schemaVersion", 1}, {"type", "media.play"}, {"mediaKind", "movie"}, {"mediaId", 12}}, &error);
+    QVERIFY(!play.isEmpty());
+    QCOMPARE(play["type"].toString(), QString("media.play"));
+    QCOMPARE(play["mediaKind"].toString(), QString("movie"));
+    QCOMPARE(play["mediaId"].toInt(), 12);
+    QCOMPARE(play["resume"].toBool(), false);
+    QCOMPARE(error, QString());
+
+    const auto resume = ComponentSchema::action(
+        {{"schemaVersion", 1}, {"type", "media.resume"}, {"mediaKind", "episode"}, {"mediaId", 5}}, &error);
+    QVERIFY(!resume.isEmpty());
+    QCOMPARE(resume["type"].toString(), QString("media.resume"));
+    QCOMPARE(resume["mediaKind"].toString(), QString("episode"));
+    QCOMPARE(resume["mediaId"].toInt(), 5);
+    QCOMPARE(resume["resume"].toBool(), true);
+
+    const auto markWatched = ComponentSchema::action(
+        {{"schemaVersion", 1}, {"type", "media.markWatched"}, {"mediaKind", "movie"}, {"mediaId", 12},
+         {"watched", true}}, &error);
+    QVERIFY(!markWatched.isEmpty());
+    QCOMPARE(markWatched["type"].toString(), QString("media.markWatched"));
+    QCOMPARE(markWatched["mediaKind"].toString(), QString("movie"));
+    QCOMPARE(markWatched["mediaId"].toInt(), 12);
+    QCOMPARE(markWatched["watched"].toBool(), true);
+
+    const auto markUnwatched = ComponentSchema::action(
+        {{"schemaVersion", 1}, {"type", "media.markWatched"}, {"mediaKind", "episode"}, {"mediaId", 7}},
+        &error);
+    QVERIFY(!markUnwatched.isEmpty());
+    QCOMPARE(markUnwatched["watched"].toBool(), true);
+
+    for (const auto& value :
+         QVariantList{QVariantMap{{"type", "media.play"}, {"mediaKind", "book"}, {"mediaId", 12}},
+                      QVariantMap{{"type", "media.resume"}, {"mediaKind", "movie"}, {"mediaId", 1.5}},
+                      QVariantMap{{"type", "media.play"}, {"mediaKind", "movie"}, {"mediaId", 0}},
+                      QVariantMap{{"type", "media.resume"}, {"mediaKind", "song"}, {"mediaId", -3}},
+                      QVariantMap{{"type", "media.markWatched"}, {"mediaKind", "song"}, {"mediaId", 1}},
+                      QVariantMap{{"type", "media.markWatched"}, {"mediaKind", "movie"}, {"mediaId", "not-an-id"}}})
+    {
+        QVERIFY(ComponentSchema::action(value.toMap(), &error).isEmpty());
+        QVERIFY(!error.isEmpty());
+    }
+}
+
+void
+ComponentContractTests::slotValidationPermitsAndRejectsComponentKinds()
+{
+    QString error;
+
+    // Empty permitted list accepts any component kind.
+    QVERIFY(ComponentSchema::validateSlotComponent({}, "button", &error));
+    QCOMPARE(error, QString());
+
+    // Non-empty permitted list accepts matching kinds.
+    QVERIFY(ComponentSchema::validateSlotComponent(
+                QVariantList{QVariant("button"), QVariant("image")}, "image", &error));
+    QCOMPARE(error, QString());
+
+    // Non-empty permitted list rejects non-matching kinds.
+    QVERIFY(!ComponentSchema::validateSlotComponent(
+                QVariantList{QVariant("button"), QVariant("image")}, "container", &error));
+    QVERIFY(!error.isEmpty());
+
+    // contentSlot validation accepts a valid permitted list.
+    QVariantMap slotWithPermitted{
+        {"schemaVersion", 1}, {"id", "slot-1"}, {"label", "Media actions"}, {"kind", "media"},
+        {"permitted", QVariantList{QVariant("button"), QVariant("image")}}};
+    QVERIFY(!ComponentSchema::component(
+                QVariantMap{{"schemaVersion", 1}, {"id", "comp-1"}, {"componentType", "button"},
+                            {"kind", "app"}, {"size", "standard"}, {"contentSlot", slotWithPermitted}},
+                false, &error)
+                .isEmpty());
+    QCOMPARE(error, QString());
+
+    // contentSlot validation rejects a permitted kind that is too long.
+    QVariantMap slotWithLongKind{
+        {"schemaVersion", 1}, {"id", "slot-2"}, {"label", "Media actions"}, {"kind", "media"},
+        {"permitted", QVariantList{QVariant("this-kind-is-way-too-long-for-a-component-name")}}}};
+    QVERIFY(ComponentSchema::component(
+                QVariantMap{{"schemaVersion", 1}, {"id", "comp-2"}, {"componentType", "button"},
+                            {"kind", "app"}, {"size", "standard"}, {"contentSlot", slotWithLongKind}},
+                false, &error)
+                .isEmpty());
+    QVERIFY(!error.isEmpty());
+
+    // contentSlot with permitted size 5 is accepted (was previously rejected as size != 4).
+    QVariantMap slotSize5{
+        {"schemaVersion", 1}, {"id", "slot-3"}, {"label", "Buttons"}, {"kind", "buttons"},
+        {"permitted", QVariantList{QVariant("button")}}};
+    QVERIFY(!ComponentSchema::component(
+                QVariantMap{{"schemaVersion", 1}, {"id", "comp-3"}, {"componentType", "button"},
+                            {"kind", "app"}, {"size", "standard"}, {"contentSlot", slotSize5}},
+                false, &error)
+                .isEmpty());
+    QCOMPARE(error, QString());
 }
 
 void
@@ -280,3 +388,116 @@ ComponentContractTests::densePlacementValidationPreservesBoundsAndTouchingEdges(
         QVERIFY(!ComponentSchema::validPlacement({{"x", 0}, {"y", 0}, {"width", coordinate}, {"height", 1}}, 16, 10));
     }
 }
+
+void
+ComponentContractTests::versionedFieldRoleSlotActionDefinitionsValidate()
+{
+    QString error;
+
+    // Inspector fields: valid field passes.
+    QVERIFY(ComponentSchema::validateInspectorField(
+                QVariantMap{{"schemaVersion", 1}, {"tab", "Layout"}, {"scope", "presentation"},
+                            {"key", "testKey"}, {"label", "Test Label"}, {"type", "number"}, {"min", 1}, {"max", 10}},
+                &error));
+    QCOMPARE(error, QString());
+
+    // Inspector field missing schemaVersion fails.
+    QVERIFY(!ComponentSchema::validateInspectorField(
+                QVariantMap{{"tab", "Layout"}, {"scope", "presentation"}, {"key", "testKey"},
+                            {"label", "Test Label"}, {"type", "number"}},
+                &error));
+    QVERIFY(!error.isEmpty());
+
+    // Inspector field with unknown key fails.
+    QVERIFY(!ComponentSchema::validateInspectorField(
+                QVariantMap{{"schemaVersion", 1}, {"tab", "Layout"}, {"scope", "presentation"},
+                            {"key", "testKey"}, {"label", "Test Label"}, {"type", "number"}, {"bogus", true}},
+                &error));
+    QVERIFY(!error.isEmpty());
+
+    // Inspector fields list: valid passes, duplicate key fails.
+    QVERIFY(ComponentSchema::validateInspectorFields(
+                QVariantList{QVariantMap{{"schemaVersion", 1}, {"key", "field1"}, {"label", "One"}, {"type", "text"}},
+                             QVariantMap{{"schemaVersion", 1}, {"key", "field2"}, {"label", "Two"}, {"type", "text"}}},
+                &error));
+    QCOMPARE(error, QString());
+    QVERIFY(!ComponentSchema::validateInspectorFields(
+                QVariantList{QVariantMap{{"schemaVersion", 1}, {"key", "field1"}, {"label", "One"}, {"type", "text"}},
+                             QVariantMap{{"schemaVersion", 1}, {"key", "field1"}, {"label", "One again"}, {"type", "text"}}},
+                &error));
+    QVERIFY(!error.isEmpty());
+
+    // Theme role: valid passes.
+    QVERIFY(ComponentSchema::validateRoleDefinition(
+                QVariantMap{{"schemaVersion", 1}, {"key", "surfaceColor"}, {"label", "Surface"}}, &error));
+    QCOMPARE(error, QString());
+
+    // Theme role missing schemaVersion fails.
+    QVERIFY(!ComponentSchema::validateRoleDefinition(
+                QVariantMap{{"key", "surfaceColor"}, {"label", "Surface"}}, &error));
+    QVERIFY(!error.isEmpty());
+
+    // Theme roles list: valid passes, duplicate key fails.
+    QVERIFY(ComponentSchema::validateRoleDefinitions(
+                QVariantList{QVariantMap{{"schemaVersion", 1}, {"key", "role1"}, {"label", "Role One"}},
+                             QVariantMap{{"schemaVersion", 1}, {"key", "role2"}, {"label", "Role Two"}}},
+                &error));
+    QCOMPARE(error, QString());
+    QVERIFY(!ComponentSchema::validateRoleDefinitions(
+                QVariantList{QVariantMap{{"schemaVersion", 1}, {"key", "role1"}, {"label", "Role One"}},
+                             QVariantMap{{"schemaVersion", 1}, {"key", "role1"}, {"label", "Role One again"}}},
+                &error));
+    QVERIFY(!error.isEmpty());
+
+    // Action definition: valid passes.
+    QVERIFY(ComponentSchema::validateActionDefinition(
+                QVariantMap{{"schemaVersion", 1}, {"name", "Play Media"}, {"action", "media.play"},
+                            {"aliases", QVariantList{QVariant("play"), QVariant("start")}}},
+                &error));
+    QCOMPARE(error, QString());
+
+    // Action definition missing schemaVersion fails.
+    QVERIFY(!ComponentSchema::validateActionDefinition(
+                QVariantMap{{"name", "Play Media"}, {"action", "media.play"}}, &error));
+    QVERIFY(!error.isEmpty());
+
+    // Action definitions list: valid passes, duplicate id fails.
+    QVERIFY(ComponentSchema::validateActionDefinitions(
+                QVariantList{QVariantMap{{"schemaVersion", 1}, {"name", "Play"}, {"action", "media.play"}},
+                             QVariantMap{{"schemaVersion", 1}, {"name", "Resume"}, {"action", "media.resume"}}},
+                &error));
+    QCOMPARE(error, QString());
+    QVERIFY(!ComponentSchema::validateActionDefinitions(
+                QVariantList{QVariantMap{{"schemaVersion", 1}, {"name", "Play"}, {"action", "media.play"}},
+                             QVariantMap{{"schemaVersion", 1}, {"name", "Play again"}, {"action", "media.play"}}},
+                &error));
+    QVERIFY(!error.isEmpty());
+
+    // Action category: valid passes.
+    QVERIFY(ComponentSchema::validateActionCategoryDefinition(
+                QVariantMap{{"schemaVersion", 1}, {"name", "Media"}, {"types", QVariantList{QVariant("media.play"), QVariant("media.resume")}}},
+                &error));
+    QCOMPARE(error, QString());
+
+    // Action category missing types fails.
+    QVERIFY(!ComponentSchema::validateActionCategoryDefinition(
+                QVariantMap{{"schemaVersion", 1}, {"name", "Media"}}, &error));
+    QVERIFY(!error.isEmpty());
+
+    // Action categories list: valid passes.
+    QVERIFY(ComponentSchema::validateActionCategoryDefinitions(
+                QVariantList{QVariantMap{{"schemaVersion", 1}, {"name", "Media"},
+                                        {"types", QVariantList{QVariant("media.play")}}}},
+                &error));
+    QCOMPARE(error, QString());
+
+    // Slot with schemaVersion and permitted passes.
+    QVERIFY(ComponentSchema::validateSlotComponent(
+                QVariantList{QVariant("button"), QVariant("image")}, "button", &error));
+    QCOMPARE(error, QString());
+
+    // Slot with empty permitted accepts any kind.
+    QVERIFY(ComponentSchema::validateSlotComponent(QVariantList(), "anything", &error));
+    QCOMPARE(error, QString());
+}
+

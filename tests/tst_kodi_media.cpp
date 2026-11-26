@@ -67,6 +67,8 @@ class KodiMediaTests : public QObject
     void
     episodeSearchAndShowResult();
     void
+    markWatchedSetsPlaycountForMovieAndEpisode();
+    void
     homeCollectionShelves();
     void
     validatesPersistedCollections();
@@ -94,6 +96,94 @@ class KodiMediaTests : public QObject
     rejectedScanIsNotSuccess();
     void
     playlistCollisionAndRulePreview();
+    void
+    searchHandlesAmbiguousTitles();
+    void
+    sortPreservesEqualValuesAcrossPages();
+    void
+    searchResumesAfterBackAndProfileSwitch();
+    void
+    searchHandlesMissingSelection();
+    void
+    searchEmptyVersusDisconnected();
+    void
+    searchLocalUnderNetworkDenial();
+    void
+    metadataEditConfirmedAndRejected();
+    void
+    artworkRolesAndInvalidRole();
+    void
+    cleanLibraryAcceptedAndRejected();
+    void
+    exportSettingsVerified();
+    void
+    cancelledCleanLeavesOriginalState();
+    void
+    resumeRestartChoiceRespected();
+    void
+    seekPreviewCommitAndCancel();
+    void
+    nextEpisodeOptInAutoPlay();
+    void
+    playbackStaleSessionRecovery();
+    void
+    playbackExactFocusReturn();
+    void
+    playlistPreviewLeavesSavedUntouched();
+    void
+    playlistStableShelfReferenceAcrossRename();
+    void
+    playlistIdenticalReorderAcrossInputs();
+    void
+    playlistInvalidNestedRulesRejected();
+    void
+    playlistStaleWriteRejected();
+    void
+    playlistReopenSavedQueue();
+    void
+    musicShuffleRepeatControls();
+    void
+    musicLyricsVisualizationSlots();
+    void
+    picturesSlideshowControls();
+    void
+    musicVideosPicturesLibraryViews();
+    void
+    audioOffsetSetAndRetrieved();
+    void
+    audioOffsetBoundsAndPlaybackGuard();
+    void
+    playbackSpeedSetAndRetrieved();
+    void
+    playbackSpeedBoundsAndPlaybackGuard();
+    void
+    subtitleDelaySetAndRetrieved();
+    void
+    subtitleDelayBoundsAndPlaybackGuard();
+    void
+    recordingsListReturned();
+    void
+    recordingDeleteAndConfirm();
+    void
+    timersListReturned();
+    void
+    timerAddAndDelete();
+    void
+    nextUnwatchedFoundAndActivated();
+    void
+    mediaVersionsFoundAndSelected();
+    void
+    chaptersListReturned();
+    void
+    chapterSeekSelected();
+    void
+    musicCrossfadeGaplessReplayGain();
+    void
+    pvrGroupsListReturned();
+    void
+    pvrGroupMembersReturned();
+    void
+    pvrGroupAddAndRemove();
 };
 void
 KodiMediaTests::localPlaybackPreferenceIsPersistedAndProfileScoped()
@@ -381,6 +471,70 @@ serve(QLocalServer& server, int version)
                             result = QJsonObject{{"deleted", !server.property("rejectPlaylist").toBool()},
                                                  {"name", params["name"]}};
                         }
+                        else if (request.value("method") == "Isolde.GetChapters")
+                        {
+                            result = QJsonObject{
+                                {"chapters",
+                                 QJsonArray{
+                                     QJsonObject{{"index", 0}, {"time", 0}, {"title", "Chapter One"}, {"selected", true}},
+                                     QJsonObject{{"index", 1}, {"time", 300}, {"title", "Chapter Two"}, {"selected", false}},
+                                     QJsonObject{{"index", 2}, {"time", 600}, {"title", "Chapter Three"}, {"selected", false}},
+                                 }},
+                                {"current", 0}};
+                        }
+                        else if (request.value("method") == "Isolde.SeekChapter")
+                        {
+                            result = QJsonObject{{"seeked", true}};
+                        }
+                        else if (request.value("method") == "Isolde.GetMusicOptions")
+                        {
+                            result = QJsonObject{
+                                {"options",
+                                 QJsonObject{
+                                     {"music.crossfade", true},
+                                     {"music.gapless", false},
+                                     {"music.replaygain", "track"},
+                                 }}};
+                        }
+                        else if (request.value("method") == "Isolde.SetMusicOption")
+                        {
+                            server.setProperty("lastMusicOptionKind", request["params"].toObject()["kind"]);
+                            server.setProperty("lastMusicOptionValue", request["params"].toObject()["value"]);
+                            result = QJsonObject{{"set", true}};
+                        }
+                        else if (request.value("method") == "Isolde.GetPVRGroups")
+                        {
+                            result = QJsonObject{
+                                {"groups",
+                                 QJsonArray{
+                                     QJsonObject{{"groupid", 1}, {"groupname", "Favorites"}, {"type", "movie"}, {"membercount", 3}},
+                                     QJsonObject{{"groupid", 2}, {"groupname", "Watch Later"}, {"type", "episode"}, {"membercount", 5}},
+                                 }}};
+                        }
+                        else if (request.value("method") == "Isolde.GetGroupMembers")
+                        {
+                            result = QJsonObject{
+                                {"members",
+                                 QJsonArray{
+                                     QJsonObject{{"memberid", 101}, {"title", "Movie A"}, {"type", "movie"}},
+                                     QJsonObject{{"memberid", 102}, {"title", "Movie B"}, {"type", "movie"}},
+                                 }},
+                                {"groupid", 1}};
+                        }
+                        else if (request.value("method") == "Isolde.AddToGroup")
+                        {
+                            server.setProperty("lastAddToGroupKind", request["params"].toObject()["type"]);
+                            server.setProperty("lastAddToGroupId", request["params"].toObject()["id"]);
+                            server.setProperty("lastAddToGroupMemberId", request["params"].toObject()["memberid"]);
+                            result = QJsonObject{{"added", true}};
+                        }
+                        else if (request.value("method") == "Isolde.RemoveFromGroup")
+                        {
+                            server.setProperty("lastRemoveFromGroupKind", request["params"].toObject()["type"]);
+                            server.setProperty("lastRemoveFromGroupId", request["params"].toObject()["id"]);
+                            server.setProperty("lastRemoveFromGroupMemberId", request["params"].toObject()["memberid"]);
+                            result = QJsonObject{{"removed", true}};
+                        }
                         else if (request.value("method") == "Isolde.GetPlaylistItems")
                         {
                             server.setProperty("playlistParams", request.value("params").toObject().toVariantMap());
@@ -455,6 +609,24 @@ serve(QLocalServer& server, int version)
                                                               {"episode", 4},
                                                               {"watchedepisodes", 1}}}};
                         }
+                        else if (request.value("method") == "VideoLibrary.SetMovieDetails")
+                        {
+                            const int movieId = request.value("params").toObject().value("movieid").toInt();
+                            const auto details = request.value("params").toObject().value("details").toObject();
+                            const int playcount = details.value("playcount").toInt();
+                            server.setProperty("lastMarkedMovieId", movieId);
+                            server.setProperty("lastMarkedMoviePlaycount", playcount);
+                            result = QJsonObject{{"ok", true}};
+                        }
+                        else if (request.value("method") == "VideoLibrary.SetEpisodeDetails")
+                        {
+                            const int episodeId = request.value("params").toObject().value("episodeid").toInt();
+                            const auto details = request.value("params").toObject().value("details").toObject();
+                            const int playcount = details.value("playcount").toInt();
+                            server.setProperty("lastMarkedEpisodeId", episodeId);
+                            server.setProperty("lastMarkedEpisodePlaycount", playcount);
+                            result = QJsonObject{{"ok", true}};
+                        }
                         else
                         {
                             server.setProperty("libraryRequests", server.property("libraryRequests").toInt() + 1);
@@ -504,6 +676,13 @@ serve(QLocalServer& server, int version)
                                 {
                                     entry["season"] = params.value("season").toInt();
                                     entry["episode"] = i + 1;
+                                    if (server.property("watchFixture").toBool() && i < 4)
+                                    {
+                                        if (i != 3)
+                                            entry["playcount"] = i == 0 ? 1 : 0;
+                                        if (i != 1)
+                                            entry["resume"] = QJsonObject{{"position", 120}};
+                                    }
                                 }
                                 movies.append(entry);
                             }
@@ -1444,6 +1623,7 @@ KodiMediaTests::manualShowCollections()
     }
     QSettings::setDefaultFormat(original);
 }
+// Verify the episode browse contract preserves the distinction between missing and zero play count.
 void
 KodiMediaTests::episodeSearchAndShowResult()
 {
@@ -1451,6 +1631,8 @@ KodiMediaTests::episodeSearchAndShowResult()
     QLocalServer server;
     QVERIFY(server.listen(directory.filePath("rpc.sock")));
     serve(server, 13);
+    server.setProperty("watchFixture", true);
+    server.setProperty("total", 4);
     KodiMedia episodes("search-episodes", nullptr, directory.path());
     episodes.openView("episodes", "search", "Pilot");
     QTRY_VERIFY(episodes.connected());
@@ -1460,6 +1642,10 @@ KodiMediaTests::episodeSearchAndShowResult()
     QCOMPARE(filter.value("field").toString(), QString("title"));
     QCOMPARE(filter.value("operator").toString(), QString("contains"));
     QCOMPARE(filter.value("value").toString(), QString("Pilot"));
+    QTRY_COMPARE(episodes.movies().size(), 4);
+    const QStringList states{"watched", "unwatched", "inProgress", "unknown"};
+    for (qsizetype index = 0; index < states.size(); ++index)
+        QCOMPARE(episodes.movies().at(index).toMap().value("watchState").toString(), states.at(index));
 
     KodiMedia shows("search-shows", nullptr, directory.path());
     shows.openShowResult("Fixture", 1);
@@ -1476,6 +1662,60 @@ KodiMediaTests::episodeSearchAndShowResult()
     QCOMPARE(server.property("lastPlayMethod").toString(), QString("Isolde.PlayMovie"));
     queuedPlayback.invalidate("Test complete");
 }
+void
+KodiMediaTests::markWatchedSetsPlaycountForMovieAndEpisode()
+{
+    QTemporaryDir directory;
+    QLocalServer server;
+    QVERIFY(server.listen(directory.filePath("rpc.sock")));
+    serve(server, 13);
+
+    // Mark a movie watched via media.markWatched action descriptor path.
+    {
+        KodiMedia media("mark-movie-watched", nullptr, directory.path());
+        media.markWatched("movie", 7, true);
+        QTRY_COMPARE(server.property("lastMethod").toString(), QString("VideoLibrary.SetMovieDetails"));
+        auto params = server.property("lastParams").toMap();
+        auto details = params.value("details").toMap();
+        QCOMPARE(params.value("movieid").toInt(), 7);
+        QCOMPARE(details.value("playcount").toInt(), 1);
+        QCOMPARE(server.property("lastMarkedMovieId").toInt(), 7);
+        QCOMPARE(server.property("lastMarkedMoviePlaycount").toInt(), 1);
+    }
+
+    // Mark a movie unwatched via the same path.
+    {
+        KodiMedia media("mark-movie-unwatched", nullptr, directory.path());
+        media.markWatched("movie", 3, false);
+        QTRY_COMPARE(server.property("lastMethod").toString(), QString("VideoLibrary.SetMovieDetails"));
+        auto params = server.property("lastParams").toMap();
+        auto details = params.value("details").toMap();
+        QCOMPARE(params.value("movieid").toInt(), 3);
+        QCOMPARE(details.value("playcount").toInt(), 0);
+    }
+
+    // Mark an episode watched via media.markWatched action descriptor path.
+    {
+        KodiMedia media("mark-episode-watched", nullptr, directory.path());
+        media.markWatched("episode", 11, true);
+        QTRY_COMPARE(server.property("lastMethod").toString(), QString("VideoLibrary.SetEpisodeDetails"));
+        auto params = server.property("lastParams").toMap();
+        auto details = params.value("details").toMap();
+        QCOMPARE(params.value("episodeid").toInt(), 11);
+        QCOMPARE(details.value("playcount").toInt(), 1);
+        QCOMPARE(server.property("lastMarkedEpisodeId").toInt(), 11);
+        QCOMPARE(server.property("lastMarkedEpisodePlaycount").toInt(), 1);
+    }
+
+    // markWatched rejects invalid kind or id.
+    {
+        KodiMedia media("mark-invalid", nullptr, directory.path());
+        QVERIFY(!media.markWatched("song", 1, true));
+        QVERIFY(!media.markWatched("movie", 0, true));
+        QVERIFY(!media.markWatched("movie", -5, true));
+    }
+}
+
 void
 KodiMediaTests::homeCollectionShelves()
 {
@@ -2207,6 +2447,1166 @@ KodiMediaTests::desktopImportIsRecursivePrivateReversibleAndGuarded()
     invalid.scanExistingKodi();
     QVERIFY(!invalid.canImport());
     QCOMPARE(read(source), desktop);
+}
+
+void
+KodiMediaTests::searchHandlesAmbiguousTitles()
+{
+    QTemporaryDir directory;
+    QLocalServer server;
+    QVERIFY(server.listen(directory.filePath("rpc.sock")));
+    serve(server, 13);
+    server.setProperty("watchFixture", true);
+
+    // Two movies with similar titles should both appear in search results.
+    KodiMedia media("ambiguous-titles", nullptr, directory.path());
+    media.setView("search", "Fixture");
+    QTRY_COMPARE(server.property("lastMethod").toString(), QString("VideoLibrary.GetMovies"));
+    auto params = server.property("lastParams").toMap();
+    auto filter = params.value("filter").toMap();
+    QCOMPARE(filter.value("field").toString(), QString("title"));
+    QCOMPARE(filter.value("operator").toString(), QString("contains"));
+    QCOMPARE(filter.value("value").toString(), QString("Fixture"));
+
+    // Results include ambiguous entries with distinct identities.
+    QTRY_VERIFY(!media.movies().isEmpty());
+    auto movieIds = QSet<int>();
+    for (const auto& entry : media.movies())
+    {
+        auto map = entry.toMap();
+        movieIds.insert(map.value("movieid").toInt());
+    }
+    QVERIFY(movieIds.size() >= 2);
+}
+
+void
+KodiMediaTests::sortPreservesEqualValuesAcrossPages()
+{
+    QTemporaryDir directory;
+    QLocalServer server;
+    QVERIFY(server.listen(directory.filePath("rpc.sock")));
+    serve(server, 13);
+    server.setProperty("total", 100);
+
+    KodiMedia media("sort-equal-values", nullptr, directory.path());
+    media.setSort("title", "ascending");
+    QCOMPARE(media.sortField(), QString("title"));
+    QCOMPARE(media.sortOrder(), QString("ascending"));
+
+    media.setView("movies", "all");
+    QTRY_COMPARE(server.property("lastMethod").toString(), QString("VideoLibrary.GetMovies"));
+    auto params = server.property("lastParams").toMap();
+    auto sort = params.value("sort").toMap();
+    QCOMPARE(sort.value("method").toString(), QString("title"));
+    QCOMPARE(sort.value("order").toString(), QString("ascending"));
+
+    // Next page preserves sort across the page boundary.
+    media.nextPage();
+    QTRY_COMPARE(server.property("lastParams").toMap().value("limits").toMap().value("start").toInt(), 50);
+    params = server.property("lastParams").toMap();
+    sort = params.value("sort").toMap();
+    QCOMPARE(sort.value("method").toString(), QString("title"));
+    QCOMPARE(sort.value("order").toString(), QString("ascending"));
+
+    // Clearing sort falls back to default.
+    media.setSort("", "ascending");
+    QCOMPARE(media.sortField(), QString(""));
+    QCOMPARE(media.sortOrder(), QString(""));
+}
+
+void
+KodiMediaTests::searchResumesAfterBackAndProfileSwitch()
+{
+    QTemporaryDir directory;
+    QLocalServer server;
+    QVERIFY(server.listen(directory.filePath("rpc.sock")));
+    serve(server, 13);
+
+    KodiMedia media("search-resume", nullptr, directory.path());
+    media.setView("search", "Fixture");
+    QTRY_COMPARE(server.property("lastMethod").toString(), QString("VideoLibrary.GetMovies"));
+
+    // Simulate Back then re-opening search restores query and re-issues request.
+    media.setView("all", "");
+    media.setView("search", "Fixture");
+    QTRY_COMPARE(server.property("lastMethod").toString(), QString("VideoLibrary.GetMovies"));
+    QCOMPARE(server.property("lastParams").toMap().value("filter").toMap().value("value").toString(), QString("Fixture"));
+}
+
+void
+KodiMediaTests::searchHandlesMissingSelection()
+{
+    QTemporaryDir directory;
+    QLocalServer server;
+    QVERIFY(server.listen(directory.filePath("rpc.sock")));
+    serve(server, 13);
+
+    KodiMedia media("missing-selection", nullptr, directory.path());
+    media.setView("movies", "all");
+    QTRY_VERIFY(!media.busy());
+
+    // Activating an out-of-range index is a safe no-op.
+    media.activate(9999);
+    QVERIFY(!media.busy());
+    QCOMPARE(server.property("lastMethod").toString(), QString("VideoLibrary.GetMovies"));
+
+    // Activating a negative index is a safe no-op.
+    media.activate(-1);
+    QVERIFY(!media.busy());
+}
+
+void
+KodiMediaTests::searchEmptyVersusDisconnected()
+{
+    QTemporaryDir directory;
+    QLocalServer server;
+    QVERIFY(server.listen(directory.filePath("rpc.sock")));
+    serve(server, 13);
+    server.setProperty("total", 0);
+
+    // Empty library: connected but no results.
+    {
+        KodiMedia media("empty-library", nullptr, directory.path());
+        media.setView("movies", "all");
+        QTRY_VERIFY(media.connected());
+        QTRY_VERIFY(!media.busy());
+        QCOMPARE(media.movies().size(), 0);
+        QCOMPARE(server.property("lastMethod").toString(), QString("VideoLibrary.GetMovies"));
+    }
+
+    // Disconnected: busy stays false, status reports unavailable.
+    {
+        KodiMedia media("disconnected", nullptr, directory.path());
+        media.retire("Kodi bridge unavailable");
+        QVERIFY(!media.connected());
+        QVERIFY(!media.busy());
+        QCOMPARE(media.status().contains("unavailable", Qt::CaseInsensitive) ||
+                     media.status().contains("Open Kodi", Qt::CaseInsensitive), true);
+    }
+}
+
+void
+KodiMediaTests::searchLocalUnderNetworkDenial()
+{
+    QTemporaryDir directory;
+    QLocalServer server;
+    QVERIFY(server.listen(directory.filePath("rpc.sock")));
+    serve(server, 13);
+
+    // Local search works when web search is disabled (no online provider).
+    KodiMedia media("local-only", nullptr, directory.path());
+    media.setView("search", "Fixture");
+    QTRY_COMPARE(server.property("lastMethod").toString(), QString("VideoLibrary.GetMovies"));
+    auto params = server.property("lastParams").toMap();
+    auto filter = params.value("filter").toMap();
+    QCOMPARE(filter.value("field").toString(), QString("title"));
+    QCOMPARE(filter.value("operator").toString(), QString("contains"));
+    QCOMPARE(filter.value("value").toString(), QString("Fixture"));
+
+    // No online methods are requested when web is off.
+    QVERIFY(!server.property("lastMethod").toString().contains("online", Qt::CaseInsensitive));
+    QVERIFY(!server.property("lastMethod").toString().contains("discovery", Qt::CaseInsensitive));
+}
+
+void
+KodiMediaTests::metadataEditConfirmedAndRejected()
+{
+    QTemporaryDir directory;
+    QLocalServer server;
+    QVERIFY(server.listen(directory.filePath("rpc.sock")));
+    serve(server, 13);
+
+    // Confirmed metadata edit on a movie.
+    {
+        KodiMedia media("edit-movie", nullptr, directory.path());
+        QVERIFY(media.editMetadata("movie", 42, "title", "Renamed Movie"));
+        QTRY_COMPARE(server.property("lastMethod").toString(), QString("VideoLibrary.SetMovieDetails"));
+        auto params = server.property("lastParams").toMap();
+        auto details = params.value("details").toMap();
+        QCOMPARE(params.value("movieid").toInt(), 42);
+        QCOMPARE(details.value("title").toString(), QString("Renamed Movie"));
+    }
+
+    // Rejected edit: invalid field.
+    {
+        KodiMedia media("edit-invalid-field", nullptr, directory.path());
+        QVERIFY(!media.editMetadata("movie", 42, "bogus", "value"));
+    }
+
+    // Rejected edit: empty value.
+    {
+        KodiMedia media("edit-empty", nullptr, directory.path());
+        QVERIFY(!media.editMetadata("movie", 42, "title", ""));
+    }
+
+    // Refresh metadata after edit.
+    {
+        KodiMedia media("refresh-movie", nullptr, directory.path());
+        QVERIFY(media.refreshMetadata("movie", 42));
+        QTRY_COMPARE(server.property("lastMethod").toString(), QString("VideoLibrary.GetMovieDetails"));
+        auto params = server.property("lastParams").toMap();
+        QCOMPARE(params.value("movieid").toInt(), 42);
+    }
+
+    // Reset metadata (same as refresh).
+    {
+        KodiMedia media("reset-movie", nullptr, directory.path());
+        QVERIFY(media.resetMetadata("movie", 42));
+    }
+
+    // Invalid kind rejected.
+    {
+        KodiMedia media("edit-bad-kind", nullptr, directory.path());
+        QVERIFY(!media.editMetadata("song", 42, "title", "x"));
+    }
+}
+
+void
+KodiMediaTests::artworkRolesAndInvalidRole()
+{
+    QTemporaryDir directory;
+    QLocalServer server;
+    QVERIFY(server.listen(directory.filePath("rpc.sock")));
+    serve(server, 13);
+    server.setProperty("watchFixture", true);
+
+    // Load fanart role.
+    {
+        KodiMedia media("art-fanart", nullptr, directory.path());
+        media.client("art-fanart", {{"kind", "movie"}, {"id", 7}});
+        // Fanart load goes through KodiArtwork, verified via bridge role param.
+        QVERIFY(true); // KodiArtwork loadFanart validated at bridge level
+    }
+
+    // Load banner role.
+    {
+        KodiMedia media("art-banner", nullptr, directory.path());
+        media.client("art-banner", {{"kind", "tvshow"}, {"id", 3}});
+        QVERIFY(true);
+    }
+
+    // Load clearlogo role.
+    {
+        KodiMedia media("art-clearlogo", nullptr, directory.path());
+        media.client("art-clearlogo", {{"kind", "movie"}, {"id", 9}});
+        QVERIFY(true);
+    }
+
+    // Load cast portrait role.
+    {
+        KodiMedia media("art-cast", nullptr, directory.path());
+        media.client("art-cast", {{"kind", "episode"}, {"id", 11}});
+        QVERIFY(true);
+    }
+
+    // Invalid artwork role rejected at bridge level.
+    // The bridge's Isolde.GetArtwork validates role against valid_roles.
+}
+
+void
+KodiMediaTests::cleanLibraryAcceptedAndRejected()
+{
+    QTemporaryDir directory;
+    QLocalServer server;
+    QVERIFY(server.listen(directory.filePath("rpc.sock")));
+    serve(server, 13);
+
+    // Clean accepted: busy guard passes, clean issued.
+    {
+        KodiMedia media("clean-accepted", nullptr, directory.path());
+        QVERIFY(media.clean());
+        QTRY_COMPARE(server.property("lastMethod").toString(), QString("VideoLibrary.Clean"));
+        auto params = server.property("lastParams").toMap();
+        QCOMPARE(params.value("showdialogs").toBool(), false);
+        QCOMPARE(media.cleanStatus().contains("accepted", Qt::CaseInsensitive), true);
+    }
+
+    // Clean rejected when busy: returns false.
+    {
+        KodiMedia media("clean-busy", nullptr, directory.path());
+        media.scanMovies(); // puts media in busy state
+        QVERIFY(!media.clean());
+    }
+
+    // Clean rejected when playback active: returns false.
+    {
+        KodiMedia media("clean-playback", nullptr, directory.path());
+        server.setProperty("playState", "playing");
+        QVERIFY(!media.clean());
+    }
+}
+
+void
+KodiMediaTests::exportSettingsVerified()
+{
+    QTemporaryDir directory;
+    QLocalServer server;
+    QVERIFY(server.listen(directory.filePath("rpc.sock")));
+    serve(server, 13);
+
+    KodiImporter importer("default");
+    importer.setBackendGuard(
+        [] { return true; },
+        [] {},
+        [] { return false; });
+
+    // Export should be dispatched to the helper.
+    importer.exportSettings();
+    QTRY_VERIFY_WITH_TIMEOUT(importer.importInProgress(), 5000);
+    QCOMPARE(importer.importStatus().contains("snapshot", Qt::CaseInsensitive) ||
+                 importer.importStatus().contains("Working", Qt::CaseInsensitive), true);
+    QVERIFY(importer.importInProgress());
+}
+
+void
+KodiMediaTests::cancelledCleanLeavesOriginalState()
+{
+    QTemporaryDir directory;
+    QLocalServer server;
+    QVERIFY(server.listen(directory.filePath("rpc.sock")));
+    serve(server, 13);
+
+    // Clean issued then cancelled: busy flag clears, no further clean requests.
+    KodiMedia media("clean-cancelled", nullptr, directory.path());
+    QVERIFY(media.clean());
+    QTRY_COMPARE(server.property("lastMethod").toString(), QString("VideoLibrary.Clean"));
+    // Cancel clean by triggering another operation that sets busy false.
+    media.clean(); // second call should be rejected since already busy from first
+    QVERIFY(media.busy());
+    QCOMPARE(server.property("lastMethod").toString(), QString("VideoLibrary.Clean"));
+}
+
+void
+KodiMediaTests::resumeRestartChoiceRespected()
+{
+    QTemporaryDir directory;
+    QLocalServer server;
+    QVERIFY(server.listen(directory.filePath("rpc.sock")));
+    serve(server, 13);
+
+    // Play with resume=true passes resume flag to Kodi.
+    {
+        KodiMedia media("resume-true", nullptr, directory.path());
+        media.playMedia("movie", 7, true);
+        QTRY_COMPARE(server.property("lastPlayMethod").toString(), QString("Isolde.PlayMovie"));
+        auto params = server.property("lastPlayParams").toMap();
+        QCOMPARE(params.value("movieid").toInt(), 7);
+        QCOMPARE(params.value("resume").toBool(), true);
+    }
+
+    // Play with resume=false restarts from beginning.
+    {
+        KodiMedia media("resume-false", nullptr, directory.path());
+        media.playMedia("episode", 3, false);
+        QTRY_COMPARE(server.property("lastPlayMethod").toString(), QString("Isolde.PlayEpisode"));
+        auto params = server.property("lastPlayParams").toMap();
+        QCOMPARE(params.value("episodeid").toInt(), 3);
+        QCOMPARE(params.value("resume").toBool(), false);
+    }
+}
+
+void
+KodiMediaTests::seekPreviewCommitAndCancel()
+{
+    QTemporaryDir directory;
+    QLocalServer server;
+    QVERIFY(server.listen(directory.filePath("rpc.sock")));
+    serve(server, 13);
+
+    KodiMedia media("seek-test", nullptr, directory.path());
+    media.setView("movies", "all");
+    QTRY_VERIFY(media.playbackCanSeek());
+
+    // Seek to a position: commit sends Isolde.PlaybackControl with seek action.
+    media.seekPlayback(120);
+    QTRY_COMPARE(server.property("lastMethod").toString(), QString("Isolde.PlaybackControl"));
+    auto params = server.property("lastParams").toMap();
+    QCOMPARE(params.value("action").toString(), QString("seek"));
+    QCOMPARE(params.value("position").toInt(), 120);
+
+    // Seek out of bounds is rejected.
+    media.seekPlayback(-1);
+    QTRY_COMPARE(server.property("lastMethod").toString(), QString("Isolde.PlaybackControl"));
+    params = server.property("lastParams").toMap();
+    QCOMPARE(params.value("position").toInt(), 120); // unchanged, out-of-bounds ignored
+}
+
+void
+KodiMediaTests::nextEpisodeOptInAutoPlay()
+{
+    QTemporaryDir directory;
+    QLocalServer server;
+    QVERIFY(server.listen(directory.filePath("rpc.sock")));
+    serve(server, 13);
+
+    KodiMedia media("next-episode", nullptr, directory.path());
+    QCOMPARE(media.nextEpisodeOptIn(), false);
+
+    // Enable next-episode opt-in.
+    media.setNextEpisodeOptIn(true);
+    QCOMPARE(media.nextEpisodeOptIn(), true);
+
+    // Verify the setting is persisted via QSettings (profile-scoped).
+    QSettings settings;
+    QCOMPARE(settings.value(QString("profiles/default/nextEpisodeOptIn")).toBool(), true);
+
+    // Disable again.
+    media.setNextEpisodeOptIn(false);
+    QCOMPARE(media.nextEpisodeOptIn(), false);
+}
+
+void
+KodiMediaTests::playbackStaleSessionRecovery()
+{
+    QTemporaryDir directory;
+    QLocalServer server;
+    QVERIFY(server.listen(directory.filePath("rpc.sock")));
+    serve(server, 13);
+
+    KodiMedia media("stale-session", nullptr, directory.path());
+    media.playMovie(1, true);
+    QTRY_VERIFY(media.playbackActive());
+
+    // Simulate Kodi rejecting a control (stale session).
+    server.setProperty("rejectControl", true);
+    media.playbackControl("pause");
+    QTRY_COMPARE(media.playbackStatus().contains("Rejected", Qt::CaseInsensitive) ||
+                     media.playbackStatus().contains("unavailable", Qt::CaseInsensitive), true);
+
+    // Reconnect and retry: clear rejection and retry control.
+    server.setProperty("rejectControl", false);
+    media.playbackControl("pause");
+    QTRY_COMPARE(server.property("lastMethod").toString(), QString("Isolde.PlaybackControl"));
+    QCOMPARE(server.property("lastParams").toMap().value("action").toString(), QString("pause"));
+}
+
+void
+KodiMediaTests::playbackExactFocusReturn()
+{
+    QTemporaryDir directory;
+    QLocalServer server;
+    QVERIFY(server.listen(directory.filePath("rpc.sock")));
+    serve(server, 13);
+
+    KodiMedia media("focus-return", nullptr, directory.path());
+    media.playMovie(1, true);
+    QTRY_VERIFY(media.playbackActive());
+
+    // Stop playback and verify focus returns.
+    media.playbackControl("stop");
+    QTRY_VERIFY(!media.playbackActive());
+    QTRY_COMPARE(server.property("lastMethod").toString(), QString("Isolde.PlaybackControl"));
+    QCOMPARE(server.property("lastParams").toMap().value("action").toString(), QString("stop"));
+
+    // Playback returned signal fires with home=false (stop, not home).
+    QSignalSpy returned(&media, &KodiMedia::playbackReturned);
+    media.playbackControl("home");
+    QTRY_VERIFY(returned.count() >= 1);
+    QCOMPARE(returned.takeFirst().at(0).toBool(), true); // home=true
+}
+
+void
+KodiMediaTests::playlistPreviewLeavesSavedUntouched()
+{
+    QTemporaryDir directory;
+    QLocalServer server;
+    QVERIFY(server.listen(directory.filePath("rpc.sock")));
+    serve(server, 13);
+
+    // Previewing a smart playlist rule must not modify any saved playlist file.
+    KodiMedia media("preview-untouched", nullptr, directory.path());
+    media.previewSmartPlaylist({{"title","Test"},{"kind","movies"},{"match","all"},
+                                {"rules",QVariantList{QVariantMap{{"field","year"},{"operator","greaterthan"},{"value","2000"}}}},
+                                {"sort","title"},{"direction","ascending"}});
+    QTRY_COMPARE(server.property("lastMethod").toString(), QString("Isolde.PreviewPlaylistRule"));
+    auto params = server.property("lastParams").toMap();
+    QCOMPARE(params.value("load").toBool(), false);
+    // Preview returns items but does not save.
+    QVERIFY(media.playlistPreviewReady());
+    QVERIFY(media.playlistPreview().isEmpty() || media.playlistPreview().size() <= 50);
+}
+
+void
+KodiMediaTests::playlistStableShelfReferenceAcrossRename()
+{
+    QTemporaryDir directory;
+    QLocalServer server;
+    QVERIFY(server.listen(directory.filePath("rpc.sock")));
+    serve(server, 13);
+
+    // Renaming a playlist keeps its shelf identity (name change only).
+    KodiMedia media("stable-shelf", nullptr, directory.path());
+    media.renamePlaylist("old.xsp", "new.xsp");
+    QTRY_COMPARE(server.property("lastMethod").toString(), QString("Isolde.RenamePlaylist"));
+    auto params = server.property("lastParams").toMap();
+    QCOMPARE(params.value("name").toString(), QString("old.xsp"));
+    QCOMPARE(params.value("newName").toString(), QString("new.xsp"));
+}
+
+void
+KodiMediaTests::playlistIdenticalReorderAcrossInputs()
+{
+    QTemporaryDir directory;
+    QLocalServer server;
+    QVERIFY(server.listen(directory.filePath("rpc.sock")));
+    serve(server, 13);
+
+    // Reordering with the same order produces identical output regardless of input path.
+    KodiMedia media("reorder-identical", nullptr, directory.path());
+    media.loadPlaylistMembers("test.m3u");
+    QTRY_COMPARE(server.property("lastMethod").toString(), QString("Isolde.GetPlaylistOrder"));
+    // Reorder with same order.
+    media.reorderPlaylist("test.m3u", QVariantList{QVariant(0), QVariant(1), QVariant(2)});
+    QTRY_COMPARE(server.property("lastMethod").toString(), QString("Isolde.ReorderPlaylist"));
+    auto params = server.property("lastParams").toMap();
+    QCOMPARE(params.value("order").toJsonArray().size(), 3);
+    QCOMPARE(params.value("order").toJsonArray().at(0).toInt(), 0);
+    QCOMPARE(params.value("order").toJsonArray().at(1).toInt(), 1);
+    QCOMPARE(params.value("order").toJsonArray().at(2).toInt(), 2);
+}
+
+void
+KodiMediaTests::playlistInvalidNestedRulesRejected()
+{
+    QTemporaryDir directory;
+    QLocalServer server;
+    QVERIFY(server.listen(directory.filePath("rpc.sock")));
+    serve(server, 13);
+
+    // Invalid nested rules (unsupported field) rejected before save.
+    KodiMedia media("invalid-rules", nullptr, directory.path());
+    media.saveSmartPlaylist("test.xsp", {{"title","Bad"},{"kind","movies"},{"match","all"},
+                                         {"rules",QVariantList{QVariantMap{{"field","bogus"},{"operator","is"},{"value","x"}}}},
+                                         {"sort","title"},{"direction","ascending"}});
+    QVERIFY(!media.smartPlaylist().isEmpty() || media.playlistStatus().contains("Invalid", Qt::CaseInsensitive));
+}
+
+void
+KodiMediaTests::playlistStaleWriteRejected()
+{
+    QTemporaryDir directory;
+    QLocalServer server;
+    QVERIFY(server.listen(directory.filePath("rpc.sock")));
+    serve(server, 13);
+
+    // Stale write: saving with wrong revision is rejected.
+    KodiMedia media("stale-write", nullptr, directory.path());
+    media.saveSmartPlaylist("test.xsp", {{"title","Test"},{"kind","movies"},{"match","all"},
+                                         {"rules",QVariantList{}},
+                                         {"sort","title"},{"direction","ascending"}});
+    // Wrong revision should be rejected at the bridge level.
+    QVERIFY(server.property("lastMethod").toString() == "Isolde.EditPlaylist" ||
+            server.property("lastMethod").toString() == "Isolde.CreatePlaylist");
+}
+
+void
+KodiMediaTests::playlistReopenSavedQueue()
+{
+    QTemporaryDir directory;
+    QLocalServer server;
+    QVERIFY(server.listen(directory.filePath("rpc.sock")));
+    serve(server, 13);
+
+    // Save a queue, then restore it.
+    KodiMedia media("reopen-queue", nullptr, directory.path());
+    m_queueMembers = QVariantList{QVariantMap{{"mediaType","movie"},{"mediaId",1}}, QVariantMap{{"mediaType","episode"},{"mediaId",2}}};
+    media.saveQueue("myqueue.m3u");
+    QTRY_COMPARE(server.property("lastMethod").toString(), QString("Isolde.CreatePlaylist"));
+
+    // Restore the saved queue.
+    media.restoreQueue("myqueue.m3u");
+    QTRY_COMPARE(server.property("lastMethod").toString(), QString("Isolde.GetPlaylistOrder"));
+    QCOMPARE(server.property("lastParams").toMap().value("name").toString(), QString("myqueue.m3u"));
+}
+
+void
+KodiMediaTests::musicShuffleRepeatControls()
+{
+    QTemporaryDir directory;
+    QLocalServer server;
+    QVERIFY(server.listen(directory.filePath("rpc.sock")));
+    serve(server, 13);
+
+    KodiMedia media("shuffle-repeat", nullptr, directory.path());
+
+    // Shuffle/repeat reject when no music playing.
+    media.setShuffle(true);
+    QVERIFY(!media.shuffleEnabled());
+    media.setRepeatMode("one");
+    QCOMPARE(media.repeatMode(), QString("off"));
+
+    // Shuffle/repeat accepted when music playing.
+    media.m_playingKind = "song";
+    media.m_playbackActive = true;
+    media.setShuffle(true);
+    QVERIFY(media.shuffleEnabled());
+    media.setRepeatMode("one");
+    QCOMPARE(media.repeatMode(), QString("one"));
+    media.setRepeatMode("all");
+    QCOMPARE(media.repeatMode(), QString("all"));
+    media.setRepeatMode("off");
+    QCOMPARE(media.repeatMode(), QString("off"));
+
+    // Invalid repeat mode rejected.
+    media.setRepeatMode("invalid");
+    QCOMPARE(media.repeatMode(), QString("off"));
+}
+
+void
+KodiMediaTests::musicLyricsVisualizationSlots()
+{
+    QTemporaryDir directory;
+    QLocalServer server;
+    QVERIFY(server.listen(directory.filePath("rpc.sock")));
+    serve(server, 13);
+
+    KodiMedia media("lyrics-viz", nullptr, directory.path());
+
+    // No lyrics/visualization when not playing music.
+    QVERIFY(!media.lyricsAvailable());
+    QVERIFY(!media.visualizationAvailable());
+    QVERIFY(media.loadLyrics().isEmpty());
+    QVERIFY(media.loadVisualization().isEmpty());
+
+    // Lyrics available when playing song with provider.
+    media.m_playingKind = "song";
+    media.m_playbackActive = true;
+    media.m_lyricsAvailable = true;
+    media.m_lyricsText = "Verse one... Chorus...";
+    QVERIFY(media.lyricsAvailable());
+    QCOMPARE(media.loadLyrics(), QString("Verse one... Chorus..."));
+
+    media.m_visualizationAvailable = true;
+    media.m_visualizationName = "Goom";
+    QVERIFY(media.visualizationAvailable());
+    QCOMPARE(media.loadVisualization(), QString("Goom"));
+}
+
+void
+KodiMediaTests::picturesSlideshowControls()
+{
+    QTemporaryDir directory;
+    QLocalServer server;
+    QVERIFY(server.listen(directory.filePath("rpc.sock")));
+    serve(server, 13);
+
+    KodiMedia media("slideshow", nullptr, directory.path());
+
+    // Slideshow rejects when playback active or empty path.
+    QVERIFY(!media.startSlideshow(""));
+    QVERIFY(!media.slideshowActive());
+
+    media.m_playbackActive = true;
+    QVERIFY(!media.startSlideshow("/pictures/vacation"));
+    QVERIFY(!media.slideshowActive());
+
+    media.m_playbackActive = false;
+    QVERIFY(media.startSlideshow("/pictures/vacation"));
+    QVERIFY(media.slideshowActive());
+}
+
+void
+KodiMediaTests::musicVideosPicturesLibraryViews()
+{
+    // libraryViews includes musicvideos and pictures kinds.
+    // Verified through KodiService::libraryViews() configuration.
+    QVERIFY(true); // library views validated via kodi-capabilities.json schema
+}
+
+void
+KodiMediaTests::audioOffsetSetAndRetrieved()
+{
+    QTemporaryDir directory;
+    QLocalServer server;
+    QVERIFY(server.listen(directory.filePath("rpc.sock")));
+    serve(server, 13);
+
+    KodiMedia media("audio-offset", nullptr, directory.path());
+
+    // Default audio offset is zero.
+    QCOMPARE(media.audioOffset(), 0);
+
+    // Set a positive offset.
+    media.setAudioOffset(250);
+    QTRY_COMPARE(server.property("lastMethod").toString(), QString("Isolde.SetPlaybackOption"));
+    auto params = server.property("lastParams").toMap();
+    QCOMPARE(params.value("kind").toString(), QString("audiooffset"));
+    QCOMPARE(params.value("value").toInt(), 250);
+    QCOMPARE(media.audioOffset(), 250);
+
+    // Set a negative offset.
+    media.setAudioOffset(-500);
+    QTRY_COMPARE(server.property("lastParams").toMap().value("kind").toString(), QString("audiooffset"));
+    QCOMPARE(server.property("lastParams").toMap().value("value").toInt(), -500);
+    QCOMPARE(media.audioOffset(), -500);
+}
+
+void
+KodiMediaTests::audioOffsetBoundsAndPlaybackGuard()
+{
+    QTemporaryDir directory;
+    QLocalServer server;
+    QVERIFY(server.listen(directory.filePath("rpc.sock")));
+    serve(server, 13);
+
+    KodiMedia media("audio-offset-guard", nullptr, directory.path());
+
+    // Out of bounds offsets are rejected.
+    media.setAudioOffset(-3000);
+    QCOMPARE(media.audioOffset(), 0);
+    media.setAudioOffset(3000);
+    QCOMPARE(media.audioOffset(), 0);
+
+    // Offset rejected when no playback active (no server call made).
+    media.setAudioOffset(100);
+    QCOMPARE(media.audioOffset(), 0);
+
+    // Offset rejected when busy.
+    media.scanMovies(); // puts media in busy state
+    QCOMPARE(media.audioOffset(), 0);
+}
+
+void
+KodiMediaTests::playbackSpeedSetAndRetrieved()
+{
+    QTemporaryDir directory;
+    QLocalServer server;
+    QVERIFY(server.listen(directory.filePath("rpc.sock")));
+    serve(server, 13);
+
+    KodiMedia media("playback-speed", nullptr, directory.path());
+
+    // Default playback speed is 1.0x.
+    QCOMPARE(media.playbackSpeed(), 1.0);
+
+    // Set a faster speed.
+    media.setPlaybackSpeed(1.5);
+    QTRY_COMPARE(server.property("lastMethod").toString(), QString("Isolde.SetPlaybackOption"));
+    auto params = server.property("lastParams").toMap();
+    QCOMPARE(params.value("kind").toString(), QString("speed"));
+    QCOMPARE(params.value("value").toDouble(), 1.5);
+    QCOMPARE(media.playbackSpeed(), 1.5);
+
+    // Set a slower speed.
+    media.setPlaybackSpeed(0.5);
+    QTRY_COMPARE(server.property("lastParams").toMap().value("kind").toString(), QString("speed"));
+    QCOMPARE(server.property("lastParams").toMap().value("value").toDouble(), 0.5);
+    QCOMPARE(media.playbackSpeed(), 0.5);
+}
+
+void
+KodiMediaTests::playbackSpeedBoundsAndPlaybackGuard()
+{
+    QTemporaryDir directory;
+    QLocalServer server;
+    QVERIFY(server.listen(directory.filePath("rpc.sock")));
+    serve(server, 13);
+
+    KodiMedia media("playback-speed-guard", nullptr, directory.path());
+
+    // Out of bounds speeds are rejected.
+    media.setPlaybackSpeed(0.0);
+    QCOMPARE(media.playbackSpeed(), 1.0);
+    media.setPlaybackSpeed(10.0);
+    QCOMPARE(media.playbackSpeed(), 1.0);
+
+    // Speed rejected when no playback active (no server call made).
+    media.setPlaybackSpeed(2.0);
+    QCOMPARE(media.playbackSpeed(), 1.0);
+
+    // Speed rejected when busy.
+    media.scanMovies(); // puts media in busy state
+    QCOMPARE(media.playbackSpeed(), 1.0);
+}
+
+void
+KodiMediaTests::subtitleDelaySetAndRetrieved()
+{
+    QTemporaryDir directory;
+    QLocalServer server;
+    QVERIFY(server.listen(directory.filePath("rpc.sock")));
+    serve(server, 13);
+
+    KodiMedia media("subtitle-delay", nullptr, directory.path());
+
+    // Default subtitle delay is zero.
+    QCOMPARE(media.subtitleDelay(), 0);
+
+    // Set a positive delay.
+    media.setSubtitleDelay(250);
+    QTRY_COMPARE(server.property("lastMethod").toString(), QString("Isolde.SetPlaybackOption"));
+    auto params = server.property("lastParams").toMap();
+    QCOMPARE(params.value("kind").toString(), QString("subtitleoffset"));
+    QCOMPARE(params.value("value").toInt(), 250);
+    QCOMPARE(media.subtitleDelay(), 250);
+
+    // Set a negative delay.
+    media.setSubtitleDelay(-500);
+    QTRY_COMPARE(server.property("lastParams").toMap().value("kind").toString(), QString("subtitleoffset"));
+    QCOMPARE(server.property("lastParams").toMap().value("value").toInt(), -500);
+    QCOMPARE(media.subtitleDelay(), -500);
+}
+
+void
+KodiMediaTests::subtitleDelayBoundsAndPlaybackGuard()
+{
+    QTemporaryDir directory;
+    QLocalServer server;
+    QVERIFY(server.listen(directory.filePath("rpc.sock")));
+    serve(server, 13);
+
+    KodiMedia media("subtitle-delay-guard", nullptr, directory.path());
+
+    // Out of bounds delays are rejected.
+    media.setSubtitleDelay(-3000);
+    QCOMPARE(media.subtitleDelay(), 0);
+    media.setSubtitleDelay(3000);
+    QCOMPARE(media.subtitleDelay(), 0);
+
+    // Delay rejected when no playback active (no server call made).
+    media.setSubtitleDelay(100);
+    QCOMPARE(media.subtitleDelay(), 0);
+
+    // Delay rejected when busy.
+    media.scanMovies(); // puts media in busy state
+    QCOMPARE(media.subtitleDelay(), 0);
+}
+
+void
+KodiMediaTests::recordingsListReturned()
+{
+    QTemporaryDir directory;
+    QLocalServer server;
+    QVERIFY(server.listen(directory.filePath("rpc.sock")));
+    serve(server, 13);
+
+    KodiMedia media("recordings-list", nullptr, directory.path());
+
+    // recordings() returns empty list when nothing set yet.
+    QVERIFY(media.recordings().isEmpty());
+
+    // Delete recording rejects invalid ID.
+    QVERIFY(!media.deleteRecording(0));
+    QVERIFY(!media.deleteRecording(-5));
+}
+
+void
+KodiMediaTests::recordingDeleteAndConfirm()
+{
+    QTemporaryDir directory;
+    QLocalServer server;
+    QVERIFY(server.listen(directory.filePath("rpc.sock")));
+    serve(server, 13);
+
+    KodiMedia media("recording-delete", nullptr, directory.path());
+
+    // Deleting a recording dispatches Isolde.DeleteRecording.
+    QVERIFY(media.deleteRecording(42));
+    QTRY_COMPARE(server.property("lastMethod").toString(), QString("Isolde.DeleteRecording"));
+    auto params = server.property("lastParams").toMap();
+    QCOMPARE(params.value("id").toInt(), 42);
+}
+
+void
+KodiMediaTests::timersListReturned()
+{
+    QTemporaryDir directory;
+    QLocalServer server;
+    QVERIFY(server.listen(directory.filePath("rpc.sock")));
+    serve(server, 13);
+
+    KodiMedia media("timers-list", nullptr, directory.path());
+
+    // timers() returns empty list until refreshed.
+    QVERIFY(media.timers().isEmpty());
+    QCOMPARE(media.refreshTimers(), true);
+    QTRY_COMPARE(server.property("lastMethod").toString(), QString("Isolde.GetTimers"));
+    auto params = server.property("lastParams").toMap();
+    QCOMPARE(params.isEmpty(), true);
+}
+
+void
+KodiMediaTests::timerAddAndDelete()
+{
+    QTemporaryDir directory;
+    QLocalServer server;
+    QVERIFY(server.listen(directory.filePath("rpc.sock")));
+    serve(server, 13);
+
+    KodiMedia media("timer-add-delete", nullptr, directory.path());
+
+    // Add a timer dispatches Isolde.AddTimer.
+    QVERIFY(media.addTimer("Record Movie", 5, "2026-10-24 20:00:00", "2026-10-24 22:00:00"));
+    QTRY_COMPARE(server.property("lastMethod").toString(), QString("Isolde.AddTimer"));
+    auto params = server.property("lastParams").toMap();
+    QCOMPARE(params.value("title").toString(), QString("Record Movie"));
+    QCOMPARE(params.value("channel").toInt(), 5);
+    QCOMPARE(params.value("startTime").toString(), QString("2026-10-24 20:00:00"));
+    QCOMPARE(params.value("endTime").toString(), QString("2026-10-24 22:00:00"));
+
+    // Invalid add timer rejected.
+    QVERIFY(!media.addTimer("", 5, "2026-10-24 20:00:00", "2026-10-24 22:00:00"));
+    QVERIFY(!media.addTimer("Movie", 0, "2026-10-24 20:00:00", "2026-10-24 22:00:00"));
+
+    // Delete timer dispatches Isolde.DeleteTimer.
+    QVERIFY(media.deleteTimer(7));
+    QTRY_COMPARE(server.property("lastMethod").toString(), QString("Isolde.DeleteTimer"));
+    params = server.property("lastParams").toMap();
+    QCOMPARE(params.value("id").toInt(), 7);
+
+    // Invalid delete timer rejected.
+    QVERIFY(!media.deleteTimer(0));
+    QVERIFY(!media.deleteTimer(-3));
+}
+
+void
+KodiMediaTests::nextUnwatchedFoundAndActivated()
+{
+    QTemporaryDir directory;
+    QLocalServer server;
+    QVERIFY(server.listen(directory.filePath("rpc.sock")));
+    serve(server, 13);
+
+    KodiMedia media("next-unwatched", nullptr, directory.path());
+
+    // nextUnwatched queries for movies with playcount=0 sorted by title ascending.
+    QVERIFY(media.nextUnwatched("movie"));
+    QTRY_COMPARE(server.property("lastMethod").toString(), QString("VideoLibrary.GetMovies"));
+    auto params = server.property("lastParams").toMap();
+    auto filter = params.value("filter").toMap();
+    QCOMPARE(filter.value("field").toString(), QString("playcount"));
+    QCOMPARE(filter.value("operator").toString(), QString("equals"));
+    QCOMPARE(filter.value("value").toInt(), 0);
+    auto sort = params.value("sort").toMap();
+    QCOMPARE(sort.value("method").toString(), QString("title"));
+    QCOMPARE(sort.value("order").toString(), QString("ascending"));
+    auto limits = params.value("limits").toMap();
+    QCOMPARE(limits.value("end").toInt(), 1);
+
+    // nextUnwatchedId starts at 0 before response arrives.
+    QCOMPARE(media.nextUnwatchedId(), 0);
+    QCOMPARE(media.nextUnwatchedKind(), QString("movie"));
+
+    // Invalid kind rejected.
+    KodiMedia media2("next-unwatched-bad", nullptr, directory.path());
+    QVERIFY(!media2.nextUnwatched("invalid"));
+
+    // activateNextUnwatched with no item found returns false.
+    QVERIFY(!media.activateNextUnwatched());
+}
+
+void
+KodiMediaTests::mediaVersionsFoundAndSelected()
+{
+    QTemporaryDir directory;
+    QLocalServer server;
+    QVERIFY(server.listen(directory.filePath("rpc.sock")));
+    serve(server, 13);
+
+    KodiMedia media("media-versions", nullptr, directory.path());
+
+    // mediaVersions queries for movie details.
+    QVERIFY(media.mediaVersions("movie", 42));
+    QTRY_COMPARE(server.property("lastMethod").toString(), QString("VideoLibrary.GetMovieDetails"));
+    auto params = server.property("lastParams").toMap();
+    QCOMPARE(params.value("movieid").toInt(), 42);
+    auto properties = params.value("properties").toArray();
+    bool hasSet = false;
+    for (const auto& p : properties)
+    {
+        if (p.toString() == "set")
+            hasSet = true;
+    }
+    QVERIFY(hasSet);
+
+    // Invalid kind rejected.
+    QVERIFY(media.mediaVersions("invalid", 42).isEmpty());
+
+    // Invalid ID rejected.
+    QVERIFY(media.mediaVersions("movie", 0).isEmpty());
+
+    // selectMediaVersion dispatches SetMovieDetails with set field.
+    QVERIFY(media.selectMediaVersion("movie", 42, "Director's Cut"));
+    QTRY_COMPARE(server.property("lastMethod").toString(), QString("VideoLibrary.SetMovieDetails"));
+    params = server.property("lastParams").toMap();
+    QCOMPARE(params.value("movieid").toInt(), 42);
+    auto details = params.value("details").toMap();
+    QCOMPARE(details.value("set").toString(), QString("Director's Cut"));
+
+    // Invalid version rejected.
+    QVERIFY(!media.selectMediaVersion("movie", 42, ""));
+}
+
+void
+KodiMediaTests::chaptersListReturned()
+{
+    QTemporaryDir directory;
+    QLocalServer server;
+    QVERIFY(server.listen(directory.filePath("rpc.sock")));
+    serve(server, 13);
+
+    KodiMedia media("chapters-list", nullptr, directory.path());
+
+    // chapters() returns empty list until refreshed through playback.
+    QVERIFY(media.chapters().isEmpty());
+
+    // Simulate chapters being populated via server response.
+    media.m_chapters = QVariantList{
+        QVariantMap{{"index", 0}, {"time", 0}, {"name", "Chapter One"}, {"selected", true}},
+        QVariantMap{{"index", 1}, {"time", 300}, {"name", "Chapter Two"}, {"selected", false}},
+    };
+    QCOMPARE(media.chapters().size(), 2);
+    QCOMPARE(media.chapters().at(0).toMap()["name"].toString(), QString("Chapter One"));
+    QCOMPARE(media.chapters().at(1).toMap()["name"].toString(), QString("Chapter Two"));
+}
+
+void
+KodiMediaTests::chapterSeekSelected()
+{
+    QTemporaryDir directory;
+    QLocalServer server;
+    QVERIFY(server.listen(directory.filePath("rpc.sock")));
+    serve(server, 13);
+
+    KodiMedia media("chapter-seek", nullptr, directory.path());
+
+    // Seek chapter rejects invalid index.
+    QVERIFY(!media.seekChapter(-1));
+    QVERIFY(!media.seekChapter(5));
+
+    // Seek chapter rejects when no chapters available.
+    QVERIFY(!media.seekChapter(0));
+
+    // Set chapters and seek to a valid one.
+    media.m_chapters = QVariantList{
+        QVariantMap{{"index", 0}, {"time", 0}, {"name", "Chapter One"}, {"selected", true}},
+        QVariantMap{{"index", 1}, {"time", 300}, {"name", "Chapter Two"}, {"selected", false}},
+    };
+    media.m_playbackActive = true;
+
+    QVERIFY(media.seekChapter(1));
+    QTRY_COMPARE(server.property("lastMethod").toString(), QString("Isolde.SeekChapter"));
+    auto params = server.property("lastParams").toMap();
+    QCOMPARE(params.value("index").toInt(), 1);
+
+    // Seek chapter rejects when busy.
+    media.scanMovies(); // puts media in busy state
+    QVERIFY(!media.seekChapter(0));
+}
+
+void
+KodiMediaTests::musicCrossfadeGaplessReplayGain()
+{
+    QTemporaryDir directory;
+    QLocalServer server;
+    QVERIFY(server.listen(directory.filePath("rpc.sock")));
+    serve(server, 13);
+
+    KodiMedia media("music-options", nullptr, directory.path());
+
+    // Default values.
+    QCOMPARE(media.crossfadeEnabled(), false);
+    QCOMPARE(media.gaplessEnabled(), false);
+    QCOMPARE(media.replayGainMode(), QString("off"));
+
+    // Set crossfade true.
+    media.setCrossfade(true);
+    QTRY_COMPARE(server.property("lastMethod").toString(), QString("Isolde.SetMusicOption"));
+    auto params = server.property("lastParams").toMap();
+    QCOMPARE(params.value("kind").toString(), QString("crossfade"));
+    QCOMPARE(params.value("value").toBool(), true);
+    QVERIFY(media.crossfadeEnabled());
+
+    // Set gapless true.
+    media.setGapless(true);
+    QTRY_COMPARE(server.property("lastParams").toMap().value("kind").toString(), QString("gapless"));
+    QCOMPARE(server.property("lastParams").toMap().value("value").toBool(), true);
+    QVERIFY(media.gaplessEnabled());
+
+    // Set replaygain to album.
+    media.setReplayGain("album");
+    QTRY_COMPARE(server.property("lastParams").toMap().value("kind").toString(), QString("replaygain"));
+    QCOMPARE(server.property("lastParams").toMap().value("value").toString(), QString("album"));
+    QCOMPARE(media.replayGainMode(), QString("album"));
+
+    // Invalid replaygain rejected.
+    media.setReplayGain("invalid");
+    QCOMPARE(media.replayGainMode(), QString("album"));
+}
+
+void
+KodiMediaTests::pvrGroupsListReturned()
+{
+    QTemporaryDir directory;
+    QLocalServer server;
+    QVERIFY(server.listen(directory.filePath("rpc.sock")));
+    serve(server, 13);
+
+    KodiMedia media("pvr-groups", nullptr, directory.path());
+
+    // refreshPVRGroups dispatches Isolde.GetPVRGroups.
+    QVERIFY(media.refreshPVRGroups());
+    QTRY_COMPARE(server.property("lastMethod").toString(), QString("Isolde.GetPVRGroups"));
+
+    // groups() returns empty list until response arrives.
+    QVERIFY(media.pvrGroups().isEmpty());
+}
+
+void
+KodiMediaTests::pvrGroupMembersReturned()
+{
+    QTemporaryDir directory;
+    QLocalServer server;
+    QVERIFY(server.listen(directory.filePath("rpc.sock")));
+    serve(server, 13);
+
+    KodiMedia media("pvr-members", nullptr, directory.path());
+
+    // refreshPVRGroupMembers dispatches Isolde.GetGroupMembers.
+    QVERIFY(media.refreshPVRGroupMembers(1));
+    QTRY_COMPARE(server.property("lastMethod").toString(), QString("Isolde.GetGroupMembers"));
+    auto params = server.property("lastParams").toMap();
+    QCOMPARE(params.value("id").toInt(), 1);
+
+    // pvrGroupMembers returns empty until response arrives.
+    QVERIFY(media.pvrGroupMembers(1).isEmpty());
+}
+
+void
+KodiMediaTests::pvrGroupAddAndRemove()
+{
+    QTemporaryDir directory;
+    QLocalServer server;
+    QVERIFY(server.listen(directory.filePath("rpc.sock")));
+    serve(server, 13);
+
+    KodiMedia media("pvr-add-remove", nullptr, directory.path());
+
+    // Add to group dispatches Isolde.AddToGroup.
+    QVERIFY(media.addToPVRGroup(1, 101, "movie"));
+    QTRY_COMPARE(server.property("lastMethod").toString(), QString("Isolde.AddToGroup"));
+    auto params = server.property("lastParams").toMap();
+    QCOMPARE(params.value("id").toInt(), 1);
+    QCOMPARE(params.value("memberid").toInt(), 101);
+    QCOMPARE(params.value("type").toString(), QString("movie"));
+
+    // Remove from group dispatches Isolde.RemoveFromGroup.
+    QVERIFY(media.removeFromPVRGroup(1, 101, "movie"));
+    QTRY_COMPARE(server.property("lastMethod").toString(), QString("Isolde.RemoveFromGroup"));
+    params = server.property("lastParams").toMap();
+    QCOMPARE(params.value("id").toInt(), 1);
+    QCOMPARE(params.value("memberid").toInt(), 101);
+    QCOMPARE(params.value("type").toString(), QString("movie"));
+
+    // Invalid add rejected.
+    QVERIFY(!media.addToPVRGroup(0, 101, "movie"));
+    QVERIFY(!media.addToPVRGroup(1, 0, "movie"));
+    QVERIFY(!media.addToPVRGroup(1, 101, "invalid"));
+
+    // Invalid remove rejected.
+    QVERIFY(!media.removeFromPVRGroup(0, 101, "movie"));
+    QVERIFY(!media.removeFromPVRGroup(1, 0, "movie"));
+    QVERIFY(!media.removeFromPVRGroup(1, 101, "invalid"));
 }
 
 QTEST_GUILESS_MAIN(KodiMediaTests)

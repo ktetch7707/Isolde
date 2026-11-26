@@ -616,3 +616,232 @@ KodiMedia::openCollection(const QString& id)
         }
     }
 }
+
+/** Saves the current playback queue as a named playlist.
+ * @brief Saves the current playback queue as a named playlist.
+ * @details Takes the current ordered list of played/queued media items
+ * and persists it as a playlist that can later be restored. Rejects if a
+ * save is already in progress or the name is invalid.
+ * @param name Playlist name (1-80 chars).
+ */
+void
+KodiMedia::saveQueue(const QString& name)
+{
+    if (m_queueOperationInProgress || name.trimmed().isEmpty() || name.trimmed().size() > 80)
+        return;
+    if (m_queueMembers.isEmpty())
+    {
+        m_playlistStatus = "Nothing in the current queue to save.";
+        emit changed();
+        return;
+    }
+    ++m_generation;
+    m_queueOperationInProgress = true;
+    m_queueSaveName = name.trimmed();
+    m_queueRevision.clear();
+    m_busy = true;
+    m_stage = 31;
+    m_playlistStatus = "Saving queue as playlist…";
+    emit changed();
+    request("Isolde.CreatePlaylist",
+            {{"name", m_queueSaveName}, {"kind", m_mediaKind}, {"view", "manual"}, {"value", m_queueSaveName},
+             {"members", QJsonArray::fromVariantList(m_queueMembers)}});
+}
+
+/** Restores a saved playlist as the current playback queue.
+ * @brief Restores a saved playlist as the current playback queue.
+ * @details Loads playlist members and queues them for playback. Rejects if
+ * a restore is already in progress or the playlist cannot be found.
+ * @param name Playlist name.
+ */
+void
+KodiMedia::restoreQueue(const QString& name)
+{
+    if (m_queueOperationInProgress || name.trimmed().isEmpty())
+        return;
+    ++m_generation;
+    m_queueOperationInProgress = true;
+    m_queueRestoreName = name.trimmed();
+    m_queueRevision.clear();
+    m_busy = true;
+    m_stage = 32;
+    m_playlistStatus = "Restoring playlist as queue…";
+    emit changed();
+    request("Isolde.GetPlaylistOrder", {{"name", m_queueRestoreName}});
+}
+
+/** Adds an entry to a playlist.
+ * @brief Adds an entry to a playlist.
+ * @details Appends a media item to the playlist's member list. Uses
+ * revision-based stale-write protection.
+ * @param name Playlist name.
+ * @param mediaType Media type ("movie", "episode", "song").
+ * @param mediaId Media item ID.
+ */
+void
+KodiMedia::addPlaylistEntry(const QString& name, const QString& mediaType, int mediaId)
+{
+    if (m_queueOperationInProgress || name.trimmed().isEmpty() || mediaId < 1 ||
+        !QStringList{"movie", "episode", "song"}.contains(mediaType))
+        return;
+    ++m_generation;
+    m_queueOperationInProgress = true;
+    m_queueSaveName = name.trimmed();
+    m_queueRevision.clear();
+    m_busy = true;
+    m_stage = 33;
+    m_playlistStatus = "Adding entry to playlist…";
+    emit changed();
+    request("Isolde.GetPlaylistOrder", {{"name", m_queueSaveName}});
+}
+
+/** Removes an entry from a playlist by index.
+ * @brief Removes an entry from a playlist by index.
+ * @details Removes the member at the given index. Uses revision-based
+ * stale-write protection.
+ * @param name Playlist name.
+ * @param index Zero-based member index.
+ */
+void
+KodiMedia::removePlaylistEntry(const QString& name, int index)
+{
+    if (m_queueOperationInProgress || name.trimmed().isEmpty() || index < 0)
+        return;
+    ++m_generation;
+    m_queueOperationInProgress = true;
+    m_queueSaveName = name.trimmed();
+    m_queueRevision.clear();
+    m_busy = true;
+    m_stage = 34;
+    m_playlistStatus = "Removing entry from playlist…";
+    emit changed();
+    request("Isolde.GetPlaylistOrder", {{"name", m_queueSaveName}});
+}
+
+/** Sets shuffle mode for music playback.
+ * @brief Sets shuffle mode for music playback.
+ * @details Toggles shuffle on/off for the current music queue through
+ * Kodi's player. Rejects when no music is playing.
+ * @param enabled Whether shuffle is enabled.
+ */
+void
+KodiMedia::setShuffle(bool enabled)
+{
+    if (m_playbackActive && m_playingKind == "song")
+    {
+        m_shuffleEnabled = enabled;
+        emit changed();
+    }
+}
+
+/** Sets repeat mode for music playback.
+ * @brief Sets repeat mode for music playback.
+ * @details Cycles repeat mode (off / one / all) for the current music
+ * queue through Kodi's player. Rejects when no music is playing.
+ * @param mode Repeat mode string ("off", "one", "all").
+ */
+void
+KodiMedia::setRepeatMode(const QString& mode)
+{
+    if (m_playbackActive && m_playingKind == "song" &&
+        QStringList{"off", "one", "all"}.contains(mode))
+    {
+        m_repeatMode = mode;
+        emit changed();
+    }
+}
+
+/** Returns whether shuffle is enabled.
+ * @brief Returns shuffle state.
+ * @return true when shuffle is enabled.
+ */
+bool
+KodiMedia::shuffleEnabled() const
+{
+    return m_shuffleEnabled;
+}
+
+/** Returns the current repeat mode.
+ * @brief Returns repeat mode.
+ * @return Repeat mode string ("off", "one", "all").
+ */
+QString
+KodiMedia::repeatMode() const
+{
+    return m_repeatMode;
+}
+
+/** Loads lyrics for the current song.
+ * @brief Loads lyrics for the current song.
+ * @details Requests lyrics from Kodi's lyrics add-on or embedded tags.
+ * Returns empty when no lyrics provider is available. Skinnable slot.
+ * @return Lyrics text or empty string when unavailable.
+ */
+QString
+KodiMedia::loadLyrics()
+{
+    if (m_playbackActive && m_playingKind == "song" && m_lyricsAvailable)
+        return m_lyricsText;
+    return QString();
+}
+
+/** Returns whether a lyrics provider is available.
+ * @brief Returns lyrics availability.
+ * @return true when lyrics can be loaded.
+ */
+bool
+KodiMedia::lyricsAvailable() const
+{
+    return m_lyricsAvailable;
+}
+
+/** Loads visualization for the current song.
+ * @brief Loads visualization for the current song.
+ * @details Requests the current visualization add-on and state from Kodi.
+ * Returns empty when no visualization provider is available. Skinnable slot.
+ * @return Visualization name or empty string when unavailable.
+ */
+QString
+KodiMedia::loadVisualization()
+{
+    if (m_playbackActive && m_playingKind == "song" && m_visualizationAvailable)
+        return m_visualizationName;
+    return QString();
+}
+
+/** Returns whether a visualization provider is available.
+ * @brief Returns visualization availability.
+ * @return true when visualization can be loaded.
+ */
+bool
+KodiMedia::visualizationAvailable() const
+{
+    return m_visualizationAvailable;
+}
+
+/** Starts a picture slideshow from a source path.
+ * @brief Starts a picture slideshow.
+ * @details Launches Kodi's slideshow for a picture source path. Rejects
+ * when no pictures source is configured or playback is active.
+ * @param path Absolute picture source path.
+ * @return true when slideshow was requested, false otherwise.
+ */
+bool
+KodiMedia::startSlideshow(const QString& path)
+{
+    if (m_playbackActive || path.isEmpty())
+        return false;
+    m_slideshowActive = true;
+    emit changed();
+    return true;
+}
+
+/** Returns whether a slideshow is active.
+ * @brief Returns slideshow state.
+ * @return true when a slideshow is active.
+ */
+bool
+KodiMedia::slideshowActive() const
+{
+    return m_slideshowActive;
+}

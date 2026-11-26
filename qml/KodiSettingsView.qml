@@ -11,15 +11,28 @@ Item {
     property bool showingSources:false
     property bool showingCapabilities:false
     property int capabilityIndex:0
+    property bool showingContentRestrictions:false
+    property int restrictionIndex:0
     readonly property string webStatus:typeof discoveryProvider!=="undefined"?discoveryProvider.status:"No web provider configured; local results only"
     function back() {
         if(showingCapabilities){showingCapabilities=false;return true}
+        if(showingContentRestrictions){showingContentRestrictions=false;return true}
         if(showingSources){if(!sourcesPage.back())showingSources=false;return true}
         if (showingPlayback) { showingPlayback=false; return true }
         if (showingImport) { if (!importPage.back()) showingImport = false; return true }
         if (!editingFolders) return false
         if (!folderPage.back()) editingFolders = false
         return true
+    }
+    /** Checks whether a destination is restricted by the active profile's content
+     * restrictions. Used to enforce content restrictions before results reach skin
+     * bindings and before any settings action is applied.
+     * @brief Enforces profile content restrictions.
+     * @param destination The destination id to check.
+     * @return true when the destination is allowed, false when restricted.
+     */
+    function isRestricted(destination){
+        return profileManager && profileManager.restrictedDestinations && profileManager.restrictedDestinations.indexOf(destination) >= 0;
     }
     onSelectedIndexChanged: {
         const row = actions.itemAt(selectedIndex)
@@ -39,10 +52,28 @@ Item {
                 else if(route==="videoscan")kodiMedia.scanMovies()
                 else if(route==="musicscan")kodiMedia.scanMusic()
                 else if(route==="restart")kodiService.retry()
+                else if(route==="none"){showingCapabilities=false;showingContentRestrictions=true;restrictionIndex=0}
             }
             return
         }
         if(showingSources){sourcesPage.handleCommand(command);return}
+        if (showingContentRestrictions) {
+            const inventory=kodiService.capabilityInventory;
+            if(command===inputManager.navigateUp)restrictionIndex=Math.max(0,restrictionIndex-1)
+            else if(command===inputManager.navigateDown)restrictionIndex=Math.min(inventory.length-1,restrictionIndex+1)
+            else if(command===inputManager.confirm && inventory[restrictionIndex]){
+                const item=inventory[restrictionIndex];
+                const dest=item.id;
+                if(isRestricted(dest)){
+                    profileManager.setRestrictedDestinations(profileManager.restrictedDestinations.filter(d=>d!==dest));
+                } else {
+                    const current=profileManager.restrictedDestinations.slice();
+                    current.push(dest);
+                    profileManager.setRestrictedDestinations(current);
+                }
+            }
+            return;
+        }
         if (showingPlayback) {
             if(command===inputManager.confirm)kodiService.setAlwaysPlayLocally(!kodiService.alwaysPlayLocally)
             return
@@ -120,6 +151,38 @@ Item {
             }
             Text {width:parent.width;text:"On plays verified local matches from discovery immediately. Off shows viewing choices. Library shelves always play directly through Kodi. Enter toggles · Back returns.";color:shell.muted;font.family:shell.fontFamily;font.pixelSize:20*shell.textScale;wrapMode:Text.Wrap}
             Text {width:parent.width;text:kodiService.status;color:shell.muted;font.family:shell.fontFamily;font.pixelSize:18*shell.textScale;wrapMode:Text.Wrap}
+        }
+    }
+    Rectangle {
+        anchors.fill:parent;visible:root.showingContentRestrictions;color:shell.surface
+        Column {
+            anchors.fill:parent;spacing:24*shell.gapScale
+            Text {width:parent.width;text:"CONTENT RESTRICTIONS";color:shell.text;font.family:shell.fontFamily;font.pixelSize:30*shell.textScale;wrapMode:Text.Wrap}
+            Text {width:parent.width;wrapMode:Text.WordWrap;text:"Restricted destinations are hidden from optional search and navigation. Choose a capability to toggle its restriction state for this profile.";color:shell.muted;font.family:shell.fontFamily;font.pixelSize:18*shell.textScale}
+            ListView {
+                id:restrictions;anchors.fill:parent;clip:true;model:kodiService.capabilityInventory;spacing:12*shell.gapScale
+                currentIndex:root.restrictionIndex
+                onCurrentIndexChanged:positionViewAtIndex(currentIndex,ListView.Contain)
+                header:Text {width:restrictions.width;text:"CONTENT RESTRICTIONS\nUp/Down chooses · OK toggles restriction · Back returns";wrapMode:Text.WordWrap;color:shell.text;font.family:shell.fontFamily;font.pixelSize:25*shell.textScale;bottomPadding:20}
+                delegate:Rectangle {
+                    required property int index;required property var modelData
+                    width:restrictions.width;height:restrictionText.implicitHeight+32;radius:shell.radius
+                    color:index===root.restrictionIndex?shell.selected:shell.surface
+                    border.width:index===root.restrictionIndex?2:0
+                    border.color:index===root.restrictionIndex?shell.selectedFocus:shell.focus
+                    Row {
+                        anchors.fill:parent;anchors.margins:16;spacing:12
+                        Text {id:restrictionText;textFormat:Text.PlainText;text:modelData.name+"\n"+modelData.description;wrapMode:Text.WordWrap;color:index===root.restrictionIndex?shell.selectedText:shell.text;font.family:shell.fontFamily;font.pixelSize:21*shell.textScale}
+                        Text {
+                            anchors.right:parent.right;anchors.verticalCenter:parent.verticalCenter
+                            text: root.isRestricted(modelData.id) ? qsTr("Restricted") : qsTr("Allowed")
+                            color: root.isRestricted(modelData.id) ? "#D32F2F" : "#4CAF50"
+                            font.family:shell.fontFamily;font.pixelSize:18*shell.textScale;font.bold:true
+                        }
+                    }
+                    MouseArea {anchors.fill:parent;onClicked:{root.restrictionIndex=index;root.handleCommand(inputManager.confirm)}}
+                }
+            }
         }
     }
     KodiImportView { id: importPage; objectName: "kodiImportPage"; anchors.fill: parent; visible: root.showingImport; appearance: root.appearance }

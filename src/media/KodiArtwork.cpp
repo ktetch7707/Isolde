@@ -191,13 +191,46 @@ KodiArtwork::loadBackdrop(const QString& kind, int id)
     loadArtwork(kind, id, true);
 }
 
+void
+KodiArtwork::loadFanart(const QString& kind, int id)
+{
+    if (m_role == "fanart" && m_kind == kind && m_item == id)
+        return;
+    loadArtwork(kind, id, false, "fanart");
+}
+
+void
+KodiArtwork::loadBanner(const QString& kind, int id)
+{
+    if (m_role == "banner" && m_kind == kind && m_item == id)
+        return;
+    loadArtwork(kind, id, false, "banner");
+}
+
+void
+KodiArtwork::loadClearlogo(const QString& kind, int id)
+{
+    if (m_role == "clearlogo" && m_kind == kind && m_item == id)
+        return;
+    loadArtwork(kind, id, false, "clearlogo");
+}
+
+void
+KodiArtwork::loadCastPortrait(const QString& kind, int id)
+{
+    if (m_role == "cast" && m_kind == kind && m_item == id)
+        return;
+    loadArtwork(kind, id, false, "cast");
+}
+
 // Cancel the previous request so a late image cannot replace the newly focused item.
 void
-KodiArtwork::loadArtwork(const QString& kind, int id, bool backdrop)
+KodiArtwork::loadArtwork(const QString& kind, int id, bool backdrop, const QString& role)
 {
     cancel();
     m_setting = false;
     m_backdrop = backdrop;
+    m_role = role;
     m_poster.clear();
     m_kind = kind;
     m_item = id;
@@ -236,6 +269,8 @@ KodiArtwork::begin()
         params.insert("data", QString::fromLatin1(m_poster.toBase64()));
     else if (m_backdrop)
         params.insert("role", "backdrop");
+    else if (!m_role.isEmpty() && m_role != "poster")
+        params.insert("role", m_role);
     m_request = QJsonDocument(QJsonObject{{"jsonrpc", "2.0"},
                                           {"id", ++m_requestId},
                                           {"method", m_setting ? "Isolde.SetPoster" : "Isolde.GetArtwork"},

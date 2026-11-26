@@ -403,6 +403,8 @@ class HomeLayout final : public QObject
                                     const QJsonArray& categoryArray, const QJsonArray& entries,
                                     QJsonArray& components);
     bool
+    validateSlotOverrides(const QJsonArray& components, QString* error);
+    bool
     validateCategoryItem(const QJsonObject& category, QSet<QString>& categoryIds) const;
     bool
     validateComponentItem(const QJsonObject& entry, const QSet<QString>& categoryIds,

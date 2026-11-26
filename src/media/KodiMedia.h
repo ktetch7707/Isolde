@@ -13,12 +13,14 @@ class KodiMedia final : public QObject
     Q_PROPERTY(QVariantList movies READ movies NOTIFY changed)
     Q_PROPERTY(QVariantList items READ movies NOTIFY changed)
     Q_PROPERTY(QString mediaKind READ mediaKind NOTIFY changed)
+    Q_PROPERTY(QString hierarchyLevel READ hierarchyLevel NOTIFY changed)
     Q_PROPERTY(QString browseTitle READ browseTitle NOTIFY changed)
     Q_PROPERTY(int selectedIndex READ selectedIndex WRITE selectIndex NOTIFY changed)
     Q_PROPERTY(bool canGoBack READ canGoBack NOTIFY changed)
     Q_PROPERTY(bool busy READ busy NOTIFY changed)
     Q_PROPERTY(bool connected READ connected NOTIFY changed)
     Q_PROPERTY(QString scanStatus READ scanStatus NOTIFY changed)
+    Q_PROPERTY(QString cleanStatus READ cleanStatus NOTIFY changed)
     Q_PROPERTY(int pageStart READ pageStart NOTIFY changed)
     Q_PROPERTY(int totalMovies READ totalMovies NOTIFY changed)
     Q_PROPERTY(bool hasNextPage READ hasNextPage NOTIFY changed)
@@ -39,6 +41,9 @@ class KodiMedia final : public QObject
     Q_PROPERTY(bool playbackCanPause READ playbackCanPause NOTIFY changed)
     Q_PROPERTY(bool playbackCanSeek READ playbackCanSeek NOTIFY changed)
     Q_PROPERTY(QVariantMap playbackTimeline READ playbackTimeline NOTIFY changed)
+    Q_PROPERTY(bool nextEpisodeOptIn READ nextEpisodeOptIn NOTIFY changed)
+    Q_INVOKABLE void
+    setNextEpisodeOptIn(bool enabled);
     Q_PROPERTY(QString viewKind READ viewKind NOTIFY changed)
     Q_PROPERTY(QString viewValue READ viewValue NOTIFY changed)
     Q_PROPERTY(QVariantList collections READ collections NOTIFY changed)
@@ -51,6 +56,15 @@ class KodiMedia final : public QObject
   public:
     explicit KodiMedia(const QString& profile, QObject* parent = nullptr, const QString& testDirectory = {});
     ~KodiMedia() override;
+    // Identify scoped TV drilldown separately from global episode search and playlists.
+    QString hierarchyLevel() const
+    {
+        if (m_mediaKind == "seasons" && m_showId > 0)
+            return QStringLiteral("seasons");
+        if (m_mediaKind == "episodes" && m_showId > 0 && m_season >= 0)
+            return QStringLiteral("episodes");
+        return {};
+    }
     QString
     status() const
     {
@@ -109,6 +123,113 @@ class KodiMedia final : public QObject
     openLibrary(const QString& kind);
     Q_INVOKABLE void
     savePlaylist(const QString& name);
+    /** Saves the current playback queue as a named playlist.
+     * @brief Saves the current playback queue as a named playlist.
+     * @details Takes the current ordered list of played/queued media items
+     * and persists it as a playlist that can later be restored. Rejects if a
+     * save is already in progress or the name is invalid.
+     * @param name Playlist name (1-80 chars).
+     */
+    Q_INVOKABLE void
+    saveQueue(const QString& name);
+    /** Restores a saved playlist as the current playback queue.
+     * @brief Restores a saved playlist as the current playback queue.
+     * @details Loads playlist members and queues them for playback. Rejects if
+     * a restore is already in progress or the playlist cannot be found.
+     * @param name Playlist name.
+     */
+    Q_INVOKABLE void
+    restoreQueue(const QString& name);
+    /** Adds an entry to a playlist.
+     * @brief Adds an entry to a playlist.
+     * @details Appends a media item to the playlist's member list. Uses
+     * revision-based stale-write protection.
+     * @param name Playlist name.
+     * @param mediaType Media type ("movie", "episode", "song").
+     * @param mediaId Media item ID.
+     */
+    Q_INVOKABLE void
+    addPlaylistEntry(const QString& name, const QString& mediaType, int mediaId);
+    /** Removes an entry from a playlist by index.
+     * @brief Removes an entry from a playlist by index.
+     * @details Removes the member at the given index. Uses revision-based
+     * stale-write protection.
+     * @param name Playlist name.
+     * @param index Zero-based member index.
+     */
+    Q_INVOKABLE void
+    removePlaylistEntry(const QString& name, int index);
+    /** Sets shuffle mode for music playback.
+     * @brief Sets shuffle mode for music playback.
+     * @details Toggles shuffle on/off for the current music queue through
+     * Kodi's player. Rejects when no music is playing.
+     * @param enabled Whether shuffle is enabled.
+     */
+    Q_INVOKABLE void
+    setShuffle(bool enabled);
+    /** Sets repeat mode for music playback.
+     * @brief Sets repeat mode for music playback.
+     * @details Cycles repeat mode (off / one / all) for the current music
+     * queue through Kodi's player. Rejects when no music is playing.
+     * @param mode Repeat mode string ("off", "one", "all").
+     */
+    Q_INVOKABLE void
+    setRepeatMode(const QString& mode);
+    /** Returns whether shuffle is enabled.
+     * @brief Returns shuffle state.
+     * @return true when shuffle is enabled.
+     */
+    Q_INVOKABLE bool
+    shuffleEnabled() const;
+    /** Returns the current repeat mode.
+     * @brief Returns repeat mode.
+     * @return Repeat mode string ("off", "one", "all").
+     */
+    Q_INVOKABLE QString
+    repeatMode() const;
+    /** Loads lyrics for the current song.
+     * @brief Loads lyrics for the current song.
+     * @details Requests lyrics from Kodi's lyrics add-on or embedded tags.
+     * Returns empty when no lyrics provider is available. Skinnable slot.
+     * @return Lyrics text or empty string when unavailable.
+     */
+    Q_INVOKABLE QString
+    loadLyrics();
+    /** Returns whether a lyrics provider is available.
+     * @brief Returns lyrics availability.
+     * @return true when lyrics can be loaded.
+     */
+    Q_INVOKABLE bool
+    lyricsAvailable() const;
+    /** Loads visualization for the current song.
+     * @brief Loads visualization for the current song.
+     * @details Requests the current visualization add-on and state from Kodi.
+     * Returns empty when no visualization provider is available. Skinnable slot.
+     * @return Visualization name or empty string when unavailable.
+     */
+    Q_INVOKABLE QString
+    loadVisualization();
+    /** Returns whether a visualization provider is available.
+     * @brief Returns visualization availability.
+     * @return true when visualization can be loaded.
+     */
+    Q_INVOKABLE bool
+    visualizationAvailable() const;
+    /** Starts a picture slideshow from a source path.
+     * @brief Starts a picture slideshow.
+     * @details Launches Kodi's slideshow for a picture source path. Rejects
+     * when no pictures source is configured or playback is active.
+     * @param path Absolute picture source path.
+     * @return true when slideshow was requested, false otherwise.
+     */
+    Q_INVOKABLE bool
+    startSlideshow(const QString& path);
+    /** Returns whether a slideshow is active.
+     * @brief Returns slideshow state.
+     * @return true when a slideshow is active.
+     */
+    Q_INVOKABLE bool
+    slideshowActive() const;
     Q_INVOKABLE void loadSmartPlaylist(const QString& name);
     Q_INVOKABLE void previewSmartPlaylist(const QVariantMap& draft);
     Q_INVOKABLE void saveSmartPlaylist(const QString& name, const QVariantMap& draft);
@@ -209,6 +330,93 @@ class KodiMedia final : public QObject
     bool
     playScheduled(const QString& kind, int id, int offsetSeconds);
     bool
+    markWatched(const QString& kind, int id, bool watched);
+    /** Finds the next unwatched media item via an ordered Kodi query.
+     * @brief Finds the next unwatched media item.
+     * @details Queries Kodi for the next unwatched item of the given kind,
+     * ordered by title ascending, filtered by playcount=0 (unwatched).
+     * Stores the result so it can be activated via activateNextUnwatched().
+     * @param kind The media kind (movie, episode, show).
+     * @return true when the next unwatched query was dispatched, false when busy or invalid kind.
+     */
+    Q_INVOKABLE bool
+    nextUnwatched(const QString& kind);
+    /** Activates the next unwatched item found by the last nextUnwatched() call.
+     * @brief Activates next unwatched item.
+     * @details Plays the media item returned by the previous nextUnwatched()
+     * query. Returns false if no unwatched item was found or navigation is not possible.
+     * @return true when activation was dispatched, false otherwise.
+     */
+    Q_INVOKABLE bool
+    activateNextUnwatched();
+    /** Returns the Kodi library identity of the next unwatched item.
+     * @brief Returns next unwatched media ID.
+     * @return The media ID, or 0 if none found.
+     */
+    Q_INVOKABLE int
+    nextUnwatchedId() const;
+    /** Returns the media kind of the next unwatched item.
+     * @brief Returns next unwatched media kind.
+     * @return The media kind string, or empty if none found.
+     */
+    Q_INVOKABLE QString
+    nextUnwatchedKind() const;
+    /** Returns available versions/editions/extras for a media item.
+     * @brief Returns media versions/editions/extras.
+     * @details Queries Kodi for version/edition/extras information for the
+     * given media item. Returns an empty list when no versions are available.
+     * @param kind The media kind (movie, episode, show).
+     * @param id The Kodi library identity.
+     * @return List of version objects with id, name, type, selected flags.
+     */
+    Q_INVOKABLE QVariantList
+    mediaVersions(const QString& kind, int id);
+    /** Selects a specific version/edition for a media item.
+     * @brief Selects media version/edition.
+     * @details Selects a version/edition/extras variant for playback.
+     * @param kind The media kind (movie, episode, show).
+     * @param id The Kodi library identity.
+     * @param version The version identifier to select.
+     * @return true when the selection was dispatched, false otherwise.
+     */
+    Q_INVOKABLE bool
+    selectMediaVersion(const QString& kind, int id, const QString& version);
+    /** Edits a single metadata field on a Kodi library item.
+     * @brief Edits a metadata field via Kodi's VideoLibrary API.
+     * @details Submits an allowlisted typed patch against the selected media
+     * identity. Only safe, non-destructive fields may be edited. Retains the
+     * prior confirmed view until Kodi acknowledges. Reports errors through
+     * errorString().
+     * @param kind The media kind (movie, episode, show).
+     * @param id The Kodi library identity.
+     * @param field The metadata field key (title, plot, etc.).
+     * @param value The new field value.
+     * @return true when the edit request was dispatched, false when it cannot proceed.
+     */
+    Q_INVOKABLE bool
+    editMetadata(const QString& kind, int id, const QString& field, const QString& value);
+    /** Refreshes metadata for a library item from Kodi.
+     * @brief Refreshes metadata from Kodi.
+     * @details Re-reads the item's details from Kodi, replacing the local
+     * cached view with Kodi's confirmed values. Used after an edit succeeds
+     * or when the user explicitly requests a refresh.
+     * @param kind The media kind.
+     * @param id The Kodi library identity.
+     * @return true when the refresh request was dispatched, false otherwise.
+     */
+    Q_INVOKABLE bool
+    refreshMetadata(const QString& kind, int id);
+    /** Resets metadata for a library item to Kodi's confirmed values.
+     * @brief Resets metadata to Kodi's confirmed values.
+     * @details Discards any local draft and reloads the item's details from
+     * Kodi. Used to abandon an in-progress edit.
+     * @param kind The media kind.
+     * @param id The Kodi library identity.
+     * @return true when the reset request was dispatched, false otherwise.
+     */
+    Q_INVOKABLE bool
+    resetMetadata(const QString& kind, int id);
+    bool
     playPvr(int id, int clientId, int uniqueId);
     bool
     playGuideStream(const QString& url);
@@ -232,6 +440,11 @@ class KodiMedia final : public QObject
     scanStatus() const
     {
         return m_scanStatus;
+    }
+    QString
+    cleanStatus() const
+    {
+        return m_cleanStatus;
     }
     int
     pageStart() const
@@ -299,6 +512,207 @@ class KodiMedia final : public QObject
     refreshPlaybackOptions();
     Q_INVOKABLE void
     setPlaybackOption(const QString& kind, const QVariant& value);
+    /** Sets the audio offset (delay) in milliseconds for the current playback.
+     * @brief Sets audio offset for playback sync.
+     * @details Adjusts audio delay relative to video via Player.SetAudioDelay.
+     * Bounded to -2000..2000 ms. Rejects when no video is playing.
+     * @param delayMs Audio delay in milliseconds (negative = audio earlier, positive = later).
+     */
+    Q_INVOKABLE void
+    setAudioOffset(int delayMs);
+    /** Returns the current audio offset in milliseconds.
+     * @brief Returns audio offset.
+     * @return Audio offset in milliseconds, or 0 if not set.
+     */
+    Q_INVOKABLE int
+    audioOffset() const;
+    /** Sets the playback speed multiplier for the current video playback.
+     * @brief Sets playback speed via Player.SetSpeed.
+     * @details Adjusts playback speed (0.1x to 8.0x). 1.0 is normal speed.
+     * Rejects when no video is playing.
+     * @param speed Playback speed multiplier (0.1 to 8.0).
+     */
+    Q_INVOKABLE void
+    setPlaybackSpeed(double speed);
+    /** Returns the current playback speed multiplier.
+     * @brief Returns playback speed.
+     * @return Speed multiplier, or 1.0 if not set.
+     */
+    Q_INVOKABLE double
+    playbackSpeed() const;
+    /** Sets the subtitle delay in milliseconds for the current video playback.
+     * @brief Sets subtitle delay via Player.SetSubtitleDelay.
+     * @details Adjusts subtitle delay relative to video (-2000..2000 ms). Negative
+     * means subtitles appear earlier, positive means later. Rejects when no video
+     * is playing.
+     * @param delayMs Subtitle delay in milliseconds.
+     */
+    Q_INVOKABLE void
+    setSubtitleDelay(int delayMs);
+    /** Returns the current subtitle delay in milliseconds.
+     * @brief Returns subtitle delay.
+     * @return Subtitle delay in milliseconds, or 0 if not set.
+     */
+     Q_INVOKABLE int
+     subtitleDelay() const;
+     /** Sets crossfade for music playback.
+      * @brief Sets music crossfade.
+      * @details Enables or disables crossfade between music tracks via Kodi settings.
+      * @param enabled Whether crossfade is enabled.
+      */
+     Q_INVOKABLE void
+     setCrossfade(bool enabled);
+     /** Returns whether crossfade is enabled for music.
+      * @brief Returns crossfade state.
+      * @return true when crossfade is enabled.
+      */
+     Q_INVOKABLE bool
+     crossfadeEnabled() const;
+     /** Sets gapless playback for music.
+      * @brief Sets gapless playback.
+      * @details Enables or disables gapless playback between music tracks via Kodi settings.
+      * @param enabled Whether gapless playback is enabled.
+      */
+     Q_INVOKABLE void
+     setGapless(bool enabled);
+     /** Returns whether gapless playback is enabled for music.
+      * @brief Returns gapless state.
+      * @return true when gapless playback is enabled.
+      */
+     Q_INVOKABLE bool
+     gaplessEnabled() const;
+     /** Sets replaygain mode for music playback.
+      * @brief Sets replaygain mode.
+      * @details Sets the replaygain mode via Kodi settings: off, track, album, or auto.
+      * @param mode The replaygain mode string.
+      */
+     Q_INVOKABLE void
+     setReplayGain(const QString& mode);
+     /** Returns the current replaygain mode for music.
+      * @brief Returns replaygain mode.
+      * @return Replaygain mode string: off, track, album, or auto.
+      */
+     Q_INVOKABLE QString
+     replayGainMode() const;
+     /** Returns the list of PVR groups/favorites.
+      * @brief Returns PVR groups list.
+      * @details Lists PVR groups from Kodi's PVR backend via PVR.GetPVRGroups.
+      * Returns an empty list when no PVR backend is configured or no groups exist.
+      * @return List of group objects with id, name, type, memberCount.
+      */
+     Q_INVOKABLE QVariantList
+     pvrGroups() const;
+     /** Returns the members of a PVR group/favorite by ID.
+      * @brief Returns PVR group members.
+      * @details Lists members of a specific PVR group via PVR.GetGroupMembers.
+      * @param id The PVR group ID.
+      * @return List of member objects with id, title, type.
+      */
+     Q_INVOKABLE QVariantList
+     pvrGroupMembers(int id);
+     /** Adds an item to a PVR group/favorite.
+      * @brief Adds item to PVR group.
+      * @details Adds a media item to a PVR group via PVR.AddToGroup.
+      * @param groupId The PVR group ID.
+      * @param memberId The media item ID to add.
+      * @param type The media type (movie, tvshow, episode, song, musicvideo, pvr).
+      * @return true when the add request was dispatched, false otherwise.
+      */
+     Q_INVOKABLE bool
+     addToPVRGroup(int groupId, int memberId, const QString& type);
+     /** Removes an item from a PVR group/favorite.
+      * @brief Removes item from PVR group.
+      * @details Removes a media item from a PVR group via PVR.RemoveFromGroup.
+      * @param groupId The PVR group ID.
+      * @param memberId The media item ID to remove.
+      * @param type The media type (movie, tvshow, episode, song, musicvideo, pvr).
+      * @return true when the remove request was dispatched, false otherwise.
+      */
+     Q_INVOKABLE bool
+     removeFromPVRGroup(int groupId, int memberId, const QString& type);
+     /** Refreshes the PVR groups list from Kodi.
+      * @brief Refreshes PVR groups.
+      * @details Fetches PVR groups via Isolde.GetPVRGroups -> PVR.GetPVRGroups.
+      * @return true when the refresh request was dispatched, false otherwise.
+      */
+     Q_INVOKABLE bool
+     refreshPVRGroups();
+     /** Refreshes the members of a PVR group/favorite by ID.
+      * @brief Refreshes PVR group members.
+      * @details Fetches group members via Isolde.GetGroupMembers -> PVR.GetGroupMembers.
+      * @param id The PVR group ID.
+      * @return true when the refresh request was dispatched, false otherwise.
+      */
+     Q_INVOKABLE bool
+     refreshPVRGroupMembers(int id);
+     /** Returns the list of playback chapters.
+      * @brief Returns playback chapters.
+      * @details Lists chapters from Kodi's player via Player.GetProperties.
+      * Returns an empty list when no video is playing or no chapters exist.
+      * @return List of chapter objects with index, time, name, selected flags.
+      */
+     Q_INVOKABLE QVariantList
+     chapters() const;
+     /** Seeks to a playback chapter by index.
+      * @brief Seeks to chapter.
+      * @details Seeks to the chapter's time position via Player.Seek.
+      * Rejects when no video is playing or the index is invalid.
+      * @param index The chapter index to seek to.
+      * @return true when the chapter seek was dispatched, false otherwise.
+      */
+     Q_INVOKABLE bool
+     seekChapter(int index);
+     /** Returns the list of PVR recordings.
+     * @brief Returns PVR recordings.
+     * @details Lists recordings from Kodi's PVR backend via PVR.GetRecordings.
+     * Returns an empty list when no PVR backend is configured or no recordings exist.
+     * @return List of recording objects with id, title, channel, startTime, endTime, duration, plot.
+     */
+    Q_INVOKABLE QVariantList
+    recordings() const;
+    /** Deletes a PVR recording by ID.
+     * @brief Deletes a recording.
+     * @details Removes a recording via PVR.DeleteRecorded. Rejects when no
+     * recordings exist or the ID is invalid.
+     * @param id The recording ID to delete.
+     * @return true when the deletion request was dispatched, false otherwise.
+     */
+    Q_INVOKABLE bool
+    deleteRecording(int id);
+    /** Returns the list of PVR timers.
+     * @brief Returns PVR timers.
+     * @details Lists timers from Kodi's PVR backend via PVR.GetTimers.
+     * Returns an empty list when no PVR backend is configured or no timers exist.
+     * @return List of timer objects with id, title, channel, startTime, endTime, type, state, plot.
+     */
+    Q_INVOKABLE QVariantList
+    timers() const;
+    /** Refreshes the PVR timer list from Kodi.
+     * @brief Refreshes PVR timers.
+     * @details Fetches timers via Isolde.GetTimers → PVR.GetTimers.
+     * @return true when the refresh request was dispatched, false otherwise.
+     */
+    Q_INVOKABLE bool
+    refreshTimers();
+    /** Adds a PVR timer.
+     * @brief Adds a recording timer.
+     * @details Creates a timer via PVR.AddTimer.
+     * @param title The timer title.
+     * @param channel The channel ID to record.
+     * @param startTime The start time string.
+     * @param endTime The end time string.
+     * @return true when the timer creation request was dispatched, false otherwise.
+     */
+    Q_INVOKABLE bool
+    addTimer(const QString& title, int channel, const QString& startTime, const QString& endTime);
+    /** Deletes a PVR timer by ID.
+     * @brief Deletes a timer.
+     * @details Removes a timer via PVR.DeleteTimer. Rejects when the ID is invalid.
+     * @param id The timer ID to delete.
+     * @return true when the deletion request was dispatched, false otherwise.
+     */
+    Q_INVOKABLE bool
+    deleteTimer(int id);
     Q_INVOKABLE void
     requestVideoPresentation()
     {
@@ -354,6 +768,13 @@ class KodiMedia final : public QObject
         return m_playbackActive && m_playbackCanSeek;
     }
     bool
+    nextEpisodeOptIn() const
+    {
+        return m_nextEpisodeOptIn;
+    }
+    Q_INVOKABLE void
+    setNextEpisodeOptIn(bool enabled);
+    bool
     lastPlaybackNaturalEnd() const
     {
         return m_lastPlaybackNaturalEnd;
@@ -377,6 +798,50 @@ class KodiMedia final : public QObject
     }
     Q_INVOKABLE void
     setView(const QString& kind, const QString& value = {});
+    /** Sets the sort field and direction for the current browse view.
+     * @brief Sets sort field and direction for browsing.
+     * @details Validates the field against the known sort keys and the direction
+     * against ascending/descending, then stores them so they are applied to the
+     * next Kodi browse request. An empty field clears the sort override and falls
+     * back to the default sort for the current view kind.
+     * @why B02 spec item 1: typed query options for sort field/direction must be
+     * exposed to Studio and the remote UI so users can reorder results.
+     * @param field The sort field key (e.g. "title", "year", "dateadded").
+     * @param direction "ascending" or "descending".
+     */
+    Q_INVOKABLE void
+    setSort(const QString& field, const QString& direction);
+    /** Enables or disables the watched filter for the current browse view.
+     * @brief Sets watched filter state.
+     * @details When enabled, Kodi returns only watched items; when disabled, all
+     * items are returned. Stored and applied to the next browse request.
+     * @why B02 spec item 1: watch filter is a typed query option exposed to the UI.
+     * @param enabled Whether to filter to watched items only.
+     */
+    Q_INVOKABLE void
+    setWatchFilter(bool enabled);
+    /** Sets a facet value for filtering results.
+     * @brief Sets a facet filter value.
+     * @details Stores a facet key/value pair that is applied to browse requests.
+     * Facets let Studio and the remote UI filter by genre, tag, year, etc.
+     * @why B02 spec item 1: supported facets must be exposed as typed query options.
+     * @param facetId The facet identifier.
+     * @param value The facet value to filter by (empty clears the facet).
+     */
+    Q_INVOKABLE void
+    setFacet(const QString& facetId, const QVariant& value);
+    Q_INVOKABLE QStringList
+    sortKeys() const;
+    Q_INVOKABLE QStringList
+    sortLabels() const;
+    Q_INVOKABLE QString
+    sortField() const;
+    Q_INVOKABLE QString
+    sortOrder() const;
+    Q_INVOKABLE bool
+    watchFilter() const;
+    Q_INVOKABLE QVariantMap
+    facets() const;
     Q_INVOKABLE void
     saveCollection(const QString& name);
     Q_INVOKABLE void
@@ -423,6 +888,8 @@ class KodiMedia final : public QObject
     scanMovies();
     Q_INVOKABLE void
     scanMusic();
+    Q_INVOKABLE void
+    clean();
     void
     quitIfIdle();
   signals:
@@ -499,7 +966,41 @@ class KodiMedia final : public QObject
     bool
     handleManualMovieError();
     bool
+    handleMarkWatchedResponse(const QJsonObject& result);
+    bool
+    handleMetadataEditResponse(const QJsonObject& result);
+    bool
+    handleMetadataRefreshResponse(const QJsonObject& result);
+    bool
     handlePlaybackOptionsResponse(const QJsonObject& result);
+    bool
+    handleRecordingsResponse(const QJsonObject& result);
+    bool
+    handleDeleteRecordingResponse(const QJsonObject& result);
+    bool
+    handleTimersResponse(const QJsonObject& result);
+    bool
+    handleAddTimerResponse(const QJsonObject& result);
+    bool
+    handleDeleteTimerResponse(const QJsonObject& result);
+    bool
+    handleNextUnwatchedResponse(const QJsonObject& result);
+    bool
+    handleMediaVersionsResponse(const QJsonObject& result);
+    bool
+    handleMediaVersionSelectResponse(const QJsonObject& result);
+    bool
+    handleGetChaptersResponse(const QJsonObject& result);
+    bool
+    handleSeekChapterResponse(const QJsonObject& result);
+    bool
+    handleGetMusicOptionsResponse(const QJsonObject& result);
+    bool
+    handleSetMusicOptionResponse(const QJsonObject& result);
+    bool
+    handlePVRGroupsResponse(const QJsonObject& result);
+    bool
+    handlePVRGroupMembersResponse(const QJsonObject& result);
     bool
     validatePlaybackOptions(const QJsonObject& result);
     bool
@@ -550,6 +1051,8 @@ class KodiMedia final : public QObject
     handleManualMovieResponse(const QJsonObject& result);
     bool
     handleScanResponse(const QJsonObject& result);
+    bool
+    handleCleanResponse(const QJsonObject& result);
     bool
     handleVersionResponse(const QJsonObject& result);
     bool
@@ -647,6 +1150,8 @@ class KodiMedia final : public QObject
     {
         QString kind, view, value, showTitle;
         int show, season, start, selected;
+        QString selectedType{};
+        int selectedId = -1;
     };
     BrowseState
     browseState() const;
@@ -655,6 +1160,8 @@ class KodiMedia final : public QObject
     bool
     storeCollections(const QVariantList& entries);
     QString m_profile, m_viewKind = "all", m_viewValue, m_collectionStatus;
+    QString m_returnSelectionType;
+    int m_returnSelectionId = -1;
     QString m_playlistStatus;
     QVariantList m_playlistPreview, m_playlistMembers;
     QVariantMap m_smartPlaylist;
@@ -681,12 +1188,15 @@ class KodiMedia final : public QObject
     quint64 m_generation = 0;
     bool m_busy = false, m_connected = false;
     QString m_scanStatus;
+    QString m_cleanStatus;
     bool m_observedScan = false;
     int m_scanPolls = 0;
     QString m_scanKind = "Video";
     int m_pageStart = 0, m_requestedStart = 0, m_totalMovies = 0, m_pageCount = 0;
     bool m_playbackActive = false, m_playbackVisible = false;
     bool m_playbackCanPause = false, m_playbackCanSeek = false;
+    bool m_nextEpisodeOptIn = false;
+    bool m_nextLaunchGuard = false;
     QVariantMap m_playbackTimeline;
     bool m_lastPlaybackNaturalEnd = false;
     bool m_scheduledPlayback = false;
@@ -699,8 +1209,27 @@ class KodiMedia final : public QObject
     QString m_subtitleStatus = QStringLiteral("Subtitle track discovery is not active.");
     QVariantList m_subtitleTracks;
     QVariantMap m_playbackOptions;
+    QString m_sortField, m_sortOrder, m_watchFilter;
+    QVariantMap m_facets;
     QString m_playbackOptionsStatus;
     int m_optionsRequest = 0;
+    int m_audioOffset = 0;
+    double m_playbackSpeed = 1.0;
+    int m_subtitleDelay = 0;
+    bool m_crossfadeEnabled = false;
+    bool m_gaplessEnabled = false;
+    QString m_replayGainMode = "off";
+    QVariantList m_pvrGroups;
+    QString m_pvrGroupsStatus;
+    QVariantList m_pvrGroupMembers;
+    QString m_pvrGroupMembersStatus;
+    int m_pvrGroupId = 0;
+    QVariantList m_recordings;
+    QString m_recordingsStatus;
+    QVariantList m_timers;
+    QString m_timersStatus;
+    QVariantList m_chapters;
+    QString m_chaptersStatus;
     QVariantList m_librarySources, m_sourceScrapers;
     QStringList m_sourceRoots;
     QString m_sourceStatus, m_sourceRevision;
@@ -722,4 +1251,24 @@ class KodiMedia final : public QObject
     QString m_mediaKind = "movies", m_showTitle;
     int m_showId = -1, m_season = -1, m_selectedIndex = 0;
     QList<BrowseState> m_history;
+    QString m_pendingEditKind, m_pendingEditField, m_pendingEditValue;
+    int m_pendingEditId = 0;
+    QString m_queueSaveName, m_queueRestoreName, m_queueRevision;
+    QVariantList m_queueMembers;
+    bool m_queueOperationInProgress = false;
+    QString m_addEntryMediaType;
+    int m_addEntryMediaId = 0;
+    int m_removeEntryIndex = 0;
+    bool m_shuffleEnabled = false;
+    QString m_repeatMode = "off";
+    bool m_lyricsAvailable = false;
+    bool m_visualizationAvailable = false;
+    bool m_slideshowActive = false;
+    QString m_lyricsText;
+    QString m_visualizationName;
+    int m_nextUnwatchedId = 0;
+    QString m_nextUnwatchedKind;
+    QVariantList m_mediaVersions;
+    QString m_mediaVersionsKind;
+    int m_mediaVersionsId = 0;
 };

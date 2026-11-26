@@ -16,8 +16,18 @@ Rectangle {
     property int movingMember: -1
     property int sortIndex: 0
     property bool sortDescending: false
-    readonly property var sortKeys: ["title","year","dateadded","lastplayed","episode"]
-    readonly property var sortLabels: ["Title","Year","Date added","Last played","Episode"]
+    property bool watchFilter: false
+    readonly property var sortKeys: ["title","year","dateadded","lastplayed","episode","track"]
+    readonly property var sortLabels: ["Title","Year","Date added","Last played","Episode","Track"]
+    onSortIndexChanged: applySort()
+    onSortDescendingChanged: applySort()
+    onWatchFilterChanged: applyWatchFilter()
+    function applySort() {
+        if (kodiMedia) kodiMedia.setSort(sortKeys[sortIndex], sortDescending ? "descending" : "ascending")
+    }
+    function applyWatchFilter() {
+        if (kodiMedia) kodiMedia.setWatchFilter(watchFilter)
+    }
     function playlistOperationRows() {
         if(playlistManageMode==="sortPlaylist")return sortLabels.map((label,i)=>(sortIndex===i?"● ":"")+label).concat(["Direction · "+(sortDescending?"descending":"ascending"),"Save order","Cancel"])
         return ["Save complete order","Cancel · keep saved order"].concat(memberDraft.map((row,i)=>(movingMember===i?"Moving · ":"")+(i+1)+" · "+row.title))
@@ -56,7 +66,9 @@ Rectangle {
         : ["Open collection", "Rename", "Remove…",
             selectedCollection && selectedCollection.home ? "Hide shelf from Home" : "Show shelf on Home",
             "Move earlier", "Move later", "Shelf " + (selectedCollection && selectedCollection.media === "shows" ? "shows" : "movies")
-                + ": " + (selectedCollection && selectedCollection.count ? selectedCollection.count : 6) + " · change", "Back"]
+                + ": " + (selectedCollection && selectedCollection.count ? selectedCollection.count : 6) + " · change",
+            watchFilter ? "Watch filter · On" : "Watch filter · Off",
+            "Sort · " + sortLabels[sortIndex] + " · " + (sortDescending ? "descending" : "ascending"), "Back"]
     visible: active; color: shell.surface; radius: shell.radius
     function manualCollectionsFor(item) {
         const media = item && item.mediaType === "tvshow" ? "shows" : "movies"
@@ -201,6 +213,8 @@ Rectangle {
                     kodiMedia.configureShelf(selectedCollection.id, !!selectedCollection.home, (selectedCollection.count || 6) >= 12 ? 3 : (selectedCollection.count || 6) + 3)
                     begin("collections")
                 }
+                else if (selectedIndex === 7) { watchFilter = !watchFilter }
+                else if (selectedIndex === 8) { sortIndex = (sortIndex + 1) % sortKeys.length; sortDescending = false }
                 else begin("collections")
             }
         }

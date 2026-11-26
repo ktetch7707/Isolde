@@ -39,12 +39,16 @@ Window {
             return mode==="subtitles"?[{label:options.subtitleEnabled?qsTr("Off"):qsTr("● Off"),kind:"subtitle",value:"off"}].concat(tracks):tracks.concat(tracks.length?[]:[{label:qsTr("No audio tracks reported"),kind:"none"}])
         }
         if(mode==="view")return (options.views || []).map(value=>({label:(options.view===value?"● ":"")+({normal:qsTr("Normal"),zoom:qsTr("Zoom"),"stretch4:3":qsTr("Stretch 4:3"),widezoom:qsTr("Wide zoom"),"stretch16:9":qsTr("Stretch 16:9"),original:qsTr("Original size")}[value] || value),kind:"view",value:value}))
+        if(mode==="audiooffset")return [{label:qsTr("−"),kind:"offset",value:-250},{label:qsTr("+"),kind:"offset",value:250},{label:qsTr("Audio offset: %1 ms").arg(kodiClient.audioOffset>=0?"+":"")+kodiClient.audioOffset,kind:"none"}]
+        if(mode==="speed")return [{label:"0.5×",kind:"speed",value:0.5},{label:"1.0×",kind:"speed",value:1.0},{label:"1.5×",kind:"speed",value:1.5},{label:"2.0×",kind:"speed",value:2.0},{label:qsTr("Speed: %1×").arg(kodiClient.playbackSpeed),kind:"none"}]
+        if(mode==="subtitleoffset")return [{label:qsTr("−"),kind:"subtitleoffset",value:-250},{label:qsTr("+"),kind:"subtitleoffset",value:250},{label:qsTr("Subtitle delay: %1 ms").arg(kodiClient.subtitleDelay>=0?"+":"")+kodiClient.subtitleDelay,kind:"none"}]
+        if(mode==="chapters")return kodiClient.chapters().length>0 ? kodiClient.chapters().map(ch=>({label:(ch.selected?"● ":"")+ch.name,kind:"chapter",value:ch.index})):[{label:qsTr("No chapters"),kind:"none"}]
         const paused=timeline.state==="paused"
         let controls=[{label:paused?qsTr("Resume"):qsTr("Pause"),symbol:paused?"▶":"Ⅱ",control:"pause"}]
         if(kodiClient.playbackCanPrevious)controls.push({label:qsTr("Previous title"),symbol:"⏮︎",adjacent:-1})
         if(kodiClient.playbackCanNext)controls.push({label:qsTr("Next title"),symbol:"⏭︎",adjacent:1})
         controls.push({label:qsTr("Information"),symbol:"ⓘ",page:"info"})
-        if(kodiClient.playbackMediaType!=="song")controls=controls.concat([{label:qsTr("Audio tracks"),symbol:"♪",page:"audio"},{label:qsTr("Subtitles"),symbol:"CC",page:"subtitles"},{label:qsTr("Picture size"),symbol:"▣",page:"view"}])
+        if(kodiClient.playbackMediaType!=="song")controls=controls.concat([{label:qsTr("Audio tracks"),symbol:"♪",page:"audio"},{label:qsTr("Audio offset"),symbol:"±",page:"audiooffset"},{label:qsTr("Playback speed"),symbol:"⏩",page:"speed"},{label:qsTr("Subtitle delay"),symbol:"◐",page:"subtitleoffset"},{label:qsTr("Chapters"),symbol:"📑",page:"chapters"},{label:qsTr("Subtitles"),symbol:"CC",page:"subtitles"},{label:qsTr("Picture size"),symbol:"▣",page:"view"}])
         return controls.concat([{label:qsTr("Stop and return"),symbol:"■",control:"stop"}])
     }
     // Use track metadata when available while keeping unlabeled tracks selectable.
@@ -104,6 +108,10 @@ Window {
         if(command===inputManager.navigateUp || command===inputManager.navigateDown){
             const direction=command===inputManager.navigateUp?-1:1
             if(mode==="controls")stepTransport(direction)
+            else if(mode==="audiooffset")selectedIndex=Math.max(0,Math.min(2,selectedIndex+direction))
+            else if(mode==="speed")selectedIndex=Math.max(0,Math.min(4,selectedIndex+direction))
+            else if(mode==="subtitleoffset")selectedIndex=Math.max(0,Math.min(2,selectedIndex+direction))
+            else if(mode==="chapters")selectedIndex=Math.max(0,Math.min(rows.length-1,selectedIndex+direction))
             else selectedIndex=Math.max(0,Math.min(rows.length-1,selectedIndex+direction))
         }
         else if(command===inputManager.confirm){
@@ -119,6 +127,10 @@ Window {
             if(row.page){controlOriginIndex=selectedIndex;mode=row.page;selectedIndex=0;if(row.page!=="info")refreshTimer.start()}
             else if(row.adjacent){waitingAdjacent=true;if(kodiClient.playAdjacent(row.adjacent)){selectedIndex=0;refreshTimer.stop()}else waitingAdjacent=false}
             else if(row.control){kodiClient.playbackControl(row.control);if(row.control==="stop")closeControls(false)}
+            else if(row.kind==="offset"){kodiClient.setAudioOffset(kodiClient.audioOffset+row.value);selectedIndex=1}
+            else if(row.kind==="speed"){kodiClient.setPlaybackSpeed(row.value);selectedIndex=3}
+            else if(row.kind==="subtitleoffset"){kodiClient.setSubtitleDelay(kodiClient.subtitleDelay+row.value);selectedIndex=2}
+            else if(row.kind==="chapter"){kodiClient.seekChapter(row.value)}
             else if(row.kind && row.kind!=="none")kodiClient.setPlaybackOption(row.kind,row.value)
         }
     }
@@ -164,7 +176,7 @@ Window {
             Column {
                 anchors.fill:parent;anchors.margins:root.mode==="controls"?12:24
                 spacing:(root.mode==="controls"?9:16)*Math.min(shell.gapScale,1.25)
-                Text {id:heading;visible:root.mode!=="controls";width:parent.width;elide:Text.ElideRight;textFormat:Text.PlainText;text:root.mode==="info"?(root.timeline.title || qsTr("Playback information")):root.mode==="audio"?qsTr("Audio tracks"):root.mode==="subtitles"?qsTr("Subtitles"):qsTr("Picture size");font.family:shell.fontFamily;font.weight:Font.DemiBold;font.pixelSize:30*shell.textScale;color:shell.text}
+                Text {id:heading;visible:root.mode!=="controls";width:parent.width;elide:Text.ElideRight;textFormat:Text.PlainText;text:root.mode==="info"?(root.timeline.title || qsTr("Playback information")):root.mode==="audio"?qsTr("Audio tracks"):root.mode==="subtitles"?qsTr("Subtitles"):root.mode==="audiooffset"?qsTr("Audio offset"):root.mode==="speed"?qsTr("Playback speed"):root.mode==="subtitleoffset"?qsTr("Subtitle delay"):root.mode==="chapters"?qsTr("Chapters"):qsTr("Picture size");font.family:shell.fontFamily;font.weight:Font.DemiBold;font.pixelSize:30*shell.textScale;color:shell.text}
                 Text {
                     visible:root.mode==="info" && root.duration>0
                     width:parent.width;textFormat:Text.PlainText

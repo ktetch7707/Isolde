@@ -133,6 +133,21 @@ QVariantMap actionLaunchApp(const QVariantMap& input, QString* error);
 QVariantMap actionCollection(const QVariantMap& input, const QString& type, QString* error);
 QVariantMap actionOpenPage(const QVariantMap& input, QString* error);
 QVariantMap actionShellRoute(const QVariantMap& input, const QString& type, QString* error);
+QVariantMap actionMedia(const QVariantMap& input, const QString& type, QString* error);
+
+bool validateSlotComponent(const QVariantList& permitted, const QString& componentType, QString* error = nullptr);
+
+bool validateInspectorField(const QVariantMap& field, QString* error = nullptr);
+bool validateInspectorFields(const QVariantList& fields, QString* error = nullptr);
+
+bool validateRoleDefinition(const QVariantMap& role, QString* error = nullptr);
+bool validateRoleDefinitions(const QVariantList& roles, QString* error = nullptr);
+
+bool validateActionDefinition(const QVariantMap& action, QString* error = nullptr);
+bool validateActionDefinitions(const QVariantList& actions, QString* error = nullptr);
+
+bool validateActionCategoryDefinition(const QVariantMap& category, QString* error = nullptr);
+bool validateActionCategoryDefinitions(const QVariantList& categories, QString* error = nullptr);
 
 QString effectiveCategory(const QJsonArray& items, const QString& id);
 

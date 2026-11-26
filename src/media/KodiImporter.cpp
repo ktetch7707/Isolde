@@ -340,6 +340,8 @@ KodiImporter::finish(bool success)
         emit importCompleted(success, m_importStatus);
     if (m_action == "rollback")
         emit rollbackCompleted(success, m_importStatus);
+    if (m_action == "export")
+        emit exportCompleted(success, m_importStatus);
     emit changed();
 }
 
@@ -379,6 +381,11 @@ void
 KodiImporter::rollback()
 {
     runAction("rollback");
+}
+void
+KodiImporter::exportSettings()
+{
+    runAction("export");
 }
 void
 KodiImporter::clearConflicts()

@@ -77,6 +77,7 @@ READ_METHODS = {
 }
 MOVIE_DETAIL_PROPERTIES = {"title", "year", "plot", "runtime", "resume", "playcount", "art", "genre", "tag"}
 TVSHOW_DETAIL_PROPERTIES = {"title", "year", "plot", "episode", "watchedepisodes", "art", "genre", "tag"}
+EPISODE_DETAIL_PROPERTIES = {"title", "year", "plot", "runtime", "resume", "playcount", "art", "genre", "tag", "firstaired"}
 
 
 def guide_candidates(params, execute):
@@ -159,8 +160,8 @@ def dispatch(raw, execute, playback=None, artwork=None, playlists=None, sources=
         return error(-32600, "Invalid request")
     if len(raw) > 32768 and request.get("method") != "Isolde.SetPoster":
         return error(-32600, "Request exceeds the method limit")
-    playback_methods = {"Isolde.PlayGuideStream", "Isolde.PlayScheduled", "Isolde.PlayMovie", "Isolde.PlayEpisode", "Isolde.PlaySong", "Isolde.PlayChannel", "Isolde.PlaybackStatus", "Isolde.PlaybackControl", "Isolde.LoadSubtitle", "Isolde.GetSubtitleTracks", "Isolde.SetSubtitleTrack", "Isolde.GetPlaybackOptions", "Isolde.SetPlaybackOption"}
-    if not isinstance(request.get("method"), str) or request.get("method") not in READ_METHODS | playback_methods | {"Isolde.GetSources", "Isolde.PreviewSource", "Isolde.ApplySource", "Isolde.GuideCandidates", "Isolde.SetPoster", "Isolde.GetArtwork", "Isolde.GetPlaylists", "Isolde.GetPlaylistItems", "Isolde.CreatePlaylist", "Isolde.DeletePlaylist", "Isolde.RenamePlaylist", "Isolde.ReorderPlaylist", "Isolde.SortPlaylist", "Isolde.EditPlaylist", "Isolde.PreviewPlaylistRule", "Isolde.GetPlaylistOrder", "VideoLibrary.Scan", "AudioLibrary.Scan", "XBMC.GetInfoBooleans", "Isolde.QuitIfIdle"}:
+    playback_methods = {"Isolde.PlayGuideStream", "Isolde.PlayScheduled", "Isolde.PlayMovie", "Isolde.PlayEpisode", "Isolde.PlaySong", "Isolde.PlayChannel", "Isolde.PlaybackStatus", "Isolde.PlaybackControl", "Isolde.LoadSubtitle", "Isolde.GetSubtitleTracks", "Isolde.SetSubtitleTrack", "Isolde.GetPlaybackOptions", "Isolde.SetPlaybackOption", "Isolde.GetRecordings", "Isolde.DeleteRecording", "Isolde.GetTimers", "Isolde.AddTimer", "Isolde.DeleteTimer", "Isolde.GetChapters", "Isolde.SeekChapter", "Isolde.GetMusicOptions", "Isolde.SetMusicOption", "Isolde.GetPVRGroups", "Isolde.GetGroupMembers", "Isolde.AddToGroup", "Isolde.RemoveFromGroup"}
+    if not isinstance(request.get("method"), str) or request.get("method") not in READ_METHODS | playback_methods | {"Isolde.GetSources", "Isolde.PreviewSource", "Isolde.ApplySource", "Isolde.GuideCandidates", "Isolde.SetPoster", "Isolde.GetArtwork", "Isolde.GetPlaylists", "Isolde.GetPlaylistItems", "Isolde.CreatePlaylist", "Isolde.DeletePlaylist", "Isolde.RenamePlaylist", "Isolde.ReorderPlaylist", "Isolde.SortPlaylist", "Isolde.EditPlaylist", "Isolde.PreviewPlaylistRule", "Isolde.GetPlaylistOrder", "VideoLibrary.Scan", "AudioLibrary.Scan", "VideoLibrary.Clean", "XBMC.GetInfoBooleans", "Isolde.QuitIfIdle", "VideoLibrary.SetMovieDetails", "VideoLibrary.SetEpisodeDetails"}:
         return error(-32601, "Method is not enabled by the Isolde bridge")
     params = request.get("params", {})
     if not isinstance(params, dict):
@@ -221,14 +222,26 @@ def dispatch(raw, execute, playback=None, artwork=None, playlists=None, sources=
             return {"jsonrpc": "2.0", "id": request_id, "result": artwork.set_poster(params) if request["method"] == "Isolde.SetPoster" else artwork.get(params)}
         except Exception:
             return error(-32000, "Local Kodi artwork unavailable")
-    if request["method"] in ("VideoLibrary.GetMovieDetails", "VideoLibrary.GetTVShowDetails"):
-        identity = "movieid" if request["method"] == "VideoLibrary.GetMovieDetails" else "tvshowid"
-        allowed_properties = MOVIE_DETAIL_PROPERTIES if identity == "movieid" else TVSHOW_DETAIL_PROPERTIES
+    if request["method"] in ("VideoLibrary.GetMovieDetails", "VideoLibrary.GetTVShowDetails", "VideoLibrary.GetEpisodeDetails"):
+        identity = "movieid" if request["method"] == "VideoLibrary.GetMovieDetails" else ("tvshowid" if request["method"] == "VideoLibrary.GetTVShowDetails" else "episodeid")
+        allowed_properties = MOVIE_DETAIL_PROPERTIES if identity == "movieid" else (TVSHOW_DETAIL_PROPERTIES if identity == "tvshowid" else EPISODE_DETAIL_PROPERTIES)
         if (set(params) != {identity, "properties"} or type(params.get(identity)) is not int or params[identity] < 1
             or not isinstance(params.get("properties"), list) or not params["properties"]
             or len(params["properties"]) > len(allowed_properties)
             or any(not isinstance(value, str) or value not in allowed_properties for value in params["properties"])):
             return error(-32602, "Library details require a valid ID and supported properties")
+    if request["method"] in ("VideoLibrary.SetMovieDetails", "VideoLibrary.SetEpisodeDetails"):
+        identity = "movieid" if request["method"] == "VideoLibrary.SetMovieDetails" else "episodeid"
+        if (set(params) != {identity, "details"} or type(params.get(identity)) is not int
+            or params[identity] < 1 or not isinstance(params.get("details"), dict)):
+            return error(-32602, "Library metadata edit requires a valid ID and details object")
+        for field, value in params["details"].items():
+            if field not in {"title", "plot", "genre", "year", "rating", "playcount"}:
+                return error(-32602, "Unsupported metadata field")
+            if field == "playcount" and (type(value) is not int or value not in (0, 1)):
+                return error(-32602, "Playcount must be 0 or 1")
+            if field != "playcount" and (not isinstance(value, str) or not value or len(value) > 1024):
+                return error(-32602, "Metadata field must be a non-empty string up to 1024 characters")
     if request["method"] == "Player.GetItem":
         if (set(params) != {"playerid", "properties"} or type(params.get("playerid")) is not int
             or params["playerid"] not in (0, 1) or not isinstance(params.get("properties"), list) or params["properties"]):
@@ -312,11 +325,16 @@ def dispatch(raw, execute, playback=None, artwork=None, playlists=None, sources=
             except Exception:
                 return error(-32000,"Music scan unavailable. Check configured folders, stop playback and retry.")
         params = {"showdialogs": False}
+    elif request["method"] == "VideoLibrary.Clean":
+        if params:
+            return error(-32602, "Clean uses only this profile's configured sources")
+        params = {"showdialogs": False}
     elif request["method"] == "XBMC.GetInfoBooleans":
         if params not in ({"booleans": ["Library.IsScanningVideo"]},{"booleans": ["Library.IsScanningMusic"]}):
             return error(-32602, "Only video scan status is available")
     elif request["method"].startswith("VideoLibrary.") and request["method"] not in (
-        "VideoLibrary.GetMovieDetails", "VideoLibrary.GetTVShowDetails"):
+    "VideoLibrary.GetMovieDetails", "VideoLibrary.GetTVShowDetails", "VideoLibrary.GetEpisodeDetails",
+        "VideoLibrary.SetMovieDetails", "VideoLibrary.SetEpisodeDetails"):
         params = dict(params)
         for key in ("tvshowid", "season"):
             if key in params and (type(params[key]) is not int or params[key] < (0 if key == "season" else 1)):

@@ -211,6 +211,32 @@ class Playback:
             return self.seek_to(params["position"])
         if method == "Isolde.PlaybackControl" and set(params) == {"action"}:
             return self.control(params["action"])
+        if method == "Isolde.GetRecordings":
+            return self.get_recordings(params)
+        if method == "Isolde.DeleteRecording":
+            return self.delete_recording(params)
+        if method == "Isolde.GetTimers":
+            return self.get_timers(params)
+        if method == "Isolde.AddTimer":
+            return self.add_timer(params)
+        if method == "Isolde.DeleteTimer":
+            return self.delete_timer(params)
+        if method == "Isolde.GetChapters":
+            return self.get_chapters(params)
+        if method == "Isolde.SeekChapter":
+            return self.seek_chapter(params)
+        if method == "Isolde.GetMusicOptions":
+            return self.get_music_options(params)
+        if method == "Isolde.SetMusicOption":
+            return self.set_music_option(params)
+        if method == "Isolde.GetPVRGroups":
+            return self.get_pvr_groups(params)
+        if method == "Isolde.GetGroupMembers":
+            return self.get_group_members(params)
+        if method == "Isolde.AddToGroup":
+            return self.add_to_group(params)
+        if method == "Isolde.RemoveFromGroup":
+            return self.remove_from_group(params)
         raise ValueError("Unsupported playback request")
 
     def owned_player(self):
@@ -259,6 +285,12 @@ class Playback:
             method="Player.SetSubtitle";params={"playerid":player,"subtitle":value,"enable":value!="off"}
         elif kind=="view" and type(value) is str and value in before["views"]:
             method="Player.SetViewMode";params={"viewmode":value}
+        elif kind=="audiooffset" and type(value) is int and -2000 <= value <= 2000:
+            method="Player.SetAudioDelay";params={"playerid":player,"delay":value}
+        elif kind=="speed" and type(value) in (int,float) and 0.1 <= value <= 8.0:
+            method="Player.SetSpeed";params={"playerid":player,"speed":float(value)}
+        elif kind=="subtitleoffset" and type(value) is int and -2000 <= value <= 2000:
+            method="Player.SetSubtitleDelay";params={"playerid":player,"delay":value}
         else:raise ValueError("Choose an available playback option")
         if self.rpc(method,params)!="OK":raise ValueError("Kodi did not acknowledge the option")
         return self.playback_options()
@@ -492,3 +524,240 @@ class Playback:
                     return self.status()
                 self.rpc("Player.Seek", {"playerid": pid, "value": {"step": "smallforward" if action == "forward" else "smallbackward"}})
         return self.status()
+
+    def get_recordings(self, params):
+        if set(params) != {}:
+            raise ValueError("Recordings listing takes no parameters")
+        result = self.rpc("PVR.GetRecordings", {})
+        recordings = result.get("recordings", [])
+        if not isinstance(recordings, list) or len(recordings) > 512:
+            raise ValueError("Invalid recordings list from Kodi")
+        items = []
+        for rec in recordings:
+            if not isinstance(rec, dict):
+                continue
+            rec_id = rec.get("recordedid")
+            if type(rec_id) is not int or rec_id < 1:
+                continue
+            items.append({
+                "id": rec_id,
+                "title": str(rec.get("title", ""))[:160],
+                "channel": str(rec.get("channelname", ""))[:80],
+                "startTime": str(rec.get("starttime", ""))[:32],
+                "endTime": str(rec.get("endtime", ""))[:32],
+                "duration": rec.get("duration", 0),
+                "plot": str(rec.get("plot", ""))[:512],
+            })
+        return {"recordings": items}
+
+    def delete_recording(self, params):
+        if set(params) != {"id"} or type(params.get("id")) is not int or params["id"] < 1:
+            raise ValueError("A valid recording ID is required")
+        result = self.rpc("PVR.DeleteRecorded", {"recordedid": params["id"]})
+        if result != "OK":
+            raise ValueError("Kodi did not confirm the recording deletion")
+        return {"deleted": True}
+
+    def get_timers(self, params):
+        if set(params) != {}:
+            raise ValueError("Timer listing takes no parameters")
+        result = self.rpc("PVR.GetTimers", {})
+        timers = result.get("timers", [])
+        if not isinstance(timers, list) or len(timers) > 512:
+            raise ValueError("Invalid timers list from Kodi")
+        items = []
+        for timer in timers:
+            if not isinstance(timer, dict):
+                continue
+            timer_id = timer.get("timerid")
+            if type(timer_id) is not int or timer_id < 1:
+                continue
+            items.append({
+                "id": timer_id,
+                "title": str(timer.get("title", ""))[:160],
+                "channel": str(timer.get("channelname", ""))[:80],
+                "startTime": str(timer.get("starttime", ""))[:32],
+                "endTime": str(timer.get("endtime", ""))[:32],
+                "type": str(timer.get("type", ""))[:40],
+                "state": str(timer.get("state", ""))[:40],
+                "plot": str(timer.get("plot", ""))[:512],
+            })
+        return {"timers": items}
+
+    def add_timer(self, params):
+        if set(params) != {"title", "channel", "startTime", "endTime"}:
+            raise ValueError("Timer requires title, channel, startTime, and endTime")
+        if type(params.get("channel")) is not int or params["channel"] < 1:
+            raise ValueError("A valid channel ID is required")
+        for field in ("startTime", "endTime"):
+            if not isinstance(params.get(field), str) or not params[field]:
+                raise ValueError(f"{field} must be a non-empty string")
+        result = self.rpc("PVR.AddTimer", {
+            "title": params["title"],
+            "channelid": params["channel"],
+            "starttime": params["startTime"],
+            "endtime": params["endTime"],
+        })
+        if result != "OK":
+            raise ValueError("Kodi did not confirm the timer creation")
+        return {"added": True}
+
+    def delete_timer(self, params):
+        if set(params) != {"id"} or type(params.get("id")) is not int or params["id"] < 1:
+            raise ValueError("A valid timer ID is required")
+        result = self.rpc("PVR.DeleteTimer", {"timerid": params["id"]})
+        if result != "OK":
+            raise ValueError("Kodi did not confirm the timer deletion")
+        return {"deleted": True}
+
+    def get_chapters(self, params):
+        if set(params) != {}:
+            raise ValueError("Chapter listing takes no parameters")
+        player = self.owned_player()
+        props = self.rpc("Player.GetProperties", {
+            "playerid": player,
+            "properties": ["chapter", "chaptertime"],
+        })
+        chapters = props.get("chaptertime")
+        if not isinstance(chapters, list) or len(chapters) > 256:
+            raise ValueError("Invalid chapters list from Kodi")
+        current = props.get("chapter")
+        current_index = current.get("chapter") if isinstance(current, dict) else -1
+        items = []
+        for idx, ch in enumerate(chapters):
+            if not isinstance(ch, dict):
+                continue
+            time_ms = ch.get("time")
+            if type(time_ms) is not int or time_ms < 0:
+                continue
+            items.append({
+                "index": idx,
+                "time": time_ms,
+                "name": str(ch.get("title", f"Chapter {idx + 1}"))[:160],
+                "selected": idx == current_index,
+            })
+        return {"chapters": items, "current": current_index}
+
+    def seek_chapter(self, params):
+        if set(params) != {"index"} or type(params.get("index")) is not int or params["index"] < 0:
+            raise ValueError("A valid chapter index is required")
+        player = self.owned_player()
+        props = self.rpc("Player.GetProperties", {
+            "playerid": player,
+            "properties": ["chaptertime"],
+        })
+        chapters = props.get("chaptertime")
+        if not isinstance(chapters, list) or params["index"] >= len(chapters):
+            raise ValueError("Chapter index out of range")
+        chapter = chapters[params["index"]]
+        time_ms = chapter.get("time")
+        if type(time_ms) is not int or time_ms < 0:
+            raise ValueError("Invalid chapter time")
+        result = self.rpc("Player.Seek", {
+            "playerid": player,
+            "value": time_ms,
+        })
+        if result != "OK":
+            raise ValueError("Kodi did not confirm the chapter seek")
+        return {"seeked": True}
+
+    def get_music_options(self, params):
+        if set(params) != {}:
+            raise ValueError("Music options listing takes no parameters")
+        result = {}
+        for key in ("music.crossfade", "music.gapless", "music.replaygain"):
+            r = self.rpc("Settings.GetSettingValue", {"setting": key})
+            result[key] = r.get("value")
+        return {"options": result}
+
+    def set_music_option(self, params):
+        if set(params) != {"kind", "value"}:
+            raise ValueError("Music option requires kind and value")
+        kind = params["kind"]
+        value = params["value"]
+        if kind == "crossfade":
+            if type(value) is not bool:
+                raise ValueError("Crossfade must be a boolean")
+            self.rpc("Settings.SetSettingValue", {"setting": "music.crossfade", "value": value})
+        elif kind == "gapless":
+            if type(value) is not bool:
+                raise ValueError("Gapless must be a boolean")
+            self.rpc("Settings.SetSettingValue", {"setting": "music.gapless", "value": value})
+        elif kind == "replaygain":
+            if value not in ("off", "track", "album", "auto"):
+                raise ValueError("Replaygain must be one of off, track, album, auto")
+            self.rpc("Settings.SetSettingValue", {"setting": "music.replaygain", "value": value})
+        else:
+            raise ValueError("Unknown music option kind")
+        return {"set": True}
+
+    def get_pvr_groups(self, params):
+        if set(params) != {}:
+            raise ValueError("PVR groups listing takes no parameters")
+        result = self.rpc("PVR.GetPVRGroups", {})
+        groups = result.get("groups", [])
+        if not isinstance(groups, list) or len(groups) > 256:
+            raise ValueError("Invalid PVR groups list from Kodi")
+        items = []
+        for group in groups:
+            if not isinstance(group, dict):
+                continue
+            group_id = group.get("groupid")
+            if type(group_id) is not int or group_id < 1:
+                continue
+            items.append({
+                "id": group_id,
+                "name": str(group.get("groupname", ""))[:160],
+                "type": str(group.get("type", ""))[:40],
+                "memberCount": group.get("membercount", 0),
+            })
+        return {"groups": items}
+
+    def get_group_members(self, params):
+        if set(params) != {"id"} or type(params.get("id")) is not int or params["id"] < 1:
+            raise ValueError("A valid group ID is required")
+        result = self.rpc("PVR.GetGroupMembers", {"groupid": params["id"]})
+        members = result.get("members", [])
+        if not isinstance(members, list) or len(members) > 512:
+            raise ValueError("Invalid group members list from Kodi")
+        items = []
+        for member in members:
+            if not isinstance(member, dict):
+                continue
+            member_id = member.get("memberid")
+            if type(member_id) is not int or member_id < 1:
+                continue
+            items.append({
+                "id": member_id,
+                "title": str(member.get("title", ""))[:160],
+                "type": str(member.get("type", ""))[:40],
+            })
+        return {"members": items, "groupId": params["id"]}
+
+    def add_to_group(self, params):
+        if set(params) != {"id", "type"} or type(params.get("id")) is not int or params["id"] < 1:
+            raise ValueError("A valid group ID and type are required")
+        if params["type"] not in ("movie", "tvshow", "episode", "song", "musicvideo", "pvr"):
+            raise ValueError("Invalid member type")
+        result = self.rpc("PVR.AddToGroup", {
+            "groupid": params["id"],
+            "memberid": params.get("memberid", params["id"]),
+            "membertype": params["type"],
+        })
+        if result != "OK":
+            raise ValueError("Kodi did not confirm adding to group")
+        return {"added": True}
+
+    def remove_from_group(self, params):
+        if set(params) != {"id", "type"} or type(params.get("id")) is not int or params["id"] < 1:
+            raise ValueError("A valid group ID and type are required")
+        if params["type"] not in ("movie", "tvshow", "episode", "song", "musicvideo", "pvr"):
+            raise ValueError("Invalid member type")
+        result = self.rpc("PVR.RemoveFromGroup", {
+            "groupid": params["id"],
+            "memberid": params.get("memberid", params["id"]),
+            "membertype": params["type"],
+        })
+        if result != "OK":
+            raise ValueError("Kodi did not confirm removing from group")
+        return {"removed": True}

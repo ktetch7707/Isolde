@@ -79,12 +79,21 @@ KodiService::capabilityInventory() const
 isValidCapabilityItem(const QJsonObject& row)
 {
     const auto id = row["id"].toString();
-    if (row.size() != 4 || id.isEmpty() || id.size() > 64 || row["name"].toString().isEmpty() ||
+    if (id.isEmpty() || id.size() > 64 || row["name"].toString().isEmpty() ||
         row["name"].toString().size() > 160 || row["description"].toString().isEmpty() ||
         row["description"].toString().size() > 2048 ||
+        !QStringList{"nav", "action", "toggle", "info", "list"}.contains(row["type"].toString()) ||
+        !QStringList{"profile"}.contains(row["scope"].toString()) ||
         !QStringList{"sources", "folders", "videoscan", "musicscan", "playback", "import", "restart", "none"}
-             .contains(row["route"].toString()))
+             .contains(row["route"].toString()) ||
+        !QStringList{"open", "scan", "toggle", "read", "configure"}.contains(row["allowedAction"].toString()))
         return false;
+    const auto choices = row["choices"].toArray();
+    for (const auto& choice : choices)
+    {
+        if (!choice.isString() || choice.toString().isEmpty() || choice.toString().size() > 80)
+            return false;
+    }
     return true;
 }
 
@@ -104,7 +113,7 @@ KodiService::libraryViews() const
     {
         const auto row = item.toObject();
         const auto kind = row["kind"].toString();
-        if (row.size() != 3 || !QStringList{"movies", "shows", "albums"}.contains(kind) || kinds.contains(kind) ||
+        if (row.size() != 3 || !QStringList{"movies", "shows", "albums", "musicvideos", "pictures"}.contains(kind) || kinds.contains(kind) ||
             row["name"].toString().isEmpty() || row["name"].toString().size() > 160 ||
             !QStringList{"primary", "trailing"}.contains(row["position"].toString()))
             return {};
@@ -606,6 +615,19 @@ KodiService::resetAlwaysPlayLocally()
     m_status = "Playback preference reset to default.";
     emit alwaysPlayLocallyChanged();
     emit changed();
+}
+
+void
+KodiService::invalidateProfileGeneration()
+{
+    // Invalidates the profile generation counter so QML bindings can detect a
+    // profile switch during a write/reconnect cycle. Reloads confirmed state on
+    // the new generation before any settings action proceeds.
+    ++m_profileGeneration;
+    m_status = "Profile switched. Reconnecting with new generation.";
+    emit profileGenerationChanged();
+    emit changed();
+    markReady();
 }
 
 void

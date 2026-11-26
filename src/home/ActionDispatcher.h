@@ -111,6 +111,8 @@ class ActionDispatcher final : public QObject
     bool
     handleOpenCollection(const QVariantMap& value, const QString& originId);
     bool
+    handleMediaLibraryAction(const QVariantMap& value, const QString& originId);
+    bool
     handleTuneChannel(const QVariantMap& value, const QString& originId);
     void
     clearGuidePlayback();

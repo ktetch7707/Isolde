@@ -91,6 +91,8 @@ class KodiImporter final : public QObject
     Q_INVOKABLE void
     rollback();
     Q_INVOKABLE void
+    exportSettings();
+    Q_INVOKABLE void
     clearConflicts();
     Q_INVOKABLE void
     cancel();
@@ -106,6 +108,8 @@ class KodiImporter final : public QObject
     importCompleted(bool success, const QString& message);
     void
     rollbackCompleted(bool success, const QString& message);
+    void
+    exportCompleted(bool success, const QString& message);
 
   private:
     QString

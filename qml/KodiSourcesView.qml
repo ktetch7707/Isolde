@@ -33,7 +33,7 @@ Item {
             {label:qsTr("Exclude from scanning · ")+(draft.exclude?qsTr("On"):qsTr("Off")),key:"exclude"}]).concat([
             {label:qsTr("Preview source settings"),preview:true}]).concat(newSource?[]:[{label:qsTr("Remove this source · preview consequences"),remove:true}]).concat([
             {label:qsTr("Cancel · keep saved source"),back:true}])
-        return [{label:qsTr("Refresh sources and providers"),refresh:true},{label:qsTr("Allow a media folder · read-only access"),folders:true},{label:qsTr("Add a Kodi source"),add:true}].concat((kodiClient.librarySources || []).map(source=>({label:source.name+(source.path?" · "+source.path:"")+(source.editable?"":" · "+qsTr("preserved, read-only")),source:source})))
+        return [{label:qsTr("Refresh sources and providers"),refresh:true},{label:qsTr("Allow a media folder · read-only access"),folders:true},{label:qsTr("Add a Kodi source"),add:true},{label:qsTr("Clean library · remove missing files"),clean:true}].concat((kodiClient.librarySources || []).map(source=>({label:source.name+(source.path?" · "+source.path:"")+(source.editable?"":" · "+qsTr("preserved, read-only")),source:source})))
     }
     function refresh(){message="";refreshAttempts=0;refreshTimer.restart()}
     function reviewRows(){
@@ -73,6 +73,7 @@ Item {
             if(row.back){back();return}
             if(row.refresh){refresh();return}
             if(row.folders){mode="folders";return}
+            if(row.clean){pending="clean";kodiClient.clean();return}
             if(!profileManager.editingAllowed){message=qsTr("This profile does not allow source changes");return}
             if(row.add){mode="roots";selectedIndex=0;return}
             if(row.path){const path=row.path.replace(/\/+$/,"")+"/";edit({name:path.split('/').filter(part=>part.length).pop(),path:path,content:"movies",recursive:true},true);chooseDefaultScraper();return}
@@ -98,6 +99,7 @@ Item {
             const operation=root.pending;root.pending=""
             if(operation==="preview" && root.kodiClient.sourcePreviewReady){root.mode="preview";root.selectedIndex=0;root.message=""}
             else if(operation==="apply"){root.confirmSave=false;root.message=root.kodiClient.sourceStatus}
+            else if(operation==="clean"){root.mode="list";root.selectedIndex=0;root.message=root.kodiClient.cleanStatus}
             else {root.selectedIndex=0;root.message=root.kodiClient.sourceStatus}
         }
     }
@@ -108,7 +110,7 @@ Item {
         id:sourceHeader;width:parent.width;spacing:16*shell.gapScale
         visible:root.mode!=="folders" && root.mode!=="keyboard"
         Text {width:parent.width;wrapMode:Text.WordWrap;text:qsTr("KODI SOURCE SETUP");font.family:shell.fontFamily;font.pixelSize:30*shell.textScale;color:shell.text}
-        Text {width:parent.width;wrapMode:Text.WordWrap;textFormat:Text.PlainText;text:root.message || root.kodiClient.sourceStatus || qsTr("Reading sources…");font.family:shell.fontFamily;font.pixelSize:18*shell.textScale;color:shell.focus}
+        Text {width:parent.width;wrapMode:Text.WordWrap;textFormat:Text.PlainText;text:root.message || root.kodiClient.cleanStatus || root.kodiClient.sourceStatus || qsTr("Reading sources…");font.family:shell.fontFamily;font.pixelSize:18*shell.textScale;color:shell.focus}
     }
     Flickable {
         id:scroll;objectName:"kodiSourceScroll";anchors.fill:parent;anchors.topMargin:sourceHeader.height+16*shell.gapScale;clip:true;contentHeight:contents.implicitHeight;boundsBehavior:Flickable.StopAtBounds;visible:root.mode!=="folders" && root.mode!=="keyboard"

@@ -31,7 +31,7 @@ class SoftwareUpdates final : public QObject
                              QObject* parent = nullptr, QNetworkAccessManager* network = nullptr,
                              const QUrl& endpoint = QUrl(QStringLiteral("https://api.github.com/repos/ktetch7707/Isolde/releases/latest")),
                              const QString& stateFile = {}, const QString& platform = {},
-                             const QString& publicKeyPath = {});
+                             const QString& publicKeyPath = {}, const QString& prefix = {});
 
     bool available() const;
     bool checking() const;
@@ -49,9 +49,24 @@ class SoftwareUpdates final : public QObject
     Q_INVOKABLE void install();
     // Roll back to the previous release (requires a previous release to exist).
     Q_INVOKABLE void rollback();
+    // Saved restore points: up to 3 pinned versions the user can return to
+    // after trying an update. Each entry is { version, current }.
+    Q_INVOKABLE QVariantList savedVersions() const;
+    // Version of the currently installed release, for saving as a restore point.
+    Q_INVOKABLE QString currentInstalledVersion() const;
+    // Pin an installed version as a saved restore point (max 3).
+    Q_INVOKABLE void saveVersion(const QString& version);
+    // Unpin a saved version.
+    Q_INVOKABLE void dropVersion(const QString& version);
+    // Switch the current release to a saved version.
+    Q_INVOKABLE void restoreVersion(const QString& version);
 
   signals:
     void changed();
+    // Emitted when a manual update check is requested while web search is off,
+    // so the UI can offer to enable web and check in one flow instead of
+    // rerouting to settings and back.
+    void webEnableRequested();
     void installFinished(bool success, const QString& message);
 
   private:
@@ -63,6 +78,9 @@ class SoftwareUpdates final : public QObject
     void installProcessFinished(int exitCode, QProcess::ExitStatus exitStatus);
     void installProcessReadyRead();
     QString downloadBaseForTag(const QString& tag) const;
+    QStringList pinnedVersions() const;
+    void runApplianceTool(const QStringList& args, bool installOperation);
+    QString applianceScriptPath() const;
 
     SearchSettings* m_settings;
     QNetworkAccessManager* m_network;
@@ -70,6 +88,7 @@ class SoftwareUpdates final : public QObject
     QTimer* m_timer;
     QUrl m_endpoint;
     QString m_stateFile;
+    QString m_prefix;
     QString m_platform;
     QString m_publicKeyPath;
     QString m_latest;

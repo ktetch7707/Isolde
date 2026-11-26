@@ -6,6 +6,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QProcess>
 #include <QTcpServer>
 #include <QTcpSocket>
 #include <QTemporaryDir>
@@ -64,6 +65,7 @@ class SoftwareUpdatesTests : public QObject
     Q_OBJECT
   private slots:
     void webGateAndDismissal();
+    void checkRequestsWebEnableWhenWebDisabled();
     void incompatibleAndMalformedReleases();
     void cancelWhenWebDisabled();
     void rateLimitsManualRetry();
@@ -72,6 +74,10 @@ class SoftwareUpdatesTests : public QObject
     void installFailsWhenNoUpdate();
     void installFailsWithoutPublicKey();
     void publicKeyPathIsReported();
+    void savedVersionsReadsPinnedFile();
+    void currentInstalledVersionReadsVersionFile();
+    void restoreRefusesUnsavedVersion();
+    void saveAndDropIgnoreEmptyVersion();
 };
 
 void SoftwareUpdatesTests::webGateAndDismissal()
@@ -112,6 +118,29 @@ void SoftwareUpdatesTests::webGateAndDismissal()
     QTRY_COMPARE(server.requests, 4);
     QTRY_VERIFY(!reloaded.checking());
     QVERIFY(!reloaded.available());
+}
+
+// A manual check while web is off must not hit the network; it asks the UI to
+// enable web first instead.
+void SoftwareUpdatesTests::checkRequestsWebEnableWhenWebDisabled()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    ReleaseServer server;
+    QVERIFY(server.server.listen(QHostAddress::LocalHost));
+    // SearchSettings defaults to web disabled.
+    SearchSettings web(nullptr, directory.filePath("search.ini"), "default");
+    QVERIFY(!web.webEnabled());
+    SoftwareUpdates updates(&web, "0.0.1.2", nullptr, nullptr, server.url(),
+                            directory.filePath("updates.ini"), "linux-amd64");
+    bool requested = false;
+    QObject::connect(&updates, &SoftwareUpdates::webEnableRequested, [&] { requested = true; });
+    updates.check();
+    QTest::qWait(50);
+    QVERIFY(requested);
+    QCOMPARE(server.requests, 0);
+    QVERIFY(!updates.checking());
+    QVERIFY(!updates.available());
 }
 
 void SoftwareUpdatesTests::incompatibleAndMalformedReleases()
@@ -283,6 +312,79 @@ void SoftwareUpdatesTests::publicKeyPathIsReported()
     SoftwareUpdates updates(&web, "0.0.1.2", nullptr, nullptr, QUrl(),
                             directory.filePath("updates.ini"), "linux-amd64", keyPath);
     QCOMPARE(updates.publicKeyPath(), keyPath);
+}
+
+// Saved versions are read from the appliance prefix pinned file and tagged with
+// whether they are the currently installed release.
+void SoftwareUpdatesTests::savedVersionsReadsPinnedFile()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString prefix = directory.path();
+    QFile pinned(prefix + QStringLiteral("/pinned"));
+    QVERIFY(pinned.open(QIODevice::WriteOnly));
+    pinned.write("[\"0.0.1.2\", \"0.0.1.3\"]");
+    pinned.close();
+    SearchSettings web(nullptr, directory.filePath("search.ini"), "default");
+    SoftwareUpdates updates(&web, "0.0.1.2", nullptr, nullptr, QUrl(),
+                            directory.filePath("updates.ini"), "linux-amd64", {}, prefix);
+    const auto saved = updates.savedVersions();
+    QCOMPARE(saved.size(), 2);
+    QCOMPARE(saved[0].toMap()["version"].toString(), QStringLiteral("0.0.1.2"));
+    QCOMPARE(saved[0].toMap()["current"].toBool(), false);
+    QCOMPARE(saved[1].toMap()["version"].toString(), QStringLiteral("0.0.1.3"));
+    QCOMPARE(saved[1].toMap()["current"].toBool(), false);
+}
+
+// The current installed version is read from the current -> release symlink and
+// the release's version file.
+void SoftwareUpdatesTests::currentInstalledVersionReadsVersionFile()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString prefix = directory.path();
+    const auto releaseDir = QDir(prefix).filePath(QStringLiteral("releases/0.0.1.3"));
+    QVERIFY(QDir().mkpath(releaseDir));
+    QFile versionFile(releaseDir + QStringLiteral("/version"));
+    QVERIFY(versionFile.open(QIODevice::WriteOnly));
+    versionFile.write("0.0.1.3\n");
+    versionFile.close();
+    QVERIFY(QProcess::execute("ln", QStringList{"-s", releaseDir, prefix + QStringLiteral("/current")}) == 0);
+    SearchSettings web(nullptr, directory.filePath("search.ini"), "default");
+    SoftwareUpdates updates(&web, "0.0.1.2", nullptr, nullptr, QUrl(),
+                            directory.filePath("updates.ini"), "linux-amd64", {}, prefix);
+    QCOMPARE(updates.currentInstalledVersion(), QStringLiteral("0.0.1.3"));
+}
+
+// Restoring a version that is not saved fails synchronously without touching the
+// installation.
+void SoftwareUpdatesTests::restoreRefusesUnsavedVersion()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString prefix = directory.path();
+    SearchSettings web(nullptr, directory.filePath("search.ini"), "default");
+    SoftwareUpdates updates(&web, "0.0.1.2", nullptr, nullptr, QUrl(),
+                            directory.filePath("updates.ini"), "linux-amd64", {}, prefix);
+    QMetaObject::invokeMethod(&updates, "restoreVersion", Q_ARG(QString, QStringLiteral("0.0.1.3")));
+    QTest::qWait(50);
+    QVERIFY(updates.status().contains("not saved"));
+    QVERIFY(!updates.installing());
+}
+
+// Empty versions are ignored by save and drop.
+void SoftwareUpdatesTests::saveAndDropIgnoreEmptyVersion()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString prefix = directory.path();
+    SearchSettings web(nullptr, directory.filePath("search.ini"), "default");
+    SoftwareUpdates updates(&web, "0.0.1.2", nullptr, nullptr, QUrl(),
+                            directory.filePath("updates.ini"), "linux-amd64", {}, prefix);
+    QMetaObject::invokeMethod(&updates, "saveVersion", Q_ARG(QString, QString{}));
+    QMetaObject::invokeMethod(&updates, "dropVersion", Q_ARG(QString, QString{}));
+    QTest::qWait(50);
+    QVERIFY(updates.savedVersions().isEmpty());
 }
 
 QTEST_GUILESS_MAIN(SoftwareUpdatesTests)

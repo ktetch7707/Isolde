@@ -2430,6 +2430,9 @@ ComponentSchema::action(const QVariantMap& input, QString* error)
     handlers.insert("switch-input", [](const QVariantMap& in, QString* err) { return actionSwitchInput(in, err); });
     handlers.insert("desktop-mode", [](const QVariantMap& in, QString* err) { return actionDesktopMode(in, err); });
     handlers.insert("wait", [](const QVariantMap& in, QString* err) { return actionWait(in, err); });
+    handlers.insert("media.play", [](const QVariantMap& in, QString* err) { return actionMedia(in, "media.play", err); });
+    handlers.insert("media.resume", [](const QVariantMap& in, QString* err) { return actionMedia(in, "media.resume", err); });
+    handlers.insert("media.markWatched", [](const QVariantMap& in, QString* err) { return actionMedia(in, "media.markWatched", err); });
     handlers.insert("open-folder", [](const QVariantMap& in, QString* err) { return actionOpenTarget(in, "open-folder", err); });
     handlers.insert("open-file", [](const QVariantMap& in, QString* err) { return actionOpenTarget(in, "open-file", err); });
     handlers.insert("open-disc", [](const QVariantMap& in, QString* err) { return actionOpenTarget(in, "open-disc", err); });
@@ -2543,6 +2546,239 @@ ComponentSchema::actionShellRoute(const QVariantMap& input, const QString& type,
     Q_UNUSED(error);
     QVariantMap result{{"schemaVersion", 1}, {"type", type}};
     return result;
+}
+
+QVariantMap
+ComponentSchema::actionMedia(const QVariantMap& input, const QString& type, QString* error)
+{
+    // Media action descriptors: stable typed IDs for media operations,
+    // validated at the boundary and dispatched through ActionDispatcher.
+    // media.play starts an item from the beginning; media.resume resumes at the
+    // saved point; media.markWatched sets the watched intent (bridge write).
+    const auto kind = input.value("mediaKind").toString();
+    if (type == "media.markWatched")
+    {
+        if (!QStringList{"movie", "episode"}.contains(kind))
+            return reject(error, "Watched state applies to movies and episodes only.");
+    }
+    else if (!QStringList{"movie", "episode", "song", "channel"}.contains(kind))
+    {
+        return reject(error, "Choose a supported media kind.");
+    }
+    const double id = input.value("mediaId").toDouble();
+    if (!std::isfinite(id) || id < 1 || id > 2147483647 || std::floor(id) != id)
+        return reject(error, "Choose a valid media ID.");
+    QVariantMap result{{"schemaVersion", 1}, {"type", type}, {"mediaKind", kind}, {"mediaId", static_cast<int>(id)}};
+    if (type == "media.resume")
+        result["resume"] = true;
+    else if (type == "media.play")
+        result["resume"] = false;
+    else if (type == "media.markWatched")
+    {
+        const bool watched = input.value("watched", true).toBool();
+        result["watched"] = watched;
+    }
+    return result;
+}
+
+bool
+ComponentSchema::validateSlotComponent(const QVariantList& permitted, const QString& componentType, QString* error)
+{
+    // A slot's permitted list restricts which component kinds may occupy it.
+    // An empty permitted list accepts any component; otherwise the component's
+    // kind must appear in the list. Used when resolving skin slot overrides
+    // and when placing components into slots during editing.
+    if (permitted.isEmpty())
+        return true;
+    for (const auto& value : permitted)
+    {
+        const auto kind = value.toString();
+        if (kind == componentType)
+            return true;
+    }
+    if (error)
+        *error = "Component kind is not permitted in this slot.";
+    return false;
+}
+
+bool
+ComponentSchema::validateInspectorField(const QVariantMap& field, QString* error)
+{
+    // Validates a single inspector field definition: bounded schemaVersion plus
+    // known field keys, a safe key id, a non-empty label, and a known field type.
+    // Fields are the editable controls exposed by Studio; malformed definitions
+    // would make fields unreachable or unsafe to edit.
+    static const QSet<QString> validKeys{"schemaVersion", "tab", "scope", "key", "label", "type",
+                                         "choices", "types", "families", "min", "max", "step",
+                                         "fallback", "advanced", "excludeTypes", "excludeFamilies",
+                                         "control", "displayScale", "displayUnit", "needsNamedPage",
+                                         "needsComposition"};
+    static const QSet<QString> validTypes{"text", "number", "choice", "toggle", "color", "action",
+                                          "repair", "section", "visibility", "lock", "order",
+                                          "typography", "historyApps", "editorColorsReset",
+                                          "responsive", "sourcePolicy", "grid", "editableMenu",
+                                          "header", "headerEditor"};
+    if (!field.contains("schemaVersion") || !versionOne(field))
+        return reject(error, "Inspector field requires schemaVersion 1.");
+    if (!field.contains("key") || !safeId(field.value("key").toString()))
+        return reject(error, "Inspector field key must be a safe id.");
+    if (!field.contains("label") || field.value("label").toString().trimmed().isEmpty()
+        || field.value("label").toString().size() > 80)
+        return reject(error, "Inspector field label must be non-empty and at most 80 characters.");
+    if (!field.contains("type") || !validTypes.contains(field.value("type").toString()))
+        return reject(error, "Inspector field type must be a known type.");
+    for (const auto& k : field.keys())
+        if (!validKeys.contains(k))
+            return reject(error, "Inspector field contains unknown key.");
+    return true;
+}
+
+bool
+ComponentSchema::validateInspectorFields(const QVariantList& fields, QString* error)
+{
+    // Validates a list of inspector field definitions: bounded size, unique keys,
+    // and each field passes validateInspectorField. Studio surface editor depends
+    // on these definitions being well formed before any field is rendered.
+    if (fields.isEmpty() || fields.size() > 256)
+        return reject(error, "Inspector fields list must be non-empty and at most 256 entries.");
+    QSet<QString> seenKeys;
+    for (const auto& value : fields)
+    {
+        const auto field = value.toMap();
+        const auto key = field.value("key").toString();
+        if (seenKeys.contains(key))
+            return reject(error, "Duplicate inspector field key.");
+        seenKeys.insert(key);
+        if (!validateInspectorField(field, error))
+            return false;
+    }
+    return true;
+}
+
+bool
+ComponentSchema::validateRoleDefinition(const QVariantMap& role, QString* error)
+{
+    // Validates a single theme role definition: bounded schemaVersion, safe key,
+    // and non-empty label. Roles map theme colors to UI surfaces; invalid role
+    // definitions would leave surfaces unstyled or miscolored.
+    if (!role.contains("schemaVersion") || !versionOne(role))
+        return reject(error, "Theme role requires schemaVersion 1.");
+    if (!role.contains("key") || !safeId(role.value("key").toString()))
+        return reject(error, "Theme role key must be a safe id.");
+    if (!role.contains("label") || role.value("label").toString().trimmed().isEmpty()
+        || role.value("label").toString().size() > 80)
+        return reject(error, "Theme role label must be non-empty and at most 80 characters.");
+    return true;
+}
+
+bool
+ComponentSchema::validateRoleDefinitions(const QVariantList& roles, QString* error)
+{
+    // Validates a list of theme role definitions: bounded size, unique keys,
+    // and each role passes validateRoleDefinition. Theme groups depend on these
+    // definitions for color assignment.
+    if (roles.isEmpty() || roles.size() > 64)
+        return reject(error, "Theme roles list must be non-empty and at most 64 entries.");
+    QSet<QString> seenKeys;
+    for (const auto& value : roles)
+    {
+        const auto role = value.toMap();
+        const auto key = role.value("key").toString();
+        if (seenKeys.contains(key))
+            return reject(error, "Duplicate theme role key.");
+        seenKeys.insert(key);
+        if (!validateRoleDefinition(role, error))
+            return false;
+    }
+    return true;
+}
+
+bool
+ComponentSchema::validateActionDefinition(const QVariantMap& action, QString* error)
+{
+    // Validates a single action definition: bounded schemaVersion, non-empty name,
+    // safe action id, and optional bounded aliases. Actions are the commands Studio
+    // can invoke on a component; invalid actions would be unreachable or unsafe.
+    if (!action.contains("schemaVersion") || !versionOne(action))
+        return reject(error, "Action definition requires schemaVersion 1.");
+    if (!action.contains("name") || action.value("name").toString().trimmed().isEmpty()
+        || action.value("name").toString().size() > 80)
+        return reject(error, "Action definition name must be non-empty and at most 80 characters.");
+    if (!action.contains("action") || !safeId(action.value("action").toString()))
+        return reject(error, "Action definition id must be a safe id.");
+    if (action.contains("aliases"))
+    {
+        const auto aliases = action.value("aliases").toList();
+        if (aliases.size() > 8)
+            return reject(error, "Action definition aliases must be at most 8 entries.");
+        for (const auto& alias : aliases)
+        {
+            const auto s = alias.toString();
+            if (s.isEmpty() || s.size() > 40)
+                return reject(error, "Action alias must be non-empty and at most 40 characters.");
+        }
+    }
+    return true;
+}
+
+bool
+ComponentSchema::validateActionDefinitions(const QVariantList& actions, QString* error)
+{
+    // Validates a list of action definitions: bounded size, unique ids, and each
+    // action passes validateActionDefinition. Action dispatcher routes commands by
+    // id; duplicates would cause ambiguous command resolution.
+    if (actions.isEmpty() || actions.size() > 128)
+        return reject(error, "Action definitions list must be non-empty and at most 128 entries.");
+    QSet<QString> seenIds;
+    for (const auto& value : actions)
+    {
+        const auto action = value.toMap();
+        const auto id = action.value("action").toString();
+        if (seenIds.contains(id))
+            return reject(error, "Duplicate action definition id.");
+        seenIds.insert(id);
+        if (!validateActionDefinition(action, error))
+            return false;
+    }
+    return true;
+}
+
+bool
+ComponentSchema::validateActionCategoryDefinition(const QVariantMap& category, QString* error)
+{
+    // Validates a single action category definition: bounded schemaVersion,
+    // non-empty name, and a non-empty list of known action type ids. Categories
+    // group actions in Studio pickers; empty or unknown type lists break selection.
+    if (!category.contains("schemaVersion") || !versionOne(category))
+        return reject(error, "Action category requires schemaVersion 1.");
+    if (!category.contains("name") || category.value("name").toString().trimmed().isEmpty()
+        || category.value("name").toString().size() > 80)
+        return reject(error, "Action category name must be non-empty and at most 80 characters.");
+    if (!category.contains("types") || !category.value("types").isList()
+        || category.value("types").toList().isEmpty())
+        return reject(error, "Action category must list at least one action type.");
+    return true;
+}
+
+bool
+ComponentSchema::validateActionCategoryDefinitions(const QVariantList& categories, QString* error)
+{
+    // Validates a list of action category definitions: bounded size, unique names,
+    // and each category passes validateActionCategoryDefinition.
+    if (categories.isEmpty() || categories.size() > 12)
+        return reject(error, "Action categories list must be non-empty and at most 12 entries.");
+    QSet<QString> seenNames;
+    for (const auto& value : categories)
+    {
+        const auto category = value.toMap();
+        const auto name = category.value("name").toString();
+        if (seenNames.contains(name))
+            return reject(error, "Duplicate action category name.");
+        seenNames.insert(name);
+        if (!validateActionCategoryDefinition(category, error))
+            return false;
+    }
+    return true;
 }
 
 QVariantMap
@@ -2914,7 +3150,8 @@ ComponentSchema::component(const QVariantMap& input, bool deriveSource, QString*
                                                   "appCollection", "appId", "opacity",
                                                   "categoryId", "parentId", "children",
                                                   "animateArtwork", "hidden", "locked",
-                                                  "showTitle", "showType", "showLogo", "logoFill", "contentSlot"};
+                                                  "showTitle", "showType", "showLogo", "logoFill", "contentSlot",
+                                                  "permitted"};
     for (auto it = input.constBegin(); it != input.constEnd(); ++it)
         if (!validComponentKeys.contains(it.key()))
             return reject(error, "Component contains unknown fields.");
@@ -2924,11 +3161,21 @@ ComponentSchema::component(const QVariantMap& input, bool deriveSource, QString*
         const auto slot = input.value("contentSlot").toMap();
         const auto label = slot.value("label");
         const auto kind = slot.value("kind").toString();
-        if (slot.size() != 4 || !slot.contains("schemaVersion") || !versionOne(slot) ||
+        if (slot.size() != 4 && slot.size() != 5 || !slot.contains("schemaVersion") || !versionOne(slot) ||
             !safeId(slot.value("id").toString()) || label.metaType().id() != QMetaType::QString ||
             label.toString().trimmed().isEmpty() || label.toString().size() > 80 ||
             (kind != "buttons" && kind != "apps" && kind != "media"))
             return reject(error, "Invalid template content slot.");
+        if (slot.contains("permitted"))
+        {
+            const auto permitted = slot.value("permitted").toList();
+            for (const auto& value : permitted)
+            {
+                const auto kind = value.toString();
+                if (kind.isEmpty() || kind.size() > 40)
+                    return reject(error, "Slot permitted component kind must be a non-empty name up to 40 characters.");
+            }
+        }
     }
     result["source"] = source;
     return result;

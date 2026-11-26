@@ -54,6 +54,16 @@ def payload_digest(payload: Path) -> str:
     return digest.hexdigest()
 
 
+def verified_digest(payload: Path, signature: Path, public_key: Path) -> str:
+    """Verify the payload signature and return its content-addressed digest."""
+    digest = payload_digest(payload)
+    with tempfile.TemporaryDirectory(dir=payload.parent, prefix=".digest-") as scratch:
+        digest_file = Path(scratch) / "digest.txt"
+        digest_file.write_text(digest)
+        verify_signature(public_key, digest_file, signature)
+    return digest
+
+
 def verify_signature(public_key, data_file, signature_file):
     """Verify a 64-byte Ed25519 signature over raw file contents."""
     if signature_file.is_symlink() or not signature_file.is_file() or signature_file.stat().st_size != 64:
@@ -67,6 +77,13 @@ def verify_signature(public_key, data_file, signature_file):
     )
     if result.returncode:
         raise RuntimeError("Signature does not match trusted signing key")
+
+
+def write_version_file(release: Path, version: str | None) -> None:
+    """Record the release version inside the staged release directory."""
+    if version is None:
+        return
+    (release / "version").write_text(version + "\n")
 
 
 def checked_release(prefix, name):
@@ -88,7 +105,7 @@ def set_link(path, target):
         os.replace(temporary, path)
 
 
-def install_payload(payload, prefix, signature, public_key):
+def install_payload(payload, prefix, signature, public_key, version=None):
     """Stage and activate a verified payload. Returns the release directory."""
     for relative in ("bin/isolde", "bin/isolde-native-host", "bin/isolde-recovery",
                      "bin/config/native-session-bus.conf"):
@@ -97,11 +114,7 @@ def install_payload(payload, prefix, signature, public_key):
     files = sorted(payload.rglob("*"))
     if any(path.is_symlink() for path in files):
         raise RuntimeError("Release payload must not contain symlinks")
-    digest = payload_digest(payload)
-    with tempfile.TemporaryDirectory(dir=payload.parent, prefix=".digest-") as scratch:
-        digest_file = Path(scratch) / "digest.txt"
-        digest_file.write_text(digest)
-        verify_signature(public_key, digest_file, signature)
+    digest = verified_digest(payload, signature, public_key)
     prefix.mkdir(parents=True, exist_ok=True)
     current = checked_release(prefix, "current")
     previous = checked_release(prefix, "previous")
@@ -113,11 +126,80 @@ def install_payload(payload, prefix, signature, public_key):
             staged = Path(scratch) / "payload"
             shutil.copytree(payload, staged)
             staged.rename(release)
+    write_version_file(release, version)
     if current != release:
         if current:
             set_link(prefix / "previous", current)
         set_link(prefix / "current", release)
     return release
+
+
+def pinned_path(prefix):
+    return prefix / "pinned"
+
+
+def load_pinned(prefix):
+    path = pinned_path(prefix)
+    if not path.is_file():
+        return []
+    try:
+        data = json.loads(path.read_text())
+    except (json.JSONDecodeError, OSError):
+        return []
+    if not isinstance(data, list):
+        return []
+    return [str(v) for v in data]
+
+
+def save_pinned(prefix, versions):
+    path = pinned_path(prefix)
+    path.write_text(json.dumps(versions, indent=2))
+
+
+def release_for_version(prefix, version):
+    """Find the release directory whose recorded version matches."""
+    releases = prefix / "releases"
+    if not releases.is_dir():
+        return None
+    for entry in sorted(releases.iterdir()):
+        if not entry.is_dir():
+            continue
+        version_file = entry / "version"
+        if version_file.is_file():
+            try:
+                if version_file.read_text().strip() == version:
+                    return entry
+            except OSError:
+                continue
+    return None
+
+
+def list_releases(prefix):
+    """Enumerate installed releases with version, current/previous/pinned status."""
+    current = checked_release(prefix, "current")
+    previous = checked_release(prefix, "previous")
+    pinned = load_pinned(prefix)
+    releases = prefix / "releases"
+    entries = []
+    if releases.is_dir():
+        for entry in sorted(releases.iterdir(), key=lambda p: p.name):
+            if not entry.is_dir():
+                continue
+            version_file = entry / "version"
+            version = ""
+            if version_file.is_file():
+                try:
+                    version = version_file.read_text().strip()
+                except OSError:
+                    version = ""
+            entries.append({
+                "version": version,
+                "dir": str(entry),
+                "current": current is not None and entry.resolve() == current.resolve(),
+                "previous": previous is not None and entry.resolve() == previous.resolve(),
+                "pinned": version in pinned,
+            })
+    return entries
 
 
 def rollback(prefix):
@@ -128,6 +210,49 @@ def rollback(prefix):
     set_link(prefix / "current", previous)
     set_link(prefix / "previous", current)
     return previous
+
+
+def save_version(prefix, version):
+    """Pin a version so it is kept as a saved restore point (max 3)."""
+    release = release_for_version(prefix, version)
+    if release is None:
+        raise RuntimeError(f"No installed release found for version {version}.")
+    pinned = load_pinned(prefix)
+    if version in pinned:
+        raise RuntimeError(f"Version {version} is already saved.")
+    if len(pinned) >= 3:
+        raise RuntimeError("Cannot save more than 3 versions. Drop a saved version first.")
+    pinned.append(version)
+    save_pinned(prefix, pinned)
+    return pinned
+
+
+def drop_version(prefix, version):
+    """Unpin a saved version."""
+    pinned = load_pinned(prefix)
+    if version not in pinned:
+        raise RuntimeError(f"Version {version} is not saved.")
+    pinned.remove(version)
+    save_pinned(prefix, pinned)
+    return pinned
+
+
+def restore_version(prefix, version):
+    """Switch the current release to a saved version."""
+    pinned = load_pinned(prefix)
+    if version not in pinned:
+        raise RuntimeError(f"Version {version} is not saved. Save it before restoring.")
+    release = release_for_version(prefix, version)
+    if release is None:
+        raise RuntimeError(f"No installed release found for version {version}.")
+    current = checked_release(prefix, "current")
+    if current is not None and release.resolve() == current.resolve():
+        raise RuntimeError(f"Version {version} is already the current release.")
+    previous = checked_release(prefix, "previous")
+    set_link(prefix / "current", release)
+    if previous is None or previous.resolve() != release.resolve():
+        set_link(prefix / "previous", current if current else release)
+    return release
 
 
 def find_public_key(prefix):
@@ -144,7 +269,7 @@ def find_public_key(prefix):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=["install", "rollback"])
+    parser.add_argument("action", choices=["install", "rollback", "list", "save", "drop", "restore"])
     parser.add_argument("--prefix", type=Path, default=Path.home() / ".local/share/isolde-appliance")
     parser.add_argument("--release-url",
                         help="GitHub release download URL base (e.g. https://github.com/ktetch7707/Isolde/releases/download/v0.0.1.3)")
@@ -174,6 +299,61 @@ def main():
             raise RuntimeError("Another installation is already using this destination.")
         previous = rollback(prefix)
         print(f"Rolled back to {previous}. Restart Isolde to use it; profile data is unchanged.")
+        return
+
+    if args.action in ("save", "drop", "restore") and not args.version:
+        parser.error(f"{args.action} requires --version")
+    if args.action == "list":
+        import fcntl
+        prefix.mkdir(parents=True, exist_ok=True)
+        lock = (prefix / ".install.lock").open("a")
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise RuntimeError("Another installation is already using this destination.")
+        for entry in list_releases(prefix):
+            marks = []
+            if entry["current"]:
+                marks.append("current")
+            if entry["previous"]:
+                marks.append("previous")
+            if entry["pinned"]:
+                marks.append("saved")
+            mark = " [" + ", ".join(marks) + "]" if marks else ""
+            print(f"{entry['version'] or '<unknown>'}{mark}  {entry['dir']}")
+        return
+    if args.action == "save":
+        import fcntl
+        prefix.mkdir(parents=True, exist_ok=True)
+        lock = (prefix / ".install.lock").open("a")
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise RuntimeError("Another installation is already using this destination.")
+        pinned = save_version(prefix, args.version)
+        print(f"Saved version {args.version}. Saved versions: {', '.join(pinned) or 'none'}.")
+        return
+    if args.action == "drop":
+        import fcntl
+        prefix.mkdir(parents=True, exist_ok=True)
+        lock = (prefix / ".install.lock").open("a")
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise RuntimeError("Another installation is already using this destination.")
+        pinned = drop_version(prefix, args.version)
+        print(f"Dropped version {args.version}. Saved versions: {', '.join(pinned) or 'none'}.")
+        return
+    if args.action == "restore":
+        import fcntl
+        prefix.mkdir(parents=True, exist_ok=True)
+        lock = (prefix / ".install.lock").open("a")
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise RuntimeError("Another installation is already using this destination.")
+        release = restore_version(prefix, args.version)
+        print(f"Restored to version {args.version} -> {release}. Restart Isolde to use it; profile data is unchanged.")
         return
 
     public_key = args.public_key or find_public_key(prefix)
@@ -235,7 +415,7 @@ def main():
             with tempfile.TemporaryDirectory(dir=work, prefix=".extract-") as scratch:
                 extract_dir = Path(scratch) / "payload"
                 shutil.unpack_archive(str(tarball_path), str(extract_dir))
-                release = install_payload(extract_dir, prefix, work / tarball_sig, public_key)
+                release = install_payload(extract_dir, prefix, work / tarball_sig, public_key, version=version)
 
             if args.startup:
                 config = Path(os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config")))

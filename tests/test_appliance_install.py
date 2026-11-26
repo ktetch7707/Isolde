@@ -10,6 +10,9 @@ import shutil
 spec = importlib.util.spec_from_file_location("installer", Path(__file__).resolve().parents[1] / "tools/install-appliance.py")
 installer = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(installer)
+update_spec = importlib.util.spec_from_file_location("update_appliance", Path(__file__).resolve().parents[1] / "tools/update-appliance.py")
+update_appliance = importlib.util.module_from_spec(update_spec)
+update_spec.loader.exec_module(update_appliance)
 display_spec = importlib.util.spec_from_file_location("display_waiter", Path(__file__).resolve().parents[1] / "tools/wait-for-display.py")
 display_waiter = importlib.util.module_from_spec(display_spec)
 display_spec.loader.exec_module(display_waiter)
@@ -200,6 +203,73 @@ class InstallationTests(unittest.TestCase):
             installer.verify_payload_signature(self.payload, signature, public)
         self.assertEqual(sentinel.read_text(), "preserve")
         self.assertTrue(scratch.is_symlink())
+
+    def _make_release(self, version):
+        release = self.prefix / "releases" / version
+        (release / "bin").mkdir(parents=True)
+        (release / "version").write_text(version + "\n")
+        (release / "bin" / "isolde").write_text("payload")
+        return release
+
+    def test_list_releases_marks_current_and_pinned(self):
+        r1 = self._make_release("0.0.1.2")
+        r2 = self._make_release("0.0.1.3")
+        (self.prefix / "current").symlink_to(r1)
+        entries = update_appliance.list_releases(self.prefix)
+        self.assertEqual(len(entries), 2)
+        self.assertEqual([e["version"] for e in entries], ["0.0.1.2", "0.0.1.3"])
+        self.assertTrue(entries[0]["current"])
+        self.assertFalse(entries[0]["pinned"])
+        self.assertFalse(entries[1]["current"])
+        self.assertFalse(entries[1]["pinned"])
+
+    def test_save_drop_and_list_versions(self):
+        self._make_release("0.0.1.2")
+        self._make_release("0.0.1.3")
+        pinned = update_appliance.save_version(self.prefix, "0.0.1.2")
+        self.assertEqual(pinned, ["0.0.1.2"])
+        pinned = update_appliance.save_version(self.prefix, "0.0.1.3")
+        self.assertEqual(pinned, ["0.0.1.2", "0.0.1.3"])
+        entries = update_appliance.list_releases(self.prefix)
+        self.assertTrue(all(e["pinned"] for e in entries))
+        pinned = update_appliance.drop_version(self.prefix, "0.0.1.2")
+        self.assertEqual(pinned, ["0.0.1.3"])
+        entries = update_appliance.list_releases(self.prefix)
+        self.assertTrue(entries[0]["pinned"] is False)
+        self.assertTrue(entries[1]["pinned"])
+
+    def test_save_refuses_duplicate_and_unknown_version(self):
+        self._make_release("0.0.1.2")
+        update_appliance.save_version(self.prefix, "0.0.1.2")
+        with self.assertRaises(RuntimeError):
+            update_appliance.save_version(self.prefix, "0.0.1.2")
+        with self.assertRaises(RuntimeError):
+            update_appliance.save_version(self.prefix, "0.0.1.9")
+
+    def test_save_limited_to_three_versions(self):
+        for v in ("0.0.1.2", "0.0.1.3", "0.0.1.4", "0.0.1.5"):
+            self._make_release(v)
+        update_appliance.save_version(self.prefix, "0.0.1.2")
+        update_appliance.save_version(self.prefix, "0.0.1.3")
+        update_appliance.save_version(self.prefix, "0.0.1.4")
+        self.assertEqual(len(update_appliance.load_pinned(self.prefix)), 3)
+        with self.assertRaises(RuntimeError):
+            update_appliance.save_version(self.prefix, "0.0.1.5")
+        self.assertEqual(len(update_appliance.load_pinned(self.prefix)), 3)
+
+    def test_restore_switches_current_release(self):
+        r1 = self._make_release("0.0.1.2")
+        r2 = self._make_release("0.0.1.3")
+        (self.prefix / "current").symlink_to(r1)
+        update_appliance.save_version(self.prefix, "0.0.1.3")
+        update_appliance.restore_version(self.prefix, "0.0.1.3")
+        self.assertEqual((self.prefix / "current").resolve(), r2)
+        # Restoring the already-current version is rejected.
+        with self.assertRaises(RuntimeError):
+            installer.restore_version(self.prefix, "0.0.1.3")
+        # Restoring an unsaved version is rejected.
+        with self.assertRaises(RuntimeError):
+            installer.restore_version(self.prefix, "0.0.1.2")
 
 
 if __name__ == "__main__":

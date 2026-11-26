@@ -2499,21 +2499,31 @@ HomeNavigationTests::televisionLibraryRemoteFlow()
                                                                                    : "episodes";
                             QJsonObject item{{"title", "Synthetic library fixture"},
                                              {"plot", "Kodi-backed television navigation"}};
+                            QJsonArray rows;
                             if (method == "VideoLibrary.GetTVShows")
                                 item["tvshowid"] = 7;
                             else if (method == "VideoLibrary.GetSeasons")
                             {
                                 item["seasonid"] = 8;
                                 item["season"] = 0;
+                                rows.append(item);
+                                item["seasonid"] = 18;
+                                item["season"] = 1;
                             }
                             else
                             {
                                 item["episodeid"] = 9;
-                                item["season"] = 0;
+                                item["season"] = request["params"].toObject().value("season").toInt();
                                 item["episode"] = 1;
+                                item["firstaired"] = "2024-06-04";
+                                item["playcount"] = 1;
                             }
-                            result = {{key, QJsonArray{item}},
-                                      {"limits", QJsonObject{{"start", 0}, {"end", 1}, {"total", 1}}}};
+                            rows.append(item);
+                            if (method == "VideoLibrary.GetSeasons" && server.property("reorderSeasons").toBool())
+                                rows = QJsonArray{rows.at(1), rows.at(0)};
+                            const int count = static_cast<int>(rows.size());
+                            result = {{key, rows},
+                                      {"limits", QJsonObject{{"start", 0}, {"end", count}, {"total", count}}}};
                         }
                         socket->write(
                             QJsonDocument(QJsonObject{{"jsonrpc", "2.0"}, {"id", request["id"]}, {"result", result}})
@@ -2556,15 +2566,52 @@ HomeNavigationTests::televisionLibraryRemoteFlow()
     const QVariant unnumberedEpisode = QVariantMap{{"mediaType", "episode"}, {"showtitle", "Known show"}};
     QVERIFY(QMetaObject::invokeMethod(
         root.get(), "subtitle", Q_RETURN_ARG(QVariant, missingEpisodeSubtitle), Q_ARG(QVariant, unnumberedEpisode)));
-    QCOMPARE(missingEpisodeSubtitle.toString(), QString("Known show · Unwatched"));
+    QCOMPARE(missingEpisodeSubtitle.toString(), QString("Known show · Watch status unavailable"));
+    auto* hierarchy = root->findChild<QQuickItem*>("libraryHierarchyDialog");
+    auto* items = root->findChild<QQuickItem*>("libraryItems");
+    auto* artworkPreview = root->findChild<QQuickItem*>("libraryArtworkPreview");
+    QVERIFY(hierarchy);
+    QVERIFY(items);
+    QVERIFY(artworkPreview);
+    QVERIFY(!hierarchy->isVisible());
     media.openLibrary("shows");
     QTRY_VERIFY(media.connected());
     QVERIFY(command(InputManager::Confirm));
     QTRY_VERIFY(!media.busy());
     QCOMPARE(media.mediaKind(), QString("seasons"));
+    QCOMPARE(root->property("hierarchyLevel").toString(), QString("seasons"));
+    QVERIFY(hierarchy->isVisible());
+    QVERIFY(hierarchy->isAncestorOf(items));
+    QVERIFY(hierarchy->width() < 1280);
+    const QVariantMap hierarchyAppearance{{"seasonPresentation", "fullscreen"}, {"episodeLayout", "grid"},
+                                          {"episodeHeader", false}, {"episodeMetadata", false}};
+    QVERIFY(root->setProperty("appearance", hierarchyAppearance));
+    QTRY_COMPARE(hierarchy->width(), 1280.0);
+    QVERIFY(artworkPreview->isVisible());
+    QVERIFY(command(InputManager::NavigateDown));
+    QCOMPARE(media.selectedIndex(), 1);
     QVERIFY(command(InputManager::Confirm));
     QTRY_VERIFY(!media.busy());
     QCOMPARE(media.mediaKind(), QString("episodes"));
+    QCOMPARE(root->property("hierarchyLevel").toString(), QString("episodes"));
+    QVERIFY(hierarchy->isVisible());
+    QVERIFY(hierarchy->isAncestorOf(items));
+    QTRY_VERIFY(hierarchy->width() < 1280);
+    QVERIFY(!artworkPreview->isVisible());
+    QCOMPARE(root->property("hierarchyColumns").toInt(), 2);
+    QVERIFY(!root->property("hierarchyShowsHeader").toBool());
+    QVERIFY(!root->property("hierarchyShowsMetadata").toBool());
+    auto* outline = root->findChild<QQuickItem*>("episodeWatchedPosterOutline");
+    QVERIFY(outline);
+    QVERIFY(!outline->isVisible());
+    QVERIFY(root->setProperty("appearance", QVariantMap{{"episodeWatchedStyle", "checkmark-outline"},
+                                                        {"episodeWatchedOutlineColor", "#42c776"}}));
+    QTRY_VERIFY(outline->isVisible());
+    QVERIFY(root->property("episodeWatchedCheckmark").toBool());
+    QVERIFY(root->setProperty("appearance", QVariantMap{{"episodeWatchedStyle", "hidden"}}));
+    QVERIFY(!outline->isVisible());
+    QVERIFY(!root->property("episodeWatchedCheckmark").toBool());
+    QVERIFY(root->setProperty("appearance", QVariantMap{}));
     QVERIFY(command(InputManager::Menu));
     QVERIFY(!root->property("details").isNull());
     // Appearance changes must repaint existing production browse/detail children
@@ -2601,7 +2648,9 @@ HomeNavigationTests::televisionLibraryRemoteFlow()
         QVERIFY(subtitle);
         QVERIFY(playback);
         QCOMPARE(panel->property("color").value<QColor>(), QColor(tokens["elevatedColor"].toString()));
+        QCOMPARE(hierarchy->property("color").value<QColor>(), QColor(tokens["elevatedColor"].toString()));
         QCOMPARE(subtitle->property("color").value<QColor>(), QColor(tokens["elevatedFocusColor"].toString()));
+        QVERIFY(subtitle->property("text").toString().contains("2024-06-04"));
         QCOMPARE(playback->property("color").value<QColor>(), QColor(tokens["elevatedFocusColor"].toString()));
         QCOMPARE(root->property("details"), detailsBefore);
         QCOMPARE(media.items(), itemsBefore);
@@ -2648,12 +2697,19 @@ HomeNavigationTests::televisionLibraryRemoteFlow()
     QVERIFY(root->property("open").toBool());
     QCOMPARE(media.selectedIndex(), 0);
     QVERIFY(command(InputManager::Back)); // details close
+    server.setProperty("reorderSeasons", true);
     QVERIFY(command(InputManager::Back));
     QTRY_VERIFY(!media.busy());
     QCOMPARE(media.mediaKind(), QString("seasons"));
+    QVERIFY(hierarchy->isVisible());
+    QCOMPARE(media.selectedIndex(), 0);
+    QCOMPARE(media.items().at(media.selectedIndex()).toMap().value("seasonid").toInt(), 18);
     QVERIFY(command(InputManager::Back));
     QTRY_VERIFY(!media.busy());
     QCOMPARE(media.mediaKind(), QString("shows"));
+    QVERIFY(!hierarchy->isVisible());
+    QVERIFY(!hierarchy->isAncestorOf(items));
+    QCOMPARE(media.selectedIndex(), 0);
     media.selectIndex(-1);
     root->setProperty("toolbarIndex", 6);
     QVERIFY(command(InputManager::Confirm));

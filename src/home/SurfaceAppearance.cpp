@@ -46,19 +46,49 @@ const QSet<QString> colorRoles{"backgroundStart",
                                "inputColor",
                                "inputTextColor",
                                "scrimColor",
+                               "episodeWatchedOutlineColor",
                                "successColor",
                                "warningColor",
                                "errorColor",
                                "unavailableColor"};
 
+// Validate editable surface tokens before allowing them into a saved skin.
 bool
-validTokens(const QVariant& value)
+validTokens(const QVariant& value, const QString& surface)
 {
     if (value.metaType().id() != QMetaType::QVariantMap)
         return false;
     const auto tokens = value.toMap();
     for (auto it = tokens.cbegin(); it != tokens.cend(); ++it)
     {
+        const bool hierarchyPresentation = it.key() == "seasonPresentation" || it.key() == "episodePresentation";
+        const bool hierarchyLayout = it.key() == "seasonLayout" || it.key() == "episodeLayout";
+        const bool hierarchySlot = it.key() == "seasonHeader" || it.key() == "episodeHeader" ||
+                                   it.key() == "seasonMetadata" || it.key() == "episodeMetadata";
+        if (hierarchySlot)
+        {
+            if (surface != "kodi" || it.value().metaType().id() != QMetaType::Bool)
+                return false;
+            continue;
+        }
+        if (hierarchyPresentation || hierarchyLayout)
+        {
+            const auto choices = hierarchyPresentation ? QStringList{"dialog", "fullscreen"}
+                                                       : QStringList{"artwork", "list", "grid"};
+            if (surface != "kodi" || it.value().metaType().id() != QMetaType::QString ||
+                !choices.contains(it.value().toString()))
+                return false;
+            continue;
+        }
+        if (it.key().startsWith("episodeWatched") && surface != "kodi")
+            return false;
+        if (it.key() == "episodeWatchedStyle")
+        {
+            if (it.value().metaType().id() != QMetaType::QString ||
+                !QStringList{"text", "hidden", "checkmark", "outline", "checkmark-outline"}.contains(it.value().toString()))
+                return false;
+            continue;
+        }
         if (colorRoles.contains(it.key()))
         {
             if (it.value().metaType().id() != QMetaType::QString)
@@ -132,7 +162,7 @@ ComponentSchema::validSurfaceThemes(const QVariant& value)
         const auto mode = policy.value("mode").toString();
         if (!QStringList{"home", "origin", "custom"}.contains(mode) || (it.key() == "settings" && mode == "origin"))
             return false;
-        if (policy.contains("tokens") && !validTokens(policy.value("tokens")))
+        if (policy.contains("tokens") && !validTokens(policy.value("tokens"), it.key()))
             return false;
         if (mode != "custom" && !policy.value("tokens").toMap().isEmpty())
             return false;

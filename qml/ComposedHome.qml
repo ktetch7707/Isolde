@@ -324,7 +324,21 @@ Item {
     }
     function restoreFocus(id) {
         const generation=navigationGeneration
-        Qt.callLater(()=>{if(!root || generation!==root.navigationGeneration || !root.host || !root.widgets)return;const widget=root.widgets[id];const saved=(root.host.appCollectionFocus || {})[id];if(widget && saved && widget.restoreFocusState){root.activeWidget=id;widget.restoreFocusState(saved)}})
+        const entries=focusEntries()
+        const original=entries.find(e=>e.id===id)
+        const widget=root.widgets[id]
+        const saved=(root.host.appCollectionFocus || {})[id]
+        if(widget && saved && widget.restoreFocusState){root.activeWidget=id;widget.restoreFocusState(saved)}
+        else if(!widget && entries.length){
+            // The focused item disappeared after a navigation generation. Fall back to
+            // the nearest surviving row on the same horizontal band, then the parent
+            // control, then the first focusable entry (safe header).
+            let target=entries.find(e=>e.row===original?.row && e.id!==id)
+            if(!target){const sameRow=entries.filter(e=>e.row===original?.row);target=sameRow.length?sameRow[0]:null}
+            if(!target){const idx=entries.indexOf(original||{id:""});target=idx>=0?entries[Math.min(idx,entries.length-1)]:null}
+            if(!target)target=entries[0]
+            if(target && target.id!==id){focusEntry(target);root.activeWidget=target.id}
+        }
         if(scrollingPage)Qt.callLater(()=>{if(root && generation===root.navigationGeneration)revealFocusedPlacement()})
         const component=(host.items || []).find(i=>i.id===id);activeGroup=component?component.parentId || "":""
         sectionActionId = id.startsWith("section-") ? id : ""

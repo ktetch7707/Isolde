@@ -752,14 +752,23 @@ Window {
             kodiLibrary.open = false
             if (sessionManager.launch("settings")) settings.openSection(section)
         }
-        onMediaRequested: (mediaType, mediaId, query, collectionId, pageStart) => {
+        onMediaRequested: (mediaType, mediaId, query, collectionId, pageStart, resumePosition) => {
             commandCenter.playbackOriginLibraryOpen = kodiLibrary.open
             kodiLibrary.open = true
             kodiLibrary.returnToHomeAfterPlayback = false
             kodiLibrary.returnToSearchAfterPlayback = mediaType === "movie" || mediaType === "episode"
             if (mediaType === "collection") kodiMedia.openCollection(collectionId)
             else if (mediaType === "show") kodiMedia.openShowResult(query, mediaId, pageStart)
-            else kodiMedia.playMedia(mediaType, mediaId, true)
+            else if (resumePosition > 0 && (mediaType === "movie" || mediaType === "episode")) {
+                resumeRestartDialog.resumePosition = resumePosition
+                resumeRestartDialog.mediaTitle = query
+                resumeRestartDialog.mediaId = mediaId
+                resumeRestartDialog.mediaKind = mediaType
+                resumeRestartDialog.kodiClient = kodiMedia
+                resumeRestartDialog.show()
+            } else {
+                kodiMedia.playMedia(mediaType, mediaId, true)
+            }
         }
         onPageSourceRequested: (pageId, sourceId, kind, view, value) => {
             if (pageId && pageSurface.activeId !== pageId) pageSurface.showPage(pageId, "", true)
@@ -788,6 +797,12 @@ Window {
         onCloseRequested: open = false
     }
     PlaybackOptionsWindow { id:playbackOptions;kodiClient:kodiMedia;appearance:window.shellAppearance("kodi",kodiLibrary.themeOrigin);uiScale:window.uiScaleFactor;safeInset:window.safeAreaPixels }
+    ResumeRestartDialog {
+        id:resumeRestartDialog
+        kodiClient:kodiMedia
+        appearance:window.shellAppearance("kodi",kodiLibrary.themeOrigin)
+        onClosed:(resume)=>kodiMedia.playMedia(resumeRestartDialog.mediaKind, resumeRestartDialog.mediaId, resume)
+    }
     CaptureSessionView {
         id: captureSession
         anchors.fill: parent

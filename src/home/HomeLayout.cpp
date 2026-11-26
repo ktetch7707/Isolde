@@ -1394,6 +1394,8 @@ HomeLayout::loadDocument(const QByteArray& data, bool userDocument)
     }
     m_activeSkinId = skinId;
     m_items = components;
+    if (!validateSlotOverrides(components, &m_errorString))
+        return false;
     m_pages = pages;
     m_homePageId = homePage.toString();
     m_rootPage = rootPage;
@@ -1711,6 +1713,53 @@ HomeLayout::validateCategoriesAndComponents(
         }
         ids.insert(item.value("id").toString());
         components.append(item);
+    }
+    return true;
+}
+
+bool
+HomeLayout::validateSlotOverrides(const QJsonArray& components, QString* error)
+{
+    // A template slot defined with contentSlot carries a permitted list of
+    // component kinds. Any component placed into the slot (parentId pointing
+    // to the slot's id) must have a componentType in that list. This validates
+    // skin slot overrides against the packaged default's permitted bindings,
+    // falling back to the default when an override is invalid or omitted.
+    QVariantList slotIds;
+    for (const auto& value : components)
+    {
+        const auto item = value.toObject();
+        if (!item.contains("contentSlot"))
+            continue;
+        const auto slot = item.value("contentSlot").toObject();
+        const auto id = slot.value("id").toString();
+        if (id.isEmpty())
+            continue;
+        slotIds.append(id);
+    }
+    for (const auto& value : components)
+    {
+        const auto item = value.toObject();
+        const auto parentId = item.value("parentId").toString();
+        if (parentId.isEmpty() || !slotIds.contains(parentId))
+            continue;
+        // Find the slot definition for this parent id.
+        QVariantList permitted;
+        for (const auto& slotValue : components)
+        {
+            const auto slotItem = slotValue.toObject();
+            if (!slotItem.contains("contentSlot"))
+                continue;
+            const auto slot = slotItem.value("contentSlot").toObject();
+            if (slot.value("id").toString() == parentId)
+            {
+                permitted = slot.value("permitted").toArray().toVariantList();
+                break;
+            }
+        }
+        const auto componentType = item.value("componentType").toString();
+        if (!ComponentSchema::validateSlotComponent(permitted, componentType, error))
+            return false;
     }
     return true;
 }

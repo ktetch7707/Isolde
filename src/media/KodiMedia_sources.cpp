@@ -91,3 +91,23 @@ KodiMedia::cancelSourcePreview()
     m_sourceRevision.clear();
     emit changed();
 }
+
+void
+KodiMedia::clean()
+{
+    if (m_busy || m_playbackActive || !m_connected)
+    {
+        m_cleanStatus = m_playbackActive ? "Stop playback before cleaning, then retry."
+                           : m_busy
+                              ? "Kodi is finishing another operation. Wait, then retry the clean."
+                              : "Connect to Kodi before cleaning. Refresh the library connection, then retry. " + m_status;
+        emit changed();
+        return;
+    }
+    ++m_generation;
+    m_busy = true;
+    m_stage = 30;
+    m_cleanStatus = "Requesting Kodi clean the library…";
+    emit changed();
+    request("VideoLibrary.Clean", {{"showdialogs", false}});
+}

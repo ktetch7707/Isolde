@@ -7,7 +7,7 @@ Item {
     property int selectedIndex: 0
     property string pendingAction: ""
     readonly property var previewRows: kodiImporter.previewText.length ? kodiImporter.previewText.split("\n").filter(function(line) { return line.length > 0 }) : []
-    readonly property int actionCount: 8
+    readonly property int actionCount: 9
     onPreviewRowsChanged: selectedIndex = Math.min(selectedIndex, actionCount + previewRows.length - 1)
 
     function back() {
@@ -33,7 +33,11 @@ Item {
             }
             else if (selectedIndex === 5) kodiImporter.clearConflicts()
             else if (selectedIndex === 6) kodiMedia.refresh()
-            else if (selectedIndex === 7) sessionManager.goHome()
+            else if (selectedIndex === 8) {
+                if (pendingAction === "export") { pendingAction = ""; kodiImporter.exportSettings(); }
+                else pendingAction = "export"
+            }
+            else if (selectedIndex === 9) sessionManager.goHome()
         }
         else if (command === inputManager.back) back()
     }
@@ -71,7 +75,8 @@ Item {
                     root.pendingAction === "rollback" ? "5 · CONFIRM rollback (press again)" : "5 · Rollback from backup",
                     "6 · Clear conflict notices",
                     "7 · Refresh library connection",
-                    "8 · Return to Isolde Home"
+                    root.pendingAction === "export" ? "8 · CONFIRM export settings (press again)" : "8 · Export settings",
+                    "9 · Return to Isolde Home"
                 ].concat(root.previewRows.map(function(line) { return "Preview · " + line }))
                 delegate: Rectangle {
                     required property int index
@@ -81,7 +86,7 @@ Item {
                     color: root.selectedIndex === index ? shell.selected : shell.surface
                     border.width: root.selectedIndex === index ? 2 : 0
                     border.color: root.selectedIndex === index ? shell.selectedFocus : shell.focus
-                    opacity: kodiImporter.importInProgress && index !== 7 ? 0.45 : 1
+                    opacity: kodiImporter.importInProgress && index !== (root.pendingAction === "export" ? 8 : 9) ? 0.45 : 1
                     Text {id:actionLabel;font.family: shell.fontFamily;anchors.left:parent.left;anchors.right:parent.right;anchors.top:parent.top;anchors.margins:18;text:modelData;color:(root.selectedIndex===index)?shell.selectedText:shell.text;font.pixelSize:19*shell.textScale;wrapMode:Text.WordWrap}
                     MouseArea { anchors.fill: parent; onClicked: { root.selectedIndex = index; root.handleCommand(inputManager.confirm) } }
                 }

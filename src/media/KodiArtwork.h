@@ -34,6 +34,38 @@ class KodiArtwork final : public QObject
     }
     Q_INVOKABLE bool
     setPoster(const QString& kind, int id, const QString& managedId);
+    /** Loads fanart artwork for a media item.
+     * @brief Loads fanart artwork.
+     * @details Requests fanart from Kodi's art metadata via the bridge.
+     * @param kind The media kind.
+     * @param id The media item ID.
+     */
+    Q_INVOKABLE void
+    loadFanart(const QString& kind, int id);
+    /** Loads banner artwork for a media item.
+     * @brief Loads banner artwork.
+     * @details Requests banner from Kodi's art metadata via the bridge.
+     * @param kind The media kind.
+     * @param id The media item ID.
+     */
+    Q_INVOKABLE void
+    loadBanner(const QString& kind, int id);
+    /** Loads clearlogo artwork for a media item.
+     * @brief Loads clearlogo artwork.
+     * @details Requests clearlogo from Kodi's art metadata via the bridge.
+     * @param kind The media kind.
+     * @param id The media item ID.
+     */
+    Q_INVOKABLE void
+    loadClearlogo(const QString& kind, int id);
+    /** Loads cast portrait artwork for a media item.
+     * @brief Loads cast portrait artwork.
+     * @details Requests cast portrait from Kodi's art metadata via the bridge.
+     * @param kind The media kind.
+     * @param id The media item ID.
+     */
+    Q_INVOKABLE void
+    loadCastPortrait(const QString& kind, int id);
   signals:
     void
     changed();
@@ -53,6 +85,7 @@ class KodiArtwork final : public QObject
     bool m_active = false;
     bool m_setting = false;
     bool m_backdrop = false;
+    QString m_role = "poster";
     std::function<QString(const QString&)> m_resolver;
     QByteArray m_poster;
     QByteArray m_received, m_request;

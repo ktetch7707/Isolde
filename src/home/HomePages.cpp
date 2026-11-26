@@ -114,6 +114,13 @@ HomeLayout::buildSurfaceAppearance(const QVariantMap& home, const QVariantMap& o
             effective[it.key()] = it.value();
     }
     auto result = ComponentSchema::surfacePalette(effective);
+    if (surface == "kodi")
+    {
+        if (!result.contains("episodeWatchedStyle"))
+            result["episodeWatchedStyle"] = "text";
+        if (!result.contains("episodeWatchedOutlineColor"))
+            result["episodeWatchedOutlineColor"] = result.value("successColor");
+    }
     result["themeSource"] = surface == "settings" || mode == "home" || originName.isEmpty()
         ? sourceForPage(surface) : originName;
     result["themeMode"] = mode;

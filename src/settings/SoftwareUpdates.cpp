@@ -3,10 +3,12 @@
 
 #include <QCoreApplication>
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QJsonParseError>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
@@ -97,10 +99,11 @@ QString githubRepoFromEndpoint(const QUrl& endpoint)
 SoftwareUpdates::SoftwareUpdates(SearchSettings* settings, const QString& installedVersion, QObject* parent,
                                  QNetworkAccessManager* network, const QUrl& endpoint,
                                  const QString& stateFile, const QString& platform,
-                                 const QString& publicKeyPath)
+                                 const QString& publicKeyPath, const QString& prefix)
     : QObject(parent), m_settings(settings), m_network(network ? network : new QNetworkAccessManager(this)),
       m_timer(new QTimer(this)), m_endpoint(endpoint),
       m_stateFile(stateFile.isEmpty() ? statePath() : stateFile),
+      m_prefix(prefix.isEmpty() ? QDir::homePath() + QStringLiteral("/.local/share/isolde-appliance") : prefix),
       m_platform(platform.isNull() ? installationPlatform() : platform),
       m_publicKeyPath(publicKeyPath.isNull() ? packagedPublicKey() : publicKeyPath),
       m_installed(stableVersion(QStringLiteral("v") + installedVersion))
@@ -160,6 +163,7 @@ void SoftwareUpdates::check()
     if (!m_settings || !m_settings->webEnabled())
     {
         webChanged();
+        emit webEnableRequested();
         return;
     }
     if (m_reply)
@@ -472,4 +476,116 @@ void SoftwareUpdates::installProcessReadyRead()
     else if (!error.isEmpty())
         m_status = QStringLiteral("Installer: %1").arg(error.trimmed().left(200));
     emit changed();
+}
+
+QString SoftwareUpdates::applianceScriptPath() const
+{
+    return QCoreApplication::applicationDirPath() + QStringLiteral("/../share/isolde/update-appliance.py");
+}
+
+QStringList SoftwareUpdates::pinnedVersions() const
+{
+    const QFileInfo pinned(m_prefix + QStringLiteral("/pinned"));
+    if (!pinned.isFile())
+        return {};
+    QFile file(pinned.absoluteFilePath());
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
+        return {};
+    QJsonParseError error;
+    const auto document = QJsonDocument::fromJson(file.readAll(), &error);
+    file.close();
+    if (error.error != QJsonParseError::NoError || !document.isArray())
+        return {};
+    QStringList result;
+    for (const auto& value : document.array())
+        result << value.toString();
+    return result;
+}
+
+QString SoftwareUpdates::currentInstalledVersion() const
+{
+    const QFileInfo current(m_prefix + QStringLiteral("/current"));
+    if (!current.isSymLink() || !current.exists())
+        return QString{};
+    const QFileInfo versionFile(current.canonicalFilePath() + QStringLiteral("/version"));
+    if (!versionFile.isFile())
+        return QString{};
+    QFile file(versionFile.absoluteFilePath());
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
+        return QString{};
+    const auto version = QString::fromUtf8(file.readAll()).trimmed();
+    file.close();
+    return version;
+}
+
+QVariantList SoftwareUpdates::savedVersions() const
+{
+    const auto pinned = pinnedVersions();
+    const auto current = currentInstalledVersion();
+    QVariantList list;
+    for (const auto& version : pinned) {
+        QVariantMap entry;
+        entry["version"] = version;
+        entry["current"] = (version == current);
+        list.append(entry);
+    }
+    return list;
+}
+
+void SoftwareUpdates::runApplianceTool(const QStringList& args, bool installOperation)
+{
+    QStringList allArgs;
+    allArgs << applianceScriptPath()
+            << QStringLiteral("--prefix") << m_prefix;
+    allArgs << args;
+    auto* process = new QProcess(this);
+    connect(process, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+            this, [this, process, installOperation](int exitCode, QProcess::ExitStatus exitStatus) {
+        if (installOperation)
+            m_installing = false;
+        if (exitCode != 0 || exitStatus != QProcess::NormalExit) {
+            auto output = process->readAllStandardError();
+            fail(QStringLiteral("Update appliance tool failed: ") + QString::fromLocal8Bit(output).trimmed());
+        } else {
+            emit changed();
+        }
+        process->deleteLater();
+    });
+    connect(process, &QProcess::errorOccurred, this, [this, process, installOperation](QProcess::ProcessError error) {
+        Q_UNUSED(error);
+        if (installOperation)
+            m_installing = false;
+        fail(QStringLiteral("Could not start the update appliance tool."));
+        process->deleteLater();
+    });
+    process->start(QStringLiteral("python3"), allArgs);
+}
+
+void SoftwareUpdates::saveVersion(const QString& version)
+{
+    if (version.isEmpty())
+        return;
+    runApplianceTool({ QStringLiteral("save"), QStringLiteral("--version"), version }, false);
+}
+
+void SoftwareUpdates::dropVersion(const QString& version)
+{
+    if (version.isEmpty())
+        return;
+    runApplianceTool({ QStringLiteral("drop"), QStringLiteral("--version"), version }, false);
+}
+
+void SoftwareUpdates::restoreVersion(const QString& version)
+{
+    if (version.isEmpty())
+        return;
+    const auto pinned = pinnedVersions();
+    if (!pinned.contains(version)) {
+        fail(QStringLiteral("Version %1 is not saved. Save it before restoring.").arg(version));
+        return;
+    }
+    m_installing = true;
+    m_status = QStringLiteral("Restoring to version %1…").arg(version);
+    emit changed();
+    runApplianceTool({ QStringLiteral("restore"), QStringLiteral("--version"), version }, true);
 }

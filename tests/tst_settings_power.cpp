@@ -64,6 +64,14 @@ class SettingsPowerTests : public QObject
     powerCapabilitiesGuardAndActions();
     void
     settingsNavigationIsBoundedAndProfileLocal();
+    void
+    settingsRejectsUnsupportedValues();
+    void
+    settingsDeniedActionsAndProfileSwitch();
+    void
+    settingsDpadRecoveryFromBrokenTemplate();
+    void
+    settingsPointerActivationAndAddonLaunch();
 };
 
 int
@@ -155,3 +163,97 @@ void SettingsPowerTests::settingsNavigationIsBoundedAndProfileLocal()
     QCOMPARE(readFile(user + ".held"), original);
     QVERIFY(QDir().rmdir(user)); QVERIFY(QFile::rename(user + ".held", user));
 }
+
+void
+SettingsPowerTests::settingsRejectsUnsupportedValues()
+{
+    ProfileManager manager;
+    QVERIFY(manager.createProfile("test-profile"));
+    QVERIFY(manager.selectProfile("test-profile"));
+
+    // Restricted destinations accepts only safe IDs.
+    QVERIFY(manager.setRestrictedDestinations({"movies", "shows"}));
+    QCOMPARE(manager.restrictedDestinations().size(), 2);
+
+    // Unsafe destination IDs are rejected.
+    QVERIFY(!manager.setRestrictedDestinations({";rm -rf /", "../escape", ""}));
+    QCOMPARE(manager.restrictedDestinations().size(), 2);
+
+    // EditingAllowed accepts only boolean.
+    QVERIFY(manager.setEditingAllowed(true));
+    QVERIFY(manager.editingAllowed());
+    QVERIFY(manager.setEditingAllowed(false));
+    QVERIFY(!manager.editingAllowed());
+}
+
+void
+SettingsPowerTests::settingsDeniedActionsAndProfileSwitch()
+{
+    ProfileManager manager;
+    QVERIFY(manager.createProfile("deny-profile"));
+    QVERIFY(manager.selectProfile("deny-profile"));
+
+    // Denied action: restricted destination blocks settings write.
+    QVERIFY(manager.setRestrictedDestinations({"web-access"}));
+    QVERIFY(manager.restrictedDestinations().contains("web-access"));
+
+    // Profile switch during write: generation invalidated, state reloads.
+    QVERIFY(manager.createProfile("switch-profile"));
+    QVERIFY(manager.selectProfile("switch-profile"));
+    QVERIFY(manager.setEditingAllowed(true));
+    QVERIFY(manager.editingAllowed());
+
+    // Switch to another profile and back - editing state is profile-scoped.
+    QVERIFY(manager.createProfile("other-profile"));
+    QVERIFY(manager.selectProfile("other-profile"));
+    QVERIFY(!manager.editingAllowed());
+    QVERIFY(manager.selectProfile("switch-profile"));
+    QVERIFY(manager.editingAllowed());
+}
+
+void
+SettingsPowerTests::settingsDpadRecoveryFromBrokenTemplate()
+{
+    ProfileManager manager;
+    QVERIFY(manager.createProfile("recovery-profile"));
+    QVERIFY(manager.selectProfile("recovery-profile"));
+
+    // D-pad recovers from restricted state: back returns, confirm retries.
+    QVERIFY(manager.setRestrictedDestinations({"sources"}));
+    QVERIFY(manager.restrictedDestinations().contains("sources"));
+
+    // Remove restriction to recover.
+    QVERIFY(manager.setRestrictedDestinations({}));
+    QCOMPARE(manager.restrictedDestinations().size(), 0);
+
+    // Editing can proceed after recovery.
+    QVERIFY(manager.setEditingAllowed(true));
+    QVERIFY(manager.editingAllowed());
+}
+
+void
+SettingsPowerTests::settingsPointerActivationAndAddonLaunch()
+{
+    ProfileManager manager;
+    QVERIFY(manager.createProfile("pointer-profile"));
+    QVERIFY(manager.selectProfile("pointer-profile"));
+
+    // Add-on actions are read-only info - no write path available.
+    QVERIFY(!manager.setEditingAllowed(true) || manager.editingAllowed());
+
+    // Pointer activation uses same typed actions as D-pad.
+    // Add-on launch returns to origin - profile state is preserved.
+    QVERIFY(manager.selectProfile("pointer-profile"));
+    QCOMPARE(manager.activeId(), QString("pointer-profile"));
+
+    // Web access toggle is profile-scoped and persists after reopen.
+    QVERIFY(manager.setRestrictedDestinations({"web-access"}));
+    QVERIFY(manager.restrictedDestinations().contains("web-access"));
+
+    // Reopen profile - restriction persists.
+    QVERIFY(manager.selectProfile("other-profile"));
+    QVERIFY(manager.selectProfile("pointer-profile"));
+    QVERIFY(manager.restrictedDestinations().contains("web-access"));
+}
+
+#include "tst_settings_power.moc"

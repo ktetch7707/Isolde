@@ -36,7 +36,7 @@ Item {
         const local=localDiscoveryMatch(title)
         if(local && (!playbackPreferences || playbackPreferences.alwaysPlayLocally)) {
             closeRequested()
-            mediaRequested(local.mediaType,local.mediaId,query.trim(),"",local.pageStart)
+            mediaRequested(local.mediaType,local.mediaId,query.trim(),"",local.pageStart,local.resume&&local.resume.position?local.resume.position:0)
         } else onlineDiscovery.loadAvailability(title.mediaType,title.providerId,title.title)
     }
     Connections {target:root.movieSearchClient;function onChanged(){if(root.pendingDiscoverySelection && root.webSearchEnabled)root.resolveDiscoverySelection(root.pendingDiscoverySelection)}}
@@ -68,7 +68,7 @@ Item {
     signal openSettings(int section)
     signal installPackage(string packageId)
     signal setupPackage(string packageId)
-    signal mediaRequested(string mediaType, int mediaId, string query, string collectionId, int pageStart)
+    signal mediaRequested(string mediaType, int mediaId, string query, string collectionId, int pageStart, int resumePosition)
     signal pageSourceRequested(string pageId, string sourceId, string kind, string view, string value)
     signal closeRequested()
     signal shellActionRequested(var action)
@@ -351,10 +351,10 @@ Item {
         } else if (item.kind === "media") {
             if(item.mediaType==="movie" || item.mediaType==="episode")mediaReturnState={index:selectedIndex,area:focusArea,header:lastHeader}
             closeRequested()
-            mediaRequested(item.mediaType, item.mediaId, query.trim(), "", item.pageStart)
+            mediaRequested(item.mediaType, item.mediaId, query.trim(), "", item.pageStart, item.resume&&item.resume.position?item.resume.position:0)
         } else if (item.kind === "mediaCollection") {
             closeRequested()
-            mediaRequested("collection", 0, query.trim(), item.collectionId, 0)
+            mediaRequested("collection", 0, query.trim(), item.collectionId, 0, 0)
         } else if (item.kind === "pageSource") {
             closeRequested()
             pageSourceRequested(pageId, item.pageSourceId, item.pageSourceKind, item.pageSourceView, item.pageSourceValue)
@@ -367,7 +367,7 @@ Item {
             resolveDiscoverySelection(item)
         } else if (item.kind === "discoveryLocal") {
             const local=localDiscoveryMatch(selectedDiscoveryTitle)
-            if(local){closeRequested();mediaRequested(local.mediaType,local.mediaId,query.trim(),"",local.pageStart)}
+            if(local){closeRequested();mediaRequested(local.mediaType,local.mediaId,query.trim(),"",local.pageStart,local.resume&&local.resume.position?local.resume.position:0)}
         } else if (item.kind === "onlineProvider" && onlineDiscovery) {
             onlineDiscovery.launchProvider(item.providerId)
         }

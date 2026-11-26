@@ -112,7 +112,7 @@ Item {
         const revision = session.document
         return model.surfaceAppearance(shellSurface, pageId)
     }
-    readonly property var tabs:editorMode?["Colors"]:pageMode?["Colors","Background","Layout","More","Header","Shell","Folder"]:structureType==="navigation"?["Content","Actions","More"]:structureType==="section"?["Content","Appearance","Layout","Actions","More"]:["Content","Appearance","Layout","Accessibility","More"].concat(current && current.appCollection?["Folder"]:[])
+    readonly property var tabs:editorMode?["Colors"]:pageMode?["Colors","Background","Layout","More","Header","Shell","Folder"]:structureType==="navigation"?["Content","Actions","More"]:structureType==="section"?["Content","Appearance","Layout","Actions","More"]:(["Content","Appearance","Layout","Accessibility","More"].concat(current && current.appCollection?["Folder"]:[])).concat(current && current.contentSlot?["Slots"]:[])
     readonly property var targets:!page?[]:structureType?((structureType==="section"?page.categories:page.composition.navigation) || []).filter(i=>i.id===structureId).map(i=>Object.assign({},i,{componentType:structureType})):(page.items || []).filter(i=>selectedIds.indexOf(i.id)>=0)
     readonly property var current:targets[0] || null
     readonly property var actions:session?session.availableActions:[]
@@ -121,7 +121,7 @@ Item {
     readonly property var localPanels:(page && page.items || []).filter(item=>item.family==="page-panel")
     readonly property var allApps:actions.filter(a=>a.action && a.action.type==="launch-app" && (a.appType==="web" || a.appType==="desktop" || a.appType==="android"))
     readonly property var apps:allApps.filter(a=>!current || !current.appCollection || !current.appCollection.section || a.appSection===current.appCollection.section)
-    readonly property var fields:((options.inspector || {})[editorMode?"studioFields":pageMode?"pageFields":"fields"] || []).filter(f=>f.tab===tabs[tab] && (advanced || !pageMode && current && current.componentType==="library" && ["borderWidth","borderColor"].includes(f.key) || !f.advanced && (pageMode?(f.tab!=="Header" || (simpleSettings.basicHeader || []).indexOf(f.key)>=0) && (f.tab!=="Layout" || (simpleSettings.basicPageLayout || []).indexOf(f.key)>=0):f.tab!=="Appearance" || (simpleSettings.basicAppearance || []).indexOf(f.key)>=0)) && (!f.needsNamedPage || !!pageId) && (!f.needsComposition || page && page.composition.enabled) && (structureType!=="navigation" || f.key==="name" || f.key==="action") && (editingState==="base" || tabs[tab]!=="Appearance" || f.scope==="presentation" && ["surfaceColor","surfaceOpacity","labelColor","iconColor","focusColor","borderColor","borderWidth","focusWidth","radius","labelSize","labelBold","labelSurfaceColor"].indexOf(f.key)>=0) && (editorMode || pageMode || targets.length && targets.every(i=>shelfFieldVisible(i,f) && (!f.types || f.types.indexOf(i.componentType)>=0) && (!f.excludeTypes || f.excludeTypes.indexOf(i.componentType)<0 || (f.includeFamilies || []).indexOf(i.family)>=0) && (!f.families || f.families.indexOf(i.family)>=0) && (!f.excludeFamilies || f.excludeFamilies.indexOf(i.family)<0))))
+    readonly property var fields:((options.inspector || {})[editorMode?"studioFields":pageMode?"pageFields":"fields"] || []).filter(f=>f.tab===tabs[tab] && (!f.surface || f.surface===shellSurface) && (advanced || !pageMode && current && current.componentType==="library" && ["borderWidth","borderColor"].includes(f.key) || !f.advanced && (pageMode?(f.tab!=="Header" || (simpleSettings.basicHeader || []).indexOf(f.key)>=0) && (f.tab!=="Layout" || (simpleSettings.basicPageLayout || []).indexOf(f.key)>=0):f.tab!=="Appearance" || (simpleSettings.basicAppearance || []).indexOf(f.key)>=0)) && (!f.needsNamedPage || !!pageId) && (!f.needsComposition || page && page.composition.enabled) && (structureType!=="navigation" || f.key==="name" || f.key==="action") && (editingState==="base" || tabs[tab]!=="Appearance" || f.scope==="presentation" && ["surfaceColor","surfaceOpacity","labelColor","iconColor","focusColor","borderColor","borderWidth","focusWidth","radius","labelSize","labelBold","labelSurfaceColor"].indexOf(f.key)>=0) && (editorMode || pageMode || targets.length && targets.every(i=>shelfFieldVisible(i,f) && (!f.types || f.types.indexOf(i.componentType)>=0) && (!f.excludeTypes || f.excludeTypes.indexOf(i.componentType)<0 || (f.includeFamilies || []).indexOf(i.family)>=0) && (!f.families || f.families.indexOf(i.family)>=0) && (!f.excludeFamilies || f.excludeFamilies.indexOf(i.family)<0))))
     readonly property real unit:(appearance.typographyScale || 1)*Math.min(width/1280,height/720)
     readonly property real panelWidth:Math.min(width-48*unit,540*unit)
     readonly property real panelHeight:Math.min(height-48*unit,650*unit)
@@ -158,7 +158,7 @@ Item {
             return style.galleryTitle || (style.folderOnly || collection.mode==="selected" || collection.section
                 ? item.name || f.fallback : pageGallery.title || qsTr("More"))
         }
-        if(pageMode && f.scope==="surfaceTheme")return f.key==="mode"?(shellSurface==="settings"?"home":"origin"):shellPreview[f.key]
+        if(pageMode && f.scope==="surfaceTheme")return f.key==="mode"?(shellSurface==="settings"?"home":"origin"):(shellPreview[f.key] === undefined ? f.fallback : shellPreview[f.key])
         if(editorMode)return (options.appearance || {})[f.key]
         if(pageMode){if(f.scope==="theme"){const group=themeGroups.find(g=>g.roles.some(r=>r.key===f.key));return page.appearance[f.key] || (group?themeColors()[group.id]:undefined)}if(f.scope==="background")return (options.backgroundDefaults || {})[f.key];if(f.scope==="headerStyle"){const defaults=(options.headerDefaults || {})[page.composition.headerMode==="identity"?"identity":"navigation"] || {};if(defaults[f.key]!==undefined)return defaults[f.key];if(f.key==="clockColor")return effective(item,{scope:"headerStyle",key:"textColor"});if(f.key==="textColor")return page.appearance.textColor;if(f.key==="focusColor")return page.appearance.focusColor;if(f.key==="backgroundColor")return page.appearance.surfaceColor}}
         else if(f.scope==="presentation"){
@@ -499,7 +499,7 @@ if(view==="colorWheel")return ["Back"]
             const item=(playlistClient.items || [])[selected-1];if(!item)return
             applyLibrarySource("playlist",item.playlistName);return
         }
-        if(view==="tabs"){tab=selected;selected=0;fieldReturnView="fields";view=tabs[tab]==="Header"?"headerGroups":"fields";headerGroup=-1;return}
+        if(view==="tabs"){tab=selected;selected=0;fieldReturnView="fields";view=tabs[tab]==="Header"?"headerGroups":tabs[tab]==="Slots"?"slotInspector":"fields";headerGroup=-1;return}
         if(view==="fields"){
             if(tabs[tab]==="More"){
                 const operations=pageMode?["navigation","sections","moviePage","showsPage","close"]:structureType?["structureEarlier","structureLater","structureRemove",...(structureType==="navigation"?["navSections"]:[]),"close"]:["duplicate","remove","orderBefore","orderAfter","destination","groupDestination","selectGroup","contents","samples","close"]
@@ -586,6 +586,7 @@ if(view==="colorWheel"){view=fieldReturnView;selected=returnSelection;return}
         if(view==="scalar"){scalarCommand(command);return}
         if(view==="colorWheel"){colorPicker.handleCommand(command);return}
         if(view==="mediaAction"){media.handleCommand(command);return}
+        if(view==="slotInspector"){slotInspector.handleCommand(command);return}
         if(view==="keyboard"){keyboard.handleCommand(command);return}
         if(collapsed){if(command===inputManager.back)closed();else if(command===inputManager.confirm){controlsShown=true;hiddenControls=false;}return}
         if(command===inputManager.back){
@@ -730,7 +731,7 @@ if(view==="colorWheel"){view=fieldReturnView;selected=returnSelection;return}
         MouseArea {anchors.fill:parent;onClicked:{root.controlsShown=true;root.hiddenControls=false}}
     }
     Rectangle {
-        id:panel;visible:!root.collapsed && root.view!=="actionPicker" && root.view!=="apps" && root.view!=="historyApps" && root.view!=="framing" && root.view!=="imageBrowser" && root.view!=="keyboard" && root.view!=="colorWheel" && root.view!=="scalar";width:root.panelWidth;height:root.panelHeight
+        id:panel;visible:!root.collapsed && root.view!=="actionPicker" && root.view!=="apps" && root.view!=="historyApps" && root.view!=="framing" && root.view!=="imageBrowser" && root.view!=="keyboard" && root.view!=="colorWheel" && root.view!=="scalar" && root.view!=="slotInspector";width:root.panelWidth;height:root.panelHeight
         x:root.roomRight?root.selectionRect.x+root.selectionRect.width+24*root.unit:root.roomLeft?root.selectionRect.x-width-24*root.unit:(parent.width-width)/2
         y:Math.max(24*root.unit,Math.min(parent.height-height-24*root.unit,root.selectionRect?root.selectionRect.y:(parent.height-height)/2))
         radius:18*root.unit;color:root.appearance.surfaceColor;border.width:2;border.color:root.appearance.focusColor
@@ -896,5 +897,9 @@ if(view==="colorWheel"){view=fieldReturnView;selected=returnSelection;return}
             onPolicyAccepted:policy=>{if(root.run("pagePatch",{scope:"theme",value:{sourcePolicy:policy}})){root.view=root.fieldReturnView;root.selected=root.returnSelection}}
             onPolicyCancelled:{root.view=root.fieldReturnView;root.selected=root.returnSelection}
         }
+    }
+    StudioSlotInspector {id:slotInspector;anchors.fill:parent;visible:root.view==="slotInspector";session:root.session;page:root.page;pageId:root.pageId;options:root.options;appearance:root.appearance;selectedIds:root.selectedIds
+        onClosed:{root.view=root.fieldReturnView;root.selected=root.returnSelection}
+        onOperation:name=>root.operation(name)
     }
 }

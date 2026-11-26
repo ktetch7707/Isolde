@@ -85,17 +85,27 @@ class Artwork:
         return {"updated": True}
 
     def get(self, params):
-        """Read a Kodi poster or a landscape image selected from its art metadata."""
+        """Read a Kodi artwork image for a named role selected from its art metadata."""
         kinds = {"movie": "Movie", "tvshow": "TVShow", "season": "Season", "episode": "Episode", "album": "Album", "song": "Song", "channel":"Channel"}
         kind, ident = params.get("kind"), params.get("id")
         role = params.get("role", "poster")
-        if set(params) - {"kind", "id", "role"} or role not in ("poster", "backdrop") or kind not in kinds or type(ident) is not int or ident < 1:
-            raise ValueError("A library identity is required")
+        valid_roles = {"poster", "backdrop", "fanart", "banner", "clearlogo", "cast", "thumb"}
+        if set(params) - {"kind", "id", "role"} or role not in valid_roles or kind not in kinds or type(ident) is not int or ident < 1:
+            raise ValueError("A library identity and valid artwork role are required")
         namespace = "AudioLibrary." if kind in {"album", "song"} else "PVR." if kind == "channel" else "VideoLibrary."
         details = self.query(namespace + "Get" + kinds[kind] + "Details", {kind + "id": ident, "properties": ["icon"] if kind == "channel" else ["art"]})
         art = details.get(kind + "details", {}).get("art", {})
         if kind == "channel": art = {"thumb":details.get("channeldetails",{}).get("icon","")}
-        names = ("fanart", "tvshow.fanart", "landscape") if role == "backdrop" else ("poster", "tvshow.poster", "thumb", "fanart")
+        role_names = {
+            "poster": ("poster", "tvshow.poster", "thumb", "fanart"),
+            "backdrop": ("fanart", "tvshow.fanart", "landscape"),
+            "fanart": ("fanart", "tvshow.fanart", "landscape"),
+            "banner": ("banner", "tvshow.banner"),
+            "clearlogo": ("clearlogo", "tvshow.clearlogo"),
+            "cast": ("cast", "thumb"),
+            "thumb": ("thumb", "poster"),
+        }
+        names = role_names.get(role, ("poster",))
         for name in names:
             url = art.get(name, "")
             if not isinstance(url, str) or not url or len(url) > 8192:

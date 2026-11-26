@@ -6,6 +6,23 @@
 
 QVariantList sortedHistory(QVariantList items, int limit);
 
+// Give skin bindings consistent watch state without treating missing Kodi metadata as unwatched.
+static void
+addVideoWatchState(QVariantMap& entry, const QJsonObject& item, const QString& type)
+{
+    if (type != "movie" && type != "episode")
+        return;
+
+    const int playCount = item.value("playcount").toInt(-1);
+    const double resumeSeconds = item.value("resume").toObject().value("position").toDouble();
+    QString state = "unknown";
+    if (playCount > 0)
+        state = "watched";
+    else if (playCount == 0)
+        state = resumeSeconds > 0 ? "inProgress" : "unwatched";
+    entry["watchState"] = state;
+}
+
 // Accept source edits only after validating the bounded bridge response and revision.
 bool
 KodiMedia::handleSourceResponse(const QJsonObject& result)
@@ -129,9 +146,35 @@ KodiMedia::consume()
         {10, &KodiMedia::handlePlaylistRenameResponse},
         {11, &KodiMedia::handlePlaylistDeleteResponse},
         {12, &KodiMedia::handlePlaylistReorderResponse},
+        {31, &KodiMedia::handlePlaylistSaveResponse},
+        {32, &KodiMedia::handlePlaylistResponse},
+        {33, &KodiMedia::handlePlaylistResponse},
+        {34, &KodiMedia::handlePlaylistResponse},
+        {35, &KodiMedia::handlePlaylistSaveResponse},
+        {36, &KodiMedia::handlePlaylistSaveResponse},
+        {37, &KodiMedia::handlePlaybackOptionsResponse},
+        {38, &KodiMedia::handlePlaybackOptionsResponse},
+        {39, &KodiMedia::handlePlaybackOptionsResponse},
+        {40, &KodiMedia::handleDeleteRecordingResponse},
+        {41, &KodiMedia::handleAddTimerResponse},
+        {42, &KodiMedia::handleDeleteTimerResponse},
+        {43, &KodiMedia::handleTimersResponse},
+        {44, &KodiMedia::handleNextUnwatchedResponse},
+        {45, &KodiMedia::handleMediaVersionsResponse},
+        {46, &KodiMedia::handleMediaVersionSelectResponse},
+        {47, &KodiMedia::handleGetChaptersResponse},
+        {48, &KodiMedia::handleSeekChapterResponse},
+        {49, &KodiMedia::handleGetMusicOptionsResponse},
+        {50, &KodiMedia::handleSetMusicOptionResponse},
+        {53, &KodiMedia::handlePVRGroupsResponse},
+        {54, &KodiMedia::handlePVRGroupMembersResponse},
         {13, &KodiMedia::handleSubtitleLoadResponse},
         {14, &KodiMedia::handleSubtitleTracksResponse},
         {15, &KodiMedia::handleSubtitleTracksResponse},
+        {27, &KodiMedia::handleMarkWatchedResponse},
+        {28, &KodiMedia::handleMetadataEditResponse},
+        {29, &KodiMedia::handleMetadataRefreshResponse},
+        {30, &KodiMedia::handleCleanResponse},
         {5, &KodiMedia::handlePlaybackStatusResponse},
         {6, &KodiMedia::handlePlaybackStatusResponse},
         {7, &KodiMedia::handlePlaybackStatusResponse},
@@ -158,8 +201,10 @@ KodiMedia::handleErrorResponse(const QJsonObject& /*response*/)
     static const QSet<int> subtitleLoadStages{13};
     static const QSet<int> playlistOperationStages{9, 10, 11, 12, 16, 17, 18, 19, 25, 26};
     static const QSet<int> subtitleTracksStages{14, 15};
-    static const QSet<int> playbackOptionsStages{20, 21};
+    static const QSet<int> playbackOptionsStages{20, 21, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 53, 54};
     static const QSet<int> sourceOperationStages{22, 23, 24};
+    static const QSet<int> watchedWriteStages{27, 28};
+    static const QSet<int> metadataReadStages{29};
     if (playbackControlStages.contains(m_stage))
         return handlePlaybackControlError();
     if (manualMovieStages.contains(m_stage))
@@ -174,6 +219,33 @@ KodiMedia::handleErrorResponse(const QJsonObject& /*response*/)
         return handlePlaybackOptionsError();
     if (sourceOperationStages.contains(m_stage))
         return handleSourceOperationError();
+    if (watchedWriteStages.contains(m_stage))
+    {
+        m_busy = false;
+        m_timeout.stop();
+        releaseSocket();
+        m_playbackStatus = "Kodi rejected the watched-state write.";
+        emit changed();
+        return true;
+    }
+    if (metadataReadStages.contains(m_stage))
+    {
+        m_busy = false;
+        m_timeout.stop();
+        releaseSocket();
+        m_playbackStatus = "Kodi rejected the metadata read.";
+        emit changed();
+        return true;
+    }
+    if (m_stage == 30)
+    {
+        m_busy = false;
+        m_timeout.stop();
+        releaseSocket();
+        m_cleanStatus = "Kodi rejected the clean request.";
+        emit changed();
+        return true;
+    }
     if (m_mediaKind == "playlists" || m_viewKind == "playlist")
         return handlePlaylistKindError();
     return false;
@@ -292,6 +364,61 @@ KodiMedia::handleManualMovieError()
 }
 
 bool
+KodiMedia::handleMarkWatchedResponse(const QJsonObject& result)
+{
+    m_timeout.stop();
+    releaseSocket();
+    m_busy = false;
+    ++m_generation;
+    if (!result.value("ok").isBool() || !result.value("ok").toBool())
+    {
+        m_playbackStatus = "Kodi rejected the watched-state write.";
+        emit changed();
+        return true;
+    }
+    m_playbackStatus = "Watched state updated.";
+    emit changed();
+    return true;
+}
+
+bool
+KodiMedia::handleMetadataEditResponse(const QJsonObject& result)
+{
+    m_timeout.stop();
+    releaseSocket();
+    m_busy = false;
+    ++m_generation;
+    if (!result.value("ok").isBool() || !result.value("ok").toBool())
+    {
+        m_playbackStatus = "Kodi rejected the metadata edit.";
+        emit changed();
+        return true;
+    }
+    m_playbackStatus = "Metadata updated.";
+    emit changed();
+    return true;
+}
+
+bool
+KodiMedia::handleMetadataRefreshResponse(const QJsonObject& result)
+{
+    m_timeout.stop();
+    releaseSocket();
+    m_busy = false;
+    ++m_generation;
+    const auto details = result.value(m_pendingEditKind + "details").toObject();
+    if (details.isEmpty())
+    {
+        m_playbackStatus = "Kodi returned no metadata for the item.";
+        emit changed();
+        return true;
+    }
+    m_playbackStatus = "Metadata refreshed.";
+    emit changed();
+    return true;
+}
+
+bool
 KodiMedia::validateSourceRevision(const QJsonObject& result)
 {
     const auto revision = result["revision"].toString();
@@ -400,6 +527,388 @@ KodiMedia::handlePlaybackOptionsResponse(const QJsonObject& result)
 }
 
 bool
+KodiMedia::handleRecordingsResponse(const QJsonObject& result)
+{
+    m_busy = false;
+    releaseSocket();
+    const auto recs = result["recordings"];
+    if (!recs.isArray() || recs.size() > 512)
+    {
+        m_recordingsStatus = "Invalid recordings list from Kodi.";
+        m_recordings.clear();
+        emit changed();
+        return true;
+    }
+    QVariantList items;
+    for (const auto& value : recs.toArray())
+    {
+        const auto rec = value.toObject();
+        const auto id = rec["recordedid"].toInt(-1);
+        if (!rec["recordedid"].isDouble() || rec["recordedid"].toDouble() != id || id < 1)
+            continue;
+        QVariantMap item;
+        item["id"] = id;
+        item["title"] = rec["title"].isString() ? rec["title"].toString() : QString();
+        item["channel"] = rec["channelname"].isString() ? rec["channelname"].toString() : QString();
+        item["startTime"] = rec["starttime"].isString() ? rec["starttime"].toString() : QString();
+        item["endTime"] = rec["endtime"].isString() ? rec["endtime"].toString() : QString();
+        item["duration"] = rec["duration"].isDouble() ? rec["duration"].toDouble() : 0;
+        item["plot"] = rec["plot"].isString() ? rec["plot"].toString() : QString();
+        items.append(item);
+    }
+    m_recordings = items;
+    m_recordingsStatus = QString("Recordings · %1 item(s)").arg(m_recordings.size());
+    emit changed();
+    return true;
+}
+
+bool
+KodiMedia::handleDeleteRecordingResponse(const QJsonObject& result)
+{
+    m_busy = false;
+    releaseSocket();
+    if (result != QJsonValue("OK") && !result["ok"].isBool())
+    {
+        m_recordingsStatus = "Kodi did not confirm the recording deletion.";
+        emit changed();
+        return true;
+    }
+    m_recordingsStatus = "Recording deleted.";
+    emit changed();
+    return true;
+}
+
+bool
+KodiMedia::handleTimersResponse(const QJsonObject& result)
+{
+    m_busy = false;
+    releaseSocket();
+    const auto tmr = result["timers"];
+    if (!tmr.isArray() || tmr.size() > 512)
+    {
+        m_timersStatus = "Invalid timers list from Kodi.";
+        m_timers.clear();
+        emit changed();
+        return true;
+    }
+    QVariantList items;
+    for (const auto& value : tmr.toArray())
+    {
+        const auto timer = value.toObject();
+        const auto id = timer["timerid"].toInt(-1);
+        if (!timer["timerid"].isDouble() || timer["timerid"].toDouble() != id || id < 1)
+            continue;
+        QVariantMap item;
+        item["id"] = id;
+        item["title"] = timer["title"].isString() ? timer["title"].toString() : QString();
+        item["channel"] = timer["channelname"].isString() ? timer["channelname"].toString() : QString();
+        item["startTime"] = timer["starttime"].isString() ? timer["starttime"].toString() : QString();
+        item["endTime"] = timer["endtime"].isString() ? timer["endtime"].toString() : QString();
+        item["type"] = timer["type"].isString() ? timer["type"].toString() : QString();
+        item["state"] = timer["state"].isString() ? timer["state"].toString() : QString();
+        item["plot"] = timer["plot"].isString() ? timer["plot"].toString() : QString();
+        items.append(item);
+    }
+    m_timers = items;
+    m_timersStatus = QString("Timers · %1 item(s)").arg(m_timers.size());
+    emit changed();
+    return true;
+}
+
+bool
+KodiMedia::handleAddTimerResponse(const QJsonObject& result)
+{
+    m_busy = false;
+    releaseSocket();
+    if (result != QJsonValue("OK") && !result["added"].isBool())
+    {
+        m_timersStatus = "Kodi did not confirm the timer creation.";
+        emit changed();
+        return true;
+    }
+    m_timersStatus = "Timer added.";
+    emit changed();
+    return true;
+}
+
+bool
+KodiMedia::handleDeleteTimerResponse(const QJsonObject& result)
+{
+    m_busy = false;
+    releaseSocket();
+    if (result != QJsonValue("OK") && !result["deleted"].isBool())
+    {
+        m_timersStatus = "Kodi did not confirm the timer deletion.";
+        emit changed();
+        return true;
+    }
+    m_timersStatus = "Timer deleted.";
+    emit changed();
+    return true;
+}
+
+bool
+KodiMedia::handleNextUnwatchedResponse(const QJsonObject& result)
+{
+    m_busy = false;
+    releaseSocket();
+    m_nextUnwatchedId = 0;
+    const auto items = result["movies"];
+    const auto& arr = items.isArray() ? items.toArray() : QJsonArray{};
+    if (!arr.isEmpty())
+    {
+        const auto& item = arr.first().toObject();
+        const auto id = item["movieid"].toInt(-1);
+        if (item["movieid"].isDouble() && item["movieid"].toDouble() == id && id >= 1)
+        {
+            m_nextUnwatchedId = id;
+            m_playbackStatus = QString("Next unwatched: %1").arg(item["title"].toString());
+        }
+    }
+    else
+    {
+        const auto& tvArr = result["tvshows"].toArray();
+        if (!tvArr.isEmpty())
+        {
+            const auto& item = tvArr.first().toObject();
+            const auto id = item["tvshowid"].toInt(-1);
+            if (item["tvshowid"].isDouble() && item["tvshowid"].toDouble() == id && id >= 1)
+            {
+                m_nextUnwatchedId = id;
+                m_playbackStatus = QString("Next unwatched show: %1").arg(item["title"].toString());
+            }
+        }
+        else
+        {
+            const auto& epArr = result["episodes"].toArray();
+            if (!epArr.isEmpty())
+            {
+                const auto& item = epArr.first().toObject();
+                const auto id = item["episodeid"].toInt(-1);
+                if (item["episodeid"].isDouble() && item["episodeid"].toDouble() == id && id >= 1)
+                {
+                    m_nextUnwatchedId = id;
+                    m_playbackStatus = QString("Next unwatched episode: %1").arg(item["title"].toString());
+                }
+            }
+            else
+            {
+                m_playbackStatus = "No unwatched items found.";
+            }
+        }
+    }
+    emit changed();
+    return true;
+}
+
+bool
+KodiMedia::handleMediaVersionsResponse(const QJsonObject& result)
+{
+    m_busy = false;
+    releaseSocket();
+    QVariantList versions;
+    const auto details = result[m_mediaVersionsKind + "details"].toObject();
+    // Movie set / collection as a version option
+    if (details.contains("setid") && details["setid"].isDouble() && details["setid"].toInt() >= 1)
+    {
+        QVariantMap setVersion;
+        setVersion["id"] = details["setid"].toInt();
+        setVersion["name"] = details.value("set").toString();
+        setVersion["type"] = "set";
+        setVersion["selected"] = false;
+        versions.append(setVersion);
+    }
+    // Individual item as its own version
+    QVariantMap itemVersion;
+    itemVersion["id"] = m_mediaVersionsId;
+    itemVersion["name"] = details.value("title").toString();
+    itemVersion["type"] = "item";
+    itemVersion["selected"] = true;
+    versions.append(itemVersion);
+    m_mediaVersions = versions;
+    m_playbackStatus = QString("Versions · %1 item(s)").arg(m_mediaVersions.size());
+    emit changed();
+    return true;
+}
+
+bool
+KodiMedia::handleMediaVersionSelectResponse(const QJsonObject& result)
+{
+    m_busy = false;
+    releaseSocket();
+    if (result != QJsonValue("OK") && !result["ok"].isBool())
+    {
+        m_playbackStatus = "Kodi did not confirm the version selection.";
+        emit changed();
+        return true;
+    }
+    m_playbackStatus = "Version selected.";
+    emit changed();
+    return true;
+}
+
+bool
+KodiMedia::handleGetChaptersResponse(const QJsonObject& result)
+{
+    m_busy = false;
+    releaseSocket();
+    const auto chaps = result["chapters"];
+    if (!chaps.isArray() || chaps.size() > 256)
+    {
+        m_chaptersStatus = "Invalid chapters list from Kodi.";
+        m_chapters.clear();
+        emit changed();
+        return true;
+    }
+    QVariantList items;
+    int currentIndex = -1;
+    for (const auto& value : chaps.toArray())
+    {
+        const auto chap = value.toObject();
+        const auto idx = chap["index"].toInt(-1);
+        const auto timeMs = chap["time"].toInt(-1);
+        if (chap["index"].isDouble() == false || chap["index"].toDouble() != idx || idx < 0 ||
+            chap["time"].isDouble() == false || chap["time"].toDouble() != timeMs || timeMs < 0)
+            continue;
+        QVariantMap item;
+        item["index"] = idx;
+        item["time"] = timeMs;
+        item["name"] = chap["name"].isString() ? chap["name"].toString() : QString("Chapter %1").arg(idx + 1);
+        item["selected"] = chap["selected"].toBool();
+        if (chap["selected"].toBool())
+            currentIndex = idx;
+        items.append(item);
+    }
+    m_chapters = items;
+    m_chaptersStatus = QString("Chapters · %1 item(s)").arg(m_chapters.size());
+    if (currentIndex >= 0)
+        m_chaptersStatus += QString(" · chapter %1").arg(currentIndex + 1);
+    emit changed();
+    return true;
+}
+
+bool
+KodiMedia::handleSeekChapterResponse(const QJsonObject& result)
+{
+    m_busy = false;
+    releaseSocket();
+    if (result != QJsonValue("OK") && !result["seeked"].isBool())
+    {
+        m_chaptersStatus = "Kodi did not confirm the chapter seek.";
+        emit changed();
+        return true;
+    }
+    m_chaptersStatus = "Chapter seeked.";
+    emit changed();
+    return true;
+}
+
+bool
+KodiMedia::handleGetMusicOptionsResponse(const QJsonObject& result)
+{
+    m_busy = false;
+    releaseSocket();
+    const auto options = result["options"];
+    if (!options.isObject())
+    {
+        m_playbackStatus = "Invalid music options from Kodi.";
+        emit changed();
+        return true;
+    }
+    const auto& obj = options.toObject();
+    if (obj.contains("music.crossfade"))
+        m_crossfadeEnabled = obj["music.crossfade"].toBool();
+    if (obj.contains("music.gapless"))
+        m_gaplessEnabled = obj["music.gapless"].toBool();
+    if (obj.contains("music.replaygain"))
+        m_replayGainMode = obj["music.replaygain"].toString();
+    m_playbackStatus = "Music options loaded.";
+    emit changed();
+    return true;
+}
+
+bool
+KodiMedia::handleSetMusicOptionResponse(const QJsonObject& result)
+{
+    m_busy = false;
+    releaseSocket();
+    if (result != QJsonValue("OK") && !result["set"].isBool())
+    {
+        m_playbackStatus = "Kodi did not confirm the music option.";
+        emit changed();
+        return true;
+    }
+    m_playbackStatus = "Music option set.";
+    emit changed();
+    return true;
+}
+
+bool
+KodiMedia::handlePVRGroupsResponse(const QJsonObject& result)
+{
+    m_busy = false;
+    releaseSocket();
+    const auto groups = result["groups"];
+    if (!groups.isArray() || groups.size() > 256)
+    {
+        m_pvrGroupsStatus = "Invalid PVR groups list from Kodi.";
+        m_pvrGroups.clear();
+        emit changed();
+        return true;
+    }
+    QVariantList items;
+    for (const auto& value : groups.toArray())
+    {
+        const auto group = value.toObject();
+        const auto id = group["groupid"].toInt(-1);
+        if (group["groupid"].isDouble() == false || group["groupid"].toDouble() != id || id < 1)
+            continue;
+        QVariantMap item;
+        item["id"] = id;
+        item["name"] = group["groupname"].isString() ? group["groupname"].toString() : QString();
+        item["type"] = group["type"].isString() ? group["type"].toString() : QString();
+        item["memberCount"] = group["membercount"].isDouble() ? group["membercount"].toDouble() : 0;
+        items.append(item);
+    }
+    m_pvrGroups = items;
+    m_pvrGroupsStatus = QString("PVR groups · %1 item(s)").arg(m_pvrGroups.size());
+    emit changed();
+    return true;
+}
+
+bool
+KodiMedia::handlePVRGroupMembersResponse(const QJsonObject& result)
+{
+    m_busy = false;
+    releaseSocket();
+    const auto members = result["members"];
+    if (!members.isArray() || members.size() > 512)
+    {
+        m_pvrGroupMembersStatus = "Invalid group members list from Kodi.";
+        m_pvrGroupMembers.clear();
+        emit changed();
+        return true;
+    }
+    QVariantList items;
+    for (const auto& value : members.toArray())
+    {
+        const auto member = value.toObject();
+        const auto id = member["memberid"].toInt(-1);
+        if (member["memberid"].isDouble() == false || member["memberid"].toDouble() != id || id < 1)
+            continue;
+        QVariantMap item;
+        item["id"] = id;
+        item["title"] = member["title"].isString() ? member["title"].toString() : QString();
+        item["type"] = member["type"].isString() ? member["type"].toString() : QString();
+        items.append(item);
+    }
+    m_pvrGroupMembers = items;
+    m_pvrGroupMembersStatus = QString("Group members · %1 item(s)").arg(m_pvrGroupMembers.size());
+    emit changed();
+    return true;
+}
+
+bool
 KodiMedia::validatePlaybackOptions(const QJsonObject& result)
 {
     if (!result["audio"].isArray() || !result["subtitles"].isArray() || !result["views"].isArray() ||
@@ -490,6 +999,56 @@ KodiMedia::handlePlaylistResponse(const QJsonObject& result)
         emit changed();
         return true;
     }
+    if (stage == 32 || stage == 33 || stage == 34)
+    {
+        const auto rows = result["members"];
+        const auto array = rows.isArray() ? rows.toArray() : QJsonArray{};
+        const auto revision = result["revision"].toString();
+        const bool valid = validatePlaylistRows(array, stage) &&
+                           QRegularExpression("^[0-9a-f]{64}$").match(revision).hasMatch();
+        if (!valid)
+        {
+            m_playlistStatus = "Kodi returned invalid playlist data. Reload before retrying.";
+            m_queueOperationInProgress = false;
+            m_busy = false;
+            emit changed();
+            return true;
+        }
+        m_queueMembers = array.toVariantList();
+        m_queueRevision = revision;
+        if (stage == 32)
+        {
+            m_busy = false;
+            m_queueOperationInProgress = false;
+            m_playlistStatus = QString("Playlist restored · %1 members").arg(array.size());
+            emit changed();
+            return true;
+        }
+        // Stages 33/34: apply add/remove after members loaded
+        if (stage == 33)
+        {
+            m_stage = 35;
+            m_busy = true;
+            QJsonArray ints;
+            ints.append(m_queueMembers.size()); // append at end
+            request("Isolde.AddPlaylistEntry",
+                    {{"name", m_queueSaveName}, {"mediaType", m_addEntryMediaType},
+                     {"mediaId", m_addEntryMediaId}, {"revision", m_queueRevision}});
+            m_playlistStatus = "Adding entry to playlist…";
+            emit changed();
+            return true;
+        }
+        if (stage == 34)
+        {
+            m_stage = 36;
+            m_busy = true;
+            request("Isolde.RemovePlaylistEntry",
+                    {{"name", m_queueSaveName}, {"index", m_removeEntryIndex}, {"revision", m_queueRevision}});
+            m_playlistStatus = "Removing entry from playlist…";
+            emit changed();
+            return true;
+        }
+    }
     const auto rows = result[stage == 17 ? "items" : "members"];
     const auto array = rows.isArray() ? rows.toArray() : QJsonArray{};
     const bool valid = validatePlaylistRows(array, stage) &&
@@ -572,6 +1131,23 @@ KodiMedia::handlePlaylistSaveResponse(const QJsonObject& result)
     m_busy = false;
     releaseSocket();
     const auto filename = result["playlistName"].toString();
+    if (stage == 31 || stage == 35 || stage == 36)
+    {
+        const bool ok = result["saved"].toBool() || result["added"].toBool() || result["removed"].toBool();
+        m_queueOperationInProgress = false;
+        if (!ok)
+        {
+            m_playlistStatus = "Kodi did not confirm the queue change. Reload before retrying.";
+            emit changed();
+            return true;
+        }
+        m_playlistStatus = stage == 31 ? "Queue saved as playlist." :
+                            (stage == 35 ? "Entry added to playlist." : "Entry removed from playlist.");
+        if (stage == 31)
+            emit playlistSaved(filename);
+        emit changed();
+        return true;
+    }
     if (!result["saved"].toBool() || !validPlaylistName(filename) || !filename.startsWith("Isolde-"))
     {
         m_playlistStatus =
@@ -781,6 +1357,7 @@ KodiMedia::handlePlaybackStoppedState(const QJsonObject& result, const QString& 
         return true;
     m_adjacentGlobal = m_adjacentAfterRead = -1;
     m_adjacentTransition = false;
+    m_nextLaunchGuard = false;
     const bool home = result.value("home").toBool() || m_returnHomeRequested;
     m_returnHomeRequested = false;
     emit playbackReturned(home);
@@ -822,6 +1399,43 @@ KodiMedia::handlePlaybackEnded(const QJsonObject& result, const QString& state)
     if (state == "ended" && !m_scheduledPlayback)
     {
         const auto generation = m_generation;
+        // Next-episode opt-in: auto-play the next episode from the same library
+        // view when the user has enabled it and the current item is an episode.
+        // Guarded against duplicate launch by requiring m_playbackActive == false
+        // and checking m_nextLaunchGuard before proceeding.
+        if (m_nextEpisodeOptIn && m_playingKind == "episode" && !m_nextLaunchGuard)
+        {
+            m_nextLaunchGuard = true;
+            QTimer::singleShot(1200,
+                               this,
+                               [this, generation]
+                               {
+                                   if (generation == m_generation && m_connected && !m_busy && !m_playbackActive &&
+                                       m_nextEpisodeOptIn && m_playingKind == "episode")
+                                   {
+                                       const int nextIndex = m_selectedIndex + 1;
+                                       if (nextIndex >= 0 && nextIndex < m_movies.size())
+                                       {
+                                           const auto next = m_movies[nextIndex].toMap();
+                                           if (next.value("mediaType").toString() == "episode")
+                                           {
+                                               m_selectedIndex = nextIndex;
+                                               m_pageStart = (nextIndex / 50) * 50;
+                                               loadPage(m_pageStart);
+                                               return;
+                                           }
+                                       }
+                                       m_nextLaunchGuard = false;
+                                       loadPage(m_pageStart);
+                                   }
+                                   else
+                                   {
+                                       m_nextLaunchGuard = false;
+                                       loadPage(m_pageStart);
+                                   }
+                               });
+            return;
+        }
         QTimer::singleShot(1200,
                            this,
                            [this, generation]
@@ -906,6 +1520,7 @@ KodiMedia::handleManualMovieResponse(const QJsonObject& result)
     auto entry = item.toVariantMap();
     entry["mediaType"] = shows ? "tvshow" : "movie";
     entry["mediaId"] = m_manualCurrentId;
+    addVideoWatchState(entry, item, entry.value("mediaType").toString());
     m_manualResults.append(entry);
     releaseSocket();
     const auto generation = m_generation;
@@ -969,6 +1584,25 @@ KodiMedia::handleScanResponse(const QJsonObject& result)
                                request("XBMC.GetInfoBooleans",
                                        {{"booleans", QJsonArray{"Library.IsScanning" + m_scanKind}}});
                        });
+    return true;
+}
+
+bool
+KodiMedia::handleCleanResponse(const QJsonObject& result)
+{
+    m_timeout.stop();
+    releaseSocket();
+    m_busy = false;
+    ++m_generation;
+    if (result.value("result") != "OK")
+    {
+        m_cleanStatus = "Kodi did not accept the clean.";
+        emit changed();
+        return true;
+    }
+    m_cleanStatus = "Kodi accepted the clean. Library files were not moved or deleted.";
+    refresh();
+    emit changed();
     return true;
 }
 
@@ -1087,6 +1721,21 @@ KodiMedia::handleLibraryListResponse(const QJsonObject& result)
         return true;
     m_movies = normalized;
     restoreHistorySelection();
+    // Kodi can reorder the saved page while the child is open. Prefer the original identity over its old index.
+    if (m_returnSelectionId > 0)
+    {
+        for (int index = 0; index < m_movies.size(); ++index)
+        {
+            const auto row = m_movies[index].toMap();
+            if (row.value("mediaId").toInt() == m_returnSelectionId &&
+                row.value("mediaType").toString() == m_returnSelectionType)
+            {
+                m_selectedIndex = index;
+                break;
+            }
+        }
+        m_returnSelectionId = -1;
+    }
     m_selectedIndex = qBound(-1, m_selectedIndex, qMax(-1, int(m_movies.size()) - 1));
     m_status = computeLibraryStatus();
     m_busy = false;
@@ -1123,11 +1772,13 @@ KodiMedia::resolveDefaultType() const
 QVariantMap
 KodiMedia::normalizeLibraryEntry(const QJsonValue& value, const QString& /*type*/, const QString& defaultType)
 {
-    auto entry = value.toObject().toVariantMap();
+    const auto item = value.toObject();
+    auto entry = item.toVariantMap();
     const QString type =
         m_viewKind == "playlist" ? entry.value("playlistMediaType").toString() : QString(defaultType);
     entry["mediaType"] = type;
     entry["mediaId"] = entry.value(QString(type) + "id", -1);
+    addVideoWatchState(entry, item, type);
     if (m_mediaKind == "history")
     {
         const auto date = entry.value("lastplayed").toString();

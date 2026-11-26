@@ -110,6 +110,18 @@ SurfaceAppearanceTests::policiesRejectUnsafeAndUnboundedData()
     QVERIFY(!ComponentSchema::validSurfaceThemes(policy("settings", "origin")));
     QVERIFY(!ComponentSchema::validSurfaceThemes(policy("native-kodi", "custom")));
     QVERIFY(!ComponentSchema::validSurfaceThemes(policy("search", "code")));
+    const QVariantMap watched{{"episodeWatchedStyle", "checkmark-outline"}, {"episodeWatchedOutlineColor", "#42c776"}};
+    QVERIFY(ComponentSchema::validSurfaceThemes(policy("kodi", "custom", watched)));
+    QVERIFY(!ComponentSchema::validSurfaceThemes(policy("search", "custom", watched)));
+    QVERIFY(!ComponentSchema::validSurfaceThemes(policy("kodi", "custom", {{"episodeWatchedStyle", "invalid"}})));
+    QVERIFY(!ComponentSchema::validSurfaceThemes(policy("kodi", "custom", {{"episodeWatchedOutlineColor", "#0042c776"}})));
+    const QVariantMap hierarchy{{"seasonPresentation", "fullscreen"}, {"episodePresentation", "dialog"},
+                                {"seasonLayout", "artwork"}, {"episodeLayout", "grid"}, {"episodeHeader", false}};
+    QVERIFY(ComponentSchema::validSurfaceThemes(policy("kodi", "custom", hierarchy)));
+    QVERIFY(!ComponentSchema::validSurfaceThemes(policy("search", "custom", hierarchy)));
+    QVERIFY(!ComponentSchema::validSurfaceThemes(policy("kodi", "custom", {{"seasonPresentation", "popup"}})));
+    QVERIFY(!ComponentSchema::validSurfaceThemes(policy("kodi", "custom", {{"episodeLayout", true}})));
+    QVERIFY(!ComponentSchema::validSurfaceThemes(policy("kodi", "custom", {{"episodeHeader", "false"}})));
     for (const auto& tokens : QList<QVariantMap>{{{"script", "run"}},
                                                  {{"textColor", "#00ffffff"}},
                                                  {{"cornerRadius", 49}},

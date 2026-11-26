@@ -24,16 +24,19 @@ class KodiService final : public QObject
     Q_PROPERTY(bool alwaysPlayLocally READ alwaysPlayLocally WRITE setAlwaysPlayLocally NOTIFY alwaysPlayLocallyChanged)
     Q_PROPERTY(QVariantList capabilityInventory READ capabilityInventory CONSTANT)
     Q_PROPERTY(QVariantList libraryViews READ libraryViews CONSTANT)
+    Q_PROPERTY(int profileGeneration READ profileGeneration NOTIFY profileGenerationChanged)
   public:
     QVariantList
     capabilityInventory() const;
     QVariantList
     libraryViews() const;
-    bool
-    alwaysPlayLocally() const
+    Q_INVOKABLE int
+    profileGeneration() const
     {
-        return m_alAlwaysPlayLocally;
+        return m_profileGeneration;
     }
+    Q_INVOKABLE void
+    invalidateProfileGeneration();
     Q_INVOKABLE void
     setAlwaysPlayLocally(bool value);
     Q_INVOKABLE void
@@ -135,6 +138,8 @@ class KodiService final : public QObject
     ready();
     void
     unavailable(const QString& reason);
+    void
+    profileGenerationChanged();
 
   private:
     void
@@ -186,6 +191,7 @@ class KodiService final : public QObject
     std::unique_ptr<QLockFile> m_lock;
     QString m_profile, m_frontend = "isolde", m_pendingFrontend;
     QString m_status;
+    int m_profileGeneration = 0;
     KodiMedia m_modeClient;
     QTimer m_modeDeadline;
     QString m_folderStatus;
