@@ -2595,7 +2595,7 @@ KodiMedia::pvrGroups() const
  * @return List of member objects with id, title, type.
  */
 QVariantList
-KodiMedia::pvrGroupMembers(int id)
+KodiMedia::pvrGroupMembers(int /*id*/)
 {
     return m_pvrGroupMembers;
 }
