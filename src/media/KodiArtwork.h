@@ -72,6 +72,7 @@ class KodiArtwork final : public QObject
 
   private:
     void loadArtwork(const QString& kind, int id, bool backdrop);
+    void loadArtwork(const QString& kind, int id, bool backdrop, const QString& role);
     void
     begin();
     void
