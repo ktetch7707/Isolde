@@ -470,6 +470,11 @@ class KodiMedia final : public QObject
     {
         return m_playbackActive;
     }
+    Q_INVOKABLE void
+    setPlaybackActive(bool active)
+    {
+        m_playbackActive = active;
+    }
     QString
     playbackStatus() const
     {
@@ -609,7 +614,7 @@ class KodiMedia final : public QObject
       * @return List of member objects with id, title, type.
       */
      Q_INVOKABLE QVariantList
-     pvrGroupMembers();
+     pvrGroupMembers(int id);
      /** Adds an item to a PVR group/favorite.
       * @brief Adds item to PVR group.
       * @details Adds a media item to a PVR group via PVR.AddToGroup.
@@ -651,8 +656,13 @@ class KodiMedia final : public QObject
       * Returns an empty list when no video is playing or no chapters exist.
       * @return List of chapter objects with index, time, name, selected flags.
       */
-     Q_INVOKABLE QVariantList
+     Q_INVOKABLE      QVariantList
      chapters() const;
+     Q_INVOKABLE void
+     setChapters(const QVariantList& chapters)
+    {
+        m_chapters = chapters;
+    }
      /** Seeks to a playback chapter by index.
       * @brief Seeks to chapter.
       * @details Seeks to the chapter's time position via Player.Seek.
