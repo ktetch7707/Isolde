@@ -2662,12 +2662,21 @@ ComponentSchema::validateRoleDefinition(const QVariantMap& role, QString* error)
     // and non-empty label. Roles map theme colors to UI surfaces; invalid role
     // definitions would leave surfaces unstyled or miscolored.
     if (!role.contains("schemaVersion") || !versionOne(role))
-        return reject(error, "Theme role requires schemaVersion 1.");
+    {
+        reject(error, "Theme role requires schemaVersion 1.");
+        return false;
+    }
     if (!role.contains("key") || !safeId(role.value("key").toString()))
-        return reject(error, "Theme role key must be a safe id.");
+    {
+        reject(error, "Theme role key must be a safe id.");
+        return false;
+    }
     if (!role.contains("label") || role.value("label").toString().trimmed().isEmpty()
         || role.value("label").toString().size() > 80)
-        return reject(error, "Theme role label must be non-empty and at most 80 characters.");
+    {
+        reject(error, "Theme role label must be non-empty and at most 80 characters.");
+        return false;
+    }
     return true;
 }
 
@@ -2678,14 +2687,20 @@ ComponentSchema::validateRoleDefinitions(const QVariantList& roles, QString* err
     // and each role passes validateRoleDefinition. Theme groups depend on these
     // definitions for color assignment.
     if (roles.isEmpty() || roles.size() > 64)
-        return reject(error, "Theme roles list must be non-empty and at most 64 entries.");
+    {
+        reject(error, "Theme roles list must be non-empty and at most 64 entries.");
+        return false;
+    }
     QSet<QString> seenKeys;
     for (const auto& value : roles)
     {
         const auto role = value.toMap();
         const auto key = role.value("key").toString();
         if (seenKeys.contains(key))
-            return reject(error, "Duplicate theme role key.");
+        {
+            reject(error, "Duplicate theme role key.");
+            return false;
+        }
         seenKeys.insert(key);
         if (!validateRoleDefinition(role, error))
             return false;
