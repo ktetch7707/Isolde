@@ -39,6 +39,11 @@ class KodiService final : public QObject
     invalidateProfileGeneration();
     Q_INVOKABLE void
     setAlwaysPlayLocally(bool value);
+    bool
+    alwaysPlayLocally() const
+    {
+        return m_alAlwaysPlayLocally;
+    }
     Q_INVOKABLE void
     resetAlwaysPlayLocally();
     void

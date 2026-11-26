@@ -772,8 +772,6 @@ class KodiMedia final : public QObject
     {
         return m_nextEpisodeOptIn;
     }
-    Q_INVOKABLE void
-    setNextEpisodeOptIn(bool enabled);
     bool
     lastPlaybackNaturalEnd() const
     {
