@@ -609,7 +609,7 @@ class KodiMedia final : public QObject
       * @return List of member objects with id, title, type.
       */
      Q_INVOKABLE QVariantList
-     pvrGroupMembers(int id);
+     pvrGroupMembers();
      /** Adds an item to a PVR group/favorite.
       * @brief Adds item to PVR group.
       * @details Adds a media item to a PVR group via PVR.AddToGroup.

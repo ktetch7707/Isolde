@@ -339,7 +339,7 @@ KodiMedia::setNextEpisodeOptIn(bool enabled)
     // each profile independently controls whether the next episode plays
     // automatically after the current one ends.
     QSettings settings;
-    settings.setValue(QString("profiles/%1/nextEpisodeOptIn").arg(qApp->property("isoldeProfile").toString()), enabled);
+    settings.setValue(QString("profiles/%1/nextEpisodeOptIn").arg(m_profile), enabled);
     m_nextEpisodeOptIn = enabled;
     emit changed();
 }
@@ -1929,7 +1929,8 @@ KodiMedia::activateNextUnwatched()
 {
     if (m_busy || m_playbackActive || m_nextUnwatchedId < 1 || m_nextUnwatchedKind.isEmpty())
         return false;
-    return playMedia(m_nextUnwatchedKind, m_nextUnwatchedId, true);
+    playMedia(m_nextUnwatchedKind, m_nextUnwatchedId, true);
+    return true;
 }
 
 /** Returns the Kodi library identity of the next unwatched item.
@@ -2594,7 +2595,7 @@ KodiMedia::pvrGroups() const
  * @return List of member objects with id, title, type.
  */
 QVariantList
-KodiMedia::pvrGroupMembers(int id)
+KodiMedia::pvrGroupMembers()
 {
     return m_pvrGroupMembers;
 }
