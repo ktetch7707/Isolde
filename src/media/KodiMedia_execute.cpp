@@ -532,7 +532,7 @@ KodiMedia::handleRecordingsResponse(const QJsonObject& result)
     m_busy = false;
     releaseSocket();
     const auto recs = result["recordings"].toArray();
-    if (!recs.isArray() || recs.size() > 512)
+    if (recs.size() > 512)
     {
         m_recordingsStatus = "Invalid recordings list from Kodi.";
         m_recordings.clear();
@@ -584,7 +584,7 @@ KodiMedia::handleTimersResponse(const QJsonObject& result)
     m_busy = false;
     releaseSocket();
     const auto tmr = result["timers"].toArray();
-    if (!tmr.isArray() || tmr.size() > 512)
+    if (tmr.size() > 512)
     {
         m_timersStatus = "Invalid timers list from Kodi.";
         m_timers.clear();
@@ -753,7 +753,7 @@ KodiMedia::handleGetChaptersResponse(const QJsonObject& result)
     m_busy = false;
     releaseSocket();
     const auto chaps = result["chapters"].toArray();
-    if (!chaps.isArray() || chaps.size() > 256)
+    if (chaps.size() > 256)
     {
         m_chaptersStatus = "Invalid chapters list from Kodi.";
         m_chapters.clear();
@@ -849,7 +849,7 @@ KodiMedia::handlePVRGroupsResponse(const QJsonObject& result)
     m_busy = false;
     releaseSocket();
     const auto groups = result["groups"].toArray();
-    if (!groups.isArray() || groups.size() > 256)
+    if (groups.size() > 256)
     {
         m_pvrGroupsStatus = "Invalid PVR groups list from Kodi.";
         m_pvrGroups.clear();
@@ -882,7 +882,7 @@ KodiMedia::handlePVRGroupMembersResponse(const QJsonObject& result)
     m_busy = false;
     releaseSocket();
     const auto members = result["members"].toArray();
-    if (!members.isArray() || members.size() > 512)
+    if (members.size() > 512)
     {
         m_pvrGroupMembersStatus = "Invalid group members list from Kodi.";
         m_pvrGroupMembers.clear();
@@ -1141,9 +1141,9 @@ KodiMedia::handlePlaylistSaveResponse(const QJsonObject& result)
             emit changed();
             return true;
         }
-        m_playlistStatus = stage == 31 ? "Queue saved as playlist." :
-                            (stage == 35 ? "Entry added to playlist." : "Entry removed from playlist.");
-        if (stage == 31)
+        m_playlistStatus = m_stage == 31 ? "Queue saved as playlist." :
+                            (m_stage == 35 ? "Entry added to playlist." : "Entry removed from playlist.");
+        if (m_stage == 31)
             emit playlistSaved(filename);
         emit changed();
         return true;
