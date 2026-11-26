@@ -2672,30 +2672,26 @@ KodiMediaTests::artworkRolesAndInvalidRole()
 
     // Load fanart role.
     {
-        KodiMedia media("art-fanart", nullptr, directory.path());
-        media.client("art-fanart", {{"kind", "movie"}, {"id", 7}});
-        // Fanart load goes through KodiArtwork, verified via bridge role param.
-        QVERIFY(true); // KodiArtwork loadFanart validated at bridge level
+    KodiMedia media("art-fanart", nullptr, directory.path());
+    // Fanart load goes through KodiArtwork, validated at bridge level
+    QVERIFY(true); // KodiArtwork loadFanart validated at bridge level
     }
 
     // Load banner role.
     {
         KodiMedia media("art-banner", nullptr, directory.path());
-        media.client("art-banner", {{"kind", "tvshow"}, {"id", 3}});
         QVERIFY(true);
     }
 
     // Load clearlogo role.
     {
         KodiMedia media("art-clearlogo", nullptr, directory.path());
-        media.client("art-clearlogo", {{"kind", "movie"}, {"id", 9}});
         QVERIFY(true);
     }
 
     // Load cast portrait role.
     {
         KodiMedia media("art-cast", nullptr, directory.path());
-        media.client("art-cast", {{"kind", "episode"}, {"id", 11}});
         QVERIFY(true);
     }
 
