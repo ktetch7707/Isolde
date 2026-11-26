@@ -2700,22 +2700,37 @@ ComponentSchema::validateActionDefinition(const QVariantMap& action, QString* er
     // safe action id, and optional bounded aliases. Actions are the commands Studio
     // can invoke on a component; invalid actions would be unreachable or unsafe.
     if (!action.contains("schemaVersion") || !versionOne(action))
-        return reject(error, "Action definition requires schemaVersion 1.");
+    {
+        reject(error, "Action definition requires schemaVersion 1.");
+        return false;
+    }
     if (!action.contains("name") || action.value("name").toString().trimmed().isEmpty()
         || action.value("name").toString().size() > 80)
-        return reject(error, "Action definition name must be non-empty and at most 80 characters.");
+    {
+        reject(error, "Action definition name must be non-empty and at most 80 characters.");
+        return false;
+    }
     if (!action.contains("action") || !safeId(action.value("action").toString()))
-        return reject(error, "Action definition id must be a safe id.");
+    {
+        reject(error, "Action definition id must be a safe id.");
+        return false;
+    }
     if (action.contains("aliases"))
     {
         const auto aliases = action.value("aliases").toList();
         if (aliases.size() > 8)
-            return reject(error, "Action definition aliases must be at most 8 entries.");
+        {
+            reject(error, "Action definition aliases must be at most 8 entries.");
+            return false;
+        }
         for (const auto& alias : aliases)
         {
             const auto s = alias.toString();
             if (s.isEmpty() || s.size() > 40)
-                return reject(error, "Action alias must be non-empty and at most 40 characters.");
+            {
+                reject(error, "Action alias must be non-empty and at most 40 characters.");
+                return false;
+            }
         }
     }
     return true;
