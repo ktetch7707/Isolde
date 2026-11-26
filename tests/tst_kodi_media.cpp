@@ -3009,7 +3009,7 @@ KodiMediaTests::playlistReopenSavedQueue()
 
     // Save a queue, then restore it.
     KodiMedia media("reopen-queue", nullptr, directory.path());
-    m_queueMembers = QVariantList{QVariantMap{{"mediaType","movie"},{"mediaId",1}}, QVariantMap{{"mediaType","episode"},{"mediaId",2}}};
+    media.setQueueMembers(QVariantList{QVariantMap{{"mediaType","movie"},{"mediaId",1}}, QVariantMap{{"mediaType","episode"},{"mediaId",2}}});
     media.saveQueue("myqueue.m3u");
     QTRY_COMPARE(server.property("lastMethod").toString(), QString("Isolde.CreatePlaylist"));
 

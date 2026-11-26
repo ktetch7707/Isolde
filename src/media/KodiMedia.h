@@ -908,7 +908,7 @@ class KodiMedia final : public QObject
     scanMovies();
     Q_INVOKABLE void
     scanMusic();
-    Q_INVOKABLE void
+    Q_INVOKABLE bool
     clean();
     void
     quitIfIdle();

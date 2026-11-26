@@ -322,6 +322,20 @@ KodiMedia::quitIfIdle()
     m_stage = 4;
     request("Isolde.QuitIfIdle");
 }
+
+bool
+KodiMedia::clean()
+{
+    if (m_busy)
+        return false;
+    ++m_generation;
+    m_busy = true;
+    m_stage = 5;
+    m_cleanStatus = "Requesting Kodi clean the library…";
+    emit changed();
+    request("VideoLibrary.Clean", {{"showdialogs", false}});
+    return true;
+}
 void
 KodiMedia::invalidate(const QString& reason)
 {
