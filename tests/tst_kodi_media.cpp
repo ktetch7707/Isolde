@@ -3037,7 +3037,7 @@ KodiMediaTests::musicShuffleRepeatControls()
 
     // Shuffle/repeat accepted when music playing.
     media.m_playingKind = "song";
-    media.m_playbackActive = true;
+    media.setPlaybackActive(true);
     media.setShuffle(true);
     QVERIFY(media.shuffleEnabled());
     media.setRepeatMode("one");
@@ -3070,7 +3070,7 @@ KodiMediaTests::musicLyricsVisualizationSlots()
 
     // Lyrics available when playing song with provider.
     media.m_playingKind = "song";
-    media.m_playbackActive = true;
+    media.setPlaybackActive(true);
     media.m_lyricsAvailable = true;
     media.m_lyricsText = "Verse one... Chorus...";
     QVERIFY(media.lyricsAvailable());
@@ -3096,11 +3096,11 @@ KodiMediaTests::picturesSlideshowControls()
     QVERIFY(!media.startSlideshow(""));
     QVERIFY(!media.slideshowActive());
 
-    media.m_playbackActive = true;
+    media.setPlaybackActive(true);
     QVERIFY(!media.startSlideshow("/pictures/vacation"));
     QVERIFY(!media.slideshowActive());
 
-    media.m_playbackActive = false;
+    media.setPlaybackActive(false);
     QVERIFY(media.startSlideshow("/pictures/vacation"));
     QVERIFY(media.slideshowActive());
 }
@@ -3451,7 +3451,7 @@ KodiMediaTests::chaptersListReturned()
     QVERIFY(media.chapters().isEmpty());
 
     // Simulate chapters being populated via server response.
-    media.m_chapters = QVariantList{
+    media.setChapters(QVariantList{
         QVariantMap{{"index", 0}, {"time", 0}, {"name", "Chapter One"}, {"selected", true}},
         QVariantMap{{"index", 1}, {"time", 300}, {"name", "Chapter Two"}, {"selected", false}},
     };
@@ -3478,11 +3478,11 @@ KodiMediaTests::chapterSeekSelected()
     QVERIFY(!media.seekChapter(0));
 
     // Set chapters and seek to a valid one.
-    media.m_chapters = QVariantList{
+    media.setChapters(QVariantList{
         QVariantMap{{"index", 0}, {"time", 0}, {"name", "Chapter One"}, {"selected", true}},
         QVariantMap{{"index", 1}, {"time", 300}, {"name", "Chapter Two"}, {"selected", false}},
     };
-    media.m_playbackActive = true;
+    media.setPlaybackActive(true);
 
     QVERIFY(media.seekChapter(1));
     QTRY_COMPARE(server.property("lastMethod").toString(), QString("Isolde.SeekChapter"));
