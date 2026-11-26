@@ -255,5 +255,3 @@ SettingsPowerTests::settingsPointerActivationAndAddonLaunch()
     QVERIFY(manager.selectProfile("pointer-profile"));
     QVERIFY(manager.restrictedDestinations().contains("web-access"));
 }
-
-#include "tst_settings_power.moc"
