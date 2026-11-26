@@ -2160,12 +2160,6 @@ KodiMedia::setQueueMembers(const QVariantList& members)
     m_queueMembers = members;
 }
 
-void
-KodiMedia::setShuffle(bool enabled)
-{
-    m_shuffleEnabled = enabled;
-}
-
 /** Plays guide stream by URL.
  * @brief Plays guide stream by URL.
  * @details Plays guide stream via Kodi bridge.

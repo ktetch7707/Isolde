@@ -530,9 +530,9 @@ serve(QLocalServer& server, int version)
                         }
                         else if (request.value("method") == "Isolde.RemoveFromGroup")
                         {
-                            server.setProperty("lastRemoveFromGroupKind", request["params"].toObject()["type"]);
-                            server.setProperty("lastRemoveFromGroupId", request["params"].toObject()["id"]);
-                            server.setProperty("lastRemoveFromGroupMemberId", request["params"].toObject()["memberid"]);
+                            server.setProperty("lastRemoveFromGroupKind", request["params"].toObject()["type"].toVariant());
+                            server.setProperty("lastRemoveFromGroupId", request["params"].toObject()["id"].toVariant());
+                            server.setProperty("lastRemoveFromGroupMemberId", request["params"].toObject()["memberid"].toVariant());
                             result = QJsonObject{{"removed", true}};
                         }
                         else if (request.value("method") == "Isolde.GetPlaylistItems")
@@ -3608,3 +3608,5 @@ KodiMediaTests::pvrGroupAddAndRemove()
 
 QTEST_GUILESS_MAIN(KodiMediaTests)
 #include "tst_kodi_media.moc"
+
+
