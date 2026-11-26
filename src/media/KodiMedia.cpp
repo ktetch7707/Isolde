@@ -2140,6 +2140,30 @@ KodiMedia::setPlayingKind(const QString& kind)
     m_playingKind = kind;
 }
 
+void
+KodiMedia::setQueueMembers(const QVariantList& members)
+{
+    m_queueMembers = members;
+}
+
+void
+KodiMedia::setShuffle(bool enabled)
+{
+    m_shuffleEnabled = enabled;
+}
+
+void
+KodiMedia::setPlaybackActive(bool active)
+{
+    m_playbackActive = active;
+}
+
+void
+KodiMedia::setChapters(const QVariantList& chapters)
+{
+    m_chapters = chapters;
+}
+
 /** Plays guide stream by URL.
  * @brief Plays guide stream by URL.
  * @details Plays guide stream via Kodi bridge.

@@ -3036,6 +3036,7 @@ KodiMediaTests::musicShuffleRepeatControls()
     QCOMPARE(media.repeatMode(), QString("off"));
 
     // Shuffle/repeat accepted when music playing.
+    // Set playback kind via public setter
     media.setPlayingKind("song");
     media.setPlaybackActive(true);
     media.setShuffle(true);

@@ -42,8 +42,6 @@ class KodiMedia final : public QObject
     Q_PROPERTY(bool playbackCanSeek READ playbackCanSeek NOTIFY changed)
     Q_PROPERTY(QVariantMap playbackTimeline READ playbackTimeline NOTIFY changed)
     Q_PROPERTY(bool nextEpisodeOptIn READ nextEpisodeOptIn NOTIFY changed)
-    Q_INVOKABLE void
-    setNextEpisodeOptIn(bool enabled);
     Q_PROPERTY(QString viewKind READ viewKind NOTIFY changed)
     Q_PROPERTY(QString viewValue READ viewValue NOTIFY changed)
     Q_PROPERTY(QVariantList collections READ collections NOTIFY changed)
@@ -56,6 +54,8 @@ class KodiMedia final : public QObject
   public:
     explicit KodiMedia(const QString& profile, QObject* parent = nullptr, const QString& testDirectory = {});
     ~KodiMedia() override;
+    Q_INVOKABLE void
+    setNextEpisodeOptIn(bool enabled);
     // Identify scoped TV drilldown separately from global episode search and playlists.
     QString hierarchyLevel() const
     {
@@ -225,6 +225,8 @@ class KodiMedia final : public QObject
     setVisualizationName(const QString& name);
     Q_INVOKABLE void
     setPlayingKind(const QString& kind);
+    Q_INVOKABLE void
+    setQueueMembers(const QVariantList& members);
     /** Starts a picture slideshow from a source path.
      * @brief Starts a picture slideshow.
      * @details Launches Kodi's slideshow for a picture source path. Rejects
