@@ -215,6 +215,14 @@ class KodiMedia final : public QObject
      */
     Q_INVOKABLE bool
     visualizationAvailable() const;
+    Q_INVOKABLE void
+    setLyricsAvailable(bool available);
+    Q_INVOKABLE void
+    setLyricsText(const QString& text);
+    Q_INVOKABLE void
+    setVisualizationAvailable(bool available);
+    Q_INVOKABLE void
+    setVisualizationName(const QString& name);
     /** Starts a picture slideshow from a source path.
      * @brief Starts a picture slideshow.
      * @details Launches Kodi's slideshow for a picture source path. Rejects

@@ -2110,6 +2110,42 @@ KodiMedia::resetMetadata(const QString& kind, int id)
     return refreshMetadata(kind, id);
 }
 
+bool
+KodiMedia::lyricsAvailable() const
+{
+    return m_lyricsAvailable;
+}
+
+Q_INVOKABLE void
+KodiMedia::setLyricsAvailable(bool available)
+{
+    m_lyricsAvailable = available;
+}
+
+Q_INVOKABLE void
+KodiMedia::setLyricsText(const QString& text)
+{
+    m_lyricsText = text;
+}
+
+bool
+KodiMedia::visualizationAvailable() const
+{
+    return m_visualizationAvailable;
+}
+
+Q_INVOKABLE void
+KodiMedia::setVisualizationAvailable(bool available)
+{
+    m_visualizationAvailable = available;
+}
+
+Q_INVOKABLE void
+KodiMedia::setVisualizationName(const QString& name)
+{
+    m_visualizationName = name;
+}
+
 /** Plays guide stream by URL.
  * @brief Plays guide stream by URL.
  * @details Plays guide stream via Kodi bridge.
