@@ -171,7 +171,7 @@ ComponentContractTests::slotValidationPermitsAndRejectsComponentKinds()
     // contentSlot validation rejects a permitted kind that is too long.
     QVariantMap slotWithLongKind{
         {"schemaVersion", 1}, {"id", "slot-2"}, {"label", "Media actions"}, {"kind", "media"},
-        {"permitted", QVariantList{QVariant("this-kind-is-way-too-long-for-a-component-name")}}}};
+        {"permitted", QVariantList{QVariant("this-kind-is-way-too-long-for-a-component-name")}}};
     QVERIFY(ComponentSchema::component(
                 QVariantMap{{"schemaVersion", 1}, {"id", "comp-2"}, {"componentType", "button"},
                             {"kind", "app"}, {"size", "standard"}, {"contentSlot", slotWithLongKind}},
