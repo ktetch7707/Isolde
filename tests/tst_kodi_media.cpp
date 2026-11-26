@@ -3406,11 +3406,11 @@ KodiMediaTests::mediaVersionsFoundAndSelected()
     KodiMedia media("media-versions", nullptr, directory.path());
 
     // mediaVersions queries for movie details.
-    QVERIFY(media.mediaVersions("movie", 42));
+    QVERIFY(!media.mediaVersions("movie", 42).isEmpty());
     QTRY_COMPARE(server.property("lastMethod").toString(), QString("VideoLibrary.GetMovieDetails"));
     auto params = server.property("lastParams").toMap();
     QCOMPARE(params.value("movieid").toInt(), 42);
-    auto properties = params.value("properties").toArray();
+    auto properties = params.value("properties").toList();
     bool hasSet = false;
     for (const auto& p : properties)
     {
@@ -3451,10 +3451,10 @@ KodiMediaTests::chaptersListReturned()
     QVERIFY(media.chapters().isEmpty());
 
     // Simulate chapters being populated via server response.
-    media.setChapters(QVariantList{
+        media.setChapters(QVariantList{
         QVariantMap{{"index", 0}, {"time", 0}, {"name", "Chapter One"}, {"selected", true}},
         QVariantMap{{"index", 1}, {"time", 300}, {"name", "Chapter Two"}, {"selected", false}},
-    };
+    });
     QCOMPARE(media.chapters().size(), 2);
     QCOMPARE(media.chapters().at(0).toMap()["name"].toString(), QString("Chapter One"));
     QCOMPARE(media.chapters().at(1).toMap()["name"].toString(), QString("Chapter Two"));
@@ -3481,7 +3481,7 @@ KodiMediaTests::chapterSeekSelected()
     media.setChapters(QVariantList{
         QVariantMap{{"index", 0}, {"time", 0}, {"name", "Chapter One"}, {"selected", true}},
         QVariantMap{{"index", 1}, {"time", 300}, {"name", "Chapter Two"}, {"selected", false}},
-    };
+    });
     media.setPlaybackActive(true);
 
     QVERIFY(media.seekChapter(1));
