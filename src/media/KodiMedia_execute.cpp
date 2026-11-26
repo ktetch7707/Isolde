@@ -531,7 +531,7 @@ KodiMedia::handleRecordingsResponse(const QJsonObject& result)
 {
     m_busy = false;
     releaseSocket();
-    const auto recs = result["recordings"];
+    const auto recs = result["recordings"].toArray();
     if (!recs.isArray() || recs.size() > 512)
     {
         m_recordingsStatus = "Invalid recordings list from Kodi.";
@@ -583,7 +583,7 @@ KodiMedia::handleTimersResponse(const QJsonObject& result)
 {
     m_busy = false;
     releaseSocket();
-    const auto tmr = result["timers"];
+    const auto tmr = result["timers"].toArray();
     if (!tmr.isArray() || tmr.size() > 512)
     {
         m_timersStatus = "Invalid timers list from Kodi.";
@@ -752,7 +752,7 @@ KodiMedia::handleGetChaptersResponse(const QJsonObject& result)
 {
     m_busy = false;
     releaseSocket();
-    const auto chaps = result["chapters"];
+    const auto chaps = result["chapters"].toArray();
     if (!chaps.isArray() || chaps.size() > 256)
     {
         m_chaptersStatus = "Invalid chapters list from Kodi.";
@@ -848,7 +848,7 @@ KodiMedia::handlePVRGroupsResponse(const QJsonObject& result)
 {
     m_busy = false;
     releaseSocket();
-    const auto groups = result["groups"];
+    const auto groups = result["groups"].toArray();
     if (!groups.isArray() || groups.size() > 256)
     {
         m_pvrGroupsStatus = "Invalid PVR groups list from Kodi.";
@@ -881,7 +881,7 @@ KodiMedia::handlePVRGroupMembersResponse(const QJsonObject& result)
 {
     m_busy = false;
     releaseSocket();
-    const auto members = result["members"];
+    const auto members = result["members"].toArray();
     if (!members.isArray() || members.size() > 512)
     {
         m_pvrGroupMembersStatus = "Invalid group members list from Kodi.";
@@ -1131,7 +1131,7 @@ KodiMedia::handlePlaylistSaveResponse(const QJsonObject& result)
     m_busy = false;
     releaseSocket();
     const auto filename = result["playlistName"].toString();
-    if (stage == 31 || stage == 35 || stage == 36)
+    if (m_stage == 31 || m_stage == 35 || m_stage == 36)
     {
         const bool ok = result["saved"].toBool() || result["added"].toBool() || result["removed"].toBool();
         m_queueOperationInProgress = false;
