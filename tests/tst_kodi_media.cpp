@@ -3071,13 +3071,13 @@ KodiMediaTests::musicLyricsVisualizationSlots()
     // Lyrics available when playing song with provider.
     media.m_playingKind = "song";
     media.setPlaybackActive(true);
-    media.m_lyricsAvailable = true;
-    media.m_lyricsText = "Verse one... Chorus...";
+    media.setLyricsAvailable(true);
+    media.setLyricsText("Verse one... Chorus...");
     QVERIFY(media.lyricsAvailable());
     QCOMPARE(media.loadLyrics(), QString("Verse one... Chorus..."));
 
-    media.m_visualizationAvailable = true;
-    media.m_visualizationName = "Goom";
+    media.setVisualizationAvailable(true);
+    media.setVisualizationName("Goom");
     QVERIFY(media.visualizationAvailable());
     QCOMPARE(media.loadVisualization(), QString("Goom"));
 }
