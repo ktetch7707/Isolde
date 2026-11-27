@@ -499,7 +499,7 @@ serve(QLocalServer& server, int version)
                         else if (request.value("method") == "Isolde.SetMusicOption")
                         {
                             server.setProperty("lastMusicOptionKind", request["params"].toObject()["kind"]);
-                            server.setProperty("lastMusicOptionValue", request["params"].toObject()["value"]);
+                            server.setProperty("lastMusicOptionValue", request["params"].toObject()["value"].toVariant());
                             result = QJsonObject{{"set", true}};
                         }
                         else if (request.value("method") == "Isolde.GetPVRGroups")
