@@ -225,6 +225,12 @@ KodiArtwork::loadCastPortrait(const QString& kind, int id)
 
 // Cancel the previous request so a late image cannot replace the newly focused item.
 void
+KodiArtwork::loadArtwork(const QString& kind, int id, bool backdrop)
+{
+    loadArtwork(kind, id, backdrop, backdrop ? "backdrop" : "");
+}
+
+void
 KodiArtwork::loadArtwork(const QString& kind, int id, bool backdrop, const QString& role)
 {
     cancel();
