@@ -498,7 +498,7 @@ serve(QLocalServer& server, int version)
                         }
                         else if (request.value("method") == "Isolde.SetMusicOption")
                         {
-                            server.setProperty("lastMusicOptionKind", request["params"].toObject()["kind"]);
+                            server.setProperty("lastMusicOptionKind", request["params"].toObject()["kind"].toVariant());
                             server.setProperty("lastMusicOptionValue", request["params"].toObject()["value"].toVariant());
                             result = QJsonObject{{"set", true}};
                         }
@@ -3608,6 +3608,7 @@ KodiMediaTests::pvrGroupAddAndRemove()
 
 QTEST_GUILESS_MAIN(KodiMediaTests)
 #include "tst_kodi_media.moc"
+
 
 
 
