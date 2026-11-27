@@ -2938,35 +2938,4 @@ KodiMedia::loadArtwork(const QString& kind, int id, bool backdrop)
     else if (!m_role.isEmpty() && m_role != "poster")
         params.insert("role", m_role);
     m_active = true;
-    QJsonObject params{{"kind", m_kind}, {"id", m_item}};
-    if (m_setting)
-        params.insert("data", QString::fromLatin1(m_poster.toBase64()));
-    else if (m_backdrop)
-        params.insert("role", "backdrop");
-    else if (!m_role.isEmpty() && m_role != "poster")
-        params.insert("role", m_role);
-    m_active = true;
-    QJsonObject params{{"kind", m_kind}, {"id", m_item}};
-    if (m_setting)
-        params.insert("data", QString::fromLatin1(m_poster.toBase64()));
-    else if (m_backdrop)
-        params.insert("role", "backdrop");
-    else if (!m_role.isEmpty() && m_role != "poster")
-        params.insert("role", m_role);
-    m_active = true;
-    QJsonObject params{{"kind", m_kind}, {"id", m_item}};
-    if (m_setting)
-        params.insert("data", QString::fromLatin1(m_poster.toBase64()));
-    else if (m_backdrop)
-        params.insert("role", "backdrop");
-    else if (!m_role.isEmpty() && m_role != "poster")
-        params.insert("role", m_role);
-      m_active = true;
-      QJsonObject params{{"kind", m_kind}, {"id", m_item}};
-      if (m_setting)
-          params.insert("data", QString::fromLatin1(m_poster.toBase64()));
-      else if (m_backdrop)
-          params.insert("role", "backdrop");
-      else if (!m_role.isEmpty() && m_role != "poster")
-          params.insert("role", m_role);
     }
