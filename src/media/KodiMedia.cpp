@@ -323,19 +323,6 @@ KodiMedia::quitIfIdle()
     request("Isolde.QuitIfIdle");
 }
 
-bool
-KodiMedia::clean()
-{
-    if (m_busy)
-        return false;
-    ++m_generation;
-    m_busy = true;
-    m_stage = 5;
-    m_cleanStatus = "Requesting Kodi clean the library…";
-    emit changed();
-    request("VideoLibrary.Clean", {{"showdialogs", false}});
-    return true;
-}
 void
 KodiMedia::invalidate(const QString& reason)
 {
@@ -2923,3 +2910,63 @@ KodiMedia::request(const QString& method, const QJsonObject& params)
     fail("The local Kodi bridge currently requires Linux.");
 #endif
 }
+
+void
+KodiMedia::loadBackdrop(const QString& kind, int id)
+{
+    loadArtwork(kind, id, true);
+}
+
+void
+KodiMedia::loadArtwork(const QString& kind, int id, bool backdrop)
+{
+    if (m_busy || m_playbackActive || id < 1)
+        return;
+    ++m_generation;
+    m_busy = true;
+    m_stage = 48;
+    m_poster.clear();
+    m_kind = kind;
+    m_item = id;
+    m_source.clear();
+    m_active = true;
+    QJsonObject params{{"kind", m_kind}, {"id", m_item}};
+    if (m_setting)
+        params.insert("data", QString::fromLatin1(m_poster.toBase64()));
+    else if (m_backdrop)
+        params.insert("role", "backdrop");
+    else if (!m_role.isEmpty() && m_role != "poster")
+        params.insert("role", m_role);
+    m_active = true;
+    QJsonObject params{{"kind", m_kind}, {"id", m_item}};
+    if (m_setting)
+        params.insert("data", QString::fromLatin1(m_poster.toBase64()));
+    else if (m_backdrop)
+        params.insert("role", "backdrop");
+    else if (!m_role.isEmpty() && m_role != "poster")
+        params.insert("role", m_role);
+    m_active = true;
+    QJsonObject params{{"kind", m_kind}, {"id", m_item}};
+    if (m_setting)
+        params.insert("data", QString::fromLatin1(m_poster.toBase64()));
+    else if (m_backdrop)
+        params.insert("role", "backdrop");
+    else if (!m_role.isEmpty() && m_role != "poster")
+        params.insert("role", m_role);
+    m_active = true;
+    QJsonObject params{{"kind", m_kind}, {"id", m_item}};
+    if (m_setting)
+        params.insert("data", QString::fromLatin1(m_poster.toBase64()));
+    else if (m_backdrop)
+        params.insert("role", "backdrop");
+    else if (!m_role.isEmpty() && m_role != "poster")
+        params.insert("role", m_role);
+      m_active = true;
+      QJsonObject params{{"kind", m_kind}, {"id", m_item}};
+      if (m_setting)
+          params.insert("data", QString::fromLatin1(m_poster.toBase64()));
+      else if (m_backdrop)
+          params.insert("role", "backdrop");
+      else if (!m_role.isEmpty() && m_role != "poster")
+          params.insert("role", m_role);
+    }
