@@ -2925,17 +2925,8 @@ KodiMedia::loadArtwork(const QString& kind, int id, bool backdrop)
     ++m_generation;
     m_busy = true;
     m_stage = 48;
-    m_poster.clear();
-    m_kind = kind;
-    m_item = id;
-    m_source.clear();
-    m_active = true;
-    QJsonObject params{{"kind", m_kind}, {"id", m_item}};
-    if (m_setting)
-        params.insert("data", QString::fromLatin1(m_poster.toBase64()));
-    else if (m_backdrop)
+    m_mediaKind = kind;
+    QJsonObject params{{"kind", kind}, {"id", id}};
+    if (backdrop)
         params.insert("role", "backdrop");
-    else if (!m_role.isEmpty() && m_role != "poster")
-        params.insert("role", m_role);
-    m_active = true;
-    }
+}
