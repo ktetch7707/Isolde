@@ -313,7 +313,11 @@ HomeLayout::validateStudioActionCategoryTypes(const QJsonArray& categories) cons
 bool
 HomeLayout::validateStudioActionCategory(const QJsonObject& category, const QStringList& pickerTypes) const
 {
-    if (category.size() != 2 || !category["name"].isString() || category["name"].toString().trimmed().isEmpty() ||
+    // Existing catalogs omit the version. Accept the explicit v1 shape without admitting unknown fields.
+    const bool versioned = category.contains("schemaVersion");
+    if (category.size() != (versioned ? 3 : 2) ||
+        (versioned && (!category["schemaVersion"].isDouble() || category["schemaVersion"].toDouble() != 1)) ||
+        !category["name"].isString() || category["name"].toString().trimmed().isEmpty() ||
         category["name"].toString().size() > 80 || !category["types"].isArray() ||
         category["types"].toArray().size() > pickerTypes.size())
         return false;

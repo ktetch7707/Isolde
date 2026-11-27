@@ -1351,7 +1351,7 @@ HomeNavigationTests::universalLocalSearchRemoteFlow()
                                                {"height", 720},
                                                {"open", true}}));
     QVERIFY2(root, qPrintable(component.errorString()));
-    QSignalSpy mediaRequested(root.get(), SIGNAL(mediaRequested(QString, int, QString, QString, int)));
+    QSignalSpy mediaRequested(root.get(), SIGNAL(mediaRequested(QString, int, QString, QString, int, int)));
     root->setProperty("query", "Pilot");
     QTRY_VERIFY(movieSearch.connected());
     QTRY_VERIFY(showSearch.connected());
@@ -2516,7 +2516,10 @@ HomeNavigationTests::televisionLibraryRemoteFlow()
                                 item["season"] = request["params"].toObject().value("season").toInt();
                                 item["episode"] = 1;
                                 item["firstaired"] = "2024-06-04";
-                                item["playcount"] = 1;
+                                const bool unwatchedQuery = request["params"].toObject().value("unwatchedOnly").toBool();
+                                item["playcount"] = unwatchedQuery ? 0 : 1;
+                                if (unwatchedQuery)
+                                    item["episodeid"] = 19;
                             }
                             rows.append(item);
                             if (method == "VideoLibrary.GetSeasons" && server.property("reorderSeasons").toBool())
@@ -2696,7 +2699,19 @@ HomeNavigationTests::televisionLibraryRemoteFlow()
     QTRY_VERIFY(!media.playbackActive());
     QVERIFY(root->property("open").toBool());
     QCOMPARE(media.selectedIndex(), 0);
-    QVERIFY(command(InputManager::Back)); // details close
+    // Find only proposes a playable match. A second Confirm starts the Kodi episode.
+    QTRY_VERIFY(!media.busy());
+    QVERIFY(command(InputManager::NavigateDown));
+    QVERIFY(root->property("nextUnwatchedFocused").toBool());
+    QVERIFY(command(InputManager::Confirm));
+    QTRY_COMPARE(media.nextUnwatchedId(), 19);
+    QVERIFY(!media.playbackActive());
+    QVERIFY(command(InputManager::Confirm));
+    QTRY_COMPARE(server.property("episode").toMap().value("episodeid").toInt(), 19);
+    QVERIFY(media.playbackActive());
+    media.playbackControl("stop");
+    QTRY_VERIFY(!media.playbackActive());
+    QVERIFY(!root->property("canFindNextEpisode").toBool());
     server.setProperty("reorderSeasons", true);
     QVERIFY(command(InputManager::Back));
     QTRY_VERIFY(!media.busy());
@@ -2749,7 +2764,14 @@ HomeNavigationTests::televisionLibraryRemoteFlow()
     media.openLibrary("movies");
     QTRY_VERIFY(!media.busy());
     media.selectIndex(-1);
-    for (int i = 0; i < 20; ++i)
+    QVERIFY(root->setProperty("toolbarIndex", 0));
+    const auto toolbar = root->property("toolbar").value<QJSValue>().toVariant().toList();
+    const auto music = std::find_if(toolbar.cbegin(), toolbar.cend(), [](const QVariant& row)
+    {
+        return row.toMap().value("kind") == "albums";
+    });
+    QVERIFY(music != toolbar.cend());
+    for (auto row = toolbar.cbegin(); row != music; ++row)
         QVERIFY(command(InputManager::NavigateRight));
     QVERIFY(command(InputManager::Confirm));
     QTRY_VERIFY(!media.busy());

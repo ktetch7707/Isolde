@@ -2612,7 +2612,7 @@ ComponentSchema::validateInspectorField(const QVariantMap& field, QString* error
                                          "choices", "types", "families", "min", "max", "step",
                                          "fallback", "advanced", "excludeTypes", "excludeFamilies",
                                          "control", "displayScale", "displayUnit", "needsNamedPage",
-                                         "needsComposition"};
+                                         "needsComposition", "surface", "includeFamilies"};
     static const QSet<QString> validTypes{"text", "number", "choice", "toggle", "color", "action",
                                           "repair", "section", "visibility", "lock", "order",
                                           "typography", "historyApps", "editorColorsReset",
@@ -2647,6 +2647,8 @@ ComponentSchema::validateInspectorField(const QVariantMap& field, QString* error
             return false;
         }
     }
+    if (error)
+        error->clear();
     return true;
 }
 
@@ -2700,6 +2702,8 @@ ComponentSchema::validateRoleDefinition(const QVariantMap& role, QString* error)
         reject(error, "Theme role label must be non-empty and at most 80 characters.");
         return false;
     }
+    if (error)
+        error->clear();
     return true;
 }
 
@@ -2771,6 +2775,8 @@ ComponentSchema::validateActionDefinition(const QVariantMap& action, QString* er
             }
         }
     }
+    if (error)
+        error->clear();
     return true;
 }
 
@@ -2830,6 +2836,8 @@ ComponentSchema::validateActionCategoryDefinition(const QVariantMap& category, Q
         reject(error, "Action category must list at least one action type.");
         return false;
     }
+    if (error)
+        error->clear();
     return true;
 }
 

@@ -298,6 +298,7 @@ Window {
             return
         }
         if (subtitleQueue.open) { subtitleQueue.handleCommand(command); return }
+        if (resumeRestartDialog.visible) { resumeRestartDialog.handleCommand(command); return }
         if (commandCenter.open) { commandCenter.handleCommand(command); return }
         if(launchErrorOverlay.visible){launchErrorOverlay.handleCommand(command);return}
         if(allApps.open){allApps.handleCommand(command);return}
@@ -764,7 +765,6 @@ Window {
                 resumeRestartDialog.mediaTitle = query
                 resumeRestartDialog.mediaId = mediaId
                 resumeRestartDialog.mediaKind = mediaType
-                resumeRestartDialog.kodiClient = kodiMedia
                 resumeRestartDialog.show()
             } else {
                 kodiMedia.playMedia(mediaType, mediaId, true)
@@ -799,9 +799,13 @@ Window {
     PlaybackOptionsWindow { id:playbackOptions;kodiClient:kodiMedia;appearance:window.shellAppearance("kodi",kodiLibrary.themeOrigin);uiScale:window.uiScaleFactor;safeInset:window.safeAreaPixels }
     ResumeRestartDialog {
         id:resumeRestartDialog
-        kodiClient:kodiMedia
+        z: 901
         appearance:window.shellAppearance("kodi",kodiLibrary.themeOrigin)
         onClosed:(resume)=>kodiMedia.playMedia(resumeRestartDialog.mediaKind, resumeRestartDialog.mediaId, resume)
+        onCancelled: {
+            kodiLibrary.returnToSearchAfterPlayback = false
+            kodiLibrary.searchReturnRequested()
+        }
     }
     CaptureSessionView {
         id: captureSession

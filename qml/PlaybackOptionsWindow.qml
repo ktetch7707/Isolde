@@ -40,7 +40,7 @@ Window {
         }
         if(mode==="view")return (options.views || []).map(value=>({label:(options.view===value?"● ":"")+({normal:qsTr("Normal"),zoom:qsTr("Zoom"),"stretch4:3":qsTr("Stretch 4:3"),widezoom:qsTr("Wide zoom"),"stretch16:9":qsTr("Stretch 16:9"),original:qsTr("Original size")}[value] || value),kind:"view",value:value}))
         if(mode==="audiooffset")return [{label:qsTr("−"),kind:"offset",value:-250},{label:qsTr("+"),kind:"offset",value:250},{label:qsTr("Audio offset: %1 ms").arg(kodiClient.audioOffset>=0?"+":"")+kodiClient.audioOffset,kind:"none"}]
-        if(mode==="speed")return [{label:"0.5×",kind:"speed",value:0.5},{label:"1.0×",kind:"speed",value:1.0},{label:"1.5×",kind:"speed",value:1.5},{label:"2.0×",kind:"speed",value:2.0},{label:qsTr("Speed: %1×").arg(kodiClient.playbackSpeed),kind:"none"}]
+        if(mode==="speed")return [{label:"1×",kind:"speed",value:1},{label:"2×",kind:"speed",value:2},{label:"4×",kind:"speed",value:4},{label:"8×",kind:"speed",value:8},{label:qsTr("Speed: %1×").arg(kodiClient.playbackSpeed),kind:"none"}]
         if(mode==="subtitleoffset")return [{label:qsTr("−"),kind:"subtitleoffset",value:-250},{label:qsTr("+"),kind:"subtitleoffset",value:250},{label:qsTr("Subtitle delay: %1 ms").arg(kodiClient.subtitleDelay>=0?"+":"")+kodiClient.subtitleDelay,kind:"none"}]
         if(mode==="chapters")return kodiClient.chapters().length>0 ? kodiClient.chapters().map(ch=>({label:(ch.selected?"● ":"")+ch.name,kind:"chapter",value:ch.index})):[{label:qsTr("No chapters"),kind:"none"}]
         const paused=timeline.state==="paused"
@@ -48,6 +48,12 @@ Window {
         if(kodiClient.playbackCanPrevious)controls.push({label:qsTr("Previous title"),symbol:"⏮︎",adjacent:-1})
         if(kodiClient.playbackCanNext)controls.push({label:qsTr("Next title"),symbol:"⏭︎",adjacent:1})
         controls.push({label:qsTr("Information"),symbol:"ⓘ",page:"info"})
+        const options = kodiClient.playbackOptions || ({})
+        if(kodiClient.playbackMediaType==="song" && typeof options.shuffled === "boolean")
+            controls.push({label:options.shuffled?qsTr("Turn shuffle off"):qsTr("Turn shuffle on"),symbol:"⇄",kind:"shuffle",value:!options.shuffled})
+        if(kodiClient.playbackMediaType==="song" && ["off","one","all"].includes(options.repeat))
+            controls.push({label:options.repeat==="off"?qsTr("Repeat off"):options.repeat==="one"?qsTr("Repeat one"):qsTr("Repeat all"),
+                           symbol:"↻",kind:"repeat",value:options.repeat==="off"?"one":options.repeat==="one"?"all":"off"})
         if(kodiClient.playbackMediaType!=="song")controls=controls.concat([{label:qsTr("Audio tracks"),symbol:"♪",page:"audio"},{label:qsTr("Audio offset"),symbol:"±",page:"audiooffset"},{label:qsTr("Playback speed"),symbol:"⏩",page:"speed"},{label:qsTr("Subtitle delay"),symbol:"◐",page:"subtitleoffset"},{label:qsTr("Chapters"),symbol:"📑",page:"chapters"},{label:qsTr("Subtitles"),symbol:"CC",page:"subtitles"},{label:qsTr("Picture size"),symbol:"▣",page:"view"}])
         return controls.concat([{label:qsTr("Stop and return"),symbol:"■",control:"stop"}])
     }

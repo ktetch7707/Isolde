@@ -50,6 +50,22 @@ class KodiImportTests(unittest.TestCase):
         for expected in ('skin.fixture','Media sources: 1','User add-ons: 1','Playlists: 1','Watch/resume databases: 1'):self.assertIn(expected,text)
         self.assert_preserved();self.assertFalse(self.operation.receipt.exists())
 
+    def test_private_export_leaves_import_receipt_and_profile_unchanged(self):
+        """Check the shipped snapshot operation publishes verified bytes and removes a failed draft."""
+        self.operation.backup()
+        original_receipt = self.operation.receipt.read_bytes()
+        published = self.operation.export()
+        self.assertEqual(module.inventory(published), self.previous)
+        self.assertEqual(published.stat().st_mode & 0o077, 0)
+        self.assertEqual(module.inventory(self.operation.target), self.previous)
+        self.assertEqual(self.operation.receipt.read_bytes(), original_receipt)
+        before_failure = set(self.operation.base.iterdir())
+        with patch.object(self.operation, 'fault', side_effect=RuntimeError('failure before publish')):
+            with self.assertRaises(RuntimeError):
+                self.operation.export()
+        self.assertEqual(set(self.operation.base.iterdir()), before_failure)
+        self.assert_preserved()
+
     def test_recursive_backup_import_cold_reopen_and_rollback(self):
         foreign=self.data/'native-profiles/6b30896f-2192-47f4-bc93-f71977515e95/kodi/home/.kodi/userdata/keep'
         self.write(foreign,b'other profile')

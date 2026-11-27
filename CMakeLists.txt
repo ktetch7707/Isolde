@@ -214,6 +214,7 @@ qt_add_qml_module(isolde
         qml/SmartPlaylistEditor.qml
         qml/KodiSettingsView.qml
         qml/PlaybackOptionsWindow.qml
+        qml/ResumeRestartDialog.qml
         qml/KodiSourcesView.qml
         qml/KodiImportView.qml
         qml/MediaFoldersView.qml
@@ -253,6 +254,7 @@ qt_add_qml_module(isolde
         qml/PageMenuWidget.qml
         qml/PageSourcesWidget.qml
         qml/StudioInspector.qml
+        qml/StudioSlotInspector.qml
         qml/StudioReusePanel.qml
         qml/StudioDesignPanel.qml
         qml/StudioActionPicker.qml
@@ -735,6 +737,8 @@ if(BUILD_TESTING)
         add_dependencies(isolde_kodi_startup_smoke isolde-native-host)
         target_link_libraries(isolde_kodi_media_tests PRIVATE isolde_core Qt6::Test)
         add_test(NAME kodi_media_client COMMAND isolde_kodi_media_tests)
+        # Keep the expanded Kodi client registration bounded while collecting failures after the original 120-second cutoff.
+        set_tests_properties(kodi_media_client PROPERTIES TIMEOUT 240)
         qt_add_executable(isolde_native_smoke tools/native-session-smoke.cpp)
         target_link_libraries(isolde_native_smoke PRIVATE isolde_core)
         add_dependencies(isolde_native_smoke isolde-native-host)

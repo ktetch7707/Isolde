@@ -33,11 +33,11 @@ Item {
             }
             else if (selectedIndex === 5) kodiImporter.clearConflicts()
             else if (selectedIndex === 6) kodiMedia.refresh()
-            else if (selectedIndex === 8) {
+            else if (selectedIndex === 7) {
                 if (pendingAction === "export") { pendingAction = ""; kodiImporter.exportSettings(); }
                 else pendingAction = "export"
             }
-            else if (selectedIndex === 9) sessionManager.goHome()
+            else if (selectedIndex === 8) sessionManager.goHome()
         }
         else if (command === inputManager.back) back()
     }
@@ -86,7 +86,7 @@ Item {
                     color: root.selectedIndex === index ? shell.selected : shell.surface
                     border.width: root.selectedIndex === index ? 2 : 0
                     border.color: root.selectedIndex === index ? shell.selectedFocus : shell.focus
-                    opacity: kodiImporter.importInProgress && index !== (root.pendingAction === "export" ? 8 : 9) ? 0.45 : 1
+                    opacity: kodiImporter.importInProgress ? 0.45 : 1
                     Text {id:actionLabel;font.family: shell.fontFamily;anchors.left:parent.left;anchors.right:parent.right;anchors.top:parent.top;anchors.margins:18;text:modelData;color:(root.selectedIndex===index)?shell.selectedText:shell.text;font.pixelSize:19*shell.textScale;wrapMode:Text.WordWrap}
                     MouseArea { anchors.fill: parent; onClicked: { root.selectedIndex = index; root.handleCommand(inputManager.confirm) } }
                 }

@@ -242,6 +242,32 @@ def dispatch(raw, execute, playback=None, artwork=None, playlists=None, sources=
                 return error(-32602, "Playcount must be 0 or 1")
             if field != "playcount" and (not isinstance(value, str) or not value or len(value) > 1024):
                 return error(-32602, "Metadata field must be a non-empty string up to 1024 characters")
+        details = dict(params["details"])
+        if not details:
+            return error(-32602, "At least one metadata field is required")
+        if "genre" in details:
+            details["genre"] = [details["genre"]]
+        try:
+            if "year" in details:
+                details["year"] = int(details["year"])
+                if not 0 <= details["year"] <= 9999:
+                    raise ValueError("invalid year")
+            if "rating" in details:
+                details["rating"] = float(details["rating"])
+                if not 0 <= details["rating"] <= 10:
+                    raise ValueError("invalid rating")
+        except ValueError:
+            return error(-32602, "Invalid metadata year or rating")
+        # Translate Isolde's bounded edit object into Kodi's top-level RPC fields.
+        try:
+            reply = json.loads(execute(json.dumps({"jsonrpc": "2.0", "id": request_id,
+                                                  "method": request["method"],
+                                                  "params": {identity: params[identity], **details}})))
+        except Exception:
+            return error(-32603, "Kodi could not process the edit")
+        if reply.get("result") != "OK":
+            return error(-32000, "Kodi did not confirm the edit")
+        return {"jsonrpc": "2.0", "id": request_id, "result": {"ok": True}}
     if request["method"] == "Player.GetItem":
         if (set(params) != {"playerid", "properties"} or type(params.get("playerid")) is not int
             or params["playerid"] not in (0, 1) or not isinstance(params.get("properties"), list) or params["properties"]):
@@ -357,6 +383,32 @@ def dispatch(raw, execute, playback=None, artwork=None, playlists=None, sources=
                     return error(-32602, "Viewing history requires an ISO calendar date")
             if request["method"] == "VideoLibrary.GetSeasons" or (request["method"] == "VideoLibrary.GetTVShows" and rule["field"] != "title"):
                 return error(-32602, "This filter is not supported for this view")
+        # Combine only typed private browse fields with the already validated Kodi rule.
+        watched_only = params.pop("watchedOnly", False)
+        unwatched_only = params.pop("unwatchedOnly", False)
+        facets = params.pop("facetfilters", {})
+        if (type(watched_only) is not bool or type(unwatched_only) is not bool or (watched_only and unwatched_only)
+                or ((watched_only or unwatched_only) and request["method"] not in
+                    ("VideoLibrary.GetMovies", "VideoLibrary.GetEpisodes"))):
+            return error(-32602, "Watched filter is not supported for this view")
+        if (unwatched_only and request["method"] == "VideoLibrary.GetEpisodes"
+                and ("tvshowid" not in params or "season" not in params)):
+            return error(-32602, "Next unwatched episode requires a show and season")
+        if not isinstance(facets, dict) or (facets and request["method"] != "VideoLibrary.GetMovies"):
+            return error(-32602, "Facets are not supported for this view")
+        rules = [params["filter"]] if "filter" in params else []
+        if watched_only:
+            rules.append({"field": "playcount", "operator": "greaterthan", "value": "0"})
+        if unwatched_only:
+            rules.append({"field": "playcount", "operator": "is", "value": "0"})
+        for field, value in facets.items():
+            if (field not in {"genre", "actor", "director", "studio", "year"}
+                    or not isinstance(value, str) or not value.strip() or len(value) > 160
+                    or (field == "year" and (not value.isascii() or not value.isdecimal() or len(value) != 4))):
+                return error(-32602, "Invalid movie facet")
+            rules.append({"field": field, "operator": "is", "value": value})
+        if rules:
+            params["filter"] = rules[0] if len(rules) == 1 else {"and": rules}
         limits = params.get("limits", {"start": 0, "end": 50})
         if (not isinstance(limits, dict) or type(limits.get("start", 0)) is not int
             or type(limits.get("end")) is not int or limits.get("start", 0) < 0

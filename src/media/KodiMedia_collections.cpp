@@ -728,10 +728,7 @@ void
 KodiMedia::setShuffle(bool enabled)
 {
     if (m_playbackActive && m_playingKind == "song")
-    {
-        m_shuffleEnabled = enabled;
-        emit changed();
-    }
+        setPlaybackOption("shuffle", enabled);
 }
 
 /** Sets repeat mode for music playback.
@@ -745,10 +742,7 @@ KodiMedia::setRepeatMode(const QString& mode)
 {
     if (m_playbackActive && m_playingKind == "song" &&
         QStringList{"off", "one", "all"}.contains(mode))
-    {
-        m_repeatMode = mode;
-        emit changed();
-    }
+        setPlaybackOption("repeat", mode);
 }
 
 /** Returns whether shuffle is enabled.

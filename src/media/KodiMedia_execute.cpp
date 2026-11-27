@@ -121,13 +121,14 @@ KodiMedia::consume()
                                            : "Kodi returned an incompatible response.");
         return;
     }
-    if (m_stage != 2 && m_stage != 4 && !response.value("result").isObject())
+    // Scan, quit and clean use Kodi's scalar acknowledgement instead of a result object.
+    const bool scalarAcknowledgement = m_stage == 2 || m_stage == 4 || m_stage == 30;
+    if (!scalarAcknowledgement && !response.value("result").isObject())
     {
         fail("Kodi returned an incompatible response.");
         return;
     }
-    // Scan and quit return a scalar acknowledgement. Keep it intact for their handlers.
-    const auto result = m_stage == 2 || m_stage == 4 ? response : response.value("result").toObject();
+    const auto result = scalarAcknowledgement ? response : response.value("result").toObject();
     m_timeout.stop();
     using StageHandler = bool (KodiMedia::*)(const QJsonObject&);
     static const QHash<int, StageHandler> stageHandlers{
@@ -201,7 +202,7 @@ KodiMedia::handleErrorResponse(const QJsonObject& /*response*/)
     static const QSet<int> subtitleLoadStages{13};
     static const QSet<int> playlistOperationStages{9, 10, 11, 12, 16, 17, 18, 19, 25, 26};
     static const QSet<int> subtitleTracksStages{14, 15};
-    static const QSet<int> playbackOptionsStages{20, 21, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 53, 54};
+    static const QSet<int> playbackOptionsStages{20, 21, 37, 38, 39, 40, 41, 42, 43, 45, 46, 47, 48, 49, 50, 53, 54};
     static const QSet<int> sourceOperationStages{22, 23, 24};
     static const QSet<int> watchedWriteStages{27, 28};
     static const QSet<int> metadataReadStages{29};
@@ -246,6 +247,8 @@ KodiMedia::handleErrorResponse(const QJsonObject& /*response*/)
         emit changed();
         return true;
     }
+    if (m_stage == 44)
+        return handleNextUnwatchedResponse({});
     if (m_mediaKind == "playlists" || m_viewKind == "playlist")
         return handlePlaylistKindError();
     return false;
@@ -363,6 +366,7 @@ KodiMedia::handleManualMovieError()
     return true;
 }
 
+// Refresh the selected page from Kodi after a confirmed write so indicators use backend state.
 bool
 KodiMedia::handleMarkWatchedResponse(const QJsonObject& result)
 {
@@ -377,7 +381,10 @@ KodiMedia::handleMarkWatchedResponse(const QJsonObject& result)
         return true;
     }
     m_playbackStatus = "Watched state updated.";
-    emit changed();
+    if (m_connected)
+        refresh();
+    else
+        emit changed();
     return true;
 }
 
@@ -647,55 +654,27 @@ KodiMedia::handleDeleteTimerResponse(const QJsonObject& result)
     return true;
 }
 
+// Accept only the requested playable type and require Kodi to confirm it is unwatched.
 bool
 KodiMedia::handleNextUnwatchedResponse(const QJsonObject& result)
 {
     m_busy = false;
     releaseSocket();
+    const auto rows = result.value(m_nextUnwatchedKind == "episode" ? "episodes" : "movies");
+    const auto items = rows.toArray();
+    const auto item = items.isEmpty() ? QJsonObject{} : items.first().toObject();
+    const auto identity = item.value(m_nextUnwatchedKind + "id");
+    const int id = identity.toInt(-1);
     m_nextUnwatchedId = 0;
-    const auto items = result["movies"];
-    const auto& arr = items.isArray() ? items.toArray() : QJsonArray{};
-    if (!arr.isEmpty())
-    {
-        const auto& item = arr.first().toObject();
-        const auto id = item["movieid"].toInt(-1);
-        if (item["movieid"].isDouble() && item["movieid"].toDouble() == id && id >= 1)
-        {
-            m_nextUnwatchedId = id;
-            m_playbackStatus = QString("Next unwatched: %1").arg(item["title"].toString());
-        }
-    }
+    if (rows.isArray() && items.isEmpty())
+        m_playbackStatus = "No unwatched items found.";
+    else if (items.size() != 1 || id < 1 || identity.toDouble() != id ||
+             item.value("playcount").toInt(-1) != 0)
+        m_playbackStatus = "Kodi did not confirm an unwatched item.";
     else
     {
-        const auto& tvArr = result["tvshows"].toArray();
-        if (!tvArr.isEmpty())
-        {
-            const auto& item = tvArr.first().toObject();
-            const auto id = item["tvshowid"].toInt(-1);
-            if (item["tvshowid"].isDouble() && item["tvshowid"].toDouble() == id && id >= 1)
-            {
-                m_nextUnwatchedId = id;
-                m_playbackStatus = QString("Next unwatched show: %1").arg(item["title"].toString());
-            }
-        }
-        else
-        {
-            const auto& epArr = result["episodes"].toArray();
-            if (!epArr.isEmpty())
-            {
-                const auto& item = epArr.first().toObject();
-                const auto id = item["episodeid"].toInt(-1);
-                if (item["episodeid"].isDouble() && item["episodeid"].toDouble() == id && id >= 1)
-                {
-                    m_nextUnwatchedId = id;
-                    m_playbackStatus = QString("Next unwatched episode: %1").arg(item["title"].toString());
-                }
-            }
-            else
-            {
-                m_playbackStatus = "No unwatched items found.";
-            }
-        }
+        m_nextUnwatchedId = id;
+        m_playbackStatus = QString("Next unwatched: %1").arg(item.value("title").toString());
     }
     emit changed();
     return true;
@@ -849,7 +828,7 @@ KodiMedia::handlePVRGroupsResponse(const QJsonObject& result)
     m_busy = false;
     releaseSocket();
     const auto groups = result["groups"].toArray();
-    if (groups.size() > 256)
+    if (!result["groups"].isArray() || groups.size() > 50)
     {
         m_pvrGroupsStatus = "Invalid PVR groups list from Kodi.";
         m_pvrGroups.clear();
@@ -860,14 +839,13 @@ KodiMedia::handlePVRGroupsResponse(const QJsonObject& result)
     for (const auto& value : groups)
     {
         const auto group = value.toObject();
-        const auto id = group["groupid"].toInt(-1);
-        if (group["groupid"].isDouble() == false || group["groupid"].toDouble() != id || id < 1)
+        const auto id = group["id"].toInt(-1);
+        if (group["id"].toDouble() != id || id < 1)
             continue;
         QVariantMap item;
         item["id"] = id;
-        item["name"] = group["groupname"].isString() ? group["groupname"].toString() : QString();
+        item["name"] = group["name"].toString();
         item["type"] = group["type"].isString() ? group["type"].toString() : QString();
-        item["memberCount"] = group["membercount"].isDouble() ? group["membercount"].toDouble() : 0;
         items.append(item);
     }
     m_pvrGroups = items;
@@ -882,7 +860,7 @@ KodiMedia::handlePVRGroupMembersResponse(const QJsonObject& result)
     m_busy = false;
     releaseSocket();
     const auto members = result["members"].toArray();
-    if (members.size() > 512)
+    if (!result["members"].isArray() || result["groupId"].toInt(-1) != m_pvrGroupId || members.size() > 50)
     {
         m_pvrGroupMembersStatus = "Invalid group members list from Kodi.";
         m_pvrGroupMembers.clear();
@@ -893,8 +871,8 @@ KodiMedia::handlePVRGroupMembersResponse(const QJsonObject& result)
     for (const auto& value : members)
     {
         const auto member = value.toObject();
-        const auto id = member["memberid"].toInt(-1);
-        if (member["memberid"].isDouble() == false || member["memberid"].toDouble() != id || id < 1)
+        const auto id = member["id"].toInt(-1);
+        if (member["id"].toDouble() != id || id < 1)
             continue;
         QVariantMap item;
         item["id"] = id;
@@ -947,12 +925,17 @@ KodiMedia::validatePlaybackOptionRows(const QJsonArray& rows, QSet<int>& seen)
     return true;
 }
 
+// Update controls from the confirmed Kodi snapshot, including song queue options when present.
 void
 KodiMedia::applyPlaybackOptionsResult(const QJsonObject& result, bool valid)
 {
     if (valid)
     {
         m_playbackOptions = result.toVariantMap();
+        m_shuffleEnabled = result.value("shuffled").toBool();
+        m_repeatMode = result.value("repeat").toString("off");
+        m_audioOffset = result.value("audioOffsetMs").toInt(m_audioOffset);
+        m_playbackSpeed = result.value("speed").toDouble(m_playbackSpeed);
         m_playbackOptionsStatus = "Choose an option. Confirm applies it to the managed Kodi player.";
     }
     else
@@ -1343,8 +1326,21 @@ KodiMedia::handlePlaybackPlayingState(const QJsonObject& result, const QString& 
 bool
 KodiMedia::handlePlaybackStoppedState(const QJsonObject& result, const QString& state)
 {
+    // Reuse the paged adjacent-title transition only for a natural end in an ordered season.
+    const bool autoNext = m_nextEpisodeOptIn && m_stage == 6 && m_playingKind == "episode" &&
+                          m_mediaKind == "episodes" && m_viewKind == "all" && m_showId > 0 && m_season >= 0 &&
+                          (m_sortField.isEmpty() || (m_sortField == "episode" && m_sortOrder == "ascending")) &&
+                          state == "ended" && result.value("naturalEnd").toBool() &&
+                          !m_returnHomeRequested && !result.value("home").toBool() && playbackCanNext();
+    if (autoNext)
+    {
+        m_adjacentGlobal = m_pageStart + m_selectedIndex + 1;
+        m_adjacentTransition = true;
+    }
     m_playbackPoll.stop();
     m_playbackActive = m_playbackVisible = false;
+    m_audioOffset = m_subtitleDelay = 0;
+    m_playbackSpeed = 1.0;
     m_subtitleTracks.clear();
     m_lastPlaybackNaturalEnd =
         state == "ended" && result.value("naturalEnd").isBool() && result.value("naturalEnd").toBool();
@@ -1357,7 +1353,6 @@ KodiMedia::handlePlaybackStoppedState(const QJsonObject& result, const QString& 
         return true;
     m_adjacentGlobal = m_adjacentAfterRead = -1;
     m_adjacentTransition = false;
-    m_nextLaunchGuard = false;
     const bool home = result.value("home").toBool() || m_returnHomeRequested;
     m_returnHomeRequested = false;
     emit playbackReturned(home);
@@ -1399,43 +1394,6 @@ KodiMedia::handlePlaybackEnded(const QJsonObject& result, const QString& state)
     if (state == "ended" && !m_scheduledPlayback)
     {
         const auto generation = m_generation;
-        // Next-episode opt-in: auto-play the next episode from the same library
-        // view when the user has enabled it and the current item is an episode.
-        // Guarded against duplicate launch by requiring m_playbackActive == false
-        // and checking m_nextLaunchGuard before proceeding.
-        if (m_nextEpisodeOptIn && m_playingKind == "episode" && !m_nextLaunchGuard)
-        {
-            m_nextLaunchGuard = true;
-            QTimer::singleShot(1200,
-                               this,
-                               [this, generation]
-                               {
-                                   if (generation == m_generation && m_connected && !m_busy && !m_playbackActive &&
-                                       m_nextEpisodeOptIn && m_playingKind == "episode")
-                                   {
-                                       const int nextIndex = m_selectedIndex + 1;
-                                       if (nextIndex >= 0 && nextIndex < m_movies.size())
-                                       {
-                                           const auto next = m_movies[nextIndex].toMap();
-                                           if (next.value("mediaType").toString() == "episode")
-                                           {
-                                               m_selectedIndex = nextIndex;
-                                               m_pageStart = (nextIndex / 50) * 50;
-                                               loadPage(m_pageStart);
-                                               return;
-                                           }
-                                       }
-                                       m_nextLaunchGuard = false;
-                                       loadPage(m_pageStart);
-                                   }
-                                   else
-                                   {
-                                       m_nextLaunchGuard = false;
-                                       loadPage(m_pageStart);
-                                   }
-                               });
-            return;
-        }
         QTimer::singleShot(1200,
                            this,
                            [this, generation]

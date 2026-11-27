@@ -21,6 +21,7 @@ Item {
     SurfacePalette {id:shell;appearance:root.appearance}
     readonly property var rows:{
         if(mode==="folders")return []
+        if(mode==="confirmClean")return [{label:qsTr("Cancel"),back:true},{label:qsTr("Remove missing entries from the video library"),confirmClean:true}]
         if(mode==="roots")return (kodiClient.sourceRoots || []).map(path=>({label:path,path:path})).concat([{label:qsTr("Back"),back:true}])
         if(mode==="preview")return reviewRows().concat([{label:qsTr("Back to draft"),back:true},{label:confirmSave?qsTr("CONFIRM · Apply this source change"):qsTr("Apply reviewed source change"),apply:true}])
         if(mode==="edit")return [
@@ -73,8 +74,17 @@ Item {
             if(row.back){back();return}
             if(row.refresh){refresh();return}
             if(row.folders){mode="folders";return}
-            if(row.clean){pending="clean";kodiClient.clean();return}
             if(!profileManager.editingAllowed){message=qsTr("This profile does not allow source changes");return}
+            if(row.clean){
+                mode="confirmClean";selectedIndex=0
+                message=qsTr("Kodi will remove library entries it can no longer find, including entries on disconnected sources. Media files are not deleted.")
+                return
+            }
+            if(row.confirmClean){
+                pending="clean"
+                if(!kodiClient.clean()){pending="";message=kodiClient.cleanStatus}
+                return
+            }
             if(row.add){mode="roots";selectedIndex=0;return}
             if(row.path){const path=row.path.replace(/\/+$/,"")+"/";edit({name:path.split('/').filter(part=>part.length).pop(),path:path,content:"movies",recursive:true},true);chooseDefaultScraper();return}
             if(row.source){if(row.source.editable)edit(row.source);else message=qsTr("This source is preserved. Editing supports allowed local single-folder sources; existing remote and multipath definitions stay intact.");return}

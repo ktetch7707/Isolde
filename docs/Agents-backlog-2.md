@@ -1,5 +1,7 @@
 # Agents backlog 2 â Kodi feature options and skinning
 
+Current implementation and VM status is tracked in the [November 26 validation and repair ledger](Agents-backlog-2-validation-2026-11-26.md). Card progress notes below describe work in the branch and do not establish acceptance.
+
 Planning companion to the current [Isolde backlog](agent-backlog.md), based on the supplied `ISOLDE_FEATURE_PARITY_AND_SKINNING.md` inventory. This plan adds no work to the current 25-task Coding% or S1 acceptance calculation. The current execution queue retains priority. T13 and T31 remain excluded. Card IDs below are local to this plan. Priorities are proposed within this plan.
 
 ## Product boundary

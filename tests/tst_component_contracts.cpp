@@ -163,8 +163,9 @@ ComponentContractTests::slotValidationPermitsAndRejectsComponentKinds()
         {"permitted", QVariantList{QVariant("button"), QVariant("image")}}};
     QVERIFY(!ComponentSchema::component(
                 QVariantMap{{"schemaVersion", 1}, {"id", "comp-1"}, {"componentType", "button"},
-                            {"kind", "app"}, {"size", "standard"}, {"contentSlot", slotWithPermitted}},
-                false, &error)
+                            {"kind", "widget"}, {"widgetType", "button"}, {"name", "Slot fixture"},
+                            {"size", "standard"}, {"contentSlot", slotWithPermitted}},
+                true, &error)
                 .isEmpty());
     QCOMPARE(error, QString());
 
@@ -174,8 +175,9 @@ ComponentContractTests::slotValidationPermitsAndRejectsComponentKinds()
         {"permitted", QVariantList{QVariant("this-kind-is-way-too-long-for-a-component-name")}}};
     QVERIFY(ComponentSchema::component(
                 QVariantMap{{"schemaVersion", 1}, {"id", "comp-2"}, {"componentType", "button"},
-                            {"kind", "app"}, {"size", "standard"}, {"contentSlot", slotWithLongKind}},
-                false, &error)
+                            {"kind", "widget"}, {"widgetType", "button"}, {"name", "Slot fixture"},
+                            {"size", "standard"}, {"contentSlot", slotWithLongKind}},
+                true, &error)
                 .isEmpty());
     QVERIFY(!error.isEmpty());
 
@@ -185,8 +187,9 @@ ComponentContractTests::slotValidationPermitsAndRejectsComponentKinds()
         {"permitted", QVariantList{QVariant("button")}}};
     QVERIFY(!ComponentSchema::component(
                 QVariantMap{{"schemaVersion", 1}, {"id", "comp-3"}, {"componentType", "button"},
-                            {"kind", "app"}, {"size", "standard"}, {"contentSlot", slotSize5}},
-                false, &error)
+                            {"kind", "widget"}, {"widgetType", "button"}, {"name", "Slot fixture"},
+                            {"size", "standard"}, {"contentSlot", slotSize5}},
+                true, &error)
                 .isEmpty());
     QCOMPARE(error, QString());
 }

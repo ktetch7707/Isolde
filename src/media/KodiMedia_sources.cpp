@@ -1,4 +1,5 @@
 #include "KodiMedia.h"
+#include "settings/ProfileManager.h"
 
 void
 KodiMedia::scanMovies()
@@ -92,9 +93,16 @@ KodiMedia::cancelSourcePreview()
     emit changed();
 }
 
+// Require a live, editable profile before asking Kodi to remove missing library entries.
 bool
 KodiMedia::clean()
 {
+    if (m_retired || !ProfileManager::allows("edit"))
+    {
+        m_cleanStatus = "Library maintenance is unavailable for this profile.";
+        emit changed();
+        return false;
+    }
     if (m_busy || m_playbackActive || !m_connected)
     {
         m_cleanStatus = m_playbackActive ? "Stop playback before cleaning, then retry."
@@ -109,6 +117,6 @@ KodiMedia::clean()
     m_stage = 30;
     m_cleanStatus = "Requesting Kodi clean the library…";
     emit changed();
-    request("VideoLibrary.Clean", {{"showdialogs", false}});
+    request("VideoLibrary.Clean", {});
     return true;
 }

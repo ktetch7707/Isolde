@@ -521,13 +521,73 @@ class BridgeTests(unittest.TestCase):
             ("VideoLibrary.Scan", {"showdialogs": True}),
             ("AudioLibrary.Scan", {"directory": "/etc"}),
             ("AudioLibrary.Scan", {"limits": {"start": 0, "end": 50}}),
-            ("VideoLibrary.Clean", {}),
+            ("VideoLibrary.Clean", {"directory": "/etc"}),
+            ("VideoLibrary.Clean", {"showdialogs": True}),
             ("XBMC.GetInfoBooleans", {"booleans": ["System.HasNetwork"]}),
         ):
             self.assertIn("error", bridge.dispatch(self.request(method, params), execute))
         self.assertEqual(len(received), 1)
         bridge.dispatch(self.request("XBMC.GetInfoBooleans", {"booleans": ["Library.IsScanningVideo"]}), execute)
         self.assertEqual(len(received), 2)
+        self.assertEqual(bridge.dispatch(self.request("VideoLibrary.Clean"), execute)["result"], "OK")
+        self.assertEqual(received[-1]["params"], {"showdialogs": False})
+
+    def test_movie_facets_and_watched_filter_preserve_search(self):
+        """Check composable browse filters are translated and restricted to the supported routes."""
+        seen = []
+
+        def execute(raw):
+            seen.append(json.loads(raw)["params"])
+            return '{"jsonrpc":"2.0","id":7,"result":{"movies":[]}}'
+
+        title = {"field": "title", "operator": "contains", "value": "Fixture"}
+        params = {"filter": title, "watchedOnly": True, "facetfilters": {"actor": "Example Actor", "year": "2024"}}
+        self.assertIn("result", bridge.dispatch(self.request("VideoLibrary.GetMovies", params), execute))
+        self.assertEqual(seen[0]["filter"], {"and": [title,
+                         {"field": "playcount", "operator": "greaterthan", "value": "0"},
+                         {"field": "actor", "operator": "is", "value": "Example Actor"},
+                         {"field": "year", "operator": "is", "value": "2024"}]})
+        self.assertNotIn("facetfilters", seen[0])
+        self.assertNotIn("watchedOnly", seen[0])
+        self.assertIn("error", bridge.dispatch(self.request("VideoLibrary.GetSeasons", {"tvshowid": 1, "watchedOnly": True}), execute))
+        self.assertIn("error", bridge.dispatch(self.request("VideoLibrary.GetMovies", {"facetfilters": {"path": "private"}}), execute))
+        self.assertEqual(len(seen), 1)
+
+    def test_first_unwatched_episode_is_scoped_to_show_and_season(self):
+        """Prevent an episode lookup from selecting an unrelated show or returning a watched row."""
+        requests = []
+
+        def execute(raw):
+            requests.append(json.loads(raw)["params"])
+            return '{"jsonrpc":"2.0","id":7,"result":{"episodes":[]}}'
+
+        query = {"tvshowid": 2, "season": 0, "unwatchedOnly": True, "limits": {"start": 0, "end": 1}}
+        method = "VideoLibrary.GetEpisodes"
+        self.assertIn("result", bridge.dispatch(self.request(method, query), execute))
+        self.assertEqual(requests[0]["filter"], {"field": "playcount", "operator": "is", "value": "0"})
+        self.assertEqual(requests[0]["limits"], {"start": 0, "end": 1})
+        self.assertNotIn("unwatchedOnly", requests[0])
+        del query["season"]
+        self.assertIn("error", bridge.dispatch(self.request(method, query), execute))
+        self.assertEqual(len(requests), 1)
+
+    def test_watched_write_uses_kodi_parameters_and_confirms_only_ok(self):
+        """Keep watched status authoritative by validating the actual Kodi request and reply."""
+        for kind in ("Movie", "Episode"):
+            method = "VideoLibrary.Set" + kind + "Details"
+            identity = kind.lower() + "id"
+            seen = []
+
+            def execute(raw):
+                seen.append(json.loads(raw))
+                return '{"jsonrpc":"2.0","id":7,"result":"OK"}'
+
+            params = {identity: 7, "details": {"playcount": 1}}
+            result = bridge.dispatch(self.request(method, params), execute)
+            self.assertEqual(result["result"], {"ok": True})
+            self.assertEqual(seen[0]["params"], {identity: 7, "playcount": 1})
+            rejected = bridge.dispatch(self.request(method, params), lambda _: '{"error":{"code":-32602}}')
+            self.assertIn("error", rejected)
 
     def test_local_socket_permissions_and_duplicate(self):
         with tempfile.TemporaryDirectory() as directory:

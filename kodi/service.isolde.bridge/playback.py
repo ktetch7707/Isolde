@@ -253,9 +253,16 @@ class Playback:
         return self.owned_player()
 
     def playback_options(self):
+        """Read the current owned player's controls so the UI displays confirmed state."""
         player=self.owned_player()
         if self.media_type=="song":
-            return {"audio":[],"subtitles":[],"views":[],"view":"normal","subtitleEnabled":False}
+            result = {"audio": [], "subtitles": [], "views": [], "view": "normal", "subtitleEnabled": False}
+            props = self.rpc("Player.GetProperties", {"playerid": player, "properties": ["shuffled", "repeat"]})
+            if type(props.get("shuffled")) is bool:
+                result["shuffled"] = props["shuffled"]
+            if props.get("repeat") in ("off", "one", "all"):
+                result["repeat"] = props["repeat"]
+            return result
         props=self.rpc("Player.GetProperties",{"playerid":player,"properties":["audiostreams","currentaudiostream","subtitles","currentsubtitle","subtitleenabled"]})
         result={"audio":[],"subtitles":[],"views":["normal","zoom","stretch4:3","widezoom","stretch16:9","original"],"subtitleEnabled":props.get("subtitleenabled") is True}
         for key,current in (("audiostreams","currentaudiostream"),("subtitles","currentsubtitle")):
@@ -278,6 +285,18 @@ class Playback:
         return result
 
     def set_playback_option(self,kind,value):
+        """Apply only a supported option to the currently owned player, then read it back."""
+        if self.media_type == "song":
+            available = self.playback_options()
+            if kind == "shuffle" and type(value) is bool and "shuffled" in available:
+                method = "Player.SetShuffle"
+            elif kind == "repeat" and value in ("off", "one", "all") and "repeat" in available:
+                method = "Player.SetRepeat"
+            else:
+                raise ValueError("Choose an available music playback option")
+            if self.rpc(method, {"playerid": self.owned_player(), kind: value}) != "OK":
+                raise ValueError("Kodi did not acknowledge the music playback option")
+            return self.playback_options()
         before=self.playback_options();player=self.owned_video_player()
         if kind=="audio" and type(value) is int and any(row["id"]==value for row in before["audio"]):
             method="Player.SetAudioStream";params={"playerid":player,"stream":value}
@@ -286,9 +305,17 @@ class Playback:
         elif kind=="view" and type(value) is str and value in before["views"]:
             method="Player.SetViewMode";params={"viewmode":value}
         elif kind=="audiooffset" and type(value) is int and -2000 <= value <= 2000:
-            method="Player.SetAudioDelay";params={"playerid":player,"delay":value}
-        elif kind=="speed" and type(value) in (int,float) and 0.1 <= value <= 8.0:
-            method="Player.SetSpeed";params={"playerid":player,"speed":float(value)}
+            result = self.rpc("Player.SetAudioDelay", {"playerid": player, "offset": value / 1000})
+            offset = result.get("offset") if isinstance(result, dict) else None
+            if type(offset) not in (int, float) or not -2 <= offset <= 2:
+                raise ValueError("Kodi did not confirm the audio offset")
+            return {**self.playback_options(), "audioOffsetMs": round(offset * 1000)}
+        elif kind=="speed" and type(value) in (int,float) and value in (1, 2, 4, 8):
+            result = self.rpc("Player.SetSpeed", {"playerid": player, "speed": int(value)})
+            speed = result.get("speed") if isinstance(result, dict) else None
+            if type(speed) is not int or speed not in (1, 2, 4, 8):
+                raise ValueError("Kodi did not confirm the playback speed")
+            return {**self.playback_options(), "speed": speed}
         elif kind=="subtitleoffset" and type(value) is int and -2000 <= value <= 2000:
             method="Player.SetSubtitleDelay";params={"playerid":player,"delay":value}
         else:raise ValueError("Choose an available playback option")
@@ -692,45 +719,46 @@ class Playback:
         return {"set": True}
 
     def get_pvr_groups(self, params):
-        if set(params) != {}:
+        """Return a bounded page of Kodi's television channel groups."""
+        if params:
             raise ValueError("PVR groups listing takes no parameters")
-        result = self.rpc("PVR.GetPVRGroups", {})
-        groups = result.get("groups", [])
-        if not isinstance(groups, list) or len(groups) > 256:
+        result = self.rpc("PVR.GetChannelGroups", {"channeltype": "tv", "limits": {"start": 0, "end": 50}})
+        groups = result.get("channelgroups")
+        if not isinstance(groups, list) or len(groups) > 50:
             raise ValueError("Invalid PVR groups list from Kodi")
         items = []
         for group in groups:
             if not isinstance(group, dict):
                 continue
-            group_id = group.get("groupid")
+            group_id = group.get("channelgroupid")
             if type(group_id) is not int or group_id < 1:
                 continue
             items.append({
                 "id": group_id,
-                "name": str(group.get("groupname", ""))[:160],
-                "type": str(group.get("type", ""))[:40],
-                "memberCount": group.get("membercount", 0),
+                "name": str(group.get("label", ""))[:160],
+                "type": "tv",
             })
         return {"groups": items}
 
     def get_group_members(self, params):
+        """Read one group's channels by Kodi group ID and keep the response scoped to that ID."""
         if set(params) != {"id"} or type(params.get("id")) is not int or params["id"] < 1:
             raise ValueError("A valid group ID is required")
-        result = self.rpc("PVR.GetGroupMembers", {"groupid": params["id"]})
-        members = result.get("members", [])
-        if not isinstance(members, list) or len(members) > 512:
+        result = self.rpc("PVR.GetChannels", {"channelgroupid": params["id"], "limits": {"start": 0, "end": 50}})
+        members = result.get("channels")
+        if not isinstance(members, list) or len(members) > 50:
             raise ValueError("Invalid group members list from Kodi")
         items = []
         for member in members:
             if not isinstance(member, dict):
                 continue
-            member_id = member.get("memberid")
+            member_id = member.get("channelid")
             if type(member_id) is not int or member_id < 1:
                 continue
             items.append({
                 "id": member_id,
-                "title": str(member.get("title", ""))[:160],
-                "type": str(member.get("type", ""))[:40],
+                "title": str(member.get("label", ""))[:160],
+                "type": "channel",
             })
         return {"members": items, "groupId": params["id"]}
 

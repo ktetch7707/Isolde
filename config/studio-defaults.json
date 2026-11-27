@@ -1,13 +1,7 @@
 {
   "playlistShelfChoices": [
-    {
-      "name": "Movies \u00c2\u00b7 Kodi playlist",
-      "kind": "movies"
-    },
-    {
-      "name": "Shows \u00c2\u00b7 Kodi playlist",
-      "kind": "shows"
-    }
+    { "name": "Movies \u00c2\u00b7 Kodi playlist", "kind": "movies" },
+    { "name": "Shows \u00c2\u00b7 Kodi playlist", "kind": "shows" }
   ],
   "settingsNavigation": {
     "schemaVersion": 1,
@@ -17,16 +11,8 @@
         "name": "Network & Internet",
         "description": "Wi-Fi, connections and VPN",
         "rows": [
-          {
-            "name": "Network connection",
-            "description": "Connection status, Wi-Fi and saved networks",
-            "route": "network"
-          },
-          {
-            "name": "VPN",
-            "description": "Provider setup, locations and connection controls",
-            "route": "vpn"
-          }
+          { "name": "Network connection", "description": "Connection status, Wi-Fi and saved networks", "route": "network" },
+          { "name": "VPN", "description": "Provider setup, locations and connection controls", "route": "vpn" }
         ]
       },
       {
@@ -34,44 +20,19 @@
         "name": "Picture & Sound",
         "description": "Display, accessibility and audio",
         "rows": [
-          {
-            "name": "Display & accessibility",
-            "description": "Safe area, interface scale, contrast and motion",
-            "route": "display"
-          },
-          {
-            "name": "Sound",
-            "description": "Audio output, volume and startup preferences",
-            "route": "audio"
-          },
-          {
-            "name": "Interface sounds",
-            "description": "Kodi sound themes, navigation feedback and sound level",
-            "route": "interface-sounds"
-          }
+          { "name": "Display & accessibility", "description": "Safe area, interface scale, contrast and motion", "route": "display" },
+          { "name": "Sound", "description": "Audio output, volume and startup preferences", "route": "audio" },
+          { "name": "Interface sounds", "description": "Kodi sound themes, navigation feedback and sound level", "route": "interface-sounds" }
         ]
       },
-      {
-        "id": "display-skins",
-        "name": "Skins",
-        "description": "Preview and manage skins for this profile",
-        "route": "skins"
-      },
+      { "id": "display-skins", "name": "Skins", "description": "Preview and manage skins for this profile", "route": "skins" },
       {
         "id": "home",
         "name": "Home & Appearance",
         "description": "Pages, themes and ambient mode",
         "rows": [
-          {
-            "name": "Edit Home & pages",
-            "description": "Layouts, components, artwork and themes in Studio",
-            "route": "studio"
-          },
-          {
-            "name": "Ambient mode",
-            "description": "Idle timing, screensaver pages and preview",
-            "route": "ambient"
-          }
+          { "name": "Edit Home & pages", "description": "Layouts, components, artwork and themes in Studio", "route": "studio" },
+          { "name": "Ambient mode", "description": "Idle timing, screensaver pages and preview", "route": "ambient" }
         ]
       },
       {
@@ -79,16 +40,8 @@
         "name": "Apps",
         "description": "App Store, installed apps and store preferences",
         "rows": [
-          {
-            "name": "App Store",
-            "description": "Browse, install and manage apps; set up Android support",
-            "route": "store"
-          },
-          {
-            "name": "Store preferences",
-            "description": "Online catalog search and refresh",
-            "route": "store-preferences"
-          }
+          { "name": "App Store", "description": "Browse, install and manage apps; set up Android support", "route": "store" },
+          { "name": "Store preferences", "description": "Online catalog search and refresh", "route": "store-preferences" }
         ]
       },
       {
@@ -96,42 +49,14 @@
         "name": "Inputs & Sources",
         "description": "HDMI inputs, drives and detected media",
         "rows": [
-          {
-            "name": "HDMI inputs",
-            "description": "Capture device, input names, switching and preview",
-            "route": "capture"
-          },
-          {
-            "name": "Detected sources",
-            "description": "Discs, drives, folders and source notices",
-            "route": "sources"
-          }
+          { "name": "HDMI inputs", "description": "Capture device, input names, switching and preview", "route": "capture" },
+          { "name": "Detected sources", "description": "Discs, drives, folders and source notices", "route": "sources" }
         ]
       },
-      {
-        "id": "remotes",
-        "name": "Remotes & Controllers",
-        "description": "Pairing, button tests and mappings",
-        "route": "remotes"
-      },
-      {
-        "id": "profiles",
-        "name": "Profiles",
-        "description": "People, personal layouts and permissions",
-        "route": "profiles"
-      },
-      {
-        "id": "media",
-        "name": "Media & Playback",
-        "description": "Kodi library, import and playback preferences",
-        "route": "media"
-      },
-      {
-        "id": "system",
-        "name": "System & Support",
-        "description": "Setup guide, diagnostics and version information",
-        "route": "system"
-      }
+      { "id": "remotes", "name": "Remotes & Controllers", "description": "Pairing, button tests and mappings", "route": "remotes" },
+      { "id": "profiles", "name": "Profiles", "description": "People, personal layouts and permissions", "route": "profiles" },
+      { "id": "media", "name": "Media & Playback", "description": "Kodi library, import and playback preferences", "route": "media" },
+      { "id": "system", "name": "System & Support", "description": "Setup guide, diagnostics and version information", "route": "system" }
     ]
   },
   "headerLabels": {
@@ -149,67 +74,30 @@
       "key": "discoveryEnabled",
       "label": "Local discovery",
       "choices": [
-        {
-          "name": "On",
-          "value": true
-        },
-        {
-          "name": "Off",
-          "value": false
-        }
+        { "name": "On", "value": true },
+        { "name": "Off", "value": false }
       ]
     },
     {
       "key": "mode",
       "label": "Presentation",
       "choices": [
-        {
-          "name": "Off",
-          "value": "off"
-        },
-        {
-          "name": "Compact notice",
-          "value": "compact"
-        },
-        {
-          "name": "Contained widget",
-          "value": "widget"
-        }
+        { "name": "Off", "value": "off" },
+        { "name": "Compact notice", "value": "compact" },
+        { "name": "Contained widget", "value": "widget" }
       ]
     },
-    {
-      "key": "pages",
-      "label": "Allowed pages",
-      "multiple": true,
-      "options": "pages"
-    },
-    {
-      "key": "slots",
-      "label": "Allowed declared slots \u00c2\u00b7 empty means any",
-      "multiple": true,
-      "options": "slots"
-    },
+    { "key": "pages", "label": "Allowed pages", "multiple": true, "options": "pages" },
+    { "key": "slots", "label": "Allowed declared slots \u00c2\u00b7 empty means any", "multiple": true, "options": "slots" },
     {
       "key": "events",
       "label": "Notification events",
       "multiple": true,
       "choices": [
-        {
-          "name": "Movie discs",
-          "value": "movie-disc"
-        },
-        {
-          "name": "Game discs",
-          "value": "game-disc"
-        },
-        {
-          "name": "Media folders",
-          "value": "media-folder"
-        },
-        {
-          "name": "Files",
-          "value": "file-source"
-        }
+        { "name": "Movie discs", "value": "movie-disc" },
+        { "name": "Game discs", "value": "game-disc" },
+        { "name": "Media folders", "value": "media-folder" },
+        { "name": "Files", "value": "file-source" }
       ]
     },
     {
@@ -217,108 +105,54 @@
       "label": "Permitted local source types",
       "multiple": true,
       "choices": [
-        {
-          "name": "Movie discs",
-          "value": "movie-disc"
-        },
-        {
-          "name": "Game discs",
-          "value": "game-disc"
-        },
-        {
-          "name": "Media folders",
-          "value": "media-folder"
-        },
-        {
-          "name": "Files",
-          "value": "file-source"
-        }
+        { "name": "Movie discs", "value": "movie-disc" },
+        { "name": "Game discs", "value": "game-disc" },
+        { "name": "Media folders", "value": "media-folder" },
+        { "name": "Files", "value": "file-source" }
       ]
     },
     {
       "key": "duration",
       "label": "Notice duration",
       "choices": [
-        {
-          "name": "Until dismissed",
-          "value": 0
-        },
-        {
-          "name": "5 seconds",
-          "value": 5
-        },
-        {
-          "name": "8 seconds",
-          "value": 8
-        },
-        {
-          "name": "15 seconds",
-          "value": 15
-        },
-        {
-          "name": "30 seconds",
-          "value": 30
-        },
-        {
-          "name": "60 seconds",
-          "value": 60
-        }
+        { "name": "Until dismissed", "value": 0 },
+        { "name": "5 seconds", "value": 5 },
+        { "name": "8 seconds", "value": 8 },
+        { "name": "15 seconds", "value": 15 },
+        { "name": "30 seconds", "value": 30 },
+        { "name": "60 seconds", "value": 60 }
       ]
     },
     {
       "key": "reconnect",
       "label": "Notify after reconnect",
       "choices": [
-        {
-          "name": "On",
-          "value": true
-        },
-        {
-          "name": "Once per profile session",
-          "value": false
-        }
+        { "name": "On", "value": true },
+        { "name": "Once per profile session", "value": false }
       ]
     },
     {
       "key": "suppressPlayback",
       "label": "Suppress during playback",
       "choices": [
-        {
-          "name": "On",
-          "value": true
-        },
-        {
-          "name": "Off",
-          "value": false
-        }
+        { "name": "On", "value": true },
+        { "name": "Off", "value": false }
       ]
     },
     {
       "key": "suppressSetup",
       "label": "Suppress during setup",
       "choices": [
-        {
-          "name": "On",
-          "value": true
-        },
-        {
-          "name": "Off",
-          "value": false
-        }
+        { "name": "On", "value": true },
+        { "name": "Off", "value": false }
       ]
     },
     {
       "key": "suppressEditing",
       "label": "Suppress during editing",
       "choices": [
-        {
-          "name": "On",
-          "value": true
-        },
-        {
-          "name": "Off",
-          "value": false
-        }
+        { "name": "On", "value": true },
+        { "name": "Off", "value": false }
       ]
     }
   ],
@@ -361,95 +195,43 @@
         "id": "background",
         "label": "Background",
         "roles": [
-          {
-            "key": "backgroundStart",
-            "label": "Page background",
-            "schemaVersion": 1
-          },
-          {
-            "key": "backgroundEnd",
-            "label": "Gradient end",
-            "schemaVersion": 1
-          }
+          { "key": "backgroundStart", "label": "Page background", "schemaVersion": 1 },
+          { "key": "backgroundEnd", "label": "Gradient end", "schemaVersion": 1 }
         ]
       },
       {
         "id": "cards",
         "label": "Cards",
         "roles": [
-          {
-            "key": "surfaceColor",
-            "label": "Cards and panels",
-            "schemaVersion": 1
-          },
-          {
-            "key": "selectedColor",
-            "label": "Selected cards",
-            "schemaVersion": 1
-          }
+          { "key": "surfaceColor", "label": "Cards and panels", "schemaVersion": 1 },
+          { "key": "selectedColor", "label": "Selected cards", "schemaVersion": 1 }
         ]
       },
       {
         "id": "text",
         "label": "Text",
         "roles": [
-          {
-            "key": "textColor",
-            "label": "Default text",
-            "schemaVersion": 1
-          },
-          {
-            "key": "headingColor",
-            "label": "Page and section titles",
-            "schemaVersion": 1
-          },
-          {
-            "key": "labelColor",
-            "label": "Labels",
-            "schemaVersion": 1
-          },
-          {
-            "key": "bodyColor",
-            "label": "Body text",
-            "schemaVersion": 1
-          },
-          {
-            "key": "mutedColor",
-            "label": "Supporting text",
-            "schemaVersion": 1
-          }
+          { "key": "textColor", "label": "Default text", "schemaVersion": 1 },
+          { "key": "headingColor", "label": "Page and section titles", "schemaVersion": 1 },
+          { "key": "labelColor", "label": "Labels", "schemaVersion": 1 },
+          { "key": "bodyColor", "label": "Body text", "schemaVersion": 1 },
+          { "key": "mutedColor", "label": "Supporting text", "schemaVersion": 1 }
         ]
       },
       {
         "id": "highlight",
         "label": "Highlight",
         "roles": [
-          {
-            "key": "focusColor",
-            "label": "Focus ring",
-            "schemaVersion": 1
-          },
-          {
-            "key": "borderColor",
-            "label": "Borders",
-            "schemaVersion": 1
-          }
+          { "key": "focusColor", "label": "Focus ring", "schemaVersion": 1 },
+          { "key": "borderColor", "label": "Borders", "schemaVersion": 1 }
         ]
       },
       {
         "id": "accent",
         "label": "Accent",
         "roles": [
-          {
-            "key": "accentColor",
-            "label": "Buttons and details",
-            "schemaVersion": 1
-          },
-          {
-            "key": "iconColor",
-            "label": "Icons",
-            "schemaVersion": 1
-          }
+          { "key": "accentColor", "label": "Buttons and details", "schemaVersion": 1 },
+          { "key": "iconColor", "label": "Icons", "schemaVersion": 1 }
         ]
       }
     ],
@@ -494,26 +276,11 @@
       "clock": "Clock"
     },
     "actionIntents": [
-      {
-        "name": "Open an app",
-        "categoryName": "Apps"
-      },
-      {
-        "name": "Go to a page",
-        "categoryName": "Pages"
-      },
-      {
-        "name": "Open media",
-        "categoryName": "Media"
-      },
-      {
-        "name": "More actions",
-        "categoryName": "All links"
-      },
-      {
-        "name": "No action",
-        "noAction": true
-      }
+      { "name": "Open an app", "categoryName": "Apps" },
+      { "name": "Go to a page", "categoryName": "Pages" },
+      { "name": "Open media", "categoryName": "Media" },
+      { "name": "More actions", "categoryName": "All links" },
+      { "name": "No action", "noAction": true }
     ],
     "basicFamilies": [
       "button",
@@ -720,18 +487,9 @@
   },
   "artworkCleanup": {
     "previewSurfaces": [
-      {
-        "name": "Light",
-        "colour": "#f5f1f3"
-      },
-      {
-        "name": "Dark",
-        "colour": "#202126"
-      },
-      {
-        "name": "Pastel",
-        "colour": "#e8ced8"
-      }
+      { "name": "Light", "colour": "#f5f1f3" },
+      { "name": "Dark", "colour": "#202126" },
+      { "name": "Pastel", "colour": "#e8ced8" }
     ]
   },
   "referenceViewport": {
@@ -755,30 +513,12 @@
     "sourceBadges": true,
     "labels": true,
     "toolbar": [
-      {
-        "id": "now",
-        "label": "Now"
-      },
-      {
-        "id": "add",
-        "label": "Add"
-      },
-      {
-        "id": "manage",
-        "label": "Manage channels"
-      },
-      {
-        "id": "sources",
-        "label": "Sources"
-      },
-      {
-        "id": "browse",
-        "label": "Find / time"
-      },
-      {
-        "id": "close",
-        "label": "Back"
-      }
+      { "id": "now", "label": "Now" },
+      { "id": "add", "label": "Add" },
+      { "id": "manage", "label": "Manage channels" },
+      { "id": "sources", "label": "Sources" },
+      { "id": "browse", "label": "Find / time" },
+      { "id": "close", "label": "Back" }
     ],
     "sources": [
       {
@@ -944,61 +684,22 @@
     }
   ],
   "replacementChoices": [
-    {
-      "name": "Button",
-      "type": "button"
-    },
-    {
-      "name": "Image",
-      "type": "image"
-    },
-    {
-      "name": "Text",
-      "type": "text"
-    },
-    {
-      "name": "Decorative shape",
-      "type": "shape"
-    },
-    {
-      "name": "Empty container",
-      "type": "container"
-    }
+    { "name": "Button", "type": "button" },
+    { "name": "Image", "type": "image" },
+    { "name": "Text", "type": "text" },
+    { "name": "Decorative shape", "type": "shape" },
+    { "name": "Empty container", "type": "container" }
   ],
   "colorPicker": {
     "presets": [
-      {
-        "name": "Snow",
-        "value": "#ffffff"
-      },
-      {
-        "name": "Charcoal",
-        "value": "#202126"
-      },
-      {
-        "name": "Rose",
-        "value": "#e89ab0"
-      },
-      {
-        "name": "Lavender",
-        "value": "#b4a1e8"
-      },
-      {
-        "name": "Sky",
-        "value": "#82bce8"
-      },
-      {
-        "name": "Mint",
-        "value": "#91d4b8"
-      },
-      {
-        "name": "Peach",
-        "value": "#ffc5a2"
-      },
-      {
-        "name": "Gold",
-        "value": "#f2ce75"
-      }
+      { "name": "Snow", "value": "#ffffff" },
+      { "name": "Charcoal", "value": "#202126" },
+      { "name": "Rose", "value": "#e89ab0" },
+      { "name": "Lavender", "value": "#b4a1e8" },
+      { "name": "Sky", "value": "#82bce8" },
+      { "name": "Mint", "value": "#91d4b8" },
+      { "name": "Peach", "value": "#ffc5a2" },
+      { "name": "Gold", "value": "#f2ce75" }
     ]
   },
   "appearance": {
@@ -1011,18 +712,9 @@
   },
   "menuWidth": 280,
   "trialDurations": [
-    {
-      "label": "30 seconds",
-      "seconds": 30
-    },
-    {
-      "label": "1 minute",
-      "seconds": 60
-    },
-    {
-      "label": "5 minutes",
-      "seconds": 300
-    }
+    { "label": "30 seconds", "seconds": 30 },
+    { "label": "1 minute", "seconds": 60 },
+    { "label": "5 minutes", "seconds": 300 }
   ],
   "defaultGrid": {
     "columns": 8,
@@ -1247,14 +939,8 @@
     ]
   },
   "gridModes": [
-    {
-      "id": "screen",
-      "name": "Page grid"
-    },
-    {
-      "id": "sections",
-      "name": "Scrolling sections"
-    }
+    { "id": "screen", "name": "Page grid" },
+    { "id": "sections", "name": "Scrolling sections" }
   ],
   "componentVariants": {
     "button": [
@@ -1844,102 +1530,22 @@
     }
   },
   "catalog": [
-    {
-      "id": "page-panel",
-      "name": "Page panel",
-      "description": "Place an interactive page in part of this screen.",
-      "icon": "grid"
-    },
-    {
-      "id": "source-notice",
-      "name": "Source notice slot",
-      "description": "A bounded, themed source status region. Display policy is in Home Header controls.",
-      "icon": "display"
-    },
-    {
-      "id": "detected-sources",
-      "name": "Detected sources",
-      "description": "Contained detected devices and folders with View all; no automatic layout injection.",
-      "icon": "display"
-    },
-    {
-      "id": "button",
-      "name": "Button",
-      "description": "A page link, app, or supported action",
-      "icon": "arrow-right"
-    },
-    {
-      "id": "carousel",
-      "name": "Button shelf",
-      "description": "Arrange apps, HDMI inputs, page links, and other shortcuts in one row",
-      "icon": "carousel"
-    },
-    {
-      "id": "library",
-      "name": "Media shelf",
-      "description": "Live Kodi movies, shows, or saved collections",
-      "icon": "film"
-    },
-    {
-      "id": "app-bar",
-      "name": "App carousel",
-      "description": "Choose and arrange installed apps",
-      "icon": "grid"
-    },
-    {
-      "id": "app-folder",
-      "name": "App folder",
-      "description": "One tile opens a folder of apps",
-      "icon": "grid"
-    },
-    {
-      "id": "image",
-      "name": "Image",
-      "description": "Managed artwork, decorative or linked",
-      "icon": "image"
-    },
-    {
-      "id": "widgets",
-      "name": "Widgets",
-      "description": "Clock, text, groups, and input slots",
-      "icon": "clock"
-    },
-    {
-      "id": "recently-viewed",
-      "name": "Recently viewed",
-      "description": "Local Kodi movies and episodes, most recently viewed first",
-      "icon": "clock"
-    },
-    {
-      "id": "music-library",
-      "name": "Music library",
-      "description": "Local Kodi albums and tracks with artwork and playback",
-      "icon": "music"
-    },
-    {
-      "id": "tv-guide",
-      "name": "TV Guide",
-      "description": "Configured Kodi TV channels and current/next programmes",
-      "icon": "tv"
-    },
-    {
-      "id": "page-menu",
-      "name": "Page menu",
-      "description": "Movable page links. On named pages, replaces the fixed menu when placed; Undo restores it.",
-      "icon": "grid"
-    },
-    {
-      "id": "shape",
-      "name": "Shape",
-      "icon": "image",
-      "description": "Decorative shapes or a real container with editable children."
-    },
-    {
-      "id": "text",
-      "name": "Text",
-      "icon": "text",
-      "description": "Independent plain text with a separate optional visible label."
-    }
+    { "id": "page-panel", "name": "Page panel", "description": "Place an interactive page in part of this screen.", "icon": "grid" },
+    { "id": "source-notice", "name": "Source notice slot", "description": "A bounded, themed source status region. Display policy is in Home Header controls.", "icon": "display" },
+    { "id": "detected-sources", "name": "Detected sources", "description": "Contained detected devices and folders with View all; no automatic layout injection.", "icon": "display" },
+    { "id": "button", "name": "Button", "description": "A page link, app, or supported action", "icon": "arrow-right" },
+    { "id": "carousel", "name": "Button shelf", "description": "Arrange apps, HDMI inputs, page links, and other shortcuts in one row", "icon": "carousel" },
+    { "id": "library", "name": "Media shelf", "description": "Live Kodi movies, shows, or saved collections", "icon": "film" },
+    { "id": "app-bar", "name": "App carousel", "description": "Choose and arrange installed apps", "icon": "grid" },
+    { "id": "app-folder", "name": "App folder", "description": "One tile opens a folder of apps", "icon": "grid" },
+    { "id": "image", "name": "Image", "description": "Managed artwork, decorative or linked", "icon": "image" },
+    { "id": "widgets", "name": "Widgets", "description": "Clock, text, groups, and input slots", "icon": "clock" },
+    { "id": "recently-viewed", "name": "Recently viewed", "description": "Local Kodi movies and episodes, most recently viewed first", "icon": "clock" },
+    { "id": "music-library", "name": "Music library", "description": "Local Kodi albums and tracks with artwork and playback", "icon": "music" },
+    { "id": "tv-guide", "name": "TV Guide", "description": "Configured Kodi TV channels and current/next programmes", "icon": "tv" },
+    { "id": "page-menu", "name": "Page menu", "description": "Movable page links. On named pages, replaces the fixed menu when placed; Undo restores it.", "icon": "grid" },
+    { "id": "shape", "name": "Shape", "icon": "image", "description": "Decorative shapes or a real container with editable children." },
+    { "id": "text", "name": "Text", "icon": "text", "description": "Independent plain text with a separate optional visible label." }
   ],
   "actionCategories": [
     {
@@ -2393,14 +1999,7 @@
         ],
         "schemaVersion": 1
       },
-      {
-        "tab": "Content",
-        "scope": "component",
-        "key": "name",
-        "label": "Editor name",
-        "type": "text",
-        "schemaVersion": 1
-      },
+      { "tab": "Content", "scope": "component", "key": "name", "label": "Editor name", "type": "text", "schemaVersion": 1 },
       {
         "tab": "Content",
         "scope": "presentation",
@@ -2641,18 +2240,9 @@
         "label": "App icon style",
         "type": "choice",
         "choices": [
-          {
-            "name": "Signature",
-            "value": "signature"
-          },
-          {
-            "name": "Quiet tiles",
-            "value": "tiles"
-          },
-          {
-            "name": "Compact rail",
-            "value": "rail"
-          }
+          { "name": "Signature", "value": "signature" },
+          { "name": "Quiet tiles", "value": "tiles" },
+          { "name": "Compact rail", "value": "rail" }
         ],
         "families": [
           "app-bar"
@@ -2667,14 +2257,8 @@
         "label": "Icon selection",
         "type": "choice",
         "choices": [
-          {
-            "name": "Icon-shaped glow",
-            "value": "glow"
-          },
-          {
-            "name": "Frame",
-            "value": "frame"
-          }
+          { "name": "Icon-shaped glow", "value": "glow" },
+          { "name": "Frame", "value": "frame" }
         ],
         "families": [
           "app-bar"
@@ -2689,18 +2273,9 @@
         "label": "Logo backing",
         "type": "choice",
         "choices": [
-          {
-            "name": "Automatic contrast",
-            "value": "auto"
-          },
-          {
-            "name": "None",
-            "value": "none"
-          },
-          {
-            "name": "Page surface",
-            "value": "surface"
-          }
+          { "name": "Automatic contrast", "value": "auto" },
+          { "name": "None", "value": "none" },
+          { "name": "Page surface", "value": "surface" }
         ],
         "advanced": true,
         "families": [
@@ -2819,24 +2394,8 @@
         ],
         "schemaVersion": 1
       },
-      {
-        "tab": "Appearance",
-        "scope": "presentation",
-        "key": "surfaceColor",
-        "label": "Surface",
-        "type": "color",
-        "advanced": false,
-        "schemaVersion": 1
-      },
-      {
-        "tab": "Appearance",
-        "scope": "presentation",
-        "key": "labelColor",
-        "label": "Text",
-        "type": "color",
-        "advanced": false,
-        "schemaVersion": 1
-      },
+      { "tab": "Appearance", "scope": "presentation", "key": "surfaceColor", "label": "Surface", "type": "color", "advanced": false, "schemaVersion": 1 },
+      { "tab": "Appearance", "scope": "presentation", "key": "labelColor", "label": "Text", "type": "color", "advanced": false, "schemaVersion": 1 },
       {
         "tab": "Appearance",
         "scope": "presentation",
@@ -2849,24 +2408,8 @@
         ],
         "schemaVersion": 1
       },
-      {
-        "tab": "Appearance",
-        "scope": "presentation",
-        "key": "focusColor",
-        "label": "Focus ring",
-        "type": "color",
-        "advanced": false,
-        "schemaVersion": 1
-      },
-      {
-        "tab": "Appearance",
-        "scope": "presentation",
-        "key": "borderColor",
-        "label": "Border",
-        "type": "color",
-        "advanced": true,
-        "schemaVersion": 1
-      },
+      { "tab": "Appearance", "scope": "presentation", "key": "focusColor", "label": "Focus ring", "type": "color", "advanced": false, "schemaVersion": 1 },
+      { "tab": "Appearance", "scope": "presentation", "key": "borderColor", "label": "Border", "type": "color", "advanced": true, "schemaVersion": 1 },
       {
         "tab": "Appearance",
         "scope": "presentation",
@@ -2903,18 +2446,9 @@
         "type": "number",
         "control": "slider",
         "presets": [
-          {
-            "name": "Square",
-            "value": 0
-          },
-          {
-            "name": "Soft",
-            "value": 22
-          },
-          {
-            "name": "Rounded",
-            "value": 100
-          }
+          { "name": "Square", "value": 0 },
+          { "name": "Soft", "value": 22 },
+          { "name": "Rounded", "value": 100 }
         ],
         "min": 0,
         "max": 400,
@@ -3015,22 +2549,10 @@
         "label": "Label lines",
         "type": "choice",
         "choices": [
-          {
-            "name": "One line",
-            "value": 1
-          },
-          {
-            "name": "Two lines",
-            "value": 2
-          },
-          {
-            "name": "Three lines",
-            "value": 3
-          },
-          {
-            "name": "Four lines",
-            "value": 4
-          }
+          { "name": "One line", "value": 1 },
+          { "name": "Two lines", "value": 2 },
+          { "name": "Three lines", "value": 3 },
+          { "name": "Four lines", "value": 4 }
         ],
         "fallback": 2,
         "advanced": true,
@@ -3156,18 +2678,9 @@
         "label": "Featured background",
         "type": "choice",
         "choices": [
-          {
-            "name": "Page theme",
-            "value": "theme"
-          },
-          {
-            "name": "Pick a color",
-            "value": "fixed"
-          },
-          {
-            "name": "Match the artwork",
-            "value": "artwork"
-          }
+          { "name": "Page theme", "value": "theme" },
+          { "name": "Pick a color", "value": "fixed" },
+          { "name": "Match the artwork", "value": "artwork" }
         ],
         "types": [
           "library",
@@ -3418,16 +2931,7 @@
         ],
         "schemaVersion": 1
       },
-      {
-        "tab": "Appearance",
-        "scope": "presentation",
-        "key": "focusEnabled",
-        "label": "Focus ring",
-        "type": "toggle",
-        "fallback": true,
-        "advanced": true,
-        "schemaVersion": 1
-      },
+      { "tab": "Appearance", "scope": "presentation", "key": "focusEnabled", "label": "Focus ring", "type": "toggle", "fallback": true, "advanced": true, "schemaVersion": 1 },
       {
         "tab": "Appearance",
         "scope": "presentation",
@@ -3441,16 +2945,7 @@
         ],
         "schemaVersion": 1
       },
-      {
-        "tab": "Appearance",
-        "scope": "presentation",
-        "key": "headingBold",
-        "label": "Bold heading",
-        "type": "toggle",
-        "fallback": false,
-        "advanced": true,
-        "schemaVersion": 1
-      },
+      { "tab": "Appearance", "scope": "presentation", "key": "headingBold", "label": "Bold heading", "type": "toggle", "fallback": false, "advanced": true, "schemaVersion": 1 },
       {
         "tab": "Appearance",
         "scope": "component",
@@ -3895,22 +3390,8 @@
         ],
         "schemaVersion": 1
       },
-      {
-        "tab": "Accessibility",
-        "scope": "accessibility",
-        "key": "name",
-        "label": "Accessible name",
-        "type": "text",
-        "schemaVersion": 1
-      },
-      {
-        "tab": "Accessibility",
-        "scope": "accessibility",
-        "key": "hint",
-        "label": "Accessible hint",
-        "type": "text",
-        "schemaVersion": 1
-      },
+      { "tab": "Accessibility", "scope": "accessibility", "key": "name", "label": "Accessible name", "type": "text", "schemaVersion": 1 },
+      { "tab": "Accessibility", "scope": "accessibility", "key": "hint", "label": "Accessible hint", "type": "text", "schemaVersion": 1 },
       {
         "tab": "Accessibility",
         "scope": "component",
@@ -4081,14 +3562,8 @@
           "section"
         ],
         "choices": [
-          {
-            "name": "Half width (two-column layout)",
-            "value": 1
-          },
-          {
-            "name": "Full width",
-            "value": 2
-          }
+          { "name": "Half width (two-column layout)", "value": 1 },
+          { "name": "Full width", "value": 2 }
         ],
         "fallback": 2,
         "schemaVersion": 1
@@ -4263,15 +3738,7 @@
         ],
         "schemaVersion": 1
       },
-      {
-        "tab": "Layout",
-        "scope": "component",
-        "key": "categoryId",
-        "label": "Section",
-        "type": "section",
-        "advanced": true,
-        "schemaVersion": 1
-      },
+      { "tab": "Layout", "scope": "component", "key": "categoryId", "label": "Section", "type": "section", "advanced": true, "schemaVersion": 1 },
       {
         "tab": "Appearance",
         "scope": "presentation",
@@ -4316,14 +3783,7 @@
         "fallback": false,
         "schemaVersion": 1
       },
-      {
-        "tab": "Content",
-        "scope": "presentation",
-        "key": "visibleLabel",
-        "label": "Visible label",
-        "type": "text",
-        "schemaVersion": 1
-      },
+      { "tab": "Content", "scope": "presentation", "key": "visibleLabel", "label": "Visible label", "type": "text", "schemaVersion": 1 },
       {
         "tab": "Content",
         "scope": "presentation",
@@ -4732,65 +4192,16 @@
       }
     ],
     "studioFields": [
-      {
-        "tab": "Colors",
-        "scope": "studioAppearance",
-        "key": "surfaceColor",
-        "label": "Surface",
-        "type": "color"
-      },
-      {
-        "tab": "Colors",
-        "scope": "studioAppearance",
-        "key": "selectedColor",
-        "label": "Selected surface",
-        "type": "color"
-      },
-      {
-        "tab": "Colors",
-        "scope": "studioAppearance",
-        "key": "textColor",
-        "label": "Text",
-        "type": "color"
-      },
-      {
-        "tab": "Colors",
-        "scope": "studioAppearance",
-        "key": "mutedColor",
-        "label": "Supporting text",
-        "type": "color"
-      },
-      {
-        "tab": "Colors",
-        "scope": "studioAppearance",
-        "key": "focusColor",
-        "label": "Focus",
-        "type": "color"
-      },
-      {
-        "tab": "Colors",
-        "scope": "studioAppearance",
-        "key": "reset",
-        "label": "Reset Studio colors",
-        "type": "editorColorsReset"
-      }
+      { "tab": "Colors", "scope": "studioAppearance", "key": "surfaceColor", "label": "Surface", "type": "color" },
+      { "tab": "Colors", "scope": "studioAppearance", "key": "selectedColor", "label": "Selected surface", "type": "color" },
+      { "tab": "Colors", "scope": "studioAppearance", "key": "textColor", "label": "Text", "type": "color" },
+      { "tab": "Colors", "scope": "studioAppearance", "key": "mutedColor", "label": "Supporting text", "type": "color" },
+      { "tab": "Colors", "scope": "studioAppearance", "key": "focusColor", "label": "Focus", "type": "color" },
+      { "tab": "Colors", "scope": "studioAppearance", "key": "reset", "label": "Reset Studio colors", "type": "editorColorsReset" }
     ],
     "pageFields": [
-      {
-        "key": "responsive",
-        "label": "Responsive section rules",
-        "type": "responsive",
-        "scope": "composition",
-        "tab": "Layout",
-        "advanced": true
-      },
-      {
-        "tab": "Header",
-        "scope": "theme",
-        "key": "sourcePolicy",
-        "label": "Source display policy",
-        "type": "sourcePolicy"
-      },
+      { "key": "responsive", "label": "Responsive section rules", "type": "responsive", "scope": "composition", "tab": "Layout", "advanced": true },
+      { "tab": "Header", "scope": "theme", "key": "sourcePolicy", "label": "Source display policy", "type": "sourcePolicy" },
       {
         "tab": "Shell",
         "scope": "surfaceTheme",
@@ -4798,22 +4209,10 @@
         "label": "Surface",
         "type": "choice",
         "choices": [
-          {
-            "name": "Search",
-            "value": "search"
-          },
-          {
-            "name": "All Apps / app surfaces",
-            "value": "apps"
-          },
-          {
-            "name": "Settings \u00b7 Home source only",
-            "value": "settings"
-          },
-          {
-            "name": "Isolde media browser",
-            "value": "kodi"
-          }
+          { "name": "Search", "value": "search" },
+          { "name": "All Apps / app surfaces", "value": "apps" },
+          { "name": "Settings \u00b7 Home source only", "value": "settings" },
+          { "name": "Isolde media browser", "value": "kodi" }
         ]
       },
       {
@@ -4823,18 +4222,9 @@
         "label": "Theme source",
         "type": "choice",
         "choices": [
-          {
-            "name": "Use Home theme",
-            "value": "home"
-          },
-          {
-            "name": "Use opening page theme",
-            "value": "origin"
-          },
-          {
-            "name": "Custom colors",
-            "value": "custom"
-          }
+          { "name": "Use Home theme", "value": "home" },
+          { "name": "Use opening page theme", "value": "origin" },
+          { "name": "Custom colors", "value": "custom" }
         ]
       },
       {
@@ -4846,14 +4236,8 @@
         "fallback": "dialog",
         "type": "choice",
         "choices": [
-          {
-            "name": "Inset dialog",
-            "value": "dialog"
-          },
-          {
-            "name": "Full screen",
-            "value": "fullscreen"
-          }
+          { "name": "Inset dialog", "value": "dialog" },
+          { "name": "Full screen", "value": "fullscreen" }
         ]
       },
       {
@@ -4865,38 +4249,13 @@
         "fallback": "artwork",
         "type": "choice",
         "choices": [
-          {
-            "name": "List and artwork preview",
-            "value": "artwork"
-          },
-          {
-            "name": "List only",
-            "value": "list"
-          },
-          {
-            "name": "Card grid",
-            "value": "grid"
-          }
+          { "name": "List and artwork preview", "value": "artwork" },
+          { "name": "List only", "value": "list" },
+          { "name": "Card grid", "value": "grid" }
         ]
       },
-      {
-        "tab": "Shell",
-        "scope": "surfaceTheme",
-        "surface": "kodi",
-        "key": "seasonHeader",
-        "label": "Season browser title",
-        "type": "toggle",
-        "fallback": true
-      },
-      {
-        "tab": "Shell",
-        "scope": "surfaceTheme",
-        "surface": "kodi",
-        "key": "seasonMetadata",
-        "label": "Season card metadata",
-        "type": "toggle",
-        "fallback": true
-      },
+      { "tab": "Shell", "scope": "surfaceTheme", "surface": "kodi", "key": "seasonHeader", "label": "Season browser title", "type": "toggle", "fallback": true },
+      { "tab": "Shell", "scope": "surfaceTheme", "surface": "kodi", "key": "seasonMetadata", "label": "Season card metadata", "type": "toggle", "fallback": true },
       {
         "tab": "Shell",
         "scope": "surfaceTheme",
@@ -4906,14 +4265,8 @@
         "fallback": "dialog",
         "type": "choice",
         "choices": [
-          {
-            "name": "Inset dialog",
-            "value": "dialog"
-          },
-          {
-            "name": "Full screen",
-            "value": "fullscreen"
-          }
+          { "name": "Inset dialog", "value": "dialog" },
+          { "name": "Full screen", "value": "fullscreen" }
         ]
       },
       {
@@ -4925,38 +4278,13 @@
         "fallback": "artwork",
         "type": "choice",
         "choices": [
-          {
-            "name": "List and artwork preview",
-            "value": "artwork"
-          },
-          {
-            "name": "List only",
-            "value": "list"
-          },
-          {
-            "name": "Card grid",
-            "value": "grid"
-          }
+          { "name": "List and artwork preview", "value": "artwork" },
+          { "name": "List only", "value": "list" },
+          { "name": "Card grid", "value": "grid" }
         ]
       },
-      {
-        "tab": "Shell",
-        "scope": "surfaceTheme",
-        "surface": "kodi",
-        "key": "episodeHeader",
-        "label": "Episode browser title",
-        "type": "toggle",
-        "fallback": true
-      },
-      {
-        "tab": "Shell",
-        "scope": "surfaceTheme",
-        "surface": "kodi",
-        "key": "episodeMetadata",
-        "label": "Episode card metadata",
-        "type": "toggle",
-        "fallback": true
-      },
+      { "tab": "Shell", "scope": "surfaceTheme", "surface": "kodi", "key": "episodeHeader", "label": "Episode browser title", "type": "toggle", "fallback": true },
+      { "tab": "Shell", "scope": "surfaceTheme", "surface": "kodi", "key": "episodeMetadata", "label": "Episode card metadata", "type": "toggle", "fallback": true },
       {
         "tab": "Shell",
         "scope": "surfaceTheme",
@@ -4966,262 +4294,43 @@
         "fallback": "text",
         "type": "choice",
         "choices": [
-          {
-            "name": "Status text",
-            "value": "text"
-          },
-          {
-            "name": "Hidden",
-            "value": "hidden"
-          },
-          {
-            "name": "Checkmark",
-            "value": "checkmark"
-          },
-          {
-            "name": "Poster outline",
-            "value": "outline"
-          },
-          {
-            "name": "Checkmark and poster outline",
-            "value": "checkmark-outline"
-          }
+          { "name": "Status text", "value": "text" },
+          { "name": "Hidden", "value": "hidden" },
+          { "name": "Checkmark", "value": "checkmark" },
+          { "name": "Poster outline", "value": "outline" },
+          { "name": "Checkmark and poster outline", "value": "checkmark-outline" }
         ]
       },
-      {
-        "tab": "Shell",
-        "scope": "surfaceTheme",
-        "surface": "kodi",
-        "key": "episodeWatchedOutlineColor",
-        "label": "Watched poster outline color",
-        "type": "color",
-        "fallback": "#42c776"
-      },
-      {
-        "tab": "Shell",
-        "scope": "surfaceTheme",
-        "key": "surfaceColor",
-        "label": "Surface",
-        "type": "color"
-      },
-      {
-        "tab": "Shell",
-        "scope": "surfaceTheme",
-        "key": "selectedColor",
-        "label": "Selected surface",
-        "type": "color"
-      },
-      {
-        "tab": "Shell",
-        "scope": "surfaceTheme",
-        "key": "textColor",
-        "label": "Text",
-        "type": "color"
-      },
-      {
-        "tab": "Shell",
-        "scope": "surfaceTheme",
-        "key": "mutedColor",
-        "label": "Supporting text",
-        "type": "color"
-      },
-      {
-        "tab": "Shell",
-        "scope": "surfaceTheme",
-        "key": "focusColor",
-        "label": "Focus",
-        "type": "color"
-      },
-      {
-        "tab": "Shell",
-        "scope": "surfaceTheme",
-        "key": "backgroundEnd",
-        "label": "Background",
-        "type": "color"
-      },
-      {
-        "tab": "Shell",
-        "scope": "surfaceTheme",
-        "key": "elevatedColor",
-        "label": "Dialog / details surface",
-        "type": "color"
-      },
-      {
-        "tab": "Shell",
-        "scope": "surfaceTheme",
-        "key": "inputColor",
-        "label": "Input surface",
-        "type": "color"
-      },
-      {
-        "tab": "Shell",
-        "scope": "surfaceTheme",
-        "key": "inputTextColor",
-        "label": "Input text",
-        "type": "color"
-      },
-      {
-        "tab": "Shell",
-        "scope": "surfaceTheme",
-        "key": "outlineColor",
-        "label": "Outline",
-        "type": "color"
-      },
-      {
-        "tab": "Shell",
-        "scope": "surfaceTheme",
-        "key": "accentColor",
-        "label": "Accent",
-        "type": "color"
-      },
-      {
-        "tab": "Shell",
-        "scope": "surfaceTheme",
-        "key": "scrimColor",
-        "label": "Overlay scrim",
-        "type": "color"
-      },
-      {
-        "tab": "Shell",
-        "scope": "surfaceTheme",
-        "key": "successColor",
-        "label": "Success",
-        "type": "color"
-      },
-      {
-        "tab": "Shell",
-        "scope": "surfaceTheme",
-        "key": "warningColor",
-        "label": "Warning",
-        "type": "color"
-      },
-      {
-        "tab": "Shell",
-        "scope": "surfaceTheme",
-        "key": "errorColor",
-        "label": "Error",
-        "type": "color"
-      },
-      {
-        "tab": "Shell",
-        "scope": "surfaceTheme",
-        "key": "unavailableColor",
-        "label": "Unavailable",
-        "type": "color"
-      },
-      {
-        "tab": "Shell",
-        "scope": "surfaceTheme",
-        "key": "typographyScale",
-        "label": "Text scale",
-        "type": "number",
-        "control": "slider",
-        "min": 0.8,
-        "max": 1.3,
-        "step": 0.05,
-        "fallback": 1
-      },
-      {
-        "tab": "Shell",
-        "scope": "surfaceTheme",
-        "key": "cornerRadius",
-        "label": "Corners",
-        "type": "number",
-        "control": "slider",
-        "min": 0,
-        "max": 48,
-        "step": 1,
-        "fallback": 8
-      },
-      {
-        "tab": "Shell",
-        "scope": "surfaceTheme",
-        "key": "scrimOpacity",
-        "label": "Scrim opacity",
-        "type": "number",
-        "control": "slider",
-        "min": 0,
-        "max": 1,
-        "step": 0.05,
-        "fallback": 0.85
-      },
-      {
-        "tab": "Shell",
-        "scope": "surfaceTheme",
-        "key": "panelOpacity",
-        "label": "Panel opacity",
-        "type": "number",
-        "control": "slider",
-        "min": 0,
-        "max": 1,
-        "step": 0.05,
-        "fallback": 1
-      },
-      {
-        "tab": "Shell",
-        "scope": "surfaceTheme",
-        "key": "motionEnabled",
-        "label": "Motion",
-        "type": "toggle",
-        "fallback": true
-      },
-      {
-        "tab": "Shell",
-        "scope": "surfaceTheme",
-        "key": "highContrast",
-        "label": "High contrast",
-        "type": "toggle",
-        "fallback": false
-      },
-      {
-        "tab": "Colors",
-        "scope": "theme",
-        "key": "backgroundStart",
-        "label": "Background top / solid",
-        "type": "color"
-      },
-      {
-        "tab": "Colors",
-        "scope": "theme",
-        "key": "backgroundEnd",
-        "label": "Background bottom",
-        "type": "color"
-      },
-      {
-        "tab": "Colors",
-        "scope": "theme",
-        "key": "surfaceColor",
-        "label": "Component surface",
-        "type": "color"
-      },
-      {
-        "tab": "Colors",
-        "scope": "theme",
-        "key": "selectedColor",
-        "label": "Selected surface",
-        "type": "color"
-      },
-      {
-        "tab": "Colors",
-        "scope": "theme",
-        "key": "textColor",
-        "label": "Text",
-        "type": "color"
-      },
-      {
-        "tab": "Colors",
-        "scope": "theme",
-        "key": "mutedColor",
-        "label": "Supporting text",
-        "type": "color"
-      },
-      {
-        "tab": "Colors",
-        "scope": "theme",
-        "key": "focusColor",
-        "label": "Focus accent",
-        "type": "color"
-      },
+      { "tab": "Shell", "scope": "surfaceTheme", "surface": "kodi", "key": "episodeWatchedOutlineColor", "label": "Watched poster outline color", "type": "color", "fallback": "#42c776" },
+      { "tab": "Shell", "scope": "surfaceTheme", "key": "surfaceColor", "label": "Surface", "type": "color" },
+      { "tab": "Shell", "scope": "surfaceTheme", "key": "selectedColor", "label": "Selected surface", "type": "color" },
+      { "tab": "Shell", "scope": "surfaceTheme", "key": "textColor", "label": "Text", "type": "color" },
+      { "tab": "Shell", "scope": "surfaceTheme", "key": "mutedColor", "label": "Supporting text", "type": "color" },
+      { "tab": "Shell", "scope": "surfaceTheme", "key": "focusColor", "label": "Focus", "type": "color" },
+      { "tab": "Shell", "scope": "surfaceTheme", "key": "backgroundEnd", "label": "Background", "type": "color" },
+      { "tab": "Shell", "scope": "surfaceTheme", "key": "elevatedColor", "label": "Dialog / details surface", "type": "color" },
+      { "tab": "Shell", "scope": "surfaceTheme", "key": "inputColor", "label": "Input surface", "type": "color" },
+      { "tab": "Shell", "scope": "surfaceTheme", "key": "inputTextColor", "label": "Input text", "type": "color" },
+      { "tab": "Shell", "scope": "surfaceTheme", "key": "outlineColor", "label": "Outline", "type": "color" },
+      { "tab": "Shell", "scope": "surfaceTheme", "key": "accentColor", "label": "Accent", "type": "color" },
+      { "tab": "Shell", "scope": "surfaceTheme", "key": "scrimColor", "label": "Overlay scrim", "type": "color" },
+      { "tab": "Shell", "scope": "surfaceTheme", "key": "successColor", "label": "Success", "type": "color" },
+      { "tab": "Shell", "scope": "surfaceTheme", "key": "warningColor", "label": "Warning", "type": "color" },
+      { "tab": "Shell", "scope": "surfaceTheme", "key": "errorColor", "label": "Error", "type": "color" },
+      { "tab": "Shell", "scope": "surfaceTheme", "key": "unavailableColor", "label": "Unavailable", "type": "color" },
+      { "tab": "Shell", "scope": "surfaceTheme", "key": "typographyScale", "label": "Text scale", "type": "number", "control": "slider", "min": 0.8, "max": 1.3, "step": 0.05, "fallback": 1 },
+      { "tab": "Shell", "scope": "surfaceTheme", "key": "cornerRadius", "label": "Corners", "type": "number", "control": "slider", "min": 0, "max": 48, "step": 1, "fallback": 8 },
+      { "tab": "Shell", "scope": "surfaceTheme", "key": "scrimOpacity", "label": "Scrim opacity", "type": "number", "control": "slider", "min": 0, "max": 1, "step": 0.05, "fallback": 0.85 },
+      { "tab": "Shell", "scope": "surfaceTheme", "key": "panelOpacity", "label": "Panel opacity", "type": "number", "control": "slider", "min": 0, "max": 1, "step": 0.05, "fallback": 1 },
+      { "tab": "Shell", "scope": "surfaceTheme", "key": "motionEnabled", "label": "Motion", "type": "toggle", "fallback": true },
+      { "tab": "Shell", "scope": "surfaceTheme", "key": "highContrast", "label": "High contrast", "type": "toggle", "fallback": false },
+      { "tab": "Colors", "scope": "theme", "key": "backgroundStart", "label": "Background top / solid", "type": "color" },
+      { "tab": "Colors", "scope": "theme", "key": "backgroundEnd", "label": "Background bottom", "type": "color" },
+      { "tab": "Colors", "scope": "theme", "key": "surfaceColor", "label": "Component surface", "type": "color" },
+      { "tab": "Colors", "scope": "theme", "key": "selectedColor", "label": "Selected surface", "type": "color" },
+      { "tab": "Colors", "scope": "theme", "key": "textColor", "label": "Text", "type": "color" },
+      { "tab": "Colors", "scope": "theme", "key": "mutedColor", "label": "Supporting text", "type": "color" },
+      { "tab": "Colors", "scope": "theme", "key": "focusColor", "label": "Focus accent", "type": "color" },
       {
         "tab": "Colors",
         "scope": "theme",
@@ -5250,27 +4359,8 @@
         "fallback": 0.18,
         "advanced": true
       },
-      {
-        "tab": "Colors",
-        "scope": "theme",
-        "key": "spacing",
-        "label": "Spacing",
-        "type": "number",
-        "control": "slider",
-        "min": 8,
-        "max": 40,
-        "step": 2,
-        "fallback": 20,
-        "advanced": true
-      },
-      {
-        "tab": "Colors",
-        "scope": "theme",
-        "key": "motionEnabled",
-        "label": "Focus animation",
-        "type": "toggle",
-        "fallback": true
-      },
+      { "tab": "Colors", "scope": "theme", "key": "spacing", "label": "Spacing", "type": "number", "control": "slider", "min": 8, "max": 40, "step": 2, "fallback": 20, "advanced": true },
+      { "tab": "Colors", "scope": "theme", "key": "motionEnabled", "label": "Focus animation", "type": "toggle", "fallback": true },
       {
         "tab": "Colors",
         "scope": "theme",
@@ -5308,13 +4398,7 @@
         ],
         "fallback": "gradient"
       },
-      {
-        "tab": "Background",
-        "scope": "composition",
-        "key": "wallpaper",
-        "label": "Managed background image",
-        "type": "artwork"
-      },
+      { "tab": "Background", "scope": "composition", "key": "wallpaper", "label": "Managed background image", "type": "artwork" },
       {
         "tab": "Background",
         "scope": "background",
@@ -5329,14 +4413,7 @@
         "step": 0.05,
         "fallback": 0
       },
-      {
-        "tab": "Background",
-        "scope": "background",
-        "key": "tintColor",
-        "label": "Dim tint",
-        "type": "color",
-        "fallback": "#000000"
-      },
+      { "tab": "Background", "scope": "background", "key": "tintColor", "label": "Dim tint", "type": "color", "fallback": "#000000" },
       {
         "tab": "Background",
         "scope": "background",
@@ -5348,28 +4425,9 @@
           "contain"
         ]
       },
-      {
-        "tab": "Background",
-        "scope": "background",
-        "key": "crop",
-        "label": "Crop / focal point",
-        "type": "crop"
-      },
-      {
-        "tab": "Layout",
-        "scope": "composition",
-        "key": "verticalScrolling",
-        "label": "Allow vertical scrolling",
-        "type": "scrolling",
-        "fallback": false
-      },
-      {
-        "tab": "Layout",
-        "scope": "composition",
-        "key": "grid",
-        "label": "Grid / scrolling sections",
-        "type": "grid"
-      },
+      { "tab": "Background", "scope": "background", "key": "crop", "label": "Crop / focal point", "type": "crop" },
+      { "tab": "Layout", "scope": "composition", "key": "verticalScrolling", "label": "Allow vertical scrolling", "type": "scrolling", "fallback": false },
+      { "tab": "Layout", "scope": "composition", "key": "grid", "label": "Grid / scrolling sections", "type": "grid" },
       {
         "tab": "Layout",
         "scope": "composition",
@@ -5441,29 +4499,14 @@
         "label": "Section arrangement",
         "type": "choice",
         "choices": [
-          {
-            "name": "Stacked sections",
-            "value": 1
-          },
-          {
-            "name": "Two columns, with full-width sections",
-            "value": 2
-          }
+          { "name": "Stacked sections", "value": 1 },
+          { "name": "Two columns, with full-width sections", "value": 2 }
         ],
         "fallback": 1,
         "advanced": true,
         "needsComposition": true
       },
-      {
-        "tab": "Layout",
-        "scope": "composition",
-        "key": "fit",
-        "label": "Fit flow sections",
-        "type": "toggle",
-        "fallback": true,
-        "advanced": true,
-        "needsComposition": true
-      },
+      { "tab": "Layout", "scope": "composition", "key": "fit", "label": "Fit flow sections", "type": "toggle", "fallback": true, "advanced": true, "needsComposition": true },
       {
         "tab": "Layout",
         "scope": "composition",
@@ -5489,75 +4532,14 @@
         ],
         "needsComposition": true
       },
-      {
-        "tab": "Layout",
-        "scope": "composition",
-        "key": "identity",
-        "label": "Header title",
-        "type": "text",
-        "needsComposition": true
-      },
-      {
-        "tab": "Layout",
-        "scope": "composition",
-        "key": "showClock",
-        "label": "Header clock",
-        "type": "toggle",
-        "fallback": false,
-        "needsComposition": true
-      },
-      {
-        "tab": "Layout",
-        "scope": "composition",
-        "key": "showProfile",
-        "label": "Profile label",
-        "type": "toggle",
-        "fallback": false,
-        "advanced": true,
-        "needsComposition": true
-      },
-      {
-        "tab": "Layout",
-        "scope": "theme",
-        "key": "brandVisible",
-        "label": "Isolde brand",
-        "type": "toggle",
-        "fallback": false,
-        "advanced": true
-      },
-      {
-        "tab": "Layout",
-        "scope": "composition",
-        "key": "headerControls",
-        "label": "Header controls",
-        "type": "header",
-        "needsComposition": true
-      },
-      {
-        "tab": "Layout",
-        "scope": "composition",
-        "key": "initialTab",
-        "label": "Starting tab",
-        "type": "tab",
-        "needsComposition": true
-      },
-      {
-        "tab": "Layout",
-        "scope": "composition",
-        "key": "enabled",
-        "label": "Use composed layout",
-        "type": "toggle",
-        "advanced": true,
-        "fallback": false
-      },
-      {
-        "tab": "Layout",
-        "scope": "composition",
-        "key": "header",
-        "label": "Edit header",
-        "type": "headerEditor",
-        "needsComposition": true
-      },
+      { "tab": "Layout", "scope": "composition", "key": "identity", "label": "Header title", "type": "text", "needsComposition": true },
+      { "tab": "Layout", "scope": "composition", "key": "showClock", "label": "Header clock", "type": "toggle", "fallback": false, "needsComposition": true },
+      { "tab": "Layout", "scope": "composition", "key": "showProfile", "label": "Profile label", "type": "toggle", "fallback": false, "advanced": true, "needsComposition": true },
+      { "tab": "Layout", "scope": "theme", "key": "brandVisible", "label": "Isolde brand", "type": "toggle", "fallback": false, "advanced": true },
+      { "tab": "Layout", "scope": "composition", "key": "headerControls", "label": "Header controls", "type": "header", "needsComposition": true },
+      { "tab": "Layout", "scope": "composition", "key": "initialTab", "label": "Starting tab", "type": "tab", "needsComposition": true },
+      { "tab": "Layout", "scope": "composition", "key": "enabled", "label": "Use composed layout", "type": "toggle", "advanced": true, "fallback": false },
+      { "tab": "Layout", "scope": "composition", "key": "header", "label": "Edit header", "type": "headerEditor", "needsComposition": true },
       {
         "tab": "Header",
         "scope": "composition",
@@ -5566,41 +4548,13 @@
         "type": "choice",
         "needsComposition": true,
         "choices": [
-          {
-            "name": "Page navigation",
-            "value": "navigation"
-          },
-          {
-            "name": "Title and logo",
-            "value": "identity"
-          }
+          { "name": "Page navigation", "value": "navigation" },
+          { "name": "Title and logo", "value": "identity" }
         ]
       },
-      {
-        "tab": "Header",
-        "scope": "composition",
-        "key": "identity",
-        "label": "Title",
-        "type": "text",
-        "needsComposition": true
-      },
-      {
-        "tab": "Header",
-        "scope": "headerStyle",
-        "key": "showTitle",
-        "label": "Show title or logo",
-        "type": "toggle",
-        "needsComposition": true,
-        "fallback": true
-      },
-      {
-        "tab": "Header",
-        "scope": "headerStyle",
-        "key": "customLogo",
-        "label": "Logo image",
-        "type": "artwork",
-        "needsComposition": true
-      },
+      { "tab": "Header", "scope": "composition", "key": "identity", "label": "Title", "type": "text", "needsComposition": true },
+      { "tab": "Header", "scope": "headerStyle", "key": "showTitle", "label": "Show title or logo", "type": "toggle", "needsComposition": true, "fallback": true },
+      { "tab": "Header", "scope": "headerStyle", "key": "customLogo", "label": "Logo image", "type": "artwork", "needsComposition": true },
       {
         "tab": "Header",
         "scope": "headerStyle",
@@ -5615,24 +4569,8 @@
         ],
         "fallback": "left"
       },
-      {
-        "tab": "Header",
-        "scope": "composition",
-        "key": "showClock",
-        "label": "Show clock",
-        "type": "toggle",
-        "needsComposition": true,
-        "fallback": false
-      },
-      {
-        "tab": "Header",
-        "scope": "headerStyle",
-        "key": "showDate",
-        "label": "Show date",
-        "type": "toggle",
-        "needsComposition": true,
-        "fallback": true
-      },
+      { "tab": "Header", "scope": "composition", "key": "showClock", "label": "Show clock", "type": "toggle", "needsComposition": true, "fallback": false },
+      { "tab": "Header", "scope": "headerStyle", "key": "showDate", "label": "Show date", "type": "toggle", "needsComposition": true, "fallback": true },
       {
         "tab": "Header",
         "scope": "headerStyle",
@@ -5641,22 +4579,10 @@
         "type": "choice",
         "needsComposition": true,
         "choices": [
-          {
-            "name": "12 hour",
-            "value": "h:mm AP"
-          },
-          {
-            "name": "24 hour",
-            "value": "HH:mm"
-          },
-          {
-            "name": "12 hour with seconds",
-            "value": "h:mm:ss AP"
-          },
-          {
-            "name": "24 hour with seconds",
-            "value": "HH:mm:ss"
-          }
+          { "name": "12 hour", "value": "h:mm AP" },
+          { "name": "24 hour", "value": "HH:mm" },
+          { "name": "12 hour with seconds", "value": "h:mm:ss AP" },
+          { "name": "24 hour with seconds", "value": "HH:mm:ss" }
         ],
         "fallback": "h:mm AP"
       },
@@ -5668,73 +4594,19 @@
         "type": "choice",
         "needsComposition": true,
         "choices": [
-          {
-            "name": "Short date",
-            "value": "ddd, MMM d"
-          },
-          {
-            "name": "Long date",
-            "value": "dddd, MMMM d"
-          },
-          {
-            "name": "Year-month-day",
-            "value": "yyyy-MM-dd"
-          },
-          {
-            "name": "Day/month/year",
-            "value": "dd/MM/yyyy"
-          },
-          {
-            "name": "Month/day/year",
-            "value": "MM/dd/yyyy"
-          }
+          { "name": "Short date", "value": "ddd, MMM d" },
+          { "name": "Long date", "value": "dddd, MMMM d" },
+          { "name": "Year-month-day", "value": "yyyy-MM-dd" },
+          { "name": "Day/month/year", "value": "dd/MM/yyyy" },
+          { "name": "Month/day/year", "value": "MM/dd/yyyy" }
         ],
         "fallback": "ddd, MMM d"
       },
-      {
-        "tab": "Header",
-        "scope": "composition",
-        "key": "headerControls",
-        "label": "Search and Settings",
-        "type": "header",
-        "needsComposition": true
-      },
-      {
-        "tab": "Header",
-        "scope": "headerVisibility",
-        "key": "searchVisible",
-        "controlId": "search",
-        "label": "Show Search",
-        "type": "toggle",
-        "needsComposition": true
-      },
-      {
-        "tab": "Header",
-        "scope": "headerVisibility",
-        "key": "settingsVisible",
-        "controlId": "settings",
-        "label": "Show Settings",
-        "type": "toggle",
-        "needsComposition": true
-      },
-      {
-        "tab": "Header",
-        "scope": "headerVisibility",
-        "key": "editVisible",
-        "controlId": "edit",
-        "label": "Show Edit Home",
-        "type": "toggle",
-        "needsComposition": true
-      },
-      {
-        "tab": "Header",
-        "scope": "headerVisibility",
-        "key": "sourcesVisible",
-        "controlId": "sources",
-        "label": "Show Sources",
-        "type": "toggle",
-        "needsComposition": true
-      },
+      { "tab": "Header", "scope": "composition", "key": "headerControls", "label": "Search and Settings", "type": "header", "needsComposition": true },
+      { "tab": "Header", "scope": "headerVisibility", "key": "searchVisible", "controlId": "search", "label": "Show Search", "type": "toggle", "needsComposition": true },
+      { "tab": "Header", "scope": "headerVisibility", "key": "settingsVisible", "controlId": "settings", "label": "Show Settings", "type": "toggle", "needsComposition": true },
+      { "tab": "Header", "scope": "headerVisibility", "key": "editVisible", "controlId": "edit", "label": "Show Edit Home", "type": "toggle", "needsComposition": true },
+      { "tab": "Header", "scope": "headerVisibility", "key": "sourcesVisible", "controlId": "sources", "label": "Show Sources", "type": "toggle", "needsComposition": true },
       {
         "tab": "Header",
         "scope": "headerStyle",
@@ -5743,18 +4615,9 @@
         "type": "choice",
         "needsComposition": true,
         "choices": [
-          {
-            "name": "Icon and label",
-            "value": "both"
-          },
-          {
-            "name": "Icon",
-            "value": "icon"
-          },
-          {
-            "name": "Label",
-            "value": "label"
-          }
+          { "name": "Icon and label", "value": "both" },
+          { "name": "Icon", "value": "icon" },
+          { "name": "Label", "value": "label" }
         ]
       },
       {
@@ -5919,14 +4782,7 @@
         "fallback": 18,
         "step": 1
       },
-      {
-        "tab": "Header",
-        "scope": "headerStyle",
-        "key": "clockColor",
-        "label": "Clock color",
-        "type": "color",
-        "needsComposition": true
-      },
+      { "tab": "Header", "scope": "headerStyle", "key": "clockColor", "label": "Clock color", "type": "color", "needsComposition": true },
       {
         "tab": "Header",
         "scope": "headerStyle",
@@ -5994,30 +4850,9 @@
         "displayScale": 100,
         "displayUnit": "%"
       },
-      {
-        "tab": "Header",
-        "scope": "headerStyle",
-        "key": "backgroundColor",
-        "label": "Background",
-        "type": "color",
-        "needsComposition": true
-      },
-      {
-        "tab": "Header",
-        "scope": "headerStyle",
-        "key": "textColor",
-        "label": "Text",
-        "type": "color",
-        "needsComposition": true
-      },
-      {
-        "tab": "Header",
-        "scope": "headerStyle",
-        "key": "focusColor",
-        "label": "Focus",
-        "type": "color",
-        "needsComposition": true
-      },
+      { "tab": "Header", "scope": "headerStyle", "key": "backgroundColor", "label": "Background", "type": "color", "needsComposition": true },
+      { "tab": "Header", "scope": "headerStyle", "key": "textColor", "label": "Text", "type": "color", "needsComposition": true },
+      { "tab": "Header", "scope": "headerStyle", "key": "focusColor", "label": "Focus", "type": "color", "needsComposition": true },
       {
         "tab": "Header",
         "scope": "headerStyle",
@@ -6026,25 +4861,12 @@
         "type": "choice",
         "needsComposition": true,
         "choices": [
-          {
-            "name": "Top",
-            "value": "top"
-          },
-          {
-            "name": "Bottom",
-            "value": "bottom"
-          }
+          { "name": "Top", "value": "top" },
+          { "name": "Bottom", "value": "bottom" }
         ],
         "fallback": "top"
       },
-      {
-        "tab": "Folder",
-        "scope": "appGallery",
-        "key": "title",
-        "label": "Folder title",
-        "type": "text",
-        "fallback": "More"
-      },
+      { "tab": "Folder", "scope": "appGallery", "key": "title", "label": "Folder title", "type": "text", "fallback": "More" },
       {
         "tab": "Folder",
         "scope": "appGallery",
@@ -6057,42 +4879,9 @@
         ],
         "fallback": "grid"
       },
-      {
-        "tab": "Folder",
-        "scope": "appGallery",
-        "key": "columns",
-        "label": "Columns",
-        "type": "number",
-        "control": "stepper",
-        "min": 2,
-        "max": 8,
-        "step": 1,
-        "fallback": 5
-      },
-      {
-        "tab": "Folder",
-        "scope": "appGallery",
-        "key": "tileHeight",
-        "label": "Tile height",
-        "type": "number",
-        "control": "slider",
-        "min": 56,
-        "max": 320,
-        "step": 4,
-        "fallback": 172
-      },
-      {
-        "tab": "Folder",
-        "scope": "appGallery",
-        "key": "tileGap",
-        "label": "Tile spacing",
-        "type": "number",
-        "control": "slider",
-        "min": 0,
-        "max": 48,
-        "step": 1,
-        "fallback": 12
-      },
+      { "tab": "Folder", "scope": "appGallery", "key": "columns", "label": "Columns", "type": "number", "control": "stepper", "min": 2, "max": 8, "step": 1, "fallback": 5 },
+      { "tab": "Folder", "scope": "appGallery", "key": "tileHeight", "label": "Tile height", "type": "number", "control": "slider", "min": 56, "max": 320, "step": 4, "fallback": 172 },
+      { "tab": "Folder", "scope": "appGallery", "key": "tileGap", "label": "Tile spacing", "type": "number", "control": "slider", "min": 0, "max": 48, "step": 1, "fallback": 12 },
       {
         "tab": "Folder",
         "scope": "appGallery",
@@ -6107,63 +4896,18 @@
         "displayUnit": "%",
         "fallback": 1
       },
-      {
-        "tab": "Folder",
-        "scope": "appGallery",
-        "key": "radius",
-        "label": "Tile corners",
-        "type": "number",
-        "control": "slider",
-        "min": 0,
-        "max": 48,
-        "step": 1,
-        "fallback": 16
-      },
-      {
-        "tab": "Folder",
-        "scope": "appGallery",
-        "key": "surfaceColor",
-        "label": "Tile color",
-        "type": "color"
-      },
-      {
-        "tab": "Folder",
-        "scope": "appGallery",
-        "key": "focusColor",
-        "label": "Focus color",
-        "type": "color"
-      },
-      {
-        "tab": "Folder",
-        "scope": "appGallery",
-        "key": "showArtwork",
-        "label": "Show app icons",
-        "type": "toggle",
-        "fallback": true
-      },
-      {
-        "tab": "Folder",
-        "scope": "appGallery",
-        "key": "showLabels",
-        "label": "Show app names",
-        "type": "toggle",
-        "fallback": true
-      }
+      { "tab": "Folder", "scope": "appGallery", "key": "radius", "label": "Tile corners", "type": "number", "control": "slider", "min": 0, "max": 48, "step": 1, "fallback": 16 },
+      { "tab": "Folder", "scope": "appGallery", "key": "surfaceColor", "label": "Tile color", "type": "color" },
+      { "tab": "Folder", "scope": "appGallery", "key": "focusColor", "label": "Focus color", "type": "color" },
+      { "tab": "Folder", "scope": "appGallery", "key": "showArtwork", "label": "Show app icons", "type": "toggle", "fallback": true },
+      { "tab": "Folder", "scope": "appGallery", "key": "showLabels", "label": "Show app names", "type": "toggle", "fallback": true }
     ]
   },
   "designSamples": [
-    {
-      "title": "Design sample 1"
-    },
-    {
-      "title": "Design sample 2"
-    },
-    {
-      "title": "Design sample 3"
-    },
-    {
-      "title": "Design sample 4"
-    }
+    { "title": "Design sample 1" },
+    { "title": "Design sample 2" },
+    { "title": "Design sample 3" },
+    { "title": "Design sample 4" }
   ],
   "buttonChildPreset": {
     "id": "button",
@@ -6180,15 +4924,9 @@
     "presentation": {}
   },
   "carouselStart": [
-    {
-      "name": "Button 1"
-    },
-    {
-      "name": "Button 2"
-    },
-    {
-      "name": "Button 3"
-    }
+    { "name": "Button 1" },
+    { "name": "Button 2" },
+    { "name": "Button 3" }
   ],
   "backgroundDefaults": {
     "mode": "gradient",

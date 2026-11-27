@@ -70,6 +70,8 @@ class PlaybackTests(unittest.TestCase):
         self.subtitle_id = 0
         self.subtitle_enabled = True
         self.audio_id = 0
+        self.shuffled = False
+        self.repeat = "off"
         self.view = "normal"
         self.now = 0
         self.calls, self.builtins = [], []
@@ -92,9 +94,16 @@ class PlaybackTests(unittest.TestCase):
             for key,value in (("clientid",9),("uniqueid",101)):
                 if key in params["properties"] and not (key=="uniqueid" and self.omit_pvr_uniqueid):details[key]=value
             result={"channeldetails":details}
+        elif method == "PVR.GetChannelGroups":
+            self.assertEqual(params, {"channeltype": "tv", "limits": {"start": 0, "end": 50}})
+            result = {"channelgroups": [{"channelgroupid": 8, "label": "Local stations"}]}
+        elif method == "PVR.GetChannels":
+            self.assertEqual(params, {"channelgroupid": 8, "limits": {"start": 0, "end": 50}})
+            result = {"channels": [{"channelid": 9, "label": "Local TV"}]}
         elif method == "Player.GetItem": result = {"item": {"label":"Example movie","type": self.kind, "id": self.item, **({"file":self.stream_file} if "file" in params.get("properties",[]) else {})}}
         elif method == "Player.GetProperties":
             values={"speed":self.speed,"canseek":self.seekable,"canchangespeed":True,"live":self.kind=="channel",
+                    "shuffled": self.shuffled, "repeat": self.repeat,
                     "time":{"hours":self.position//3600,"minutes":self.position//60%60,"seconds":self.position%60},
                     "totaltime":{"hours":self.duration//3600,"minutes":self.duration//60%60,"seconds":self.duration%60}}
             values.update({"subtitles":self.subtitle_tracks, "currentsubtitle":next((track for track in self.subtitle_tracks if track["index"]==self.subtitle_id), {}),
@@ -105,6 +114,19 @@ class PlaybackTests(unittest.TestCase):
             self.assertEqual(params,{"booleans":["Player.PauseEnabled"]})
             if self.pause_info_error:return json.dumps({"error":{"code":-32602,"message":"Capability unavailable"}})
             result={"Player.PauseEnabled":self.pausable} if self.pause_info is None else self.pause_info
+        elif method == "Player.SetShuffle":
+            self.assertEqual(params, {"playerid": 1, "shuffle": True})
+            self.shuffled = params["shuffle"]
+        elif method == "Player.SetRepeat":
+            self.assertEqual(params, {"playerid": 1, "repeat": "all"})
+            self.repeat = params["repeat"]
+        elif method == "Player.SetAudioDelay":
+            self.assertEqual(params, {"playerid": 1, "offset": 0.25})
+            result = {"offset": params["offset"]}
+        elif method == "Player.SetSpeed":
+            self.assertIs(type(params["speed"]), int)
+            self.speed = params["speed"]
+            result = {"speed": self.speed}
         elif method == "Player.PlayPause":
             self.assertIs(type(params["play"]), bool)
             self.speed = int(params["play"])
@@ -454,6 +476,37 @@ class PlaybackTests(unittest.TestCase):
         self.assertEqual(self.player.handle("Isolde.GetPlaybackOptions",{})["views"],[])
         with self.assertRaises(ValueError):self.player.handle("Isolde.SetPlaybackOption",dict(kind="view",value="zoom"))
         self.assertEqual(self.player.control("pause")["state"],"paused")
+
+    def test_song_shuffle_and_repeat_use_the_owned_player_and_read_back(self):
+        """Verify the controls affect Kodi and cannot change an unrelated player."""
+        self.kind = "song"
+        self.player.handle("Isolde.PlaySong", {"songid": 7, "resume": False})
+        self.active = True
+        self.assertTrue(self.player.handle("Isolde.SetPlaybackOption", {"kind": "shuffle", "value": True})["shuffled"])
+        self.assertEqual(self.player.handle("Isolde.SetPlaybackOption", {"kind": "repeat", "value": "all"})["repeat"], "all")
+        self.item = 8
+        with self.assertRaises(ValueError):
+            self.player.handle("Isolde.SetPlaybackOption", {"kind": "shuffle", "value": False})
+        self.assertEqual(sum(method == "Player.SetShuffle" for method, _ in self.calls), 1)
+
+    def test_pvr_channel_groups_use_scoped_kodi_reads(self):
+        """Verify the bridge asks Kodi for TV groups and binds channels to the selected group."""
+        self.assertEqual(self.player.handle("Isolde.GetPVRGroups", {}),
+                         {"groups": [{"id": 8, "name": "Local stations", "type": "tv"}]})
+        self.assertEqual(self.player.handle("Isolde.GetGroupMembers", {"id": 8}),
+                         {"groupId": 8, "members": [{"id": 9, "title": "Local TV", "type": "channel"}]})
+        with self.assertRaises(ValueError):
+            self.player.handle("Isolde.GetGroupMembers", {"id": True})
+
+    def test_audio_offset_and_speed_use_kodi_types_and_confirmed_values(self):
+        """Reject unsupported speed values and display the offset acknowledged by Kodi."""
+        self.start()
+        offset = self.player.handle("Isolde.SetPlaybackOption", {"kind": "audiooffset", "value": 250})
+        self.assertEqual(offset["audioOffsetMs"], 250)
+        speed = self.player.handle("Isolde.SetPlaybackOption", {"kind": "speed", "value": 2})
+        self.assertEqual(speed["speed"], 2)
+        with self.assertRaises(ValueError):
+            self.player.handle("Isolde.SetPlaybackOption", {"kind": "speed", "value": 1.5})
 
     def test_episode_resume_restart_and_type_scoped_ownership(self):
         self.kind = "episode"

@@ -12,6 +12,7 @@
 #include <algorithm>
 #include "GuideFeeds.h"
 #include "KodiMedia.h"
+#include "settings/ProfileManager.h"
 #ifdef Q_OS_LINUX
 #include <fcntl.h>
 #include <unistd.h>
@@ -1211,20 +1212,15 @@ KodiMedia::loadPage(int start)
                      {"ignorearticle", true}}},
         {"limits", QJsonObject{{"start", start}, {"end", start + loadPageLimit(m_mediaKind)}}}};
     loadPageViewFilter(m_viewKind, m_viewValue, params);
-    if (!m_watchFilter.isEmpty())
-    {
-        params.insert("filter", QJsonObject{{"field", "playcount"}, {"operator", "greaterthan"}, {"value", 0}});
-    }
-    if (!m_facets.isEmpty())
+    if (!m_watchFilter.isEmpty() && (method == "VideoLibrary.GetMovies" || method == "VideoLibrary.GetEpisodes"))
+        params.insert("watchedOnly", true);
+    if (!m_facets.isEmpty() && method == "VideoLibrary.GetMovies")
     {
         QJsonObject facetFilters;
         for (const auto& key : m_facets.keys())
         {
             const auto value = m_facets.value(key);
-            if (value.canConvert<int>())
-                facetFilters.insert(key, value.toInt());
-            else
-                facetFilters.insert(key, value.toString());
+            facetFilters.insert(key, value.toString());
         }
         params.insert("facetfilters", facetFilters);
     }
@@ -1703,14 +1699,16 @@ KodiMedia::setWatchFilter(bool enabled)
 void
 KodiMedia::setFacet(const QString& facetId, const QVariant& value)
 {
-    if (facetId.isEmpty())
+    if (!QStringList{"genre", "actor", "director", "studio", "year"}.contains(facetId))
         return;
-    if (value.isNull() || (value.toString().isEmpty() && !value.canConvert<int>()))
+    const auto text = value.toString().trimmed();
+    if (text.isEmpty())
     {
         m_facets.remove(facetId);
         return;
     }
-    m_facets[facetId] = value;
+    if (text.size() <= 160)
+        m_facets[facetId] = text;
 }
 
 QStringList
@@ -1867,7 +1865,8 @@ KodiMedia::playScheduled(const QString& kind, int id, int offsetSeconds)
 bool
 KodiMedia::markWatched(const QString& kind, int id, bool watched)
 {
-    if (m_busy || m_playbackActive || id < 1 || !QStringList{"movie", "episode"}.contains(kind))
+    if (m_retired || !ProfileManager::allows("edit") || m_busy || m_playbackActive || id < 1 ||
+        !QStringList{"movie", "episode"}.contains(kind))
         return false;
     ++m_generation;
     m_busy = true;
@@ -1887,35 +1886,37 @@ KodiMedia::markWatched(const QString& kind, int id, bool watched)
 
 /** Finds the next unwatched media item via an ordered Kodi query.
  * @brief Finds the next unwatched media item.
- * @details Queries Kodi for the next unwatched item of the given kind,
- * ordered by title ascending, filtered by playcount=0 (unwatched).
+ * @details Queries Kodi for a confirmed unwatched movie or an episode in the open season.
  * Stores the result so it can be activated via activateNextUnwatched().
- * @param kind The media kind (movie, episode, show).
+ * @param kind The playable media kind (movie or episode).
  * @return true when the next unwatched query was dispatched, false when busy or invalid kind.
  */
 bool
 KodiMedia::nextUnwatched(const QString& kind)
 {
-    static const QStringList validKinds{"movie", "episode", "show"};
-    if (m_busy || m_playbackActive || !validKinds.contains(kind))
+    const bool episode = kind == "episode";
+    if (m_retired || m_busy || m_playbackActive || (kind != "movie" && !episode) ||
+        (episode && hierarchyLevel() != "episodes"))
         return false;
     ++m_generation;
     m_busy = true;
     m_stage = 44;
     m_presentationError.clear();
     m_playbackStatus = "Finding next unwatched…";
-    emit changed();
     m_nextUnwatchedKind = kind;
     m_nextUnwatchedId = 0;
-    const QString method = kind == "movie" ? "VideoLibrary.GetMovies"
-                                         : (kind == "show" ? "VideoLibrary.GetTVShows"
-                                                           : "VideoLibrary.GetEpisodes");
-    QJsonObject params;
-    params["properties"] = QJsonArray{"title", "year", "plot", "runtime", "resume", "playcount", "art", "uniqueid"};
-    params["sort"] = QJsonObject{{"method", "title"}, {"order", "ascending"}, {"ignorearticle", true}};
-    params["filter"] = QJsonObject{{"field", "playcount"}, {"operator", "equals"}, {"value", 0}};
-    params["limits"] = QJsonObject{{"start", 0}, {"end", 1}};
-    request(method, params);
+    m_nextUnwatchedGeneration = m_generation;
+    QJsonObject params{{"properties", QJsonArray{"title", "playcount"}},
+                       {"sort", QJsonObject{{"method", episode ? "episode" : "title"}, {"order", "ascending"}}},
+                       {"unwatchedOnly", true},
+                       {"limits", QJsonObject{{"start", 0}, {"end", 1}}}};
+    if (episode)
+    {
+        params["tvshowid"] = m_showId;
+        params["season"] = m_season;
+    }
+    emit changed();
+    request(episode ? "VideoLibrary.GetEpisodes" : "VideoLibrary.GetMovies", params);
     return true;
 }
 
@@ -1928,10 +1929,12 @@ KodiMedia::nextUnwatched(const QString& kind)
 bool
 KodiMedia::activateNextUnwatched()
 {
-    if (m_busy || m_playbackActive || m_nextUnwatchedId < 1 || m_nextUnwatchedKind.isEmpty())
+    if (m_retired || m_busy || m_playbackActive || nextUnwatchedId() < 1)
         return false;
-    playMedia(m_nextUnwatchedKind, m_nextUnwatchedId, true);
-    return true;
+    const int id = m_nextUnwatchedId;
+    m_nextUnwatchedId = 0;
+    playMedia(m_nextUnwatchedKind, id, true);
+    return m_playbackActive;
 }
 
 /** Returns the Kodi library identity of the next unwatched item.
@@ -1941,7 +1944,7 @@ KodiMedia::activateNextUnwatched()
 int
 KodiMedia::nextUnwatchedId() const
 {
-    return m_nextUnwatchedId;
+    return m_nextUnwatchedGeneration == m_generation ? m_nextUnwatchedId : 0;
 }
 
 /** Returns the media kind of the next unwatched item.
@@ -2135,11 +2138,23 @@ KodiMedia::setVisualizationName(const QString& name)
     m_visualizationName = name;
 }
 
-Q_INVOKABLE void
-KodiMedia::setPlayingKind(const QString& kind)
+Q_INVOKABLE KodiMedia::setPlayingKind(const QString& kind)
 {
     m_playingKind = kind;
 }
+
+void
+KodiMedia::setPlaybackActive(bool active)
+{
+    m_playbackActive = active;
+}
+
+void
+KodiMedia::setChapters(const QVariantList& chapters)
+{
+    m_chapters = chapters;
+}
+
 
 void
 KodiMedia::setQueueMembers(const QVariantList& members)
@@ -2448,7 +2463,11 @@ KodiMedia::refreshPlaybackOptions()
 void
 KodiMedia::setPlaybackOption(const QString& kind, const QVariant& value)
 {
-    if (!m_playbackActive || m_busy || !QStringList{"audio", "subtitle", "view"}.contains(kind))
+    if (!m_playbackActive || m_busy)
+        return;
+    const bool sound = m_playingKind == "song";
+    const auto allowed = sound ? QStringList{"shuffle", "repeat"} : QStringList{"audio", "subtitle", "view"};
+    if (!allowed.contains(kind))
         return;
     m_busy = true;
     m_stage = 21;
@@ -2487,14 +2506,14 @@ KodiMedia::audioOffset() const
 
 /** Sets the playback speed multiplier for the current video playback.
  * @brief Sets playback speed via Player.SetSpeed.
- * @details Adjusts playback speed (0.1x to 8.0x). 1.0 is normal speed.
+ * @details Offers the bounded Kodi speed steps 1x, 2x, 4x and 8x.
  * Rejects when no video is playing.
- * @param speed Playback speed multiplier (0.1 to 8.0).
+ * @param speed One of the supported positive Kodi speed steps.
  */
 void
 KodiMedia::setPlaybackSpeed(double speed)
 {
-    if (!m_playbackActive || m_busy || speed < 0.1 || speed > 8.0)
+    if (!m_playbackActive || m_busy || (speed != 1 && speed != 2 && speed != 4 && speed != 8))
         return;
     m_busy = true;
     m_stage = 38;
@@ -2615,9 +2634,9 @@ KodiMedia::replayGainMode() const
 
 /** Returns the list of PVR groups/favorites.
  * @brief Returns PVR groups list.
- * @details Lists PVR groups from Kodi's PVR backend via PVR.GetPVRGroups.
+ * @details Lists TV channel groups from Kodi's PVR backend via PVR.GetChannelGroups.
  * Returns an empty list when no PVR backend is configured or no groups exist.
- * @return List of group objects with id, name, type, memberCount.
+ * @return List of group objects with id, name and type.
  */
 QVariantList
 KodiMedia::pvrGroups() const
@@ -2627,14 +2646,14 @@ KodiMedia::pvrGroups() const
 
 /** Returns the members of a PVR group/favorite by ID.
  * @brief Returns PVR group members.
- * @details Lists members of a specific PVR group via PVR.GetGroupMembers.
+ * @details Exposes the confirmed Kodi response only for the group that was requested.
  * @param id The PVR group ID.
  * @return List of member objects with id, title, type.
  */
 QVariantList
-KodiMedia::pvrGroupMembers(int /*id*/)
+KodiMedia::pvrGroupMembers(int id)
 {
-    return m_pvrGroupMembers;
+    return id == m_pvrGroupId ? m_pvrGroupMembers : QVariantList{};
 }
 
 /** Adds an item to a PVR group/favorite.
@@ -2689,7 +2708,7 @@ KodiMedia::removeFromPVRGroup(int groupId, int memberId, const QString& type)
 
 /** Refreshes the PVR groups list from Kodi.
  * @brief Refreshes PVR groups.
- * @details Fetches PVR groups via Isolde.GetPVRGroups -> PVR.GetPVRGroups.
+ * @details Fetches TV channel groups via Kodi's PVR.GetChannelGroups.
  * @return true when the refresh request was dispatched, false otherwise.
  */
 bool
@@ -2708,7 +2727,7 @@ KodiMedia::refreshPVRGroups()
 
 /** Refreshes the members of a PVR group/favorite by ID.
  * @brief Refreshes PVR group members.
- * @details Fetches group members via Isolde.GetGroupMembers -> PVR.GetGroupMembers.
+ * @details Fetches channels for the selected Kodi group via PVR.GetChannels.
  * @param id The PVR group ID.
  * @return true when the refresh request was dispatched, false otherwise.
  */
@@ -2721,6 +2740,7 @@ KodiMedia::refreshPVRGroupMembers(int id)
     m_busy = true;
     m_stage = 54;
     m_pvrGroupId = id;
+    m_pvrGroupMembers.clear();
     m_pvrGroupMembersStatus = "Refreshing group members…";
     emit changed();
     request("Isolde.GetGroupMembers", {{"id", id}});
@@ -2929,4 +2949,5 @@ KodiMedia::loadArtwork(const QString& kind, int id, bool backdrop)
     QJsonObject params{{"kind", kind}, {"id", id}};
     if (backdrop)
         params.insert("role", "backdrop");
+    m_active = true;
 }

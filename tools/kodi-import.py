@@ -261,6 +261,28 @@ class Import:
         if not state or not state.get('imported'):raise ValueError('No imported configuration is available to roll back.')
         self.replace(self.backup_path(state)/'previous' if state['hadTarget'] else None,state['previousEntries'],state,False)
 
+    def export(self):
+        """Publish a private verified copy without replacing the import backup or managed profile."""
+        self.ensure_storage()
+        if self.journal.exists():
+            raise ValueError('Recover the interrupted Kodi import before exporting.')
+        if not self.target.is_dir():
+            raise ValueError('No managed Kodi setup is available to export.')
+        token = str(uuid.uuid4())
+        staging = self.base / token
+        published = self.base / ('export-' + token)
+        try:
+            snapshot(self.target, staging)
+            self.fault('before-export-publish')
+            check_stop()
+            os.rename(staging, published)
+            sync_directory(self.base)
+        except BaseException:
+            if staging.exists():
+                self.remove(staging)
+            raise
+        return published
+
     def status(self,preview=''):
         state=self.load();pending=self.journal.exists()
         return dict(ok=True,backupAvailable=bool(state),backupPath=str(self.backup_path(state)) if state else '',canRollback=bool(state and state.get('imported') and not pending),canImport=not pending and self.source.is_dir(),previewText=preview,conflicts=['Stop playback before import. Import replaces this Isolde profile only.'] if state and not state.get('imported') else [],importStatus='Interrupted import needs recovery. Choose Scan.' if pending else 'Imported into this Isolde profile; desktop Kodi is unchanged.' if state and state.get('imported') else 'Snapshot ready for preview and import.' if state else 'Scan the existing desktop Kodi configuration to begin.')
@@ -269,7 +291,7 @@ class Import:
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--profile',required=True);parser.add_argument('--config-root',required=True,type=Path);parser.add_argument('--data-root',required=True,type=Path)
-    parser.add_argument('action',choices=('status','scan','preview','backup','import','rollback','recover'));args=parser.parse_args()
+    parser.add_argument('action',choices=('status','scan','preview','backup','import','rollback','recover','export'));args=parser.parse_args()
     if sys.platform!='linux' or os.getuid()==0:raise ValueError('Kodi import requires the ordinary Linux user session.')
     operation=Import(args.profile,Path.home()/'.kodi',args.config_root,args.data_root)
     lock=None
@@ -289,7 +311,13 @@ def main():
     elif args.action=='import':operation.install()
     elif args.action=='rollback':operation.rollback()
     elif args.action=='recover':operation.recover()
-    print(json.dumps(operation.status(preview)),flush=True)
+    if args.action == 'export':
+        published = operation.export()
+        result = operation.status()
+        result['importStatus'] = f'Private Kodi settings exported to {published}'
+    else:
+        result = operation.status(preview)
+    print(json.dumps(result),flush=True)
 
 
 if __name__=='__main__':

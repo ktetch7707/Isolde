@@ -42,6 +42,10 @@ class KodiMedia final : public QObject
     Q_PROPERTY(bool playbackCanSeek READ playbackCanSeek NOTIFY changed)
     Q_PROPERTY(QVariantMap playbackTimeline READ playbackTimeline NOTIFY changed)
     Q_PROPERTY(bool nextEpisodeOptIn READ nextEpisodeOptIn NOTIFY changed)
+    Q_PROPERTY(int nextUnwatchedCandidateId READ nextUnwatchedId NOTIFY changed)
+    Q_PROPERTY(int audioOffset READ audioOffset NOTIFY changed)
+    Q_PROPERTY(double playbackSpeed READ playbackSpeed NOTIFY changed)
+    Q_PROPERTY(int subtitleDelay READ subtitleDelay NOTIFY changed)
     Q_PROPERTY(QString viewKind READ viewKind NOTIFY changed)
     Q_PROPERTY(QString viewValue READ viewValue NOTIFY changed)
     Q_PROPERTY(QVariantList collections READ collections NOTIFY changed)
@@ -347,8 +351,7 @@ class KodiMedia final : public QObject
     markWatched(const QString& kind, int id, bool watched);
     /** Finds the next unwatched media item via an ordered Kodi query.
      * @brief Finds the next unwatched media item.
-     * @details Queries Kodi for the next unwatched item of the given kind,
-     * ordered by title ascending, filtered by playcount=0 (unwatched).
+     * @details Queries Kodi for an unwatched movie or the first unwatched episode in the open season.
      * Stores the result so it can be activated via activateNextUnwatched().
      * @param kind The media kind (movie, episode, show).
      * @return true when the next unwatched query was dispatched, false when busy or invalid kind.
@@ -543,13 +546,13 @@ class KodiMedia final : public QObject
      * @brief Returns audio offset.
      * @return Audio offset in milliseconds, or 0 if not set.
      */
-    Q_INVOKABLE int
+    int
     audioOffset() const;
     /** Sets the playback speed multiplier for the current video playback.
      * @brief Sets playback speed via Player.SetSpeed.
-     * @details Adjusts playback speed (0.1x to 8.0x). 1.0 is normal speed.
+     * @details Offers the positive Kodi speed steps 1x, 2x, 4x and 8x.
      * Rejects when no video is playing.
-     * @param speed Playback speed multiplier (0.1 to 8.0).
+     * @param speed One of the supported Kodi speed steps.
      */
     Q_INVOKABLE void
     setPlaybackSpeed(double speed);
@@ -557,7 +560,7 @@ class KodiMedia final : public QObject
      * @brief Returns playback speed.
      * @return Speed multiplier, or 1.0 if not set.
      */
-    Q_INVOKABLE double
+    double
     playbackSpeed() const;
     /** Sets the subtitle delay in milliseconds for the current video playback.
      * @brief Sets subtitle delay via Player.SetSubtitleDelay.
@@ -572,7 +575,7 @@ class KodiMedia final : public QObject
      * @brief Returns subtitle delay.
      * @return Subtitle delay in milliseconds, or 0 if not set.
      */
-     Q_INVOKABLE int
+     int
      subtitleDelay() const;
      /** Sets crossfade for music playback.
       * @brief Sets music crossfade.
@@ -1218,7 +1221,6 @@ class KodiMedia final : public QObject
     bool m_playbackActive = false, m_playbackVisible = false;
     bool m_playbackCanPause = false, m_playbackCanSeek = false;
     bool m_nextEpisodeOptIn = false;
-    bool m_nextLaunchGuard = false;
     QVariantMap m_playbackTimeline;
     bool m_lastPlaybackNaturalEnd = false;
     bool m_scheduledPlayback = false;
@@ -1289,6 +1291,7 @@ class KodiMedia final : public QObject
     QString m_lyricsText;
     QString m_visualizationName;
     int m_nextUnwatchedId = 0;
+    quint64 m_nextUnwatchedGeneration = 0;
     QString m_nextUnwatchedKind;
     QVariantList m_mediaVersions;
     QString m_mediaVersionsKind;

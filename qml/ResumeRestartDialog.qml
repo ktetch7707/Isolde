@@ -4,16 +4,14 @@ Item {
     id: root
     // Resume/restart confirmation dialog shown when a movie or episode has a
     // saved Kodi resume point. Offers Resume at the saved position or Restart
-    // from the beginning. D-pad operable; Confirm selects, Back defaults to
-    // Resume (or Restart if no resume point exists).
-    required property int resumePosition // seconds; >0 means a resume point exists
-    required property string mediaTitle
-    required property string mediaKind // "movie" or "episode"
-    required property var kodiClient
+    // from the beginning. Back dismisses the prompt without starting playback.
+    property int resumePosition: 0
+    property string mediaTitle: ""
+    property string mediaKind: ""
     property int mediaId: 0
-    property bool visible: false
     property int selectedIndex: 0 // 0=Resume, 1=Restart
     signal closed(bool resume) // true=resume at saved point, false=restart from beginning
+    signal cancelled()
 
     readonly property bool hasResume: resumePosition > 0
     readonly property var options: hasResume ? [
@@ -31,7 +29,8 @@ Item {
 
     function show(){visible=true;selectedIndex=0}
     function hide(){visible=false;selectedIndex=0}
-    function back(){hide();closed(!hasResume || selectedIndex===0)}
+    // Leave playback untouched if the viewer backs out of the prompt.
+    function back(){hide();cancelled()}
     function confirm(){
         const choice = options[selectedIndex]
         hide();closed(choice.action)
@@ -46,8 +45,7 @@ Item {
         if(command===inputManager.confirm){confirm();return}
     }
 
-    visible: root.visible
-    color: "transparent"
+    visible: false
     anchors.fill: parent
     z: 100
 

@@ -12,6 +12,12 @@ Rectangle {
     property bool returnToHomeAfterPlayback: false
     property bool returnToSearchAfterPlayback: false
     property var details: null
+    property bool watchedActionFocused: false
+    property bool nextUnwatchedFocused: false
+    readonly property bool canFindNextEpisode: hierarchyLevel === "episodes" && !!details && details.mediaType === "episode"
+    readonly property bool canChangeWatched: !!details && profileManager.editingAllowed === true
+        && (details.mediaType === "movie" || details.mediaType === "episode") && details.mediaId > 0
+    onDetailsChanged: { watchedActionFocused = false; nextUnwatchedFocused = false }
     property int toolbarIndex: 0
     property string artworkKey: ""
     property bool choosingPoster: false
@@ -39,6 +45,23 @@ Rectangle {
     }
     signal searchRequested()
     signal searchReturnRequested()
+
+    // Use the open detail's identity and let Kodi confirm the change before refreshing the list.
+    function changeWatched() {
+        if (!canChangeWatched || kodiMedia.busy) return
+        if (kodiMedia.markWatched(details.mediaType, details.mediaId, details.watchState !== "watched"))
+            details = null
+    }
+
+    // Search within this season, then let the viewer confirm playback of Kodi's result.
+    function findOrPlayNextEpisode() {
+        if (!canFindNextEpisode || kodiMedia.busy) return
+        if (kodiMedia.nextUnwatchedCandidateId > 0) {
+            if (kodiMedia.activateNextUnwatched()) details = null
+        } else {
+            kodiMedia.nextUnwatched("episode")
+        }
+    }
     readonly property var selectedItem: kodiMedia.selectedIndex >= 0 && kodiMedia.selectedIndex < kodiMedia.items.length ? kodiMedia.items[kodiMedia.selectedIndex] : null
     readonly property var toolbar: {
         const views=kodiService.libraryViews || []
@@ -140,7 +163,16 @@ Rectangle {
         }
         if (command === inputManager.search && kodiMedia.mediaKind !== "seasons") { searchRequested(); return }
         if (details) {
-            if (command === inputManager.confirm) { details = null; kodiMedia.activate(kodiMedia.selectedIndex) }
+            if (command === inputManager.confirm && nextUnwatchedFocused) findOrPlayNextEpisode()
+            else if (command === inputManager.confirm && watchedActionFocused) changeWatched()
+            else if (command === inputManager.confirm) { details = null; kodiMedia.activate(kodiMedia.selectedIndex) }
+            else if (command === inputManager.navigateDown && !nextUnwatchedFocused) {
+                if (canChangeWatched && !watchedActionFocused) watchedActionFocused = true
+                else if (canFindNextEpisode) { watchedActionFocused = false; nextUnwatchedFocused = true }
+            } else if (command === inputManager.navigateUp) {
+                watchedActionFocused = nextUnwatchedFocused && canChangeWatched
+                nextUnwatchedFocused = false
+            }
             else if(command===inputManager.navigateLeft)openPoster()
             else if (command === inputManager.navigateRight) kodiMedia.playSelected(false)
             else if (command === inputManager.menu && (details.mediaType === "movie" || details.mediaType === "tvshow")) {
@@ -318,12 +350,55 @@ Rectangle {
             anchors.fill: parent; anchors.margins: 35; spacing: 22 * shell.gapScale
             Text { font.family: shell.fontFamily; width: parent.width; text: root.details ? root.details.title : ""; color: shell.elevatedText; font.pixelSize: 34 * root.textScale; wrapMode: Text.WordWrap; maximumLineCount: 2; elide: Text.ElideRight }
             Text { font.family: shell.fontFamily; width: parent.width; objectName: "libraryDetailsSubtitle"; text: root.subtitle(root.details); color: shell.elevatedFocus; font.pixelSize: 21 * root.textScale; wrapMode: Text.WordWrap }
-            Text { font.family: shell.fontFamily; width: parent.width; text: root.details ? root.details.plot || "No description supplied by Kodi." : ""; color: shell.elevatedText; font.pixelSize: 22 * root.textScale; wrapMode: Text.WordWrap; maximumLineCount: Math.max(2, Math.floor((root.height - 340) / 28)); elide: Text.ElideRight }
+            Text { font.family: shell.fontFamily; width: parent.width; text: root.details ? root.details.plot || "No description supplied by Kodi." : ""; color: shell.elevatedText; font.pixelSize: 22 * root.textScale; wrapMode: Text.WordWrap; maximumLineCount: Math.max(2, Math.floor((root.height - (root.canFindNextEpisode ? 450 : 340)) / (28 * root.textScale))); elide: Text.ElideRight }
                     Text { font.family: shell.fontFamily; width: parent.width; text: root.details && root.details.mediaType === "tvshow" ? "OK browse · Menu curate · Back close"
                         : root.details && (root.details.mediaType === "season" || root.details.mediaType === "album") ? "OK browse · Back close"
                         : root.details && root.details.mediaType === "song" ? "OK play · Back close\nDuring playback: Menu controls · Back stop · Home return"
                     : "OK play / resume · Right restart · Menu curate · Back close\nDuring playback: OK pause · Left/Right seek · Back stop · Home return"; color: shell.elevatedMuted; font.pixelSize: 20 * root.textScale; wrapMode: Text.WordWrap }
             Text { font.family: shell.fontFamily; objectName: "libraryDetailsPlayback"; text: kodiMedia.playbackStatus; color: shell.elevatedFocus; font.pixelSize: 18 * root.textScale }
+            Rectangle {
+                visible: root.canChangeWatched
+                width: Math.min(parent.width, watchedLabel.implicitWidth + 24)
+                height: watchedLabel.implicitHeight + 16
+                radius: shell.radius
+                color: root.watchedActionFocused ? shell.selected : shell.elevated
+                border.width: root.watchedActionFocused ? 2 : 0
+                border.color: shell.selectedFocus
+                Accessible.role: Accessible.Button
+                Accessible.name: watchedLabel.text
+                Accessible.onPressAction: root.changeWatched()
+                Text {
+                    id: watchedLabel
+                    anchors.centerIn: parent
+                    text: root.details && root.details.watchState === "watched" ? qsTr("Mark unwatched") : qsTr("Mark watched")
+                    font.family: shell.fontFamily
+                    font.pixelSize: 18 * root.textScale
+                    color: root.watchedActionFocused ? shell.selectedText : shell.elevatedText
+                }
+                MouseArea { anchors.fill: parent; onClicked: root.changeWatched() }
+            }
+            Rectangle {
+                visible: root.canFindNextEpisode
+                width: Math.min(parent.width, nextEpisodeLabel.implicitWidth + 24)
+                height: nextEpisodeLabel.implicitHeight + 16
+                radius: shell.radius
+                color: root.nextUnwatchedFocused ? shell.selected : shell.elevated
+                border.width: root.nextUnwatchedFocused ? 2 : 0
+                border.color: shell.selectedFocus
+                Accessible.role: Accessible.Button
+                Accessible.name: nextEpisodeLabel.text
+                Accessible.onPressAction: root.findOrPlayNextEpisode()
+                Text {
+                    id: nextEpisodeLabel
+                    anchors.centerIn: parent
+                    text: root.canFindNextEpisode && kodiMedia.nextUnwatchedCandidateId > 0
+                        ? qsTr("Play unwatched episode") : qsTr("Find first unwatched episode in this season")
+                    font.family: shell.fontFamily
+                    font.pixelSize: 18 * root.textScale
+                    color: root.nextUnwatchedFocused ? shell.selectedText : shell.elevatedText
+                }
+                MouseArea { anchors.fill: parent; onClicked: { root.watchedActionFocused = false; root.nextUnwatchedFocused = true; root.findOrPlayNextEpisode() } }
+            }
             Text { width:parent.width;visible:root.details && (root.details.mediaType==="movie" || root.details.mediaType==="tvshow") && profileManager.editingAllowed;text:"Left · Change this title’s Kodi poster";color:shell.elevatedFocus;font.family:shell.fontFamily;font.pixelSize:20*root.textScale;wrapMode:Text.WordWrap }
         }
         MouseArea { anchors.right: parent.right; anchors.top: parent.top; width: 90; height: 45; onClicked: root.details = null

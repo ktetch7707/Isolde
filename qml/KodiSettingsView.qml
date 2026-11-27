@@ -8,6 +8,8 @@ Item {
     property bool editingFolders: false
     property bool showingImport: false
     property bool showingPlayback: false
+    property int playbackPreferenceIndex: 0
+    onShowingPlaybackChanged: playbackPreferenceIndex = 0
     property bool showingSources:false
     property bool showingCapabilities:false
     property int capabilityIndex:0
@@ -75,7 +77,12 @@ Item {
             return;
         }
         if (showingPlayback) {
-            if(command===inputManager.confirm)kodiService.setAlwaysPlayLocally(!kodiService.alwaysPlayLocally)
+            if(command===inputManager.navigateUp)playbackPreferenceIndex=0
+            else if(command===inputManager.navigateDown)playbackPreferenceIndex=1
+            else if(command===inputManager.confirm){
+                if(playbackPreferenceIndex===0)kodiService.setAlwaysPlayLocally(!kodiService.alwaysPlayLocally)
+                else kodiMedia.setNextEpisodeOptIn(!kodiMedia.nextEpisodeOptIn)
+            }
             return
         }
         if (showingImport) { importPage.handleCommand(command); return }
@@ -143,11 +150,18 @@ Item {
         Column {
             anchors.fill:parent;spacing:24*shell.gapScale
             Text {width:parent.width;text:"PLAYBACK PREFERENCES";color:shell.text;font.family:shell.fontFamily;font.pixelSize:30*shell.textScale;wrapMode:Text.Wrap}
-            Rectangle {
-                width:parent.width;height:110;color:shell.selected;radius:shell.radius
-                border.width:3;border.color:shell.selectedFocus
-                Text {anchors.fill:parent;anchors.margins:18;text:"Always Play Locally When Available: "+(kodiService.alwaysPlayLocally?"On":"Off");color:shell.selectedText;font.family:shell.fontFamily;font.pixelSize:22*shell.textScale;wrapMode:Text.Wrap;verticalAlignment:Text.AlignVCenter}
-                MouseArea {anchors.fill:parent;onClicked:root.handleCommand(inputManager.confirm)}
+            Repeater {
+                model:[qsTr("Always play locally when available · %1").arg(kodiService.alwaysPlayLocally?qsTr("On"):qsTr("Off")),
+                       qsTr("Automatically play the next episode · %1").arg(kodiMedia.nextEpisodeOptIn?qsTr("On"):qsTr("Off"))]
+                delegate:Rectangle {
+                    required property int index
+                    required property string modelData
+                    width:parent.width;height:88*shell.textScale;radius:shell.radius
+                    color:index===root.playbackPreferenceIndex?shell.selected:shell.surface
+                    border.width:index===root.playbackPreferenceIndex?3:0;border.color:shell.selectedFocus
+                    Text {anchors.fill:parent;anchors.margins:18;text:modelData;color:index===root.playbackPreferenceIndex?shell.selectedText:shell.text;font.family:shell.fontFamily;font.pixelSize:22*shell.textScale;wrapMode:Text.Wrap;verticalAlignment:Text.AlignVCenter}
+                    MouseArea {anchors.fill:parent;onClicked:{root.playbackPreferenceIndex=index;root.handleCommand(inputManager.confirm)}}
+                }
             }
             Text {width:parent.width;text:"On plays verified local matches from discovery immediately. Off shows viewing choices. Library shelves always play directly through Kodi. Enter toggles · Back returns.";color:shell.muted;font.family:shell.fontFamily;font.pixelSize:20*shell.textScale;wrapMode:Text.Wrap}
             Text {width:parent.width;text:kodiService.status;color:shell.muted;font.family:shell.fontFamily;font.pixelSize:18*shell.textScale;wrapMode:Text.Wrap}

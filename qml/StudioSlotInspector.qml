@@ -16,15 +16,13 @@ Item {
     signal closed()
     signal operation(string name)
 
-    readonly property real unit:(appearance.typographyScale || 1)*Math.min(width/1280,height/720)
+    readonly property real unit:((appearance || {}).typographyScale || 1)*Math.min(width/1280,height/720)
     readonly property var pageItems:(page && page.items || [])
     // Components that define slots (carry a contentSlot definition).
     readonly property var slots:pageItems.filter(item=>item.contentSlot && item.contentSlot.id)
-    // Components that occupy slots (parentId points to a slot id).
-    readonly property var occupants:pageItems.filter(item=>item.parentId && slots.some(s=>s.contentSlot.id===item.parentId))
-    // Map slot id -> occupant component (first match).
-    function occupantFor(slotId){
-        return occupants.find(item=>item.parentId===slotId) || null
+    // A child links to the slot owner's component ID, which may differ from the public slot name.
+    function occupantFor(ownerId){
+        return pageItems.find(item=>item.parentId===ownerId) || null
     }
     // Permitted component kinds for a slot.
     function permittedFor(slotId){
@@ -44,12 +42,14 @@ Item {
         })
     }
     property int selectedSlot:0
+    property int selected:0
     property bool overrideMode:false
     property var selectedOccupant:null
     property string message:""
 
-    readonly property var currentSlot:slots.length?slots[selectedSlot]:null
-    readonly property var currentOccupant:currentSlot?occupantFor(currentSlot.contentSlot.id):null
+    readonly property var currentSlot:slots[selectedSlot] || null
+    readonly property var slotDefinition: currentSlot ? currentSlot.contentSlot : ({})
+    readonly property var currentOccupant:currentSlot?occupantFor(currentSlot.id):null
     readonly property var eligible:currentSlot?eligibleFor(currentSlot.contentSlot.id):[]
     readonly property var slotLabels:slots.map(s=>s.contentSlot.label || s.contentSlot.id)
     readonly property var occupantLabels:eligible.map(i=>i.name || i.componentType || "Untitled")
@@ -63,11 +63,11 @@ Item {
         const item=eligible[index]
         const slot=currentSlot
         if(!slot)return
-        // Patch the chosen component's parentId to the slot id (override), or clear it (default).
-        const targetId=overrideMode?item.id:""
-        if(targetId===item.id && item.parentId===slot.contentSlot.id){message="Already occupying this slot.";return}
-        const success=run("patch",{ids:[item.id],value:{parentId:targetId}})
-        if(success){selectedOccupant=item;message=overrideMode?"Slot overridden · Apply publishes":"Default restored · Apply publishes"}else message=session.errorString
+        if(item.parentId===slot.id){message=qsTr("Already occupying this slot.");return}
+        if(currentOccupant){message=qsTr("Move the current occupant out before assigning a different component.");return}
+        const placement=Object.assign({},item.placement,{x:0,y:0})
+        const success=run("place",{placements:[{id:item.id,parentId:slot.id,categoryId:slot.categoryId || "",placement:placement}]})
+        if(success){selectedOccupant=item;overrideMode=true;message=qsTr("Slot overridden · Apply publishes");view="slots";selected=selectedSlot}
     }
     function run(op,args){
         const success=session.execute(op,args,pageId)
@@ -75,11 +75,13 @@ Item {
         message="Draft updated · nothing applied.";return true
     }
     function labels(){
+        if(view==="occupants")return occupantLabels.concat([qsTr("Back")])
         if(slotLabels.length===0)return ["No slots defined on this page.","Back"]
         return slotLabels.map((l,i)=>(i===selectedSlot?"▸ ":"")+l+(overrideMode && i===selectedSlot?" · Override":"")).concat(["Default","Choose occupant…","Appearance","Bindings","Preview","Back"])
     }
     function activate(){
         const lbl=labels()
+        if(view==="occupants"){occupantCommand(inputManager.confirm);return}
         if(selected===lbl.length-1){closed();return}
         if(slots.length && selected<slots.length){chooseSlot(selected);return}
         if(selected===slots.length){toggleOverride();return}
@@ -101,8 +103,11 @@ Item {
     }
     function occupantCommand(command){
         if(command===inputManager.back){view="slots";selected=0;return}
-        if(command===inputManager.confirm){pickOccupant(selected);return}
-        if(command===inputManager.navigateDown || command===inputManager.navigateRight)selected=Math.min(eligible.length-1,selected+1)
+        if(command===inputManager.confirm){
+            if(selected===eligible.length){view="slots";selected=selectedSlot;return}
+            pickOccupant(selected);return
+        }
+        if(command===inputManager.navigateDown || command===inputManager.navigateRight)selected=Math.min(eligible.length,selected+1)
         else if(command===inputManager.navigateUp || command===inputManager.navigateLeft)selected=Math.max(0,selected-1)
     }
     function appearanceCommand(command){
@@ -130,16 +135,16 @@ Item {
                     MouseArea {anchors.fill:parent;onClicked:{root.selected=index;root.activate()}}
                 }
             }
-            Rectangle {visible:currentSlot;width:parent.width;height:1;color:"#3A3740"}
-            Column {visible:currentSlot;spacing:10*root.unit;width:parent.width
-                Text {textFormat:Text.PlainText;font.family:root.appearance.fontFamily || "DejaVu Sans";text:currentSlot.contentSlot.label || "Slot";color:root.appearance.textColor;font.pixelSize:22*root.unit;font.bold:true}
+            Rectangle {visible:!!currentSlot;width:parent.width;height:1;color:root.appearance.mutedColor}
+            Column {visible:!!currentSlot;spacing:10*root.unit;width:parent.width
+                Text {textFormat:Text.PlainText;font.family:root.appearance.fontFamily || "DejaVu Sans";text:slotDefinition.label || "Slot";color:root.appearance.textColor;font.pixelSize:22*root.unit;font.bold:true}
                 Row {spacing:12*root.unit
                     Text {textFormat:Text.PlainText;font.family:root.appearance.fontFamily || "DejaVu Sans";text:"Kind:";color:root.appearance.mutedColor;font.pixelSize:17*root.unit}
-                    Text {textFormat:Text.PlainText;font.family:root.appearance.fontFamily || "DejaVu Sans";text:currentSlot.contentSlot.kind;color:root.appearance.textColor;font.pixelSize:17*root.unit}
+                    Text {textFormat:Text.PlainText;font.family:root.appearance.fontFamily || "DejaVu Sans";text:slotDefinition.kind || "";color:root.appearance.textColor;font.pixelSize:17*root.unit}
                 }
                 Row {spacing:12*root.unit
                     Text {textFormat:Text.PlainText;font.family:root.appearance.fontFamily || "DejaVu Sans";text:"Permitted:";color:root.appearance.mutedColor;font.pixelSize:17*root.unit}
-                    Text {textFormat:Text.PlainText;font.family:root.appearance.fontFamily || "DejaVu Sans";text:permittedFor(currentSlot.contentSlot.id).length?permittedFor(currentSlot.contentSlot.id).join(", "):"Any";color:root.appearance.textColor;font.pixelSize:17*root.unit;wrapMode:Text.Wrap}
+                    Text {textFormat:Text.PlainText;font.family:root.appearance.fontFamily || "DejaVu Sans";text:(slotDefinition.permitted || []).join(", ") || qsTr("Any");color:root.appearance.textColor;font.pixelSize:17*root.unit;wrapMode:Text.Wrap}
                 }
                 Row {spacing:12*root.unit
                     Text {textFormat:Text.PlainText;font.family:root.appearance.fontFamily || "DejaVu Sans";text:"Occupant:";color:root.appearance.mutedColor;font.pixelSize:17*root.unit}
