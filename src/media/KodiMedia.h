@@ -243,6 +243,8 @@ class KodiMedia final : public QObject
     Q_INVOKABLE bool
     slideshowActive() const;
     Q_INVOKABLE void loadSmartPlaylist(const QString& name);
+    Q_INVOKABLE void loadBackdrop(const QString& kind, int id);
+    Q_INVOKABLE void loadArtwork(const QString& kind, int id, bool backdrop);
     Q_INVOKABLE void previewSmartPlaylist(const QVariantMap& draft);
     Q_INVOKABLE void saveSmartPlaylist(const QString& name, const QVariantMap& draft);
     // Expose loaded rules separately from the preview's matching media rows.
