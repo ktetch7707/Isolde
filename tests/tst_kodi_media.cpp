@@ -523,9 +523,9 @@ serve(QLocalServer& server, int version)
                         }
                         else if (request.value("method") == "Isolde.AddToGroup")
                         {
-                            server.setProperty("lastAddToGroupKind", request["params"].toObject()["type"]);
-                            server.setProperty("lastAddToGroupId", request["params"].toObject()["id"]);
-                            server.setProperty("lastAddToGroupMemberId", request["params"].toObject()["memberid"]);
+                            server.setProperty("lastAddToGroupKind", request["params"].toObject()["type"].toVariant());
+                            server.setProperty("lastAddToGroupId", request["params"].toObject()["id"].toVariant());
+                            server.setProperty("lastAddToGroupMemberId", request["params"].toObject()["memberid"].toVariant());
                             result = QJsonObject{{"added", true}};
                         }
                         else if (request.value("method") == "Isolde.RemoveFromGroup")
